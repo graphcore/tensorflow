@@ -27,7 +27,7 @@ struct CompilerResources;
 
 class RepeatLoopVisitor : public InplaceDeferredVisitor {
  public:
-  RepeatLoopVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
+  RepeatLoopVisitor(CompilerResources& res, const DeferredArgRBVectors& inputs,
                     const HloInstructionDescription& description,
                     const ReallocateInputsInfo& reallocate_inputs_info,
                     const std::string& name);
@@ -38,7 +38,7 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
 
   poplar::program::Sequence GetRepeatLoopSequence(const HloInstruction* inst);
 
-  const TensorVector& GetLoopState() const;
+  const TensorOrRemoteBufferVector& GetLoopState() const;
 
  protected:
   StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
@@ -52,7 +52,7 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
 
   // The tensors representing the inputs/outputs of the loops (they have to
   // alias).
-  TensorVector loop_state_;
+  TensorOrRemoteBufferVector loop_state_;
 
   // Information used for the resource update (if there is one).
   bool has_resource_update_ = false;

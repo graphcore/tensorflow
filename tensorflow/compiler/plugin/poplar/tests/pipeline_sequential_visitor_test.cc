@@ -197,7 +197,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -331,7 +332,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -458,7 +460,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -588,7 +591,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -746,7 +750,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources, {{placeholder}},
+      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -915,7 +920,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -1022,7 +1028,9 @@ ENTRY e {
   resources->main_graph->setTileMapping(p1, 0);
 
   PipelineVisitor visitor(
-      pipeline, *resources, {{p0}, {p1}},
+      pipeline, *resources,
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
+                           {TensorOrRemoteBuffer{p1}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));

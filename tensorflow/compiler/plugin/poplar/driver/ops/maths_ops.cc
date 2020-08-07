@@ -1,4 +1,4 @@
-/* Copyright 2018-2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
 #include <algorithm>
 #include <poplar/Engine.hpp>
 #include <poplar/Graph.hpp>
@@ -231,10 +232,12 @@ StatusOr<poplar::program::Program> CreateTupleSelectOp(
       poplar::Tensor pred,
       FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
-  TensorVector in0 =
-      FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
-  TensorVector in1 =
-      FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
+  TF_ASSIGN_OR_RETURN(
+      TensorVector in0,
+      FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
+  TF_ASSIGN_OR_RETURN(
+      TensorVector in1,
+      FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
 
   if (in0.size() != in1.size()) {
     return xla::FailedPrecondition("Mismatching tuple sizes on %s",
