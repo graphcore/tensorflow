@@ -33,7 +33,7 @@ namespace xla {
 namespace poplarplugin {
 
 PipelineStageVisitor::PipelineStageVisitor(
-    CompilerResources& res, const DeferredArgVectors& inputs,
+    CompilerResources& res, const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, description, name) {}
 
@@ -74,7 +74,7 @@ ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
 }
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
-    CompilerResources& res, const DeferredArgVectors& inputs,
+    CompilerResources& res, const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description, const std::string& name)
     : PipelineStageVisitor(res, inputs, description, name) {}
 
@@ -94,12 +94,12 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
 }
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
-    const HloInstruction* callsite, const DeferredArgVectors& deferred_inputs,
+    const HloInstruction* callsite, const DeferredArgRBVectors& deferred_inputs,
     TensorMap& callsite_tensor_map) {
   poplar::program::Sequence seq;
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
-  TensorVectors inputs(deferred_inputs.size());
+  TensorOrRemoteBufferVectors inputs(deferred_inputs.size());
   for (uint64 operand_idx = 0; operand_idx != deferred_inputs.size();
        ++operand_idx) {
     const uint64 num_tensors = deferred_inputs[operand_idx].size();
@@ -111,7 +111,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
       } else {
         // The tensor had a deferred allocation, so we get it now after the
         // stage has been built.
-        auto input = FindInstructionInputsInRange(
+        TensorOrRemoteBufferVector input = FindInstructionInputsInRange(
             callsite_tensor_map, resources_, callsite, operand_idx,
             {flat_idx, flat_idx + 1}, seq, false);
         CHECK_EQ(input.size(), 1);
@@ -128,12 +128,12 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
 
 poplar::program::Sequence
 ReusablePipelineStageVisitor::GetRecomputationStageSequence(
-    const HloInstruction* callsite, const TensorVectors& inputs) {
+    const HloInstruction* callsite, const TensorOrRemoteBufferVectors& inputs) {
   return GetCachedSequence(callsite, inputs);
 }
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
-    const HloInstruction* callsite, const TensorVectors& inputs) {
+    const HloInstruction* callsite, const TensorOrRemoteBufferVectors& inputs) {
   poplar::Graph& graph = GetGraph(resources_, callsite);
   // When recomputation is enabled, copies need to be inserted for all the non
   // parameter inputs as we are re-using the forward stage Poplar

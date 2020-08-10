@@ -328,8 +328,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     }
 
     poplar::program::Sequence seq;
-    TensorVector indices =
-        FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
+    TF_ASSIGN_OR_RETURN(
+        TensorVector indices,
+        FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
 
     const HloHostEmbeddingLookupInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingLookupInstruction>(inst);
@@ -598,11 +599,13 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
     poplar::program::Sequence seq;
 
-    TensorVector grads =
-        FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
+    TF_ASSIGN_OR_RETURN(
+        TensorVector grads,
+        FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
 
-    TensorVector indices =
-        FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
+    TF_ASSIGN_OR_RETURN(
+        TensorVector indices,
+        FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
 
     const HloHostEmbeddingUpdateInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingUpdateInstruction>(inst);

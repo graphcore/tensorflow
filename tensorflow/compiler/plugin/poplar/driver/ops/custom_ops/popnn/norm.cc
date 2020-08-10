@@ -161,8 +161,10 @@ poplar::Tensor BatchNormalise(
 StatusOr<poplar::Tensor> AddNormScaleTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
-    uint32 feature_index, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+    uint32 feature_index, const TensorMap& tensor_map,
+    const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(TensorVector outputs,
+                      FindInstructionOutputTensors(tensor_map, res, layout));
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -178,8 +180,10 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
 StatusOr<poplar::Tensor> AddNormOffsetTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
-    uint32 feature_index, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+    uint32 feature_index, const TensorMap& tensor_map,
+    const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(TensorVector outputs,
+                      FindInstructionOutputTensors(tensor_map, res, layout));
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -207,12 +211,12 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
     switch (input_index) {
       case 1: {
         return AddNormScaleTensor(graph, res, name, *layout, *layout_output_idx,
-                                  norm_opts.feature_index, tensor_map);
+                                  norm_opts.feature_index, tensor_map, inst);
       }
       case 2: {
         return AddNormOffsetTensor(graph, res, name, *layout,
                                    *layout_output_idx, norm_opts.feature_index,
-                                   tensor_map);
+                                   tensor_map, inst);
       }
       default: {
         return xla::FailedPrecondition(
