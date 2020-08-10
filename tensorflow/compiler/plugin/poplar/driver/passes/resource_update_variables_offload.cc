@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -244,62 +245,41 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   }
 
   std::set<int64> call_params_to_remove;
-  // For each parameter in offload_info, insert a load and store op and a dummy
-  // output op.
+  // For each parameter in offload_info, insert a load and store op.
   for (auto& offload_info : offload_infos) {
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
             << offload_info.input_to_call->ToString();
 
     // Create a load instruction inside the resource update and use that instead
     // of the parameter.
-    HloInstruction* remote_load =
-        resource_update_comp->AddInstruction(CreateHloRemoteParameterLoad(
-            offload_info.input_in_resource_update->shape(),
-            offload_info.entry_param_number));
+    HloInstruction* remote_load = resource_update_comp->AddInstruction(
+        CreateHloRemoteParameterLoad(offload_info.input_in_resource_update));
     TF_RETURN_IF_ERROR(
         offload_info.input_in_resource_update->ReplaceAllUsesWith(remote_load));
 
-    // Special case for parameters just being passed through.
+    // If the input and output are the same instruction, then we use the remote
+    // resource but don't modify it. In this case we simply reconnect the input
+    // remote buffer to the original output position.
     if (offload_info.input_in_resource_update ==
         offload_info.output_in_resource_update) {
-      offload_info.output_in_resource_update = remote_load;
+      TF_RETURN_IF_ERROR(
+          remote_load->ReplaceUseWith(resource_update_comp->root_instruction(),
+                                      offload_info.input_in_resource_update));
+    } else {
+      // Add a remote store for the updated value inside the resource update.
+      HloInstruction* remote_store =
+          resource_update_comp->AddInstruction(CreateHloRemoteParameterStore(
+              offload_info.input_in_resource_update,
+              offload_info.output_in_resource_update));
+
+      TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
+          resource_update_comp->root_instruction(), remote_store));
     }
-
-    // Add a remote store for the updated value inside the resource update.
-    resource_update_comp->AddInstruction(CreateHloRemoteParameterStore(
-        offload_info.output_in_resource_update, offload_info.entry_output_idx));
-
-    // Create a dummy output of the variable in the entry computation and use
-    // that as the output in the root instruction which we already checked is a
-    // tuple.
-    TF_RETURN_IF_ERROR(entry_comp->ReplaceWithNewInstruction(
-        offload_info.output_from_call,
-        CreateHloRemoteParameterDummyOutput(
-            offload_info.output_from_call->shape(),
-            offload_info.entry_output_idx)));
-
-    // Mark the parameter for removal.
-    call_params_to_remove.insert(offload_info.call_operand_idx);
 
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(
         RemoteParameterInfo{offload_info.entry_param_number});
   }
-
-  // Remove the outputs for offloaded parameters from the call.
-  TF_RETURN_IF_ERROR(RemoveOutputsFromCall(call_op, call_params_to_remove));
-  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
-
-  // Now remove unused inputs/outputs in the resource update.
-  bool removed_insts = false;
-  TF_ASSIGN_OR_RETURN(resource_update,
-                      PipelineOptimizer::OptimizeCallInstruction(
-                          resource_update, &removed_insts));
-  CHECK(removed_insts);
-  // Remove the inputs for offloaded parameters to the call.
-  TF_ASSIGN_OR_RETURN(call_op,
-                      RemoveParametersFromCall(call_op, call_params_to_remove));
-  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
 
   return true;
 }

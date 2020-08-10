@@ -27,13 +27,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloRemoteParameterLoad::HloRemoteParameterLoad(const Shape& shape,
-                                               int64 param_number)
-    : HloPoplarInstruction(shape, {}, PoplarOp::RemoteParameterLoad,
-                           param_number),
-      param_number_(param_number) {
-  set_custom_call_has_side_effect(true);
-}
+HloRemoteParameterLoad::HloRemoteParameterLoad(HloInstruction* const rbuffer)
+    : HloPoplarInstruction(rbuffer->shape(), {rbuffer},
+                           PoplarOp::RemoteParameterLoad) {}
 
 absl::flat_hash_set<int64> HloRemoteParameterLoad::AllocatingIndices() const {
   return {};
@@ -52,28 +48,25 @@ std::unique_ptr<HloInstruction>
 HloRemoteParameterLoad::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK(operands.empty());
-  return CreateHloRemoteParameterLoad(shape, param_number_);
+  CHECK_EQ(operands.size(), 1);
+  return CreateHloRemoteParameterLoad(operands[0]);
 }
 
 std::vector<std::string>
 HloRemoteParameterLoad::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back("param_number=" + std::to_string(param_number_));
-  return attributes;
+  return {};
 }
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
-    const Shape& shape, int64 param_number) {
-  return absl::make_unique<HloRemoteParameterLoad>(shape, param_number);
+    HloInstruction* const rbuffer) {
+  return absl::make_unique<HloRemoteParameterLoad>(rbuffer);
 }
 
-HloRemoteParameterStore::HloRemoteParameterStore(HloInstruction* const output,
-                                                 int64 output_idx)
-    : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {output},
-                           PoplarOp::RemoteParameterStore, output_idx),
-      output_idx_(output_idx) {
+HloRemoteParameterStore::HloRemoteParameterStore(HloInstruction* const rbuffer,
+                                                 HloInstruction* const value)
+    : HloPoplarInstruction(rbuffer->shape(), {rbuffer, value},
+                           PoplarOp::RemoteParameterStore) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -94,69 +87,49 @@ std::unique_ptr<HloInstruction>
 HloRemoteParameterStore::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK_EQ(operands.size(), 1);
-  return CreateHloRemoteParameterStore(operands[0], output_idx_);
+  CHECK_EQ(operands.size(), 2);
+  return CreateHloRemoteParameterStore(operands[0], operands[1]);
 }
 
 std::vector<std::string>
 HloRemoteParameterStore::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back("output_idx=" + std::to_string(output_idx_));
-  return attributes;
+  return {};
 }
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
-    HloInstruction* const output, int64 output_idx) {
-  return absl::make_unique<HloRemoteParameterStore>(output, output_idx);
+    HloInstruction* const rbuffer, HloInstruction* const value) {
+  return absl::make_unique<HloRemoteParameterStore>(rbuffer, value);
 }
 
-HloRemoteParameterDummyOutput::HloRemoteParameterDummyOutput(const Shape& shape,
-                                                             int64 output_idx)
-    : HloPoplarInstruction(shape, {}, PoplarOp::RemoteParameterDummyOutput,
-                           output_idx),
-      output_idx_(output_idx) {
-  set_custom_call_has_side_effect(true);
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloRemoteParameterLoadFactoryFunc(
+    HloCustomCallInstruction* call) {
+  if (call->mutable_operand(0)->opcode() != HloOpcode::kParameter) {
+    return xla::FailedPrecondition(
+        "Can only remote buffer load from a parameter");
+  }
+
+  return CreateHloRemoteParameterLoad(call->mutable_operand(0));
 }
 
-absl::flat_hash_set<int64> HloRemoteParameterDummyOutput::AllocatingIndices()
-    const {
-  return {};
+static HloPoplarInstructionFactory remote_parameter_load_factory(
+    PoplarOp::RemoteParameterLoad, HloRemoteParameterLoadFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloRemoteParameterStoreFactoryFunc(
+    HloCustomCallInstruction* call) {
+  if (call->mutable_operand(0)->opcode() != HloOpcode::kParameter) {
+    return xla::FailedPrecondition(
+        "Can only remote buffer store to a parameter");
+  }
+
+  return CreateHloRemoteParameterStore(call->mutable_operand(0),
+                                       call->mutable_operand(1));
 }
 
-absl::flat_hash_map<int64, int64>
-HloRemoteParameterDummyOutput::LayoutDependencies() const {
-  return {};
-}
-
-uint64 HloRemoteParameterDummyOutput::NumberOfInplaceOperands() const {
-  return 0;
-}
-
-bool HloRemoteParameterDummyOutput::IsPopOpsElementwise() const {
-  return false;
-}
-
-std::unique_ptr<HloInstruction>
-HloRemoteParameterDummyOutput::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    HloCloneContext*) const {
-  CHECK(operands.empty());
-  return CreateHloRemoteParameterDummyOutput(shape, output_idx_);
-}
-
-std::vector<std::string>
-HloRemoteParameterDummyOutput::ExtraPoplarAttributesToStringImpl(
-    const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back("output_idx=" + std::to_string(output_idx_));
-  return attributes;
-}
-
-std::unique_ptr<HloInstruction> CreateHloRemoteParameterDummyOutput(
-    const Shape& shape, int64 output_idx) {
-  return absl::make_unique<HloRemoteParameterDummyOutput>(shape, output_idx);
-}
+static HloPoplarInstructionFactory remote_parameter_store_factory(
+    PoplarOp::RemoteParameterStore, HloRemoteParameterStoreFactoryFunc);
+}  // namespace
 
 HloCreateBuffer::HloCreateBuffer(const Shape& shape, bool is_remote)
     : HloPoplarInstruction(shape, {}, PoplarOp::CreateBuffer, is_remote),

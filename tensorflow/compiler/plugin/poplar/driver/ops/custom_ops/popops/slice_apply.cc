@@ -77,7 +77,8 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
     }
     const HloInstruction* layout = *tensor_target.layout;
     int64 layout_output_idx = *tensor_target.layout_output_idx;
-    TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+    TensorOrRemoteBufferVector outputs =
+        FindInstructionOutputs(tensor_map, res, layout);
     if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
       return xla::FailedPrecondition(
           "Elementwise %s layout input not found for %s", layout->name(), name);

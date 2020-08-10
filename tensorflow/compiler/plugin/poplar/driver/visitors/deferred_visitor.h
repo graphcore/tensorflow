@@ -234,7 +234,7 @@ class DeferredVisitor : public FullVisitor {
    * buffers might be also live in other dependent subcomputations.
    */
   DeferredVisitor(
-      CompilerResources& res, const DeferredArgVectors& callsite_inputs,
+      CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
       const std::string& name,
       const bool mark_all_input_tensors_as_used = false,
       const bool allocate_all_input_tensors = true,
@@ -243,10 +243,10 @@ class DeferredVisitor : public FullVisitor {
   DeferredVisitor() = delete;
 
   // Returns the input tensors for this computation.
-  const TensorVectors& inputs() const;
+  const TensorOrRemoteBufferVectors& inputs() const;
 
   // Returns the output tensors of this computation.
-  const TensorVector& outputs() const;
+  const TensorOrRemoteBufferVector& outputs() const;
 
   // Returns whether an input to the computation was allocated for this
   // computation.
@@ -282,7 +282,7 @@ class DeferredVisitor : public FullVisitor {
       const HloInstruction* inst);
 
   // Get the inputs for a deferred instruction.
-  StatusOr<DeferredArgVectors> GetInputsForDeferredInplaceInstruction(
+  StatusOr<DeferredArgRBVectors> GetInputsForDeferredInplaceRBInstruction(
       const HloInstruction* inst, bool preserve_aliasing = false);
 
   // Handlers which are aware of deferred allocations - can be overriden by
@@ -324,6 +324,13 @@ class DeferredVisitor : public FullVisitor {
       TensorLocation allocation_location, const Shape& shape,
       absl::optional<poplar::Tensor> tensor_like);
 
+  StatusOr<poplar::Tensor> AllocateInput(
+      TensorLocation allocation_location, const Shape& shape,
+      absl::optional<TensorOrRemoteBuffer> tensor_like);
+
+  StatusOr<poplar::Tensor> AllocateInput(TensorLocation allocation_location,
+                                         const Shape& shape);
+
   // Function called for each input tensor into the computation.
   // Input location is the location at which the tensor is an input to the
   // computation (parameter/infeed).
@@ -363,11 +370,11 @@ class DeferredVisitor : public FullVisitor {
   // These are the inputs at the callsite and where the values will come from,
   // but the actual input in the computation will need it's own Tensor
   // (potentially with a different layout).
-  DeferredArgVectors callsite_inputs_;
+  DeferredArgRBVectors callsite_inputs_;
   // Actual inputs to the computation.
-  TensorVectors computation_inputs_;
+  TensorOrRemoteBufferVectors computation_inputs_;
   // Outputs of the computation.
-  TensorVector outputs_;
+  TensorOrRemoteBufferVector outputs_;
 
   // When checking livness of buffers, those buffers might be also live in other
   // dependent subcomputations.
@@ -391,13 +398,13 @@ using ReallocateInputsInfo = std::vector<std::vector<bool>>;
 class InplaceDeferredVisitor : public DeferredVisitor {
  public:
   InplaceDeferredVisitor(
-      CompilerResources& res, const DeferredArgVectors& inputs,
+      CompilerResources& res, const DeferredArgRBVectors& inputs,
       const HloInstructionDescription& description, const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
 
   InplaceDeferredVisitor(
-      CompilerResources& res, const DeferredArgVectors& inputs,
+      CompilerResources& res, const DeferredArgRBVectors& inputs,
       const HloInstructionDescription& description, const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations,
       const ReallocateInputsInfo& reallocate_inputs_info);
@@ -410,7 +417,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
 
   // If the subcomputation is used as a loop, then add input/output aliasing
   // copies. Returns the loop state (i.e. the output of the loop).
-  StatusOr<TensorVector> AddLoopInputOutputAliasingCopies(
+  StatusOr<TensorOrRemoteBufferVector> AddLoopInputOutputAliasingCopies(
       poplar::Graph& graph, const HloComputation* computation,
       const std::string& debug_name);
 

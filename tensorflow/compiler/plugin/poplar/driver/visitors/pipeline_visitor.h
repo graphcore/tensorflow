@@ -38,11 +38,11 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
       int64 num_backward_stages, CompilerResources& res,
-      const DeferredArgVectors& inputs,
+      const DeferredArgRBVectors& inputs,
       const HloInstructionDescription& description, const std::string& name);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
-                  const DeferredArgVectors& inputs,
+                  const DeferredArgRBVectors& inputs,
                   const HloInstructionDescription& description,
                   const std::string& name);
 

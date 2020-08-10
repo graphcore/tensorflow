@@ -17,14 +17,16 @@ limitations under the License.
 
 #include <limits>
 #include <numeric>
+#include <string>
+#include <tuple>
+#include <vector>
+
 #include <poplar/Engine.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplar/TensorCloneMethod.hpp>
 #include <popops/HostSliceTensor.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
-#include <string>
-#include <tuple>
 
 #include "absl/algorithm/container.h"
 #include "absl/strings/str_cat.h"
@@ -114,7 +116,7 @@ poplar::Tensor RebalanceTensorIfRequired(poplar::Graph& graph,
   return rebalanced_tensor;
 }
 
-TensorVector GetTensorsMaybeExpand(
+TensorOrRemoteBufferVector GetTensorsMaybeExpand(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq, bool expand_aliasing,
     absl::optional<int64> opt_tensors_start = absl::nullopt,
@@ -126,14 +128,18 @@ TensorVector GetTensorsMaybeExpand(
   TensorMap::NamedTensorLocationVector tensor_vector =
       map.FindInstructionNamedTensorLocations(inst, opt_tensors_start,
                                               opt_tensors_end);
-  TensorVector outputs;
+  TensorOrRemoteBufferVector outputs;
   for (auto tensor : tensor_vector) {
-    if (expand_aliasing) {
-      auto& graph = GetGraphWithOutputIndex(
-          res, inst, tensor.location.flattened_output_tuple_index);
-      tensor.tensor = RebalanceTensorIfRequired(graph, res, seq, tensor.tensor);
+    CHECK(tensor.tensor.IsTensor() || tensor.tensor.IsRemoteBuffer());
+    if (tensor.tensor.IsTensor()) {
+      if (expand_aliasing) {
+        auto& graph = GetGraphWithOutputIndex(
+            res, inst, tensor.location.flattened_output_tuple_index);
+        tensor.tensor =
+            RebalanceTensorIfRequired(graph, res, seq, tensor.tensor);
+      }
+      TF_CHECK_OK(map.UpdateTensor(tensor.location, tensor.tensor));
     }
-    TF_CHECK_OK(map.UpdateTensor(tensor.location, tensor.tensor));
     outputs.push_back(tensor.tensor);
   }
   return outputs;
@@ -752,7 +758,8 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const xla::Shape& shape, const HloInstruction* layout,
     uint64 layout_output_idx, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TF_ASSIGN_OR_RETURN(TensorVector outputs,
+                      FindInstructionOutputTensors(tensor_map, res, layout));
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -1343,6 +1350,14 @@ bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
   return true;
 }
 
+bool PoplarShapeMatchesXLAShape(poplar::RemoteBuffer remote_buffer,
+                                const xla::Shape& shape) {
+  std::size_t element_count = ShapeUtil::ElementsIn(shape);
+
+  return (remote_buffer.numElements() * remote_buffer.getRepeats()) ==
+         element_count;
+}
+
 std::pair<int64, int64> FindTupleInputIndices(const HloInstruction* tuple,
                                               int64 n) {
   int64 start = 0;
@@ -1367,11 +1382,46 @@ std::pair<int64, int64> FindGetTupleElementTupleIndices(
   return std::make_pair(start, end);
 }
 
-TensorVector FindInstructionInputsInRange(
+namespace {
+StatusOr<TensorVector> TensorOrRemoteBufferVectorToTensorVector(
+    const TensorOrRemoteBufferVector& tv, const std::string& context = {}) {
+  TensorVector result;
+
+  for (int i = 0; i < tv.size(); ++i) {
+    if (!tv[i].IsTensor()) {
+      return tensorflow::errors::FailedPrecondition(
+          "Expected all members of the TensorOrRemoteBufferVector to be poplar "
+          "tensors, but input " +
+              std::to_string(i) + " is not: ",
+          context);
+    }
+
+    result.push_back(tv[i]);
+  }
+
+  return result;
+}
+}  // namespace
+
+StatusOr<TensorVector> FindInstructionInputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
     bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
+
+  TensorOrRemoteBufferVector inputs = GetTensorsMaybeExpand(
+      map, res, operand, seq, expand_aliasing, range.first, range.second);
+
+  return TensorOrRemoteBufferVectorToTensorVector(
+      inputs, "FindInstructionInputTensorsInRange on " + inst->name());
+}
+
+TensorOrRemoteBufferVector FindInstructionInputsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    bool expand_aliasing) {
+  const HloInstruction* operand = inst->operand(input);
+
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing,
                                range.first, range.second);
 }
@@ -1380,7 +1430,8 @@ StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, poplar::program::Sequence& seq, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
-  TensorVector inputs =
+
+  TensorOrRemoteBufferVector inputs =
       GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing, 0, 1);
 
   if (inputs.size() == 0) {
@@ -1388,37 +1439,67 @@ StatusOr<poplar::Tensor> FindInstructionInput(
         StrCat("[Poplar] Couldn't find input ", input, " for ", inst->name()));
   }
 
-  return inputs[0];
+  inputs.resize(1);
+
+  TF_ASSIGN_OR_RETURN(TensorVector result,
+                      TensorOrRemoteBufferVectorToTensorVector(
+                          inputs, "FindInstructionInput on " + inst->name()));
+
+  return result[0];
 }
 
-TensorVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
-                                   const HloInstruction* inst, int64 input,
-                                   poplar::program::Sequence& seq,
-                                   bool expand_aliasing) {
+TensorOrRemoteBufferVector FindInstructionInputs(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64 input, poplar::program::Sequence& seq, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing);
 }
 
-TensorVector FindInstructionOutputs(const TensorMap& map,
-                                    CompilerResources& res,
-                                    const HloInstruction* inst) {
+StatusOr<TensorVector> FindInstructionInputTensors(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64 input, poplar::program::Sequence& seq, bool expand_aliasing) {
+  const HloInstruction* operand = inst->operand(input);
+  TensorOrRemoteBufferVector inputs =
+      GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing);
+
+  return TensorOrRemoteBufferVectorToTensorVector(
+      inputs, "FindInstructionInputTensors on " + inst->name());
+}
+
+TensorOrRemoteBufferVector FindInstructionOutputs(const TensorMap& map,
+                                                  CompilerResources& res,
+                                                  const HloInstruction* inst) {
   DeferredAllocations::AllocateIfExists(res, inst);
   return map.FindInstructionOutputs(inst);
 }
 
-TensorVector FindInstructionOutputsInRange(TensorMap& map,
-                                           CompilerResources& res,
-                                           const HloInstruction* inst,
-                                           std::pair<int64, int64> range) {
+StatusOr<TensorVector> FindInstructionOutputTensors(
+    const TensorMap& map, CompilerResources& res, const HloInstruction* inst) {
+  DeferredAllocations::AllocateIfExists(res, inst);
+  return map.FindInstructionOutputTensors(inst);
+}
+
+StatusOr<TensorVector> FindInstructionOutputTensorsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    std::pair<int64, int64> range) {
+  DeferredAllocations::AllocateIfExists(res, inst, range.first, range.second);
+  return map.FindInstructionOutputTensors(inst, range.first, range.second);
+}
+
+StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    std::pair<int64, int64> range) {
   DeferredAllocations::AllocateIfExists(res, inst, range.first, range.second);
   return map.FindInstructionOutputs(inst, range.first, range.second);
 }
 
-TensorVector FindExpandedInstructionOutputsInRange(
+StatusOr<TensorVector> FindExpandedInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     std::pair<int64, int64> range, poplar::program::Sequence& seq) {
-  return GetTensorsMaybeExpand(map, res, inst, seq, true, range.first,
-                               range.second);
+  return TensorOrRemoteBufferVectorToTensorVector(
+      GetTensorsMaybeExpand(map, res, inst, seq, true, range.first,
+                            range.second),
+      "FindExpandedInstructionOutputsInRange on " + inst->name());
 }
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
@@ -1437,7 +1518,8 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
   // Get all the input tensors for all the inplace operands
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
 
-  std::vector<TensorVector> tensor_vectors(inplace_indexes.size());
+  std::vector<TensorOrRemoteBufferVector> tensor_vectors(
+      inplace_indexes.size());
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
     tensor_vectors[i] =
         FindInstructionOutputs(map, res, inst->operand(inplace_indexes[i]));
@@ -1447,7 +1529,7 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
   // writeable.
   for (auto tensor_vector : tensor_vectors) {
     for (auto tensor : tensor_vector) {
-      if (!tensor.isParallelWriteable()) {
+      if (tensor.IsTensor() && !tensor.AsTensor().isParallelWriteable()) {
         return false;
       }
     }
@@ -1494,12 +1576,49 @@ poplar::Tensor GetTensorForInplaceOp(
   return tensor;
 }
 
+StatusOr<poplar::RemoteBuffer> GetRemoteBufferForInplaceOp(
+    poplar::RemoteBuffer remote_buffer, CompilerResources& res,
+    const HloInstruction* inst, int64 operand_index, uint64 operand_tuple_idx,
+    poplar::program::Sequence& seq, bool is_lowered_inplace) {
+  // We need to add a copy before an inplace op if inst is not marked as inplace
+  if (!is_lowered_inplace) {
+    return xla::FailedPrecondition(
+        "Unable to add copy on inplace input remote buffer at instruction "
+        "%s input %d:%d.",
+        inst->name(), operand_index, operand_tuple_idx);
+  }
+
+  return remote_buffer;
+}
+
 StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
                                                  CompilerResources& res,
                                                  const HloInstruction* inst,
                                                  poplar::program::Sequence& seq,
                                                  bool expand_aliasing,
                                                  bool always_preserve_aliases) {
+  TF_ASSIGN_OR_RETURN(auto result_with_remote_buffers,
+                      FindInplaceOutputs(map, res, inst, seq, expand_aliasing,
+                                         always_preserve_aliases));
+
+  TensorVectors result;
+  result.reserve(result_with_remote_buffers.size());
+
+  for (auto& result_with_remote_buffer : result_with_remote_buffers) {
+    TF_ASSIGN_OR_RETURN(auto tensor_vector,
+                        TensorOrRemoteBufferVectorToTensorVector(
+                            result_with_remote_buffer,
+                            "FindInplaceOutputTensors on " + inst->name()));
+    result.push_back(tensor_vector);
+  }
+
+  return result;
+}
+
+StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    poplar::program::Sequence& seq, bool expand_aliasing,
+    bool always_preserve_aliases) {
   // Check that the instruction description is for an inplace operation.
   auto inplace_description = HloInstructionDescription(inst);
   if (!inplace_description.IsInplaceType()) {
@@ -1514,7 +1633,7 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
   // Get all the input tensors for all the inplace operands
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
 
-  TensorVectors tensors(inplace_indexes.size());
+  TensorOrRemoteBufferVectors tensors(inplace_indexes.size());
   if (inst->opcode() == HloOpcode::kGetTupleElement) {
     // For GTEs there is only one input, and it is always inplace
     CHECK_EQ(inplace_indexes.size(), 1);
@@ -1537,18 +1656,39 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
   // Go through all the inplace tensors and check if we need to add copies.
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
     for (uint64 tuple_idx = 0; tuple_idx < tensors[i].size(); tuple_idx++) {
-      poplar::Tensor t = tensors[i][tuple_idx];
-      tensors[i][tuple_idx] = GetTensorForInplaceOp(
-          t, res, inst, inplace_indexes[i], tuple_idx, seq, is_still_inplace,
-          parallel_writeable_output);
+      if (tensors[i][tuple_idx].IsTensor()) {
+        poplar::Tensor t = tensors[i][tuple_idx];
+
+        tensors[i][tuple_idx] = GetTensorForInplaceOp(
+            t, res, inst, inplace_indexes[i], tuple_idx, seq, is_still_inplace,
+            parallel_writeable_output);
+      } else if (tensors[i][tuple_idx].IsRemoteBuffer()) {
+        poplar::RemoteBuffer rb = tensors[i][tuple_idx];
+
+        TF_ASSIGN_OR_RETURN(
+            tensors[i][tuple_idx],
+            GetRemoteBufferForInplaceOp(rb, res, inst, inplace_indexes[i],
+                                        tuple_idx, seq, is_still_inplace));
+      } else {
+        return xla::FailedPrecondition(
+            "Unknown tensor type in instruction `%s` at %d:%d, expected a "
+            "tensor or a remote buffer.",
+            inst->name(), inplace_indexes[i], tuple_idx);
+      }
     }
   }
+
   return tensors;
 }
 
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor) {
   return map.AddOutputTensor(inst, n, tensor);
+}
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer) {
+  return map.AddOutputRemoteBuffer(inst, n, rbuffer);
 }
 
 }  // namespace poplarplugin
