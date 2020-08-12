@@ -36,7 +36,8 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
   // Make sure that the root of each stage is a tuple.
   TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   TF_ASSIGN_OR_RETURN(auto analysis,
-                      PipelineDataflowAnalysis::GetAnalysis(stages, true));
+                      PipelineDataflowAnalysis::GetAnalysis(stages, true, true,
+                                                            true, false, true));
 
   const int64 last_stage_id = stages.forward.size() - 1;
   TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
@@ -79,7 +80,11 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
             // We don't need to do anything for these creators.
             break;
           }
-          // Fall through.
+          if (IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
+            // Ignore Fifos inserted by other passes.
+            break;
+          }
+          TF_FALLTHROUGH_INTENDED;
         }
         default: {
           return InternalErrorStrCat("Invalid input ", operand->ToString(),
