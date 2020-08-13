@@ -153,6 +153,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual poplar::program::Program GetPipelineRepeatBlockSequence(
       int64 iterations) const = 0;
 
+  // Function which indicates whether stage outputs should be copied.
+  virtual bool StageOutputsRequireCopies() const = 0;
+
   Status HandleNotImplemented(HloInstruction* hlo);
 
   // Creator for PipelineStage(Backward).
@@ -181,6 +184,8 @@ class ParallelPipelineVisitor : public PipelineVisitor {
       int additional_iterations = 0) const override;
   poplar::program::Program GetPipelineRepeatBlockSequence(
       int64 iterations) const override;
+
+  bool StageOutputsRequireCopies() const override { return true; }
 };
 
 class SequentialPipelineVisitor : public PipelineVisitor {
@@ -200,6 +205,8 @@ class SequentialPipelineVisitor : public PipelineVisitor {
       int additional_iterations = 0) const override;
   poplar::program::Program GetPipelineRepeatBlockSequence(
       int64 iterations) const override;
+
+  bool StageOutputsRequireCopies() const override { return false; }
 };
 
 StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
