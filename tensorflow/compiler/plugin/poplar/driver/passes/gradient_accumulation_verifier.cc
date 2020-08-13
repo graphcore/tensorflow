@@ -113,6 +113,87 @@ Status GradientAccumulationVerifier::VerifyStatefulGradientAccumulation(
   return Status::OK();
 }
 
+namespace {
+StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
+                                           int64 tuple_index) {
+  absl::flat_hash_set<HloInstruction*> gtes;
+  for (HloInstruction* user : inst->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    if (user->tuple_index() == tuple_index) {
+      gtes.insert(user);
+    }
+  }
+  if (gtes.size() != 1) {
+    return InternalErrorStrCat(
+        "Expected the gradient accumulation buffer to only have a "
+        "single user, but it has ",
+        gtes.size(), " users.");
+  }
+  return *std::begin(gtes);
+}
+
+StatusOr<int64> VerifyGradientAccumulationInsideComputation(
+    const HloComputation* computation, int64 parameter_index) {
+  // Expect the gradient accumulator to be used serially, with the final use in
+  // the root tuple. We expect all the uses to be inplace on the buffer and look
+  // inside of repeat loops.
+  int64 output_index = parameter_index;
+  HloInstruction* inner_user =
+      computation->parameter_instruction(parameter_index);
+  do {
+    if (inner_user->user_count() != 1) {
+      return InternalErrorStrCat(
+          "Expected the gradient accumulation buffer to be used "
+          "serially, but detected ",
+          inner_user->user_count(), " users.");
+    }
+    HloInstruction* next_user = inner_user->users()[0];
+    const auto next_user_indices = next_user->OperandIndices(inner_user);
+
+    if (next_user_indices.size() != 1) {
+      return InternalErrorStrCat(
+          "Expected the gradient accumulation buffer to only appear as "
+          "an operand once, but it is used ",
+          next_user_indices.size(), " times.");
+    }
+    auto optional_inplace_modifier = GetInplaceModifier(inner_user);
+    if (!optional_inplace_modifier) {
+      return InternalError(
+          "Expected the gradient accumulation buffer to be used "
+          "inplace.");
+    }
+    HloInstruction* inplace_modifier = *optional_inplace_modifier;
+    if (IsRepeatLoop(inplace_modifier)) {
+      const auto indices = inplace_modifier->OperandIndices(inner_user);
+      if (indices.size() != 1) {
+        return InternalErrorStrCat(
+            "Expected the gradient accumulation buffer to only appear as an "
+            "operand once, but it is used ",
+            indices.size(), " times.");
+      }
+      TF_ASSIGN_OR_RETURN(int64 gte_output_index,
+                          VerifyGradientAccumulationInsideComputation(
+                              inplace_modifier->to_apply(), indices[0]));
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          GetUniqueGTEUser(inplace_modifier, gte_output_index));
+      inner_user = gte;
+      output_index = 0;
+    } else {
+      if (inplace_modifier != next_user) {
+        return InternalErrorStrCat(
+            "Expected the gradient accumulation inplace user to be ",
+            next_user->ToString(), " but it was ", inplace_modifier->ToString(),
+            ".");
+      }
+      inner_user = next_user;
+      output_index = next_user_indices[0];
+    }
+  } while (computation->root_instruction() != inner_user);
+  CHECK_EQ(inner_user->opcode(), HloOpcode::kTuple);
+  return output_index;
+}
+}  // namespace
+
 Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
     HloInstruction* const inst, CallGraph* call_graph) {
   if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
@@ -161,7 +242,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
       if (next_user_indices.size() != 1) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to only appear as "
-            "an opperand once, but it is used ",
+            "an operand once, but it is used ",
             next_user_indices.size(), " times.");
       }
       auto inplace_modifier = GetInplaceModifier(user);
@@ -247,7 +328,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
       if (indices.size() != 1) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to only appear as an "
-            "opperand once, but it is used ",
+            "operand once, but it is used ",
             indices.size(), " times.");
       }
       if (!IsPipelineStageBackward(user)) {
@@ -267,66 +348,18 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
                                    " to have been lowered inplace.");
       }
       HloComputation* pipeline_stage_comp = user->to_apply();
-
-      // Inside of the backward pipeline stage, we expect the gradient
-      // accumulator to be used serially, with the final use in the root
-      // tuple. We expect all the uses to be inplace on the buffer.
-      int64 output_index = indices[0];
-      HloInstruction* inner_user =
-          pipeline_stage_comp->parameter_instruction(output_index);
-      do {
-        if (inner_user->user_count() != 1) {
-          return InternalErrorStrCat(
-              "Expected the gradient accumulation buffer to be used "
-              "serially, but detected ",
-              inner_user->user_count(), " users.");
-        }
-        HloInstruction* next_user = inner_user->users()[0];
-        const auto next_user_indices = next_user->OperandIndices(inner_user);
-
-        if (next_user_indices.size() != 1) {
-          return InternalErrorStrCat(
-              "Expected the gradient accumulation buffer to only appear as "
-              "an opperand once, but it is used ",
-              next_user_indices.size(), " times.");
-        }
-        auto inplace_modifier = GetInplaceModifier(inner_user);
-        if (!inplace_modifier) {
-          return InternalError(
-              "Expected the gradient accumulation buffer to be used "
-              "inplace.");
-        }
-        if (*inplace_modifier != next_user) {
-          return InternalErrorStrCat(
-              "Expected the gradient accumulation inplace user to be ",
-              next_user->ToString(), " but it was ",
-              (*inplace_modifier)->ToString(), ".");
-        }
-        inner_user = next_user;
-        output_index = next_user_indices[0];
-      } while (pipeline_stage_comp->root_instruction() != inner_user);
-      CHECK_EQ(inner_user->opcode(), HloOpcode::kTuple);
+      TF_ASSIGN_OR_RETURN(int64 output_index,
+                          VerifyGradientAccumulationInsideComputation(
+                              pipeline_stage_comp, indices[0]));
 
       // We expect the output at the gradient accumulation buffer location
       // to be only used (via a GTE) by the gradient accumulation sink
       // instruction.
-      absl::flat_hash_set<HloInstruction*> gtes;
-      for (HloInstruction* stage_user : user->users()) {
-        CHECK_EQ(stage_user->opcode(), HloOpcode::kGetTupleElement);
-        if (stage_user->tuple_index() == output_index) {
-          gtes.insert(stage_user);
-        }
-      }
-      if (gtes.size() != 1) {
-        return InternalErrorStrCat(
-            "Expected the gradient accumulation buffer to only have a "
-            "single user, but it has ",
-            gtes.size(), " users.");
-      }
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          GetUniqueGTEUser(user, output_index));
 
       // We expect the sink instruction to only be used by the resource
       // update function.
-      HloInstruction* gte = *std::begin(gtes);
       if (gte->user_count() != 1) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to only have a single "
