@@ -1100,8 +1100,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported);
-    pipeline.AddPass<PipelineFeedHoisting>();
-    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
     {
       auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
@@ -1110,6 +1108,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<PipelineOptimizer>();
     }
+    pipeline.AddPass<PipelineFeedHoisting>();
+    pipeline.AddPass<PipelineFIFOInserter>();
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputeInstructions>(
         poplar_executor->RecomputationEnabled());
