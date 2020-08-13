@@ -24,30 +24,47 @@ namespace poplarplugin {
 // This structure contains all information which is used during the
 // modifications/optimisation of the XLA graph.
 struct CompilerInformation {
-  CompilerInformation(int64 max_all_reduce_buffer_size,
-                      int64 max_reduce_scatter_buffer_size,
-                      int64 max_inter_ipu_copies_buffer_size,
-                      int64 max_send_recv_cluster_size,
-                      int64 max_scheduler_lookahead_depth_,
-                      int64 max_scheduler_search_space_size_)
-      : max_all_reduce_buffer_size(max_all_reduce_buffer_size),
-        max_reduce_scatter_buffer_size(max_reduce_scatter_buffer_size),
-        max_inter_ipu_copies_buffer_size(max_inter_ipu_copies_buffer_size),
-        max_send_recv_cluster_size(max_send_recv_cluster_size),
-        max_scheduler_lookahead_depth(max_scheduler_lookahead_depth_),
-        max_scheduler_search_space_size(max_scheduler_search_space_size_) {}
+  int64 max_all_reduce_buffer_size = 0;
 
-  const int64 max_all_reduce_buffer_size;
+  int64 max_reduce_scatter_buffer_size = 0;
 
-  const int64 max_reduce_scatter_buffer_size;
+  int64 max_inter_ipu_copies_buffer_size = 0;
 
-  const int64 max_inter_ipu_copies_buffer_size;
+  int64 max_send_recv_cluster_size = 0;
 
-  const int64 max_send_recv_cluster_size;
+  int64 max_scheduler_lookahead_depth = 1;
 
-  const int64 max_scheduler_lookahead_depth;
+  int64 max_scheduler_search_space_size = 64;
 
-  const int64 max_scheduler_search_space_size;
+  CompilerInformation& set_max_all_reduce_buffer_size(int64 val) {
+    max_all_reduce_buffer_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_reduce_scatter_buffer_size(int64 val) {
+    max_reduce_scatter_buffer_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_inter_ipu_copies_buffer_size(int64 val) {
+    max_inter_ipu_copies_buffer_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_send_recv_cluster_size(int64 val) {
+    max_send_recv_cluster_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_scheduler_lookahead_depth(int64 val) {
+    max_scheduler_lookahead_depth = val;
+    return *this;
+  }
+
+  CompilerInformation& set_max_scheduler_search_space_size(int64 val) {
+    max_scheduler_search_space_size = val;
+    return *this;
+  }
 };
 
 }  // namespace poplarplugin

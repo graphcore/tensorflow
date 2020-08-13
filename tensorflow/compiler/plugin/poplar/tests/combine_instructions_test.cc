@@ -137,7 +137,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -222,7 +223,8 @@ ENTRY entry () -> f32[2] {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_inter_ipu_copies_buffer_size(
+                  64 * 1024)))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -286,7 +288,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -376,7 +379,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -450,7 +454,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -497,7 +502,8 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_reduce_scatter_buffer_size(
+                  64 * 1024)))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -543,7 +549,8 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+              CompilerInformation().set_max_send_recv_cluster_size(
+                  max_send_recv_cluster_size)))));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -601,7 +608,8 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+              CompilerInformation().set_max_send_recv_cluster_size(
+                  max_send_recv_cluster_size)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -641,7 +649,8 @@ ENTRY %top () -> (f32[], f32[]) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+              CompilerInformation().set_max_send_recv_cluster_size(
+                  max_send_recv_cluster_size)))));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -707,7 +716,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+              CompilerInformation().set_max_send_recv_cluster_size(
+                  max_send_recv_cluster_size)))));
   ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -822,7 +832,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -871,7 +882,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -928,7 +940,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -973,7 +986,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -1039,7 +1053,8 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              CompilerInformation().set_max_all_reduce_buffer_size(64 *
+                                                                   1024)))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());

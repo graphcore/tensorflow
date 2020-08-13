@@ -169,9 +169,8 @@ ENTRY c1 {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -241,9 +240,8 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -301,9 +299,8 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -363,9 +360,8 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -421,9 +417,8 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
