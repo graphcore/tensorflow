@@ -162,6 +162,7 @@ cc_library(
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
+        "driver/passes/resource_update_elementwise_clustering.cc",
         "driver/passes/embeddings_gradient_optimizer.cc",
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
@@ -367,6 +368,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
+        "driver/passes/resource_update_elementwise_clustering.h",
         "driver/passes/resource_update_fixer.h",
         "driver/passes/resource_update_schedule_optimizer.h",
         "driver/passes/root_token_replacer.h",
@@ -3326,6 +3328,18 @@ tf_xla_py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+xla_test(
+    name = "resource_update_elementwise_clustering_test",
+    srcs = ["tests/resource_update_elementwise_clustering_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
