@@ -553,29 +553,31 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   // Compile the pipeline.
-  PipelineVisitor visitor(inst, res, inputs, HloInstructionDescription(inst),
-                          GetDebugName(inst));
+  TF_ASSIGN_OR_RETURN(
+      auto visitor,
+      GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
+                         GetDebugName(inst)));
   auto order = pipeline_computation->parent()
                    ->schedule()
                    .sequence(pipeline_computation)
                    .instructions();
 
-  TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(&visitor, order));
+  TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst));
 
   // Make sure that inputs/outputs alias each other.
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
-                      visitor.AddLoopInputOutputAliasingCopies(
+                      visitor->AddLoopInputOutputAliasingCopies(
                           graph, pipeline_computation, GetDebugName(inst)));
-  ExecutionCounters& execution_counters = visitor.GetExecutionCounters();
+  ExecutionCounters& execution_counters = visitor->GetExecutionCounters();
   // Initialize the counters.
   seq.add(execution_counters.SetInitialValuesToZero());
 
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
-                      visitor.GetPipelineSequence(pipeline_depth));
+                      visitor->GetPipelineSequence(pipeline_depth));
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 

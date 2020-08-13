@@ -196,7 +196,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -332,7 +332,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -461,7 +461,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -593,7 +593,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -722,7 +722,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -902,7 +902,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -1087,7 +1087,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -1258,7 +1258,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -1367,7 +1367,7 @@ ENTRY e {
   auto p1 = resources->main_graph->addConstant(poplar::FLOAT, {}, 2.f);
   resources->main_graph->setTileMapping(p1, 0);
 
-  PipelineVisitor visitor(
+  ParallelPipelineVisitor visitor(
       pipeline, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
                            {TensorOrRemoteBuffer{p1}}},
