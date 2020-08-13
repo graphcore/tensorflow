@@ -204,15 +204,15 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
         "Only io_batch_size = 1 is supported for verified transfers.");
   }
 
-  // Check that the replication factor matches.
-  if (res.replication_factor != outfeed_config.replication_factor()) {
+  // The data feed replication factor must match the local replication factor.
+  if (res.local_replication_factor != outfeed_config.replication_factor()) {
     return xla::FailedPrecondition(
         "Current program has been created with replication_factor %d, however "
         "the IPUOutfeedQueue has been configured with replication_factor %d. "
         "Either reduce the number of IPUs in your TensorFlow device, or set "
         "the `replication_factor` to %d when creating IPUOutfeedQueue.",
-        res.replication_factor, outfeed_config.replication_factor(),
-        res.replication_factor);
+        res.local_replication_factor, outfeed_config.replication_factor(),
+        res.local_replication_factor);
   }
 
   FeedInfo info(outfeed->name(), outfeed_config,

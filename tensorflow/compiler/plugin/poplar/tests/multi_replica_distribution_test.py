@@ -17,10 +17,10 @@ import numpy as np
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.ops.cross_replica_ops import cross_replica_sum
 from tensorflow.python.ipu.ops.replication_ops import replication_index
-from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
@@ -43,14 +43,25 @@ class MultiReplicaDistributionTest(test_util.TensorFlowTestCase):  # pylint: dis
     rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
     size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
 
-    def my_net(x):
-      y = math_ops.cast(replication_index(), np.float32) + 1.0
-      y = cross_replica_sum(y)
-      return x * x + y
+    data = np.array([2.0], dtype=np.float32)
+    dataset = dataset_ops.Dataset.from_tensor_slices((data,))
+    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="infeed")
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
-    v = array_ops.placeholder(dtype=np.float32, shape=(1,))
+    def my_body(acc, x):
+      index = math_ops.cast(replication_index(), np.float32) + 1.0
+      acc += cross_replica_sum(index)
+      acc += x * x
+      return acc, outfeed.enqueue(index)
+
+    def my_net():
+      return ipu.loops.repeat(1, my_body, infeed_queue=infeed, inputs=[0.0])
+
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
+      [result] = ipu.ipu_compiler.compile(my_net)
+
+    init_op = infeed.initializer
+    dequeue_op = outfeed.dequeue()
 
     with session.Session() as sess:
       config = ipu.utils.create_ipu_config()
@@ -61,7 +72,11 @@ class MultiReplicaDistributionTest(test_util.TensorFlowTestCase):  # pylint: dis
 
       ipu.utils.configure_ipu_system(config)
 
-      res = sess.run(result, {v: [2.0]})
+      sess.run(init_op)
+      res = sess.run(result)
+      dequeued = sess.run(dequeue_op)
+
+      self.assertEqual(dequeued, rank + 1.0)
       self.assertEqual(res, 4.0 + np.sum(range(size + 1)))
 
 
