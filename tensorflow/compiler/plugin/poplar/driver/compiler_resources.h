@@ -87,7 +87,14 @@ struct CompilerResources {
 
   bool disable_graph_outlining;
 
+  /* The global number of replicas that we are compiling for. */
   uint32 replication_factor;
+
+  /* The local number of replicas owned by this process. This is the number of
+   * replicas that we are responsible for at run-time in this process. This is
+   * only different from the `replication_factor` when using multi-replica
+   * distribution with the Poplar "runtime replica subset" feature. */
+  uint32 local_replication_factor;
 
   bool merge_infeed_io_copies;
 
@@ -147,8 +154,8 @@ struct CompilerResources {
       const poplar::OptionFlags& pooling_options, bool verified_transfers,
       bool clear_matmul_pass_type, bool disable_graph_convolution_caching,
       bool disable_graph_outlining, bool merge_infeed_io_copies,
-      uint32 replication_factor, int64 max_all_reduce_buffer_size,
-      int64 max_reduce_scatter_buffer_size,
+      uint32 replication_factor, uint32 local_replication_factor,
+      int64 max_all_reduce_buffer_size, int64 max_reduce_scatter_buffer_size,
       int64 max_inter_ipu_copies_buffer_size, int64 max_send_recv_cluster_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
@@ -173,6 +180,7 @@ struct CompilerResources {
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
+        local_replication_factor(local_replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
         scheduler_selection(scheduler_selection),
