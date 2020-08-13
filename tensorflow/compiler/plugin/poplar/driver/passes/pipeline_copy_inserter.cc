@@ -162,14 +162,16 @@ std::vector<int> GetPipelineStageDeviceMapping(const HloInstruction* pipeline) {
 
 StatusOr<bool> InsertIntraIPUCopiesBetweenStages(HloInstruction* pipeline_op,
                                                  PipelineStages& stages) {
-  TF_ASSIGN_OR_RETURN(auto backend_config,
-                      pipeline_op->backend_config<PoplarBackendConfig>());
+  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
 
-  // If we are interleaving pipeline stages, we don't need to insert copies
-  // between stages.
-  if (backend_config.call_config().pipeline_config().schedule() ==
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved) {
-    return false;
+  // Do not need to insert these copies when the schedule guarantees consecutive
+  // stages cannot be executed in the same "time-step".
+  switch (schedule) {
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential: {
+      return false;
+    }
+    default: { break; }
   }
 
   // Get the stage-device mapping

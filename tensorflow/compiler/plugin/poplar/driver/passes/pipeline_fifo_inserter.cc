@@ -115,6 +115,13 @@ StatusOr<bool> PipelineFIFOInserter::Run(HloModule* module) {
     return false;
   }
   CHECK_EQ(pipeline_ops.size(), 1);
+  TF_ASSIGN_OR_RETURN(const auto schedule,
+                      GetPipelineSchedule(pipeline_ops[0]));
+  if (schedule == PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+    VLOG(1) << "Sequential schedule does not require fifos.";
+    return false;
+  }
+
   VLOG(2) << "Before PipelineFIFOInserter:";
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
 
