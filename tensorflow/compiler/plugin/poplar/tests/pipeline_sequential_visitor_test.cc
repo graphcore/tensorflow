@@ -63,12 +63,10 @@ class PipelineSeqVisitorTest : public HloTestBase {};
 std::unique_ptr<CompilerResources> GetMockResources(
     poplar::Device& device, HloModule* module, bool merge_infeeds,
     int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size = 0) {
-  auto resources = absl::make_unique<CompilerResources>(
-      poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
-      false, false, false, false, merge_infeeds, 1, 1, 0, 0,
-      max_inter_ipu_copies_buffer_size, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour(), false, "", false, false, false,
-      poplar::OptionFlags(), 0, false, false);
+  const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
+      max_inter_ipu_copies_buffer_size);
+  auto resources = CompilerResources::CreateTestDefault(module, info);
+  resources->merge_infeed_io_copies = merge_infeeds;
   resources->streams_indices.InitializeIndexTensors(*resources, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =
