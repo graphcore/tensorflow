@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 
+#include <memory>
 #include <string>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -118,7 +119,6 @@ class PipelineVisitor : public InplaceDeferredVisitor {
 
   poplar::program::Sequence& GetSequenceForAliasingCopy() override;
 
- private:
   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule_;
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> inter_ipu_copy_sequences_;
@@ -147,10 +147,14 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
       fwd_stage_visitors_;
 
-  poplar::program::Program GetPipelineRampUpSequence() const;
-  poplar::program::Program GetPipelineRampDownSequence(
-      int additional_iterations = 0) const;
-  poplar::program::Program GetPipelineRepeatBlockSequence() const;
+  virtual poplar::program::Program GetPipelineRampUpSequence() const = 0;
+  virtual poplar::program::Program GetPipelineRampDownSequence(
+      int additional_iterations = 0) const = 0;
+  virtual poplar::program::Program GetPipelineRepeatBlockSequence(
+      int64 iterations) const = 0;
+
+  // Function which indicates whether stage outputs should be copied.
+  virtual bool StageOutputsRequireCopies() const = 0;
 
   Status HandleNotImplemented(HloInstruction* hlo);
 
@@ -164,6 +168,51 @@ class PipelineVisitor : public InplaceDeferredVisitor {
 };
 
 #undef HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED
+
+class ParallelPipelineVisitor : public PipelineVisitor {
+ public:
+  using PipelineVisitor::PipelineVisitor;
+
+  static std::unique_ptr<PipelineVisitor> Create(
+      const HloInstruction* pipeline, CompilerResources& res,
+      const DeferredArgRBVectors& inputs,
+      const HloInstructionDescription& description, const std::string& name);
+
+ protected:
+  poplar::program::Program GetPipelineRampUpSequence() const override;
+  poplar::program::Program GetPipelineRampDownSequence(
+      int additional_iterations = 0) const override;
+  poplar::program::Program GetPipelineRepeatBlockSequence(
+      int64 iterations) const override;
+
+  bool StageOutputsRequireCopies() const override { return true; }
+};
+
+class SequentialPipelineVisitor : public PipelineVisitor {
+ public:
+  using PipelineVisitor::PipelineVisitor;
+
+  Status HandleFifo(HloInstruction* hlo) override;
+
+  static std::unique_ptr<PipelineVisitor> Create(
+      const HloInstruction* pipeline, CompilerResources& res,
+      const DeferredArgRBVectors& inputs,
+      const HloInstructionDescription& description, const std::string& name);
+
+ protected:
+  poplar::program::Program GetPipelineRampUpSequence() const override;
+  poplar::program::Program GetPipelineRampDownSequence(
+      int additional_iterations = 0) const override;
+  poplar::program::Program GetPipelineRepeatBlockSequence(
+      int64 iterations) const override;
+
+  bool StageOutputsRequireCopies() const override { return false; }
+};
+
+StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
+    const HloInstruction* pipeline, CompilerResources& res,
+    const DeferredArgRBVectors& inputs,
+    const HloInstructionDescription& description, const std::string& name);
 
 }  // namespace poplarplugin
 }  // namespace xla

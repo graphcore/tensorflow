@@ -53,11 +53,7 @@ poplar::Device CreateIpuModel(int64 num_shards) {
 
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     int64 num_shards) {
-  auto resources = absl::make_unique<CompilerResources>(
-      poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
-      false, false, false, false, false, 1, 0, 0, 0, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour(), false, "", false, false, false,
-      poplar::OptionFlags(), 0, false, false);
+  auto resources = CompilerResources::CreateTestDefault(module);
   resources->streams_indices.InitializeIndexTensors(*resources, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(

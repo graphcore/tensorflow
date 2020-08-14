@@ -1,4 +1,4 @@
-/* Copyright 2017 - 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -64,9 +64,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -124,9 +123,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -172,9 +170,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -223,9 +220,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -282,9 +278,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -337,9 +332,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -392,9 +386,8 @@ cluster_1  {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -448,9 +441,8 @@ cluster_1  {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -514,9 +506,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -611,9 +602,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -701,9 +691,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -798,9 +787,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -845,9 +833,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -881,9 +868,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -929,9 +915,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -985,9 +970,8 @@ HloModule top
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(
-          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler(CompilerInformation()))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 

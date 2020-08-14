@@ -401,15 +401,16 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
         "supported.");
   }
 
-  // Check that the replication factor matches.
-  if (resources_.replication_factor != infeed_config.replication_factor()) {
+  // The data feed replication factor must match the local replication factor.
+  if (resources_.local_replication_factor !=
+      infeed_config.replication_factor()) {
     return xla::FailedPrecondition(
         "Current program has been created with replication_factor %d, however "
         "the IPUInfeedQueue has been configured with replication_factor %d. "
         "Either reduce the number of IPUs in your TensorFlow device, or set "
         "the `replication_factor` to % d when creating IPUInfeedQueue.",
-        resources_.replication_factor, infeed_config.replication_factor(),
-        resources_.replication_factor);
+        resources_.local_replication_factor, infeed_config.replication_factor(),
+        resources_.local_replication_factor);
   }
 
   std::vector<Shape> shapes = FlattenedXlaShape(infeed->infeed_shape());

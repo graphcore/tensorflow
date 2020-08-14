@@ -63,12 +63,10 @@ class PipelineSeqVisitorTest : public HloTestBase {};
 std::unique_ptr<CompilerResources> GetMockResources(
     poplar::Device& device, HloModule* module, bool merge_infeeds,
     int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size = 0) {
-  auto resources = absl::make_unique<CompilerResources>(
-      poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
-      false, false, false, false, merge_infeeds, 1, 0, 0,
-      max_inter_ipu_copies_buffer_size, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour(), false, "", false, false, false,
-      poplar::OptionFlags(), 0, false, false);
+  const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
+      max_inter_ipu_copies_buffer_size);
+  auto resources = CompilerResources::CreateTestDefault(module, info);
+  resources->merge_infeed_io_copies = merge_infeeds;
   resources->streams_indices.InitializeIndexTensors(*resources, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =
@@ -195,7 +193,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  SequentialPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -330,7 +328,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  SequentialPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -366,134 +364,8 @@ ENTRY pipeline {
 }
 
 // This tests that the output value has the expected value, given a pipeline
-// poplar control program with a fifo.
-TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValue) {
-  const string& hlo_string = R"(
-HloModule module
-
-_stage_0 {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  temp_0 = f32[] constant(0), sharding={maximal device=0}
-  const_1 = f32[] constant(1), sharding={maximal device=0}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
-}
-
-_stage_1 {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_1_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_0_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  param_1 = f32[] parameter(1), sharding={maximal device=0}
-  add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
-  ROOT t = () tuple(), sharding={{maximal device=0}}
-}
-
-ENTRY pipeline {
-  arg = f32[] parameter(0), sharding={maximal device=0}
-
-  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={maximal device=0}
-  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-}
-)";
-  auto device = createIpuModel(2, 4);
-
-  std::unique_ptr<HloModule> module =
-      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
-  auto resources = GetMockResources(device, module.get(), false, 2);
-
-  CustomOpReplacer replacer;
-  EXPECT_TRUE(replacer.Run(module.get()).ValueOrDie());
-
-  InterIpuCopyInserter inserter;
-  EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
-
-  HloTrivialScheduler scheduler;
-  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
-
-  auto entry_computation = module->entry_computation();
-
-  // Count the number of stages
-  const auto stage_count = absl::c_count_if(
-      entry_computation->instructions(), [](const HloInstruction* hlo) {
-        return hlo->opcode() == HloOpcode::kCall;
-      });
-
-  // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
-      {entry_computation->GetInstructionWithName("arg"), 0},
-      {entry_computation->GetInstructionWithName("a0"), 0},
-      {entry_computation->GetInstructionWithName("gte_a"), 0},
-      {entry_computation->GetInstructionWithName("b0"), 1},
-      {entry_computation->GetInstructionWithName("gte_b"), 1},
-      {entry_computation->GetInstructionWithName("c0"), 2},
-      {entry_computation->GetInstructionWithName("gte_c"), 2},
-      {entry_computation->GetInstructionWithName("d"), 3},
-      // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
-      // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
-      // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
-  };
-
-  auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
-  resources->main_graph->setTileMapping(placeholder, 0);
-
-  PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
-  TF_EXPECT_OK(entry_computation->Accept(&visitor));
-
-  // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(4).ValueOrDie();
-
-  // Compile the graph
-  poplar::Engine engine(*resources->main_graph, program);
-
-  // Capture the engine output into a string stream.
-  std::stringstream ss;
-  engine.setPrintTensorStream(ss);
-
-  // Run the program
-  device.attach();
-  engine.load(device);
-  engine.run(0);
-  device.detach();
-
-  const std::string expected = R"(/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-)";
-
-  ASSERT_EQ(expected, ss.str());
-}
-
-// This tests that the output value has the expected value, given a pipeline
-// poplar control program with a fifo and tuples.
-TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValueTuples) {
+// poplar control program with tuples.
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorValueTuples) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -524,8 +396,8 @@ _stage_1_bw {
 
 _stage_0_bw {
   param = f32[2] parameter(0), sharding={maximal device=0}
-  fifo_tuple = (f32[2], f32[4], f32[2], f32[2]) parameter(1), sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
-  add_1 = f32[2] get-tuple-element(fifo_tuple), index=2, sharding={maximal device=0}
+  tuple = (f32[2], f32[4], f32[2], f32[2]) parameter(1), sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
+  add_1 = f32[2] get-tuple-element(tuple), index=2, sharding={maximal device=0}
 
   add_0 = f32[2] add(param, add_1), sharding={maximal device=0}
   token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
@@ -537,12 +409,11 @@ ENTRY pipeline {
 
   a0 = ((f32[2], f32[4], f32[2], f32[2])) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = (f32[2], f32[4], f32[2], f32[2]) get-tuple-element(a0), index=0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"isInplace\":true}"
-  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[2] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  ROOT d = () call(gte_c, gte_a), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -579,17 +450,15 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
-      // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
-      // FIFO after stage 0
       {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      // Inter-ipu-copy between stage 2 and 3
+      {entry_computation->GetInstructionWithName("custom-call.2"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  SequentialPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -748,7 +617,7 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(
+  SequentialPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
@@ -824,145 +693,6 @@ ENTRY pipeline {
   ASSERT_EQ(expected, ss.str());
 }
 
-// This tests that the output value has the expected value, given a pipeline
-// poplar control program with a fifo and tuples.
-// Also make sure that aliasing is preserved by the FIFO.
-TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValueBroadcastTuples) {
-  const string& hlo_string = R"(
-HloModule module
-
-_stage_0 {
-  a = f32[] parameter(0), sharding={maximal device=0}
-  const_0 = f32[] constant(100), sharding={maximal device=0}
-  add_0 = f32[] add(a, const_0), sharding={maximal device=0}
-  bcast = f32[2] broadcast(add_0), dimensions={}, sharding={maximal device=0}
-  ROOT out = (f32[2]) tuple(bcast), sharding={{maximal device=0}}, backend_config="{\"isInplace\":true}"
-}
-
-_stage_1 {
-  a = f32[2] parameter(0), sharding={maximal device=1}
-  const_1 = f32[2] constant({1,2}), sharding={maximal device=1}
-  add_1 = f32[2] add(a, const_1), sharding={maximal device=1}
-  ROOT t = (f32[2]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_1_bw {
-  param_0 = f32[2] parameter(0), sharding={maximal device=1}
-  const_1_bw = f32[2] constant({5,10}), sharding={maximal device=1}
-  add_1_bw = f32[2] add(param_0, const_1_bw), sharding={maximal device=1}
-  ROOT t = (f32[2]) tuple(add_1_bw), sharding={{maximal device=1}}
-}
-
-_stage_0_bw {
-  param = f32[2] parameter(0), sharding={maximal device=0}
-  param1 = f32[2] parameter(1), sharding={maximal device=0}
-  add_0 = f32[2] add(param, param1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
-  ROOT t = () tuple(), sharding={{maximal device=0}}
-}
-
-ENTRY pipeline {
-  arg = f32[] parameter(0), sharding={maximal device=0}
-
-  a0 = (f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  gte_a = f32[2] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={maximal device=0}
-  b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_c = f32[2] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-}
-)";
-  auto device = createIpuModel(2, 4);
-
-  std::unique_ptr<HloModule> module =
-      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
-  auto resources = GetMockResources(device, module.get(), false, 2);
-
-  CustomOpReplacer replacer;
-  EXPECT_TRUE(replacer.Run(module.get()).ValueOrDie());
-
-  InterIpuCopyInserter inserter;
-  EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
-
-  HloTrivialScheduler scheduler;
-  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
-
-  auto entry_computation = module->entry_computation();
-
-  // Count the number of stages
-  const auto stage_count = absl::c_count_if(
-      entry_computation->instructions(), [](const HloInstruction* hlo) {
-        return hlo->opcode() == HloOpcode::kCall;
-      });
-
-  // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
-      {entry_computation->GetInstructionWithName("arg"), 0},
-      {entry_computation->GetInstructionWithName("a0"), 0},
-      {entry_computation->GetInstructionWithName("gte_a"), 0},
-      {entry_computation->GetInstructionWithName("b0"), 1},
-      {entry_computation->GetInstructionWithName("gte_b"), 1},
-      {entry_computation->GetInstructionWithName("c0"), 2},
-      {entry_computation->GetInstructionWithName("gte_c"), 2},
-      {entry_computation->GetInstructionWithName("d"), 3},
-      // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
-      // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
-      // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
-  };
-
-  auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
-  resources->main_graph->setTileMapping(placeholder, 0);
-
-  PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
-      HloInstructionDescription(entry_computation->root_instruction()),
-      "visitor");
-  TF_EXPECT_OK(entry_computation->Accept(&visitor));
-
-  // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
-
-  // Compile the graph
-  poplar::Engine engine(*resources->main_graph, program);
-
-  // Capture the engine output into a string stream.
-  std::stringstream ss;
-  engine.setPrintTensorStream(ss);
-
-  // Run the program
-  device.attach();
-  engine.load(device);
-  engine.run(0);
-  device.detach();
-
-  const std::string expected = R"(/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-)";
-
-  // Check the output of the stage has aliases.
-  ASSERT_TRUE(resources->tensor_maps.GetTensorMapForComputation("_stage_0")
-                  .FindTensorByName("out", 0)
-                  .containsAliases());
-  // Check that the fifo has aliases.
-  ASSERT_TRUE(resources->tensor_maps.GetTensorMapForComputation("pipeline")
-                  .FindTensorByName("custom-call.1", 0)
-                  .containsAliases());
-  ASSERT_EQ(expected, ss.str());
-}
-
 TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorMergedCopies) {
   const string& hlo_string = R"(
 HloModule module
@@ -1027,7 +757,7 @@ ENTRY e {
   auto p1 = resources->main_graph->addConstant(poplar::FLOAT, {}, 2.f);
   resources->main_graph->setTileMapping(p1, 0);
 
-  PipelineVisitor visitor(
+  SequentialPipelineVisitor visitor(
       pipeline, *resources,
       DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
                            {TensorOrRemoteBuffer{p1}}},

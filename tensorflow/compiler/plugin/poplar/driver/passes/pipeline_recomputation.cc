@@ -174,6 +174,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
   // Do not perform recomputation if there are no backward stages.
   if (stages.backward.empty()) {
     return false;
@@ -245,41 +246,55 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
                         GetFifoDepthMultiplier(pipeline_op));
 
-    // Replace all the non read-only inputs with FIFOs.
-    auto recomp_operands = recomp_stage->operands();
-    for (size_t op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
-      HloInstruction* operand = recomp_operands[op_idx];
-      if (IsPipelineStageReadOnlyInput(operand)) {
-        continue;
-      }
+    if (schedule !=
+        PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+      // Replace all the non read-only inputs with FIFOs.
+      auto recomp_operands = recomp_stage->operands();
+      for (size_t op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
+        HloInstruction* operand = recomp_operands[op_idx];
+        if (IsPipelineStageReadOnlyInput(operand)) {
+          continue;
+        }
 
-      // Create the FIFO.
-      HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
-          operand,
-          fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
+        // Create the FIFO.
+        HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
+            operand,
+            fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
 
-      fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
-      fifo_inst->set_sharding(operand->sharding());
-      // Use the fifo as the input.
-      TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));
-      // If there is an inplace user of the operand, then we need to add a
-      // control dependency from the new FIFO instruction to that user.
-      auto optional_inplace_user = GetInplaceModifier(operand);
-      if (optional_inplace_user) {
-        TF_RETURN_IF_ERROR(
-            fifo_inst->AddControlDependencyTo(*optional_inplace_user));
+        fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
+        fifo_inst->set_sharding(operand->sharding());
+        // Use the fifo as the input.
+        TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));
+        // If there is an inplace user of the operand, then we need to add a
+        // control dependency from the new FIFO instruction to that user.
+        auto optional_inplace_user = GetInplaceModifier(operand);
+        if (optional_inplace_user) {
+          TF_RETURN_IF_ERROR(
+              fifo_inst->AddControlDependencyTo(*optional_inplace_user));
+        }
       }
     }
 
-    // Wire inputs to the bwd stage which are FIFOs to use the recomp stage.
+    // Wire inputs to the bwd stage so that they use the recomp stage outputs.
     auto bwd_operands = bwd_stage->operands();
     for (size_t op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
       HloInstruction* operand = bwd_operands[op_idx];
-      if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
-        continue;
+      HloInstruction* gte;
+      if (schedule ==
+          PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+        if (operand->opcode() != HloOpcode::kGetTupleElement) {
+          continue;
+        }
+        gte = operand;
+      } else {
+        if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
+          continue;
+        }
+        // We expect the FIFO input to be a GTE.
+        gte = operand->mutable_operand(0);
+        CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       }
-      // We expect the FIFO input to be a GTE.
-      HloInstruction* gte = operand->mutable_operand(0);
+
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       const HloInstruction* gte_operand = gte->operand(0);
       // If it is not on the fwd stage, then it is a FIFO on some other bwd

@@ -40,6 +40,7 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
   TF_ASSIGN_OR_RETURN(std::vector<PipelinePath> paths,
                       FindPassthroughPipelinePaths(stages));
+  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
 
   if (paths.empty()) {
     return false;
@@ -48,8 +49,9 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
   // Convert the paths into FIFOs.
   for (auto& path : paths) {
     const auto& visited_stages = path.GetVisitedStages();
+    HloInstruction* stage = path.GetNewConsumerStage();
 
-    VLOG(1) << "Adding a FIFO between " << visited_stages[0] << " and "
+    VLOG(1) << "Inserting a connection between " << visited_stages[0] << " and "
             << visited_stages.back();
 
     // Get the output which will be used for the FIFO - this is the input to the
@@ -59,17 +61,22 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
         user->mutable_operand(path.GetInputsPath().back());
 
     CHECK_EQ(operand->opcode(), HloOpcode::kGetTupleElement);
-    TF_ASSIGN_OR_RETURN(const uint64 fifo_depth,
-                        path.GetFifoDepth(pipeline_op));
-    // Create the FIFO.
-    HloInstruction* fifo_inst =
-        pipeline_comp->AddInstruction(CreateFifo(operand, fifo_depth));
-    fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
+    HloInstruction* stage_input;
+    if (schedule ==
+        PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+      stage_input = operand;
+    } else {
+      TF_ASSIGN_OR_RETURN(const uint64 fifo_depth,
+                          path.GetFifoDepth(pipeline_op));
+      // Create the FIFO.
+      stage_input =
+          pipeline_comp->AddInstruction(CreateFifo(operand, fifo_depth));
+      stage_input->SetAndSanitizeName(operand->name() + ".fifo");
+    }
 
     // Connect it to the right input.
-    HloInstruction* stage = path.GetNewConsumerStage();
     TF_RETURN_IF_ERROR(
-        stage->ReplaceOperandWith(path.GetInputsPath()[0], fifo_inst));
+        stage->ReplaceOperandWith(path.GetInputsPath()[0], stage_input));
   }
 
   return true;

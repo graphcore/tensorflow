@@ -28,6 +28,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import momentum
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -227,6 +228,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       outfeed_op = outfeed_queue.dequeue()
 
       report = tu.ReportJSON(self, sess, configure_device=False)
+      report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -360,6 +362,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       outfeed_op = outfeed_queue.dequeue()
 
       report = tu.ReportJSON(self, sess, configure_device=False)
+      report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -695,6 +698,239 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         self,
         13821,
         schedule=pipelining_ops.PipelineSchedule.Sequential)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareSharedWeights(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w1",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage4(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w3",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage5(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_mean(x, axis=[1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=label))
+        return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4, stage5],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Sequential,
+        device_mapping=[0, 0, 2, 3, 0])
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareSharedWeights2(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage2(x, label):
+      return nn.relu(x), label
+
+    def stage3(x, label):
+      return nn.relu(x), label
+
+    def stage4(x, label):
+      return nn.relu(x), label
+
+    def stage5(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_mean(x, axis=[1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=label))
+        return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4, stage5],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Sequential,
+        device_mapping=[0, 1, 0, 2, 0])
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareSharedWeights3(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage2(x, label):
+      return nn.relu(x), label
+
+    def stage3(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      return nn.relu(x), label
+
+    def stage4(x, label):
+      return nn.relu(x), label
+
+    def stage5(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_mean(x, axis=[1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=label))
+        return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4, stage5],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Sequential,
+        device_mapping=[0, 1, 0, 2, 0])
 
 
 if __name__ == "__main__":

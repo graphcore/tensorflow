@@ -63,7 +63,7 @@ struct CompilerResources {
 
   CompilerAnnotations annotations;
 
-  CompilerInformation information;
+  const CompilerInformation information;
 
   poplin::PlanningCache convolution_cache;
 
@@ -87,7 +87,14 @@ struct CompilerResources {
 
   bool disable_graph_outlining;
 
+  /* The global number of replicas that we are compiling for. */
   uint32 replication_factor;
+
+  /* The local number of replicas owned by this process. This is the number of
+   * replicas that we are responsible for at run-time in this process. This is
+   * only different from the `replication_factor` when using multi-replica
+   * distribution with the Poplar "runtime replica subset" feature. */
+  uint32 local_replication_factor;
 
   bool merge_infeed_io_copies;
 
@@ -142,16 +149,13 @@ struct CompilerResources {
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
 
   CompilerResources(
+      HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
       const poplar::OptionFlags& pooling_options, bool verified_transfers,
       bool clear_matmul_pass_type, bool disable_graph_convolution_caching,
       bool disable_graph_outlining, bool merge_infeed_io_copies,
-      uint32 replication_factor, int64 max_all_reduce_buffer_size,
-      int64 max_reduce_scatter_buffer_size,
-      int64 max_inter_ipu_copies_buffer_size, int64 max_send_recv_cluster_size,
-      int64 max_scheduler_lookahead_depth,
-      int64 max_scheduler_search_space_size, HloModule* module,
+      uint32 replication_factor, uint32 local_replication_factor,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
       const std::string& scheduler_selection, bool recomputation_enabled,
@@ -160,10 +164,7 @@ struct CompilerResources {
       int64 triangular_solve_expander_block_size,
       bool enable_experimental_remote_buffer_embedding, bool enable_fast_math)
       : annotations(module),
-        information(max_all_reduce_buffer_size, max_reduce_scatter_buffer_size,
-                    max_inter_ipu_copies_buffer_size,
-                    max_send_recv_cluster_size, max_scheduler_lookahead_depth,
-                    max_scheduler_search_space_size),
+        information(information),
         global_floating_point_behaviour(floating_point_behaviour),
         default_conv_options(conv_options),
         default_matmul_options(matmul_options),
@@ -173,6 +174,7 @@ struct CompilerResources {
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
+        local_replication_factor(local_replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
         scheduler_selection(scheduler_selection),
@@ -185,6 +187,28 @@ struct CompilerResources {
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
         enable_fast_math(enable_fast_math) {}
+
+  static std::unique_ptr<CompilerResources> CreateTestDefault(
+      HloModule* module,
+      const CompilerInformation& information = CompilerInformation()) {
+    return absl::make_unique<CompilerResources>(
+        module, information,
+        /*conv_options=*/poplar::OptionFlags(),
+        /*matmul_options=*/poplar::OptionFlags(),
+        /*pooling_options=*/poplar::OptionFlags(), /*verified_transfers=*/false,
+        /*clear_matmul_pass_type=*/false,
+        /*disable_graph_convolution_caching=*/false,
+        /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
+        /*replication_factor=*/1, /*local_replication_factor=*/1,
+        /*floating_point_behaviour=*/IpuOptions::FloatingPointBehaviour(),
+        /*always_rearrange_copies_on_host=*/false, /*scheduler_selection=*/"",
+        /*recomputation_enabled=*/false, /*use_stable_norm_statistics=*/false,
+        /*remote_memory_supported=*/false,
+        /*gcl_options=*/poplar::OptionFlags(),
+        /*triangular_solve_expander_block_size=*/0,
+        /*enable_experimental_remote_buffer_embedding=*/false,
+        /*enable_fast_math=*/false);
+  }
 };
 
 }  // namespace poplarplugin
