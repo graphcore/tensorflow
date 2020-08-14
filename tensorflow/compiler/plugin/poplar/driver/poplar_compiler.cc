@@ -943,7 +943,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   // Given device with `num_ipus` IPU chips, we get the number of shards
   // `num_shards` and the replication factor is `num_ipus`/`num_shards` (and
   // we also make sure `num_ipus` % `num_shards` == 0).
-  const auto num_ipus = poplar_executor->GetOrCreatePoplarTarget().getNumIPUs();
+  const poplar::Target& target = poplar_executor->GetOrCreatePoplarTarget();
+  const auto num_ipus = target.getNumIPUs();
   const auto num_shards = NumIPUsInShards(module.get());
   const auto replication_factor = num_ipus / num_shards;
 
@@ -956,33 +957,40 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         " divide the number of IPUs.");
   }
 
-  if (poplar_executor->HasMultiReplicaDistributionOptions()) {
-    const int64 num_local_ipus = poplar_executor->GetNumIpusInLocalProcess(
-        poplar_executor->GetOrCreatePoplarTarget());
+  const auto num_local_ipus = poplar_executor->GetNumIpusInLocalProcess(target);
+  const auto local_replication_factor = num_local_ipus / num_shards;
 
-    if (num_local_ipus % num_shards) {
-      return xla::InternalErrorStrCat(
-          "With multi-replica distribution, the current local process has ",
-          num_local_ipus, " IPUs, while the graph has ", num_shards, " shards.",
-          " The number of shards needs to divide the number of local IPUs.");
-    }
+  if (num_local_ipus % num_shards) {
+    return xla::InternalErrorStrCat(
+        "With multi-replica distribution, the current local process has ",
+        num_local_ipus, " IPUs, while the graph has ", num_shards, " shards.",
+        " The number of shards needs to divide the number of local IPUs.");
   }
 
+  const auto information =
+      CompilerInformation()
+          .set_max_all_reduce_buffer_size(
+              poplar_executor->GetMaxAllReduceBufferSize())
+          .set_max_reduce_scatter_buffer_size(
+              poplar_executor->GetMaxReduceScatterBufferSize())
+          .set_max_inter_ipu_copies_buffer_size(
+              poplar_executor->GetMaxInterIpuCopyBufferSize())
+          .set_max_send_recv_cluster_size(
+              poplar_executor->GetMaxSendRecvClusterSize())
+          .set_max_scheduler_lookahead_depth(
+              poplar_executor->GetMaxSchedulerLookaheadDepth())
+          .set_max_scheduler_search_space_size(
+              poplar_executor->GetMaxSchedulerSearchSpaceSize());
+
   CompilerResources resources(
-      poplar_executor->GetConvolutionOptions(),
+      module.get(), information, poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
       poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphConvCaching(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
-      poplar_executor->GetMaxAllReduceBufferSize(),
-      poplar_executor->GetMaxReduceScatterBufferSize(),
-      poplar_executor->GetMaxInterIpuCopyBufferSize(),
-      poplar_executor->GetMaxSendRecvClusterSize(),
-      poplar_executor->GetMaxSchedulerLookaheadDepth(),
-      poplar_executor->GetMaxSchedulerSearchSpaceSize(), module.get(),
-      poplar_executor->FloatingPointBehaviour(),
+      local_replication_factor, poplar_executor->FloatingPointBehaviour(),
       poplar_executor->AlwaysRearrangeCopiesOnTheHost(),
       poplar_executor->GetSchedulerSelection(),
       poplar_executor->RecomputationEnabled(),
@@ -1100,8 +1108,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported);
-    pipeline.AddPass<PipelineFeedHoisting>();
-    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
     {
       auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
@@ -1110,6 +1116,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<PipelineOptimizer>();
     }
+    pipeline.AddPass<PipelineFeedHoisting>();
+    pipeline.AddPass<PipelineFIFOInserter>();
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputeInstructions>(
         poplar_executor->RecomputationEnabled());
