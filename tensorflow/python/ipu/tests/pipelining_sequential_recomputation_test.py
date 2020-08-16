@@ -191,7 +191,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
         [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 23984, True,
+        dataset_fn, optimizer, self, 36502, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only

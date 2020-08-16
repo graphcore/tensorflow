@@ -1438,6 +1438,9 @@ Status PoplarExecutor::CreatePoplarTarget() {
 
     model.compileIPUCode =
         current_config_.ipu_model_config().compile_ipu_code();
+    if (current_config_.ipu_model_config().tiles_per_ipu() > 0) {
+      model.tilesPerIPU = current_config_.ipu_model_config().tiles_per_ipu();
+    }
     ipu_.SetDeviceAndTarget(model.createDevice());
   }
   return Status::OK();

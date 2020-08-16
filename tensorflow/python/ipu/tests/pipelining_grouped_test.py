@@ -689,7 +689,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        22738,
+        41871,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
