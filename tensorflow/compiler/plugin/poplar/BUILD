@@ -3402,6 +3402,7 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/lstm_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 6,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -3631,7 +3632,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/size_speed_tests/resnet_size_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 4,
+    shard_count = 8,
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -3661,6 +3662,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/size_speed_tests/gru_size_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 6,
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -3675,6 +3677,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/size_speed_tests/lstm_size_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 4,
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -4210,6 +4213,7 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/gru_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 6,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

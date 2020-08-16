@@ -157,6 +157,9 @@ class PipelineTester(object):
 
       cfg = utils.create_ipu_config(profiling=profiling,
                                     profile_execution=profiling)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
@@ -216,6 +219,9 @@ class PipelineTester(object):
       profiling = utils.running_on_ipu_model()
       cfg = utils.create_ipu_config(profiling=profiling,
                                     profile_execution=profiling)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)

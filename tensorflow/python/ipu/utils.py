@@ -854,17 +854,20 @@ def set_report_options(opts,
   return opts
 
 
-def set_ipu_model_options(opts, compile_ipu_code=True):
+def set_ipu_model_options(opts, compile_ipu_code=True, tiles_per_ipu=None):
   """Set the IPU Model options.
 
   Args:
     compile_ipu_code: Whether or not to actually compile real IPU code for
       modelling.
+    tiles_per_ipu: The number of tiles per IPU Model device.
 
   Returns:
     The IpuOptions configuration protobuf, with IPU model options set.
   """
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
+  if tiles_per_ipu:
+    opts.ipu_model_config.tiles_per_ipu = tiles_per_ipu
 
   return opts
 

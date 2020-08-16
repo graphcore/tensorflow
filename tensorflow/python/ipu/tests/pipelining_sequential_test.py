@@ -637,7 +637,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        22738,
+        36526,
         schedule=pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
