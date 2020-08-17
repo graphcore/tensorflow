@@ -200,7 +200,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 23984, True,
+        dataset_fn, optimizer, self, 40549, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only

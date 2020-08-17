@@ -101,6 +101,9 @@ def _gradient_accumulation_loop(test_wrapper,
 
     cfg = utils.create_ipu_config(profiling=profiling,
                                   profile_execution=profiling)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 1)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()

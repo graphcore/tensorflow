@@ -42,6 +42,9 @@ def _make_config(iterations_per_loop=1):
   num_ipus_in_pipeline = 2
 
   ipu_options = ipu_utils.create_ipu_config()
+  ipu_options = ipu_utils.set_ipu_model_options(ipu_options,
+                                                compile_ipu_code=True,
+                                                tiles_per_ipu=128)
   ipu_options = ipu_utils.auto_select_ipus(ipu_options,
                                            num_ipus=num_ipus_in_pipeline)
   return ipu_run_config.RunConfig(ipu_run_config=ipu_run_config.IPURunConfig(
