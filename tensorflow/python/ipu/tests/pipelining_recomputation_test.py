@@ -212,7 +212,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        22906,
+        38003,
         True,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 

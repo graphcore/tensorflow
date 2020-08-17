@@ -151,6 +151,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -278,6 +281,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -344,6 +350,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -408,6 +417,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -509,6 +521,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                                      inputs=[x, y])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -590,6 +605,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 4)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
@@ -650,6 +668,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         r = ipu_compiler.compile(model, inputs=[])
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
@@ -830,7 +851,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        22700,
+        38555,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
@@ -1145,6 +1166,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
@@ -1179,6 +1203,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
@@ -1274,6 +1301,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
@@ -1336,6 +1366,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         r = ipu_compiler.compile(my_net)
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
