@@ -47,6 +47,7 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
 
   // There is nothing to optimize if there is no backward stages.
   if (stages.backward.empty()) {
@@ -54,7 +55,7 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
   }
 
   TF_ASSIGN_OR_RETURN(std::vector<PipelinePath> paths,
-                      FindPassthroughPipelinePaths(stages));
+                      FindPassthroughPipelinePaths(stages, schedule));
   // Only consider backward paths.
   std::vector<PipelinePath> backward_paths;
   absl::c_copy_if(paths, std::back_inserter(backward_paths),
