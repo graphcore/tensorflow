@@ -32,9 +32,11 @@ class TupleSimplifier : public HloModulePass {
   ~TupleSimplifier() override {}
   absl::string_view name() const override { return "tuple-simplifier"; }
 
-  // Run tuple simplification on the given computation. Returns whether the
-  // computation was changed.
+  // Run tuple simplification on the given module. Returns whether the
+  // module was changed.
   StatusOr<bool> Run(HloModule* module) override;
+
+  static StatusOr<bool> RunOnComputation(HloComputation* computation);
 
  private:
   // When set, this pipeline stage will perform optimization of all computations
