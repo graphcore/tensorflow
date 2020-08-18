@@ -30,22 +30,17 @@ limitations under the License.
 
 namespace xla {
 
-TupleSimplifier::TupleSimplifier(bool exclude_entry_computation) :
-    exclude_entry_computation_(exclude_entry_computation) {}
+TupleSimplifier::TupleSimplifier(bool exclude_entry_computation)
+    : exclude_entry_computation_(exclude_entry_computation) {}
 
-StatusOr<bool> TupleSimplifier::Run(HloModule* module) {
+StatusOr<bool> TupleSimplifier::RunOnComputation(HloComputation* computation) {
   // Initially add all GTE and Tuple instructions to the worklist.
   std::queue<HloInstruction*> worklist;
-  for (auto* computation : module->computations()) {
-    if (exclude_entry_computation_ &&
-        computation == module->entry_computation()) {
-      continue;
-    }
-    for (auto* instruction : computation->instructions()) {
-      if (instruction->opcode() == HloOpcode::kTuple ||
-          instruction->opcode() == HloOpcode::kGetTupleElement) {
-        worklist.push(instruction);
-      }
+
+  for (auto* instruction : computation->MakeInstructionPostOrder()) {
+    if (instruction->opcode() == HloOpcode::kTuple ||
+        instruction->opcode() == HloOpcode::kGetTupleElement) {
+      worklist.push(instruction);
     }
   }
 
@@ -127,6 +122,21 @@ StatusOr<bool> TupleSimplifier::Run(HloModule* module) {
         }
       }
     }
+  }
+
+  return changed;
+}
+
+StatusOr<bool> TupleSimplifier::Run(HloModule* module) {
+  bool changed = false;
+  for (auto* computation : module->MakeComputationPostOrder()) {
+    if (exclude_entry_computation_ &&
+        computation == module->entry_computation()) {
+      continue;
+    }
+    TF_ASSIGN_OR_RETURN(bool computation_changed,
+                        RunOnComputation(computation));
+    changed |= computation_changed;
   }
 
   return changed;
