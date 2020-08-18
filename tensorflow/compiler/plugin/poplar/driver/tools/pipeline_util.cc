@@ -15,11 +15,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
 #include <algorithm>
+#include <string>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -445,6 +447,32 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
     }
   }
   return added_computations;
+}
+
+StatusOr<HloInstruction*> CreatePipelineStage(
+    HloComputation* pipeline, const std::vector<HloInstruction*> operands,
+    HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
+    int64 stage_id, const std::string& name) {
+  FrontendAttributes attributes;
+  (*attributes.mutable_map())[FrontendAttributeId_Name(CALL_CONFIG_TYPE)] =
+      PoplarBackendConfig_CallConfig_Type_Name(stage_type);
+  (*attributes.mutable_map())[FrontendAttributeId_Name(PIPELINE_STAGE_ID)] =
+      std::to_string(stage_id);
+
+  OpMetadata metadata;
+  PoplarBackendConfig cfg;
+  cfg.mutable_call_config()->set_type(stage_type);
+  cfg.mutable_call_config()->mutable_pipeline_stage_config()->set_stage_id(
+      stage_id);
+  metadata.set_op_type(PoplarBackendConfig_CallConfig_Type_Name(stage_type));
+  metadata.set_op_name(name);
+
+  auto empty_call = pipeline->AddInstruction(HloInstruction::CreateCall(
+      stage_comp->root_instruction()->shape(), operands, stage_comp));
+  empty_call->set_frontend_attributes(attributes);
+  empty_call->set_backend_config(cfg);
+  empty_call->set_metadata(metadata);
+  return empty_call;
 }
 
 namespace {
