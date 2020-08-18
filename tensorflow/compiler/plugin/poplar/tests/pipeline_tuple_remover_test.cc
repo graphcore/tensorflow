@@ -267,6 +267,84 @@ ENTRY e {
                  m::AfterAll())));
 }
 
+TEST_F(PipelineTupleRemoverTest, TestSimplifyTuples) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0 {
+  stage_0_t = token[] after-all()
+  stage_0_feed = (f32[1,1,1], token[]) infeed(stage_0_t)
+  stage_0_input = f32[1,1,1] get-tuple-element(stage_0_feed), index=0
+  stage_0_weights0 = f32[1,1,1] parameter(0)
+  stage_0_input_tuple = (f32[1,1,1]) tuple(stage_0_input)
+  ROOT stage_0_tuple = ((f32[1,1,1]), f32[1,1,1]) tuple(stage_0_input_tuple, stage_0_weights0)
+}
+
+stage_1 {
+  stage_1_p0 = (f32[1,1,1]) parameter(0)
+  stage_1_p0_0 = f32[1,1,1] get-tuple-element(stage_1_p0), index=0
+  stage_1_p1 = f32[1,1,1] parameter(1)
+  add = f32[1,1,1] add(stage_1_p0_0, stage_1_p1)
+  ROOT stage_1_tuple = (f32[1,1,1]) tuple(add)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,1,1] parameter(0)
+  pipeline_stage_0 = ((f32[1,1,1]), f32[1,1,1]) call(pipeline_weights0), to_apply=stage_0, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+
+  s0_0 = (f32[1,1,1]) get-tuple-element(pipeline_stage_0), index=0
+  s0_1 = f32[1,1,1] get-tuple-element(pipeline_stage_0), index=1
+
+  ROOT pipeline_stage_1 = (f32[1,1,1]) call(s0_0, s0_1), to_apply=stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+}
+
+ENTRY e {
+  e.weights0 = f32[1,1,1] parameter(0), parameter_replication={false}
+  ROOT e.call = (f32[1,1,1]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0}}}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  PipelineTupleRemover inserter;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  // Run optimizations passes to remove all the unused operands etc.
+  while (PipelineOptimizer().Run(module.get()).ValueOrDie() ||
+         HloDCE().Run(module.get()).ValueOrDie() ||
+         HloCSE(false).Run(module.get()).ValueOrDie()) {
+  }
+  HloInstruction* pipeline = module->entry_computation()->root_instruction();
+
+  TF_ASSERT_OK_AND_ASSIGN(auto pipeline_stages,
+                          GetPipelineStages(pipeline->to_apply()));
+  for (auto& stages : {pipeline_stages.forward, pipeline_stages.backward}) {
+    for (auto& stage : stages) {
+      for (auto p : stage->to_apply()->parameter_instructions()) {
+        EXPECT_FALSE(p->shape().IsTuple());
+      }
+    }
+  }
+
+  EXPECT_TRUE(
+      Match(pipeline_stages.forward[0]->to_apply()->root_instruction(),
+            m::Tuple(m::Parameter(0), m::GetTupleElement(m::Infeed(), 0))));
+
+  // Match inputs for stage 1.
+  EXPECT_TRUE(
+      Match(pipeline_stages.forward[1]->operand(0),
+            m::GetTupleElement(m::Op().Is(pipeline_stages.forward[0]), 0)));
+  EXPECT_TRUE(
+      Match(pipeline_stages.forward[1]->operand(1),
+            m::GetTupleElement(m::Op().Is(pipeline_stages.forward[0]), 1)));
+
+  EXPECT_TRUE(Match(pipeline_stages.forward[1]->to_apply()->root_instruction(),
+                    m::Tuple(m::Add(m::Parameter(1), m::Parameter(0)))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

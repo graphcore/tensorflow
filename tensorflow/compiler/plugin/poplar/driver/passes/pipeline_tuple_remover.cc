@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -155,6 +156,13 @@ StatusOr<bool> PipelineTupleRemover::FlattenPipeline(
           stage, AddInstructionsToPipelineStage(stage, new_stage_instructions));
       ordered_stages.UpdateStage(i, stage);
     }
+  }
+
+  for (int64 i = 0; i != ordered_stages.GetNumberOfStages(); ++i) {
+    HloInstruction* stage = ordered_stages.GetStage(i);
+    TF_ASSIGN_OR_RETURN(bool changed_ts,
+                        TupleSimplifier::RunOnComputation(stage->to_apply()));
+    changed |= changed_ts;
   }
   return changed;
 }
