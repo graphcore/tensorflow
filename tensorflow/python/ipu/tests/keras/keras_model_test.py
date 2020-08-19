@@ -278,6 +278,22 @@ class IPUModelTest(test.TestCase):
         m.fit(test_dataset(), epochs=4)
 
   @test_util.run_v2_only
+  def testBuildSequentialModel(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
+
+      self.assertAllEqual(m.built, False)
+      for l in m.layers:
+        self.assertAllEqual(l.built, False)
+
+      m.build(input_shape=(4, 32))
+
+      self.assertAllEqual(m.built, True)
+      for l in m.layers:
+        self.assertAllEqual(l.built, True)
+
+  @test_util.run_v2_only
   def testStepsPerEpochTooLargeForDataset(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():

@@ -644,6 +644,13 @@ class IPUSequential(_IpuModelBase):
     self.accumulation_count = accumulation_count
     self.model_layers = layers
 
+  def build(self, input_shape):
+    s = input_shape
+    for l in self.model_layers:
+      l.build(s)
+      s = l.compute_output_shape(s)
+    self.built = True
+
   @trackable.no_automatic_dependency_tracking
   def compile(self,
               optimizer='rmsprop',

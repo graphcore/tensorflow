@@ -131,6 +131,13 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     self.pipeline_depth = pipeline_depth
     self.stages = stages
 
+  def build(self, input_shape):
+    s = input_shape
+    for l in self.layers:
+      l.build(s)
+      s = l.compute_output_shape(s)
+    self.built = True
+
   @trackable.no_automatic_dependency_tracking
   def compile(self,
               optimizer='rmsprop',

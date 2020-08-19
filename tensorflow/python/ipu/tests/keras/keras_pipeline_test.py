@@ -748,6 +748,55 @@ class IPUPipelineTest(test.TestCase):
 
     self.assertAllClose(ipu_output, cpu_out)
 
+  @test_util.run_v2_only
+  def testCanCallBuild(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      self.assertAllEqual(m.built, False)
+      for l in m.layers:
+        self.assertAllEqual(l.built, False)
+
+      m.build(input_shape=(1, 32))
+
+      self.assertAllEqual(m.built, True)
+      for l in m.layers:
+        self.assertAllEqual(l.built, True)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Just verify that it doesn't assert
+      m.predict(test_inference_dataset(length=96))
+
+  @test_util.run_v2_only
+  def testModelRetainsBuildWeights(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      self.assertAllEqual(m.built, False)
+      for l in m.layers:
+        self.assertAllEqual(l.built, False)
+
+      m.build(input_shape=(1, 48))
+
+      self.assertAllEqual(m.built, True)
+      for l in m.layers:
+        self.assertAllEqual(l.built, True)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Should fail because the model weights were constructed for a
+      # different shaped input.
+      with self.assertRaisesRegex(ValueError,
+                                  "Input 0 of layer layer0 is incompatible "):
+        m.predict(test_inference_dataset(length=96))
+
 
 if __name__ == '__main__':
   test.main()
