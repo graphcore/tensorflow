@@ -130,6 +130,12 @@ StatusOr<bool> DuplicateGTEEdges(PipelineStages& pipeline_stages);
 // Returns true is a new HloComputation has been added.
 StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages);
 
+// Create an empty pipeline stage inside of the pipeline computation
+StatusOr<HloInstruction*> CreatePipelineStage(
+    HloComputation* pipeline, const std::vector<HloInstruction*> operands,
+    HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
+    int64 stage_id, const std::string& name);
+
 // Add the instruction in ordered_lowering to the PipelineStage stage  Note that
 // the instructions in ordered_lowering are sorted in post order. Optionally
 // takes a map from a parameter index to an instruction which is being lowered
@@ -233,13 +239,14 @@ class PipelineDataflowAnalysis {
       const PipelineStages& pipeline_stages,
       bool allow_duplicate_gte_edges = false,
       bool allow_communication_ops = false, bool allow_feeds = false,
-      bool allow_recomputation = false, bool allow_fifo_optimizations = false);
+      bool allow_recomputation = false,
+      bool allow_communication_optimizations = false);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
                                     bool allow_duplicate_gte_edges,
                                     bool allow_communication_ops,
                                     bool allow_feeds, bool allow_recomputation,
-                                    bool allow_fifo_optimizations);
+                                    bool allow_communication_optimizations);
 
   // Returns whether the instruction needs to be lowered into a stage given the
   // current analysis.
@@ -332,7 +339,7 @@ class PipelineDataflowAnalysis {
   bool allow_communication_ops_;
   bool allow_feeds_;
   bool allow_recomputation_;
-  bool allow_fifo_optimizations_;
+  bool allow_communication_optimizations_;
 };
 
 // A helper class used to represent a tensor being passed through pipeline
@@ -348,15 +355,19 @@ class PipelinePath {
     // A path is between a forward and a backward stage - same pipeline stage
     // id.
     kForwardToBackward,
+    // A path between any two stages.
+    kAny,
   };
 
-  PipelinePath(HloInstruction* new_consumer, uint64 stage_idx, uint64 input_idx,
-               uint64 output_idx);
+  PipelinePath(
+      HloInstruction* new_consumer, uint64 stage_idx, uint64 input_idx,
+      uint64 output_idx,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule);
   bool FinishPath(PipelineStages& stages);
   std::vector<uint64>& GetVisitedStages();
   std::vector<uint64>& GetInputsPath();
   std::vector<uint64>& GetOutputsPath();
-  StatusOr<int64> GetFifoDepth(const HloInstruction* pipeline_op);
+  StatusOr<int64> GetFifoDepth();
   // The pipeline stage which should now be consuming the value.
   HloInstruction* GetNewConsumerStage() const;
   // The old pipeline stage which is currently consuming the value.
@@ -375,12 +386,14 @@ class PipelinePath {
   std::vector<uint64> inputs_path_;
   std::vector<uint64> outputs_path_;
   HloInstruction* new_consumer_;
+  const PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule_;
 };
 
 // A function used to find pipeline paths for operations which are passed
 // through multiple stages.
 StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
-    PipelineStages& stages);
+    PipelineStages& stages,
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule);
 
 }  // namespace poplarplugin
 }  // namespace xla

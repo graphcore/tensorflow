@@ -38,9 +38,9 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  TF_ASSIGN_OR_RETURN(std::vector<PipelinePath> paths,
-                      FindPassthroughPipelinePaths(stages));
   TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
+  TF_ASSIGN_OR_RETURN(std::vector<PipelinePath> paths,
+                      FindPassthroughPipelinePaths(stages, schedule));
 
   if (paths.empty()) {
     return false;
@@ -66,8 +66,7 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
         PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
       stage_input = operand;
     } else {
-      TF_ASSIGN_OR_RETURN(const uint64 fifo_depth,
-                          path.GetFifoDepth(pipeline_op));
+      TF_ASSIGN_OR_RETURN(const uint64 fifo_depth, path.GetFifoDepth());
       // Create the FIFO.
       stage_input =
           pipeline_comp->AddInstruction(CreateFifo(operand, fifo_depth));
