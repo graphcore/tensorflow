@@ -72,6 +72,7 @@ def _kerasLSTMImpl(instance,
         unit_forget_bias=unit_forget_bias,
         stateful=stateful)
     output = layer(inputs=x, initial_state=state, training=training)
+    shapes = [w.shape for w in layer.get_weights()]
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
@@ -83,7 +84,7 @@ def _kerasLSTMImpl(instance,
       r = sess.run(to_run, {x: x_val, h: h_val, c: c_val})
       r = r[0] if layer.updates else r
       outputs.append(r)
-    return outputs
+    return (outputs, shapes)
 
 
 def _lstmIPU(*args, **kwargs):
@@ -141,7 +142,7 @@ class IpuLstmTest(test.TestCase):
     cpu_result = _lstmCPU(self, x, h, c, return_sequences=True)
     self.assertAllClose(ipu_result, cpu_result)
 
-    self.assertEqual(ipu_result[0][0].shape,
+    self.assertEqual(ipu_result[0][0][0].shape,
                      (batch_size, timesteps, num_hidden))
 
   @test_util.deprecated_graph_mode_only
@@ -149,7 +150,7 @@ class IpuLstmTest(test.TestCase):
     x, h, c = self._get_random_inputs()
 
     ipu_result = _lstmIPU(self, x, h, c, return_state=False)
-    self.assertTrue(isinstance(ipu_result[0], np.ndarray))
+    self.assertTrue(isinstance(ipu_result[0][0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
   def test_no_dynamic_training(self):
