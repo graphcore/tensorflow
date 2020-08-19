@@ -36,6 +36,8 @@ struct CompilerInformation {
 
   int64 max_scheduler_search_space_size = 64;
 
+  int64 minimum_remote_tensor_size = 128;
+
   CompilerInformation& set_max_all_reduce_buffer_size(int64 val) {
     max_all_reduce_buffer_size = val;
     return *this;
@@ -63,6 +65,11 @@ struct CompilerInformation {
 
   CompilerInformation& set_max_scheduler_search_space_size(int64 val) {
     max_scheduler_search_space_size = val;
+    return *this;
+  }
+
+  CompilerInformation& set_minimum_remote_tensor_size(int64 val) {
+    minimum_remote_tensor_size = val;
     return *this;
   }
 };

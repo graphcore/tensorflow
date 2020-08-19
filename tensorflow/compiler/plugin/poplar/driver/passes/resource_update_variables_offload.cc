@@ -38,9 +38,11 @@ namespace xla {
 namespace poplarplugin {
 
 ResourceUpdateVariablesOffload::ResourceUpdateVariablesOffload(
-    CompilerAnnotations& annotations, bool remote_memory_supported)
+    CompilerAnnotations& annotations, bool remote_memory_supported,
+    int64 minimum_remote_tensor_size)
     : annotations_(annotations),
-      remote_memory_supported_(remote_memory_supported) {}
+      remote_memory_supported_(remote_memory_supported),
+      minimum_remote_tensor_size_(minimum_remote_tensor_size) {}
 
 StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
     HloInstruction* call_op, HloInstruction* resource_update) {
@@ -247,6 +249,16 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   std::set<int64> call_params_to_remove;
   // For each parameter in offload_info, insert a load and store op.
   for (auto& offload_info : offload_infos) {
+    if (minimum_remote_tensor_size_ >
+        ShapeUtil::ByteSizeOf(offload_info.input_to_call->shape())) {
+      VLOG(1) << "Variable " << offload_info.entry_param_number << ": "
+              << offload_info.input_to_call->ToString()
+              << " is smaller than the minimum remote tensor size ("
+              << minimum_remote_tensor_size_
+              << "B) and is therefore not offloaded.";
+      continue;
+    }
+
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
             << offload_info.input_to_call->ToString();
 

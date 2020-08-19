@@ -40,7 +40,7 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 37
+// NEXT ID 38
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -254,4 +254,8 @@ message IpuOptions {
   // Options for multi-replica distribution.
   int64 multi_replica_process_count = 35;
   int64 multi_replica_process_index = 36;
+
+  // The minimum size a tensor (in bytes) has to be in order to be consider for
+  // being stored in remote memory.
+  int64 minimum_remote_tensor_size = 37;
 };
