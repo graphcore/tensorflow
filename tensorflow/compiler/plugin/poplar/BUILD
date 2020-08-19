@@ -198,10 +198,11 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.cc",
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
+        "driver/passes/pipeline_stage_merger.cc",
         "driver/passes/pipeline_tuple_remover.cc",
+        "driver/passes/pipeline_verifier.cc",
         "driver/passes/resource_update_fixer.cc",
         "driver/passes/resource_update_variables_offload.cc",
-        "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_instructions.cc",
@@ -343,6 +344,7 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
+        "driver/passes/pipeline_stage_merger.h",
         "driver/passes/pipeline_tuple_remover.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
@@ -2394,6 +2396,21 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_stage_merger_test",
+    size = "small",
+    srcs = ["tests/pipeline_stage_merger_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "pipeline_grouped_recomputation_test",
     size = "small",
     srcs = ["tests/pipeline_grouped_recomputation_test.cc"],
@@ -4419,6 +4436,7 @@ test_suite(
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
         "pipeline_sequential_visitor_test",
+        "pipeline_stage_merger_test",
         "pipeline_tuple_remover_test",
         "pipeline_util_test",
         "pipeline_visitor_test",

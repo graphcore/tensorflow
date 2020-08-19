@@ -130,6 +130,12 @@ StatusOr<bool> DuplicateGTEEdges(PipelineStages& pipeline_stages);
 // Returns true is a new HloComputation has been added.
 StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages);
 
+// Create an empty pipeline stage inside of the pipeline computation
+StatusOr<HloInstruction*> CreatePipelineStage(
+    HloComputation* pipeline, const std::vector<HloInstruction*> operands,
+    HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
+    int64 stage_id, const std::string& name);
+
 // Add the instruction in ordered_lowering to the PipelineStage stage  Note that
 // the instructions in ordered_lowering are sorted in post order. Optionally
 // takes a map from a parameter index to an instruction which is being lowered
