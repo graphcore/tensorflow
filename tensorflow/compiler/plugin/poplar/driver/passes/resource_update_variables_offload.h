@@ -111,8 +111,9 @@ struct CompilerAnnotations;
  */
 class ResourceUpdateVariablesOffload : public HloModulePass {
  public:
-  explicit ResourceUpdateVariablesOffload(CompilerAnnotations& annotations,
-                                          bool remote_memory_supported);
+  ResourceUpdateVariablesOffload(CompilerAnnotations& annotations,
+                                 bool remote_memory_supported,
+                                 int64 minimum_remote_tensor_size);
   absl::string_view name() const override {
     return "resource-update-variables-offload";
   }
@@ -126,6 +127,7 @@ class ResourceUpdateVariablesOffload : public HloModulePass {
 
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
+  const int64 minimum_remote_tensor_size_;
 };
 
 }  // namespace poplarplugin
