@@ -82,10 +82,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
     modify the gradients like clipping.
 
     Args:
-      loss: A Tensor containing the value to minimize.
-      var_list: Optional list or tuple of `tf.Variable` to update to minimize
-        `loss`.  Defaults to the list of variables collected in the graph
-        under the key `GraphKey.TRAINABLE_VARIABLES`.
+      *args: Arguments for compute_gradients().
       **kwargs: Keyword arguments for compute_gradients().
 
     Returns:
@@ -244,28 +241,21 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
     modify the gradients like clipping.
 
     Args:
-      loss: A Tensor containing the value to minimize.
-      var_list: Optional list or tuple of `tf.Variable` to update to minimize
-        `loss`.  Defaults to the list of variables collected in the graph
-        under the key `GraphKey.TRAINABLE_VARIABLES`.
+      *args: Arguments for compute_gradients().
       **kwargs: Keyword arguments for compute_gradients().
 
     Returns:
       A list of (gradient, variable) pairs.
     """
 
-    return self._opt.compute_gradients(loss, *args, **kwargs)
+    return self._opt.compute_gradients(*args, **kwargs)
 
   def apply_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Apply gradients to variables.
 
     Args:
-      grads_and_vars: List of (gradient, variable) pairs as returned by
-        compute_gradients().
-      global_step: Optional Variable to increment by one after the
-        variables have been updated.
-      name: Optional name for the returned operation.  Default to the
-        name passed to the Optimizer constructor.
+      *args: Arguments for apply_gradients().
+      **kwargs: Keyword arguments for apply_gradients().
 
     Returns:
       An `Operation` that applies the gradients. If `global_step` was not None,
