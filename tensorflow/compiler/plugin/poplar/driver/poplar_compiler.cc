@@ -1086,6 +1086,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
     pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                      resources.replication_factor);
     {

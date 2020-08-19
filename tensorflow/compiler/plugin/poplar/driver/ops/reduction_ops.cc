@@ -359,6 +359,10 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(out, AddTensor(graph, TensorLocation{inst, 0},
                                          output_shape, res, tensor_map));
+      // If output is scalar, map it linearly with res.linear_mapping_state
+      if (ShapeUtil::IsScalar(output_shape)) {
+        MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, out);
+      }
     } else {
       TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(inst->shape()));
       const auto shape = PoplarShapeFromXlaShape(inst->shape());
