@@ -174,24 +174,6 @@ int64 GetNextStageID(int64& current,
   }
   return GetPipelineStageID(stages[current]);
 }
-
-HloComputation* CreateDummyComputation(const std::string& stage_name,
-                                       HloModule* module) {
-  auto builder = HloComputation::Builder(stage_name + "_func");
-  builder.AddInstruction(CreateStatefulNoop());
-  auto* root = builder.AddInstruction(HloInstruction::CreateTuple({}));
-  return module->AddEmbeddedComputation(builder.Build(root));
-}
-
-std::string GenerateBackwardStageOpName(const PipelineStages& stages,
-                                        int64 stage_id) {
-  HloInstruction* src = stages.backward.front();
-  int64 src_id = GetPipelineStageID(src);
-  std::string src_name = src->metadata().op_name();
-
-  return absl::StrReplaceAll(
-      src_name, {{std::to_string(src_id), std::to_string(stage_id)}});
-}
 }  // namespace
 
 StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
@@ -753,6 +735,16 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
   return unused_op_indices.size();
 }
 
+namespace {
+HloComputation* CreateEmptyComputation(const std::string& stage_name,
+                                       HloModule* module) {
+  auto builder = HloComputation::Builder(stage_name + "_func");
+  builder.AddInstruction(CreateStatefulNoop());
+  auto* root = builder.AddInstruction(HloInstruction::CreateTuple({}));
+  return module->AddEmbeddedComputation(builder.Build(root));
+}
+}  // namespace
+
 Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   TF_ASSIGN_OR_RETURN(PipelineStages stages,
                       GetPipelineStages(pipeline_comp, false));
@@ -776,30 +768,13 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   for (int64 missing_id : missing) {
     HloInstruction* input = stages.forward[missing_id];
     std::string name = input->to_apply()->name() + "_grad";
-    HloComputation* dummy_computation =
-        CreateDummyComputation(name, pipeline_comp->parent());
-    FrontendAttributes attributes;
-    (*attributes.mutable_map())[FrontendAttributeId_Name(CALL_CONFIG_TYPE)] =
-        PoplarBackendConfig_CallConfig_Type_Name(
-            PoplarBackendConfig::CallConfig::PipelineStageBackward);
-    (*attributes.mutable_map())[FrontendAttributeId_Name(PIPELINE_STAGE_ID)] =
-        std::to_string(missing_id);
-
-    OpMetadata metadata;
-    PoplarBackendConfig cfg;
-    cfg.mutable_call_config()->set_type(
-        PoplarBackendConfig::CallConfig::PipelineStageBackward);
-    cfg.mutable_call_config()->mutable_pipeline_stage_config()->set_stage_id(
-        missing_id);
-    metadata.set_op_type(PoplarBackendConfig_CallConfig_Type_Name(
-        PoplarBackendConfig::CallConfig::PipelineStageBackward));
-    metadata.set_op_name(GenerateBackwardStageOpName(stages, missing_id));
-
-    auto dummy_call = pipeline_comp->AddInstruction(HloInstruction::CreateCall(
-        dummy_computation->root_instruction()->shape(), {}, dummy_computation));
-    dummy_call->set_frontend_attributes(attributes);
-    dummy_call->set_backend_config(cfg);
-    dummy_call->set_metadata(metadata);
+    TF_RETURN_IF_ERROR(
+        CreatePipelineStage(
+            pipeline_comp, {},
+            CreateEmptyComputation(name, pipeline_comp->parent()),
+            PoplarBackendConfig::CallConfig::PipelineStageBackward, missing_id,
+            name)
+            .status());
   }
 
   return Status::OK();

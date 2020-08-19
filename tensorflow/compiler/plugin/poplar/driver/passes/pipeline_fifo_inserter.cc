@@ -36,11 +36,11 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
   // Make sure that the root of each stage is a tuple.
   TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   TF_ASSIGN_OR_RETURN(
-      auto analysis,
-      PipelineDataflowAnalysis::GetAnalysis(
-          stages, /*allow_duplicate_gte_edges=*/true,
-          /*allow_communication_ops=*/true, /*allow_feeds=*/true,
-          /*allow_recomputation=*/false, /*allow_fifo_optimizations=*/true));
+      auto analysis, PipelineDataflowAnalysis::GetAnalysis(
+                         stages, /*allow_duplicate_gte_edges=*/true,
+                         /*allow_communication_ops=*/true, /*allow_feeds=*/true,
+                         /*allow_recomputation=*/false,
+                         /*allow_communication_optimizations=*/true));
 
   const int64 last_stage_id = stages.forward.size() - 1;
   TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,

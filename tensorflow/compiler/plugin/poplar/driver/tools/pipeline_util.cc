@@ -15,11 +15,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
 #include <algorithm>
+#include <string>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -445,6 +447,32 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
     }
   }
   return added_computations;
+}
+
+StatusOr<HloInstruction*> CreatePipelineStage(
+    HloComputation* pipeline, const std::vector<HloInstruction*> operands,
+    HloComputation* stage_comp, PoplarBackendConfig_CallConfig_Type stage_type,
+    int64 stage_id, const std::string& name) {
+  FrontendAttributes attributes;
+  (*attributes.mutable_map())[FrontendAttributeId_Name(CALL_CONFIG_TYPE)] =
+      PoplarBackendConfig_CallConfig_Type_Name(stage_type);
+  (*attributes.mutable_map())[FrontendAttributeId_Name(PIPELINE_STAGE_ID)] =
+      std::to_string(stage_id);
+
+  OpMetadata metadata;
+  PoplarBackendConfig cfg;
+  cfg.mutable_call_config()->set_type(stage_type);
+  cfg.mutable_call_config()->mutable_pipeline_stage_config()->set_stage_id(
+      stage_id);
+  metadata.set_op_type(PoplarBackendConfig_CallConfig_Type_Name(stage_type));
+  metadata.set_op_name(name);
+
+  auto empty_call = pipeline->AddInstruction(HloInstruction::CreateCall(
+      stage_comp->root_instruction()->shape(), operands, stage_comp));
+  empty_call->set_frontend_attributes(attributes);
+  empty_call->set_backend_config(cfg);
+  empty_call->set_metadata(metadata);
+  return empty_call;
 }
 
 namespace {
@@ -1010,13 +1038,13 @@ Status RemoveOutputsFromCall(HloInstruction* call,
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
     const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
     bool allow_communication_ops, bool allow_feeds, bool allow_recomputation,
-    bool allow_fifo_optimizations)
+    bool allow_communication_optimizations)
     : pipeline_stages_(pipeline_stages),
       allow_duplicate_gte_edges_(allow_duplicate_gte_edges),
       allow_communication_ops_(allow_communication_ops),
       allow_feeds_(allow_feeds),
       allow_recomputation_(allow_recomputation),
-      allow_fifo_optimizations_(allow_fifo_optimizations) {
+      allow_communication_optimizations_(allow_communication_optimizations) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (size_t id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -1163,19 +1191,26 @@ Status PipelineDataflowAnalysis::VerifyPipelineUsage(
         return Status::OK();
       }
 
-      // If we allow fifo optimizations, then it can also be used by any other
-      // forward which occurs later.
-      if (allow_fifo_optimizations_ &&
+      // If we allow communication optimizations, then it can also be used by
+      // any other forward which occurs later.
+      if (allow_communication_optimizations_ &&
           pipeline_stage_user_id.stage_type == StageType::kForward &&
           pipeline_stage_id.id < pipeline_stage_user_id.id) {
         return Status::OK();
       }
 
-      // If we allow fifo optimizations and recomputation, then it can also be
-      // used by any other recomputation stage which occurs later.
-      if (allow_fifo_optimizations_ && allow_recomputation_ &&
+      // If we allow communication optimizations and recomputation, then it can
+      // also be used by any other recomputation stage which occurs later.
+      if (allow_communication_optimizations_ && allow_recomputation_ &&
           pipeline_stage_user_id.stage_type == StageType::kRecomputation &&
           pipeline_stage_id.id < pipeline_stage_user_id.id) {
+        return Status::OK();
+      }
+
+      // If we allow communication optimizations, then it can also be used by
+      // any backward stage.
+      if (allow_communication_optimizations_ &&
+          pipeline_stage_user_id.stage_type == StageType::kBackward) {
         return Status::OK();
       }
       break;
@@ -1187,9 +1222,9 @@ Status PipelineDataflowAnalysis::VerifyPipelineUsage(
         return Status::OK();
       }
 
-      // If we allow fifo optimizations, then it can also be used by any other
-      // forward which occurs later.
-      if (allow_fifo_optimizations_ &&
+      // If we allow communication optimizations, then it can also be used by
+      // any other forward which occurs later.
+      if (allow_communication_optimizations_ &&
           pipeline_stage_user_id.stage_type == StageType::kBackward &&
           pipeline_stage_id.id > pipeline_stage_user_id.id) {
         return Status::OK();
@@ -1574,7 +1609,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         // which are not intermediate *and* recomputation, then the fifo can
         // have two users.
         const uint64 max_user_count =
-            (allow_fifo_optimizations_ && allow_recomputation_) ? 2 : 1;
+            (allow_communication_optimizations_ && allow_recomputation_) ? 2
+                                                                         : 1;
 
         if (inst->user_count() > max_user_count) {
           return FailedPrecondition(
@@ -1646,7 +1682,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
                 fifo_output_stage_id.stage_type == StageType::kBackward &&
                 fifo_input_stage_id.id == fifo_output_stage_id.id;
 
-            if (allow_fifo_optimizations_) {
+            if (allow_communication_optimizations_) {
               // Allow FIFOs between stages of the same type.
               allowed_fifo |= fifo_input_stage_id.stage_type ==
                               fifo_output_stage_id.stage_type;
@@ -1777,10 +1813,10 @@ PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
                                       bool allow_communication_ops,
                                       bool allow_feeds,
                                       bool allow_recomputation,
-                                      bool allow_fifo_optimizations) {
+                                      bool allow_communication_optimizations) {
   auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
       pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops,
-      allow_feeds, allow_recomputation, allow_fifo_optimizations);
+      allow_feeds, allow_recomputation, allow_communication_optimizations);
   if (!allow_recomputation && analysis->pipeline_stages_.recomputation.size()) {
     return FailedPrecondition(
         "Detected PipelineStageRecomputation which are not allowed");
@@ -1797,12 +1833,15 @@ PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
   return std::move(analysis);
 }
 
-PipelinePath::PipelinePath(HloInstruction* new_consumer, uint64 stage_idx,
-                           uint64 input_idx, uint64 output_idx)
+PipelinePath::PipelinePath(
+    HloInstruction* new_consumer, uint64 stage_idx, uint64 input_idx,
+    uint64 output_idx,
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule)
     : visited_stages_({stage_idx}),
       inputs_path_({input_idx}),
       outputs_path_({output_idx}),
-      new_consumer_(new_consumer) {}
+      new_consumer_(new_consumer),
+      schedule_(schedule) {}
 
 bool PipelinePath::FinishPath(PipelineStages& stages) {
   finished_ = true;
@@ -1816,6 +1855,8 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
   // (1) all in forward stages,
   // (2) all in backward stages,
   // (3) between a forward and a backward stage with the same id.
+  // (4) when the schedule is Sequential, the path can be between any stages on
+  // the same IPU.
   const uint64 start_stage_idx = visited_stages_[0];
   const uint64 end_stage_idx = visited_stages_.back();
 
@@ -1837,17 +1878,28 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
     old_consumer_ = stages.forward.at(old_consumer_id);
   }
 
+  // Whether the forward and backward ids match.
+  const bool fwd_to_bwd_match =
+      start_stage_idx ==
+      (num_forward_stages + num_backward_stages - end_stage_idx - 1);
+
   if (start_is_backward_stage == end_is_backward_stage) {
     // Both start and end are of same type - handle cases (1) and (2).
     fifo_depth_ = end_stage_idx - start_stage_idx - 1;
     type_ = end_is_backward_stage ? Type::kBackward : Type::kForward;
     return true;
-  } else if (start_is_backward_stage && !end_is_backward_stage) {
+  } else if (start_is_backward_stage && !end_is_backward_stage &&
+             fwd_to_bwd_match) {
     // Handle case (3).
     fifo_depth_ = end_stage_idx - num_backward_stages;
     type_ = Type::kForwardToBackward;
-    return start_stage_idx ==
-           (num_forward_stages + num_backward_stages - end_stage_idx - 1);
+    return true;
+  } else if (schedule_ ==
+             PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+    // Handle case (4).
+    fifo_depth_ = 0;
+    type_ = Type::kAny;
+    return true;
   } else {
     return false;
   }
@@ -1861,13 +1913,13 @@ std::vector<uint64>& PipelinePath::GetInputsPath() { return inputs_path_; }
 
 std::vector<uint64>& PipelinePath::GetOutputsPath() { return outputs_path_; }
 
-StatusOr<int64> PipelinePath::GetFifoDepth(const HloInstruction* pipeline_op) {
+StatusOr<int64> PipelinePath::GetFifoDepth() {
   if (finished_) {
-    TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
     // We need to take schedule into account.
     uint64 multiplier = 1;
-    switch (schedule) {
+    switch (schedule_) {
       case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+        CHECK(type_ != Type::kAny);
         multiplier = type_ == Type::kForwardToBackward ? 2 : 1;
         break;
       case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
@@ -1895,7 +1947,8 @@ HloInstruction* PipelinePath::GetOldConsumerStage() const {
 PipelinePath::Type PipelinePath::GetType() const { return type_; }
 
 StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
-    PipelineStages& stages) {
+    PipelineStages& stages,
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule) {
   const uint64 num_stages = stages.forward.size() + stages.backward.size();
   // Set up stages in last to first order.
   std::vector<HloInstruction*> stages_last_to_first(num_stages);
@@ -2026,7 +2079,8 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
       // Create the start of a path.
       PipelinePath path{
           stage, stage_idx, input_idx,
-          inter_stage_input_to_previous_output_map[stage_idx].at(input_idx)};
+          inter_stage_input_to_previous_output_map[stage_idx].at(input_idx),
+          schedule};
 
       for (uint64 next_stage_idx = stage_idx + 1; next_stage_idx != num_stages;
            ++next_stage_idx) {
@@ -2037,11 +2091,17 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
 
         if (shard_matches) {
           // Stop if we reached a stage on the same shard.
-          // We stop as soon as possible to avoid creating parallel pipelines.
           if (path.FinishPath(stages)) {
             paths.push_back(path);
+            break;
           }
-          break;
+          // We stop as soon as possible to avoid creating parallel FIFOs - this
+          // doesn't apply in the sequential schedule as it doesn't insert
+          // FIFOs.
+          if (schedule !=
+              PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+            break;
+          }
         }
 
         // Try to extend the path.
