@@ -181,11 +181,7 @@ class _PopnnRNN(Layer):
         shapes = (shapes,)
 
       for i, shape in enumerate(shapes):
-        self.states.append(
-            self.add_weight(f"state_{i}",
-                            dtype=self._plain_dtype,
-                            initializer=init_ops.zeros_initializer(),
-                            shape=shape))
+        self.states.append(K.zeros(shape))
 
     self.built = True
 
@@ -209,7 +205,7 @@ class _PopnnRNN(Layer):
 
   def _canonical_bias_shape(self, unused_layer):
     """Shapes of Popnn canonical bias tensors for given layer."""
-    return [self._num_gates_per_layer, self._num_units]
+    return [self._num_gates_per_layer * self._num_units]
 
   def _apply_dropout(self, inputs, training):
     if not training:
@@ -441,11 +437,12 @@ class PopnnLSTM(_PopnnRNN):
 
       def bias_initializer(_, *args, **kwargs):
         # Forget gate is the first slice.
-        return K.concatenate([
+        init = K.concatenate([
             initializers.Ones()((1, self.num_units), *args, **kwargs),
             self._bias_initializer((3, self.num_units), *args, **kwargs),
         ],
                              axis=0)
+        return array_ops.reshape(init, self.canonical_bias_shapes)
     else:
       bias_initializer = self._bias_initializer
 
@@ -511,11 +508,14 @@ class PopnnLSTM(_PopnnRNN):
     if self._dropout > 0.:
       inputs = self._apply_dropout(inputs, training)
 
+    bias_tensor = array_ops.reshape(
+        self.biases, [self._num_gates_per_layer, self._num_units])
+
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
         num_channels=self._num_units,
         kernel=combined_kernel,
-        biases=self.biases,
+        biases=bias_tensor,
         input_h_state=h,
         input_c_state=c,
         is_training=training,
@@ -835,11 +835,14 @@ class PopnnGRU(_PopnnRNN):
 
     combined_kernel = array_ops.concat([self.kernel, self.recurrent_kernel], 0)
 
+    bias_tensor = array_ops.reshape(
+        self.biases, [self._num_gates_per_layer, self._num_units])
+
     output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
         num_channels=self._num_units,
         kernel=combined_kernel,
-        biases=self.biases,
+        biases=bias_tensor,
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
