@@ -103,7 +103,8 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
     }
 
     // Create the pass through computation.
-    HloComputation::Builder builder(fwd_comp->name());
+    HloComputation::Builder builder(
+        absl::StrCat("pipeline_stage_", stages.forward.size() - 1));
     std::vector<HloInstruction*> comp_parameters(stage_inputs.size());
     for (int64 param_idx = 0; param_idx != stage_inputs.size(); ++param_idx) {
       comp_parameters[param_idx] =
