@@ -981,7 +981,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           .set_max_scheduler_lookahead_depth(
               poplar_executor->GetMaxSchedulerLookaheadDepth())
           .set_max_scheduler_search_space_size(
-              poplar_executor->GetMaxSchedulerSearchSpaceSize());
+              poplar_executor->GetMaxSchedulerSearchSpaceSize())
+          .set_minimum_remote_tensor_size(
+              poplar_executor->GetMinimumRemoteTensorSize());
 
   CompilerResources resources(
       module.get(), information, poplar_executor->GetConvolutionOptions(),
@@ -1084,6 +1086,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
     pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                      resources.replication_factor);
     {
@@ -1108,7 +1111,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
-        resources.annotations, resources.remote_memory_supported);
+        resources.annotations, resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size);
     pipeline.AddPass<PipelineStageMerger>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
     {

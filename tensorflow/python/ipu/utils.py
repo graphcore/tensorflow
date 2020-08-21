@@ -401,6 +401,7 @@ def create_ipu_config(profiling=False,
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  opts.minimum_remote_tensor_size = 128
 
   opts.max_scheduler_lookahead_depth = max_scheduler_lookahead_depth
   opts.max_scheduler_search_space_size = max_scheduler_search_space_size
@@ -448,6 +449,7 @@ def set_optimization_options(opts,
                              max_reduce_scatter_buffer_size=0,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
+                             minimum_remote_tensor_size=128,
                              gather_simplifier=False,
                              triangular_solve_expander_block_size=0,
                              enable_fast_math=False):
@@ -478,8 +480,10 @@ def set_optimization_options(opts,
     max_send_recv_cluster_size: The maximum number of bytes that can be waiting
       before a cluster of send/recv instructions to/from the host is scheduled.
       These are lowered to stream copies that can be merged by Poplar.
-    gather_simplifier: Will enable more aggressive optimisation
-      for embedding lookups.
+    minimum_remote_tensor_size: The minimum size (in bytes) a tensor has to be
+      in order to be consider for being stored in remote memory.
+    gather_simplifier: Will enable more aggressive optimisation for embedding
+      lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
       expander blocks. 0 - implementation defined default.
     enable_fast_math: Enables optimizations which allow arbitrary reassociations
@@ -499,6 +503,7 @@ def set_optimization_options(opts,
   opts.max_reduce_scatter_buffer_size = max_reduce_scatter_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
+  opts.minimum_remote_tensor_size = minimum_remote_tensor_size
   opts.enable_gather_simplifier = gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
