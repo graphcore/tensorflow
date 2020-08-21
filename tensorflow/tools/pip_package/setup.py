@@ -70,7 +70,7 @@ REQUIRED_PACKAGES = [
     'networkx >= 2.2',
     # mock comes with unittest.mock for python3, need to install for python2
     'mock >= 2.0.0;python_version<"3"',
-    'numpy >= 1.16.0, < 2.0',
+    'numpy >= 1.16.0, < 1.19.0',
     'opt_einsum >= 2.3.2',
     'six >= 1.10.0',
     'protobuf >= 3.8.0',
