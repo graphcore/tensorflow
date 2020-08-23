@@ -919,9 +919,9 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   return new_call;
 }
 
-StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
-                                            HloComputation* comp_to_inline,
-                                            bool copy_sharding) {
+StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
+InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
+                  bool copy_sharding) {
   HloComputation* comp = caller->parent();
   // Hoist the computation out.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
@@ -938,6 +938,7 @@ StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
       // Clone new instruction inside the computation.
       hoisted = comp->AddInstruction(
           inst->CloneWithNewOperands(inst->shape(), new_operands));
+      TF_RETURN_IF_ERROR(hoisted->CopyAllControlDepsFrom(caller));
 
       if (copy_sharding) {
         CopyShardingIfPresent(caller, hoisted);
@@ -948,8 +949,9 @@ StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
   HloInstruction* new_root =
       hoisting_map.at(comp_to_inline->root_instruction());
   // Replace all uses.
+  TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(caller, new_root));
-  return new_root;
+  return hoisting_map;
 }
 
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
