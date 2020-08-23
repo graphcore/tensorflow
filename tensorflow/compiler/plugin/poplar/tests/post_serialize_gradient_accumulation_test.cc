@@ -76,6 +76,71 @@ ENTRY main {
   EXPECT_THAT(p0->control_predecessors(), ::testing::ElementsAre(p1));
 }
 
+TEST_F(PostSerializeGradientAccumulationTest,
+       LowerGradientAccumulationFusionUsers) {
+  const string& hlo_string = R"(
+HloModule main
+
+_pop_op_serialized_gradient_accumulation {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  a0 = f32[] add(p0, p1)
+  p2 = f32[] parameter(2)
+  a1 = f32[] add(a0, p2)
+  p3 = f32[] parameter(3)
+  ROOT a2 = f32[] add(a1, p3)
+}
+
+_pop_op_serialized_gradient_accumulation_2 {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT a0 = f32[] add(p0, p1)
+}
+
+ENTRY main {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  p3 = f32[] parameter(3)
+  p4 = f32[] parameter(4)
+  grad = f32[] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
+  add = f32[] add(p2, p3)
+  grad2 = f32[] fusion(p4, add), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation_2
+  ROOT t = (f32[], f32[]) tuple(grad, grad2)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+
+  PostSerializeGradientAccumulation psga;
+  EXPECT_TRUE(psga.Run(module).ValueOrDie());
+  VLOG(0) << module->ToString();
+
+  HloComputation* comp = module->entry_computation();
+  HloInstruction* root = comp->root_instruction();
+  EXPECT_TRUE(Match(
+      root, m::Tuple(m::Add(m::Add(m::Add(m::Parameter(0), m::Parameter(1)),
+                                   m::Parameter(2)),
+                            m::Parameter(3)),
+                     m::Add(m::Parameter(4),
+                            m::Add(m::Parameter(2), m::Parameter(3))))));
+
+  HloInstruction* p0 = comp->parameter_instruction(0);
+  HloInstruction* p1 = comp->parameter_instruction(1);
+  EXPECT_THAT(p0->control_predecessors(), ::testing::ElementsAre(p1));
+
+  auto grad = root->operand(0);
+  auto grad_input0 = grad->operand(0);
+  auto grad2 = root->operand(1);
+  auto grad_2_input = grad2->operand(1);
+  EXPECT_THAT(grad_2_input->control_predecessors(),
+              ::testing::UnorderedElementsAre(grad, grad_input0));
+}
+
 TEST_F(PostSerializeGradientAccumulationTest, AddCreatorControlDeps) {
   const string& hlo_string = R"(
 HloModule top

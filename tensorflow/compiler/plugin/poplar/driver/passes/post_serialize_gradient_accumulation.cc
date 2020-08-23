@@ -16,7 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
 
 #include <memory>
-#include <queue>
+#include <stack>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
@@ -30,33 +30,63 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-constexpr char kFusionName[] = "serialized_gradient_accumulation";
+constexpr char kFusionName[] = "";
+
+bool IsSerializedGradientAccumulation(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "serialized_gradient_accumulation");
+}
 
 Status InlineSerializedGradientAccumulation(HloInstruction* fusion) {
   HloComputation* fusion_comp = fusion->fused_instructions_computation();
   HloComputation* comp = fusion->parent();
   HloInstruction* accumulator = fusion->mutable_operand(0);
   // Inline the computation.
-  TF_ASSIGN_OR_RETURN(
-      HloInstruction * output,
-      InlineComputation(fusion, fusion_comp, /*copy_sharding*/ true));
+  TF_ASSIGN_OR_RETURN(auto mapping, InlineComputation(fusion, fusion_comp,
+                                                      /*copy_sharding*/ true));
+
+  auto reachability_map = HloReachabilityMap::Build(comp);
+
+  auto add_control_dependency = [&reachability_map](
+                                    HloInstruction* const from,
+                                    HloInstruction* const to) -> Status {
+    // Add a control dependency as long as it doesn't create a cycle.
+    if (from != to && !reachability_map->IsReachable(to, from)) {
+      TF_RETURN_IF_ERROR(from->AddControlDependencyTo(to));
+      reachability_map->UpdateReachabilityThroughInstruction(to);
+    }
+    return Status::OK();
+  };
 
   // Add a control dependency to the accumulator from all other operands
   // from its user to make sure it is allocated late as possible.
   CHECK_EQ(accumulator->user_count(), 1);
-  auto reachability_map = HloReachabilityMap::Build(comp);
   HloInstruction* accumulator_user = accumulator->users()[0];
   for (HloInstruction* operand : accumulator_user->operands()) {
-    if (operand == accumulator) {
-      continue;
-    }
-    if (reachability_map->IsReachable(accumulator, operand)) {
+    TF_RETURN_IF_ERROR(add_control_dependency(operand, accumulator));
+  }
+
+  // Add control dependencies so that each instruction adding to the gradient is
+  // executed as soon as possible.
+  for (auto pair : mapping) {
+    if (pair.first->opcode() == HloOpcode::kParameter) {
       continue;
     }
 
-    TF_RETURN_IF_ERROR(operand->AddControlDependencyTo(accumulator));
-    reachability_map->UpdateReachabilityThroughInstruction(accumulator);
+    HloInstruction* inst = pair.second;
+    HloInstructionSet input_set;
+    for (int64 op_idx = 1; op_idx != inst->operand_count(); ++op_idx) {
+      HloInstruction* operand = inst->mutable_operand(op_idx);
+      input_set.insert(operand);
+      input_set.insert(operand->LatestNonGteAncestor());
+    }
+
+    for (HloInstruction* input : input_set) {
+      for (HloInstruction* user : input->users()) {
+        TF_RETURN_IF_ERROR(add_control_dependency(inst, user));
+      }
+    }
   }
+
   return Status::OK();
 }
 
@@ -70,7 +100,7 @@ StatusOr<bool> InlineSerializedGradientAccumulations(HloModule* module) {
     // Find the fusions inside of the computations.
     std::vector<HloInstruction*> accumulator_fusions;
     for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-      if (IsPopOpsFusion(inst, kFusionName)) {
+      if (IsSerializedGradientAccumulation(inst)) {
         accumulator_fusions.push_back(inst);
       }
     }
