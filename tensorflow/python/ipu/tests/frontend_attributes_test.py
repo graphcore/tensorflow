@@ -226,7 +226,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       outputs = {}
       with ops.device("/device:IPU:0"):
         with ipu.scopes.partials_type(np.float32):
-          pa, pb, fd = _createInputs([2, 2], np.float16)
+          pa, pb, fd = _createInputs([64, 64], np.float16)
           output = math_ops.matmul(pa, pb)
           outputs[output] = ("poplin::ConvPartial*<half,float", fd)
         with ipu.scopes.partials_type(np.float16):
