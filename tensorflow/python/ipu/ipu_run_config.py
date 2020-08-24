@@ -24,7 +24,7 @@ from tensorflow.python.estimator import run_config as run_config_lib
 class IPURunConfig(
     collections.namedtuple('IPURunConfig', [
         'iterations_per_loop', 'ipu_options', 'compile_summary',
-        'num_replicas', 'num_shards', 'autosharding'
+        'num_replicas', 'num_shards', 'autosharding', 'ordinal'
     ])):
   """IPU related configuration required by `IPUEstimator`.
 
@@ -40,6 +40,8 @@ class IPURunConfig(
     num_shards: Number of IPU devices on which the graph is sharded (model parallelism)
     autosharding: Use the IPU `automatic_sharding` to automatically shard the graph
       across `num_shards` devices
+    ordinal: The IPU device ordinal to use.  For instance `0` corresponds
+      to `/device:IPU:0`.
   """
   def __new__(cls,
               iterations_per_loop=1,
@@ -47,7 +49,8 @@ class IPURunConfig(
               compile_summary=False,
               num_replicas=1,
               num_shards=1,
-              autosharding=False):
+              autosharding=False,
+              ordinal=0):
 
     num_devices = num_replicas * num_shards
     if num_devices > 1 and ipu_options is None:
@@ -57,11 +60,15 @@ class IPURunConfig(
 
     num_configured_devices = 1
     if ipu_options is not None:
-      if len(ipu_options.device_config
-             ) == 1 and ipu_options.device_config[0].auto_count > 0:
-        num_configured_devices = ipu_options.device_config[0].auto_count
-      elif len(ipu_options.device_config) > 1:
-        num_configured_devices = len(ipu_options.device_config)
+      if ordinal >= len(ipu_options.device_config):
+        raise ValueError('Only {} device(s) available to choose from.'
+                         ' You tried to pick a device at ordinal {}'.format(
+                             len(ipu_options.device_config), ordinal))
+      if ipu_options.device_config[ordinal].auto_count:
+        num_configured_devices = ipu_options.device_config[ordinal].auto_count
+      else:
+        # We're using cfg_index.  Set equal for now and check later once the device has been created
+        num_configured_devices = num_devices
 
     if num_devices != num_configured_devices:
       raise ValueError(
@@ -76,7 +83,8 @@ class IPURunConfig(
                               compile_summary=compile_summary,
                               num_replicas=num_replicas,
                               num_shards=num_shards,
-                              autosharding=autosharding)
+                              autosharding=autosharding,
+                              ordinal=ordinal)
 
 
 class RunConfig(run_config_lib.RunConfig):
