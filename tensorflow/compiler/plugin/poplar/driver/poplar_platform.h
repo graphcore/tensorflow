@@ -40,6 +40,8 @@ limitations under the License.
 
 namespace se = stream_executor;
 
+using int64 = tensorflow::int64;
+
 namespace tensorflow {
 class IpuTraceEvent;
 }
@@ -90,6 +92,8 @@ class PoplarPlatform : public se::Platform {
   // Cannot be const qualified as a call to
   // PoplarPlatform::ExecuteForDevice is made.
   Status GetIpuOptions(std::vector<IpuOptions>& out);
+
+  StatusOr<int64> GetNumIpusForDevice(int ordinal);
 
   Status ResetSeed(int ordinal, int seed);
 

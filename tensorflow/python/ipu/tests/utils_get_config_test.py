@@ -62,6 +62,21 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
       # Verify that this IpuOption was user created.
       self.assertTrue(opt.creator_id == 1)
 
+  @test_util.deprecated_graph_mode_only
+  def testGetNumberOfIpus(self):
+    # Generate a simple IPU config.
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, [2, 4])
+    ipu.utils.configure_ipu_system(cfg)
+
+    self.assertEqual(ipu.utils.get_num_of_ipus_in_device("/device:IPU:0"), 2)
+    self.assertEqual(ipu.utils.get_num_of_ipus_in_device("/device:IPU:1"), 4)
+
+  @test_util.deprecated_graph_mode_only
+  def testGetNumberOfIpusNoConfig(self):
+    self.assertEqual(ipu.utils.get_num_of_ipus_in_device("/device:IPU:0"), 1)
+
 
 if __name__ == "__main__":
   googletest.main()

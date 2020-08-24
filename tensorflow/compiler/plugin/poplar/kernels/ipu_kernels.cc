@@ -183,4 +183,41 @@ class IpuGetConfigurationOp : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("IpuGetConfiguration").Device(DEVICE_CPU),
                         IpuGetConfigurationOp);
+
+class IpuGetNumDevicesOp : public OpKernel {
+ public:
+  explicit IpuGetNumDevicesOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("device", &dev_name_));
+  }
+  ~IpuGetNumDevicesOp() = default;
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+
+    auto* p = static_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
+
+    DeviceNameUtils::ParsedName parsed_name;
+    DeviceNameUtils::ParseFullName(dev_name_, &parsed_name);
+
+    OP_REQUIRES(ctx, parsed_name.has_id,
+                errors::InvalidArgument("Invalid device name %s", dev_name_));
+    auto status_or = p->GetNumIpusForDevice(parsed_name.id);
+    OP_REQUIRES_OK(ctx, status_or.status());
+
+    // Serialize and write out.
+    Tensor* output_tensor = nullptr;
+    OP_REQUIRES_OK(
+        ctx, ctx->allocate_output("out", TensorShape({}), &output_tensor));
+    auto output_flat = output_tensor->flat<int64>();
+    output_flat(0) = status_or.ValueOrDie();
+  }
+
+ private:
+  std::string dev_name_;
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuGetNumDevicesOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IpuGetNumDevices").Device(DEVICE_CPU),
+                        IpuGetNumDevicesOp);
 }  // namespace tensorflow

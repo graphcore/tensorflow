@@ -62,7 +62,6 @@ _BATCH_SIZE_KEY = "batch_size"
 _ASSIGN_ADD_OP = "AssignAddVariableOp"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
 _HOST_DEVICE = "/device:CPU:0"
-_IPU_DEVICE = "/device:IPU:0"
 
 # Keys that cannot be used in the `params` dictionary passed to the
 # IPUEstimator
@@ -199,13 +198,28 @@ class IPUEstimatorSpec(
 
 class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
   def __init__(self, config, host_device=_HOST_DEVICE):
-    if not isinstance(config, IpuOptions):
-      raise Exception("`config` must be an IpuOptions instance")
-    self._config = config
+    if not isinstance(config.ipu_options, IpuOptions):
+      raise Exception("`config.ipu_options` must be an IpuOptions instance")
+    self._config = config.ipu_options
+    self._run_config = config
     self._host_device = host_device
 
   def begin(self):
     ipu_utils.configure_ipu_system(self._config, self._host_device)
+
+    if self._config.device_config[self._run_config.ordinal].cfg_index:
+      num_configured_devices = ipu_utils.get_num_of_ipus_in_device(
+          '/device:IPU:{}'.format(self._run_config.ordinal))
+
+      num_devices = self._run_config.num_shards * self._run_config.num_replicas
+
+      if num_devices != num_configured_devices:
+        raise ValueError('`IPURunConfig` configured with {} devices'
+                         ' ({} num_replicas times {} num_shards),'
+                         ' but `IpuOptions` configured with {} devices'.format(
+                             num_devices, self._run_config.num_replicas,
+                             self._run_config.num_shards,
+                             num_configured_devices))
 
 
 class _IPUInfeedLifecycleHook(session_run_hook.SessionRunHook):
@@ -366,7 +380,7 @@ def _validate_replicated_training_graph():
          ).format(_CROSS_REPLICA_SUM_OP))
 
 
-def _add_send_to_host_ops(tensors):
+def _add_send_to_host_ops(tensors, ipu_device):
   """Returns attributes for matching recv ops"""
   recv_ops_attrs = []
 
@@ -375,7 +389,7 @@ def _add_send_to_host_ops(tensors):
         tensor, "`host_call` argument")
 
     attrs = dict(tensor_name=tensor.name,
-                 send_device=_IPU_DEVICE,
+                 send_device=ipu_device,
                  send_device_incarnation=0,
                  recv_device=_HOST_DEVICE)
 
@@ -484,6 +498,7 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     self._replication_factor = config.ipu_run_config.num_replicas
     self._num_shards = config.ipu_run_config.num_shards
     self._autosharding = config.ipu_run_config.autosharding
+    self._ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
     self._captured_hooks = []
     self._captured_host_call_fn = None
     self._captured_host_call_args = None
@@ -516,7 +531,8 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
       assert self._captured_host_call_fn is None, \
           "Can only capture host_call once"
       self._captured_host_call_fn, tensors = host_call
-      self._captured_host_call_args = _add_send_to_host_ops(tensors)
+      self._captured_host_call_args = _add_send_to_host_ops(
+          tensors, self._ipu_device)
 
   def _capture_eval_metrics_fn(self, metrics_fn):
     assert metrics_fn is not None
@@ -761,7 +777,7 @@ def _get_input_context():
   return None
 
 
-def _augment_model_fn(model_fn, wrapper_class):
+def _augment_model_fn(model_fn, wrapper_class, ipu_device):
   """Wraps the `model_fn`, feeds it with queues, and returns a new
   `model_fn` that returns a regular `EstimatorSpec`. This `model_fn` wraps
   all the IPU support and can be passed to the regular `Estimator` class."""
@@ -801,9 +817,9 @@ def _augment_model_fn(model_fn, wrapper_class):
         )
 
     if config.ipu_run_config.ipu_options is not None:
-      ipu_options = config.ipu_run_config.ipu_options
       hooks.append(
-          _IPUConfigureIPUSystemHook(ipu_options, host_device=_HOST_DEVICE))
+          _IPUConfigureIPUSystemHook(config.ipu_run_config,
+                                     host_device=_HOST_DEVICE))
 
     wrapped_model_fn = wrapper_class(model_fn, config, params, infeed_queue,
                                      outfeed_queue)
@@ -817,7 +833,7 @@ def _augment_model_fn(model_fn, wrapper_class):
     else:
       raise ValueError("Unknown mode: {}".format(mode))
 
-    with ipu_scope(_IPU_DEVICE):
+    with ipu_scope(ipu_device):
       compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
@@ -920,6 +936,8 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     # pylint: enable=protected-access
 
     num_replicas = config.ipu_run_config.num_replicas
+
+    self._ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
 
     self._batch_size_for_train = _calc_batch_size(train_batch_size,
                                                   num_train_workers,
@@ -1038,7 +1056,7 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
           initializer=init_ops.zeros_initializer(),
           trainable=False,
           use_resource=True,
-          caching_device=_IPU_DEVICE,
+          caching_device=self._ipu_device,
           aggregation=variables.VariableAggregation.ONLY_FIRST_REPLICA,
           collections=[
               ops.GraphKeys.GLOBAL_VARIABLES, ops.GraphKeys.GLOBAL_STEP
@@ -1250,7 +1268,9 @@ class IPUEstimator(_IPUEstimatorBase):
     # Verifies the model_fn signature according to Estimator framework.
     estimator_lib._verify_model_fn_args(model_fn, params)  # pylint: disable=protected-access
 
-    model_function = _augment_model_fn(model_fn, _ModelFnWrapper)
+    ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
+
+    model_function = _augment_model_fn(model_fn, _ModelFnWrapper, ipu_device)
 
     super().__init__(model_fn=model_function,
                      model_dir=model_dir,

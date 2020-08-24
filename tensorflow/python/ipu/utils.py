@@ -242,6 +242,26 @@ def get_ipu_config(session=None):
   return deserialized
 
 
+def get_num_of_ipus_in_device(ipu_device, device="cpu"):
+  """Get the number of physical IPUs
+
+  Args:
+    ipu_device: The IPU device for which to get the number of devices for.
+    device: The CPU device which is local to the IPU hardware.
+
+  Returns:
+    A number of physical IPUs configured for a particular TF device.
+  """
+
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(device):
+      cfg_op = gen_ipu_ops.ipu_get_num_devices(ipu_device)
+
+  with session_lib.Session(graph=g) as sess:
+    return sess.run(cfg_op)
+
+
 def running_on_ipu_model():
   """ Check if XLA is configured to run on the ipu model.
 

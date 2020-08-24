@@ -348,8 +348,11 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
                params=None,
                warm_start_from=None):
     # pylint: disable=protected-access
+
+    ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
     model_function = ipu_estimator._augment_model_fn(model_fn,
-                                                     _ModelFnPipelineWrapper)
+                                                     _ModelFnPipelineWrapper,
+                                                     ipu_device)
     # pylint: enable=protected-access
     super().__init__(model_fn=model_function,
                      model_dir=model_dir,
