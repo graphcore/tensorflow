@@ -170,6 +170,14 @@ Status PoplarPlatform::GetIpuOptions(std::vector<IpuOptions>& out) {
   return Status::OK();
 }
 
+StatusOr<int64> PoplarPlatform::GetNumIpusForDevice(int ordinal) {
+  TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
+                      ExecutorForDevice(ordinal));
+
+  auto* e = static_cast<PoplarExecutor*>(executor->implementation());
+  return e->GetOrCreatePoplarTarget().getNumIPUs();
+}
+
 Status PoplarPlatform::ResetSeed(int ordinal, int seed) {
   if (ordinal < VisibleDeviceCount()) {
     TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
