@@ -492,7 +492,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
   }
 
   // Add the function.
-  seq.add(subcomp_visitor->GetSequence());
+  seq.add(subcomp_visitor->GetFunctionCall());
 
   // Propagate the outputs.
   for (size_t i = 0; i < subcomp_visitor->outputs().size(); i++) {
