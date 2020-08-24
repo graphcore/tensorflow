@@ -189,9 +189,9 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
 
 // Inlines the provided computation and replaces the output at caller site with
 // the inlined root instruction.
-StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
-                                            HloComputation* comp_to_inline,
-                                            bool copy_sharding = false);
+StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
+InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
+                  bool copy_sharding = false);
 
 // Get a schedule from a pipeline.
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
