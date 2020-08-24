@@ -260,8 +260,7 @@ class IPUPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError,
-          "PipelinedModel.fit requires a dataset containing a tuple"):
+          ValueError, r"requires a dataset containing a tuple of "):
         m.fit(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -272,8 +271,7 @@ class IPUPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError,
-          "PipelinedModel.evaluate requires a dataset containing a tuple"):
+          ValueError, r"requires a dataset containing a tuple of "):
         m.evaluate(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -283,8 +281,7 @@ class IPUPipelineTest(test.TestCase):
       m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
 
       with self.assertRaisesRegex(
-          ValueError,
-          "PipelinedModel.predict requires a dataset containing either"):
+          ValueError, r"requires a dataset containing a tuple of "):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
@@ -796,6 +793,81 @@ class IPUPipelineTest(test.TestCase):
       with self.assertRaisesRegex(ValueError,
                                   "Input 0 of layer layer0 is incompatible "):
         m.predict(test_inference_dataset(length=96))
+
+  @test_util.run_v2_only
+  def testFitWithNumpyData(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([72, 32], 1.0, dtype=np.single)
+      input_y = np.full([72, 2], 0.2, dtype=np.single)
+
+      # Fit the weights to the dataset
+      history = m.fit(input_x, input_y, batch_size=1)
+
+      # Should be only a loss stored in the history, and it should contain
+      # only the single epochs value
+      self.assertEqual(list(history.history.keys()), ['loss'])
+      self.assertEqual(type(history.history['loss']), list)
+      self.assertEqual(len(history.history['loss']), 1)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
+
+  @test_util.run_v2_only
+  def testEvalWithNumpyData(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([72, 32], 1.0, dtype=np.single)
+      input_y = np.full([72, 2], 0.2, dtype=np.single)
+
+      # Fit the weights to the dataset
+      result = m.evaluate(input_x, input_y, batch_size=1)
+
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result), list)
+
+  @test_util.run_v2_only
+  def testPredictWithNumpyData(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([96, 32], 1.0, dtype=np.single)
+
+      # Fit the weights to the dataset
+      result = m.predict(input_x, batch_size=1)
+
+      # The result is the tuple of concatenated output tensors
+      self.assertEqual(type(result), tuple)
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result[0]), np.ndarray)
+      self.assertEqual(result[0].shape, (96, 2))
 
 
 if __name__ == '__main__':

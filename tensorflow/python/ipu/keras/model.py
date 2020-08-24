@@ -40,6 +40,7 @@ from tensorflow.python.keras import backend
 from tensorflow.python.keras import Model as KerasModel
 from tensorflow.python.keras import optimizers
 from tensorflow.python.keras.layers import Layer
+from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -70,6 +71,21 @@ def _validate_args(kwargs, fn):
     raise NotImplementedError(
         "IPU Keras models do not support these parameters to " + fn + "(): " +
         ", ".join(bad_args))
+
+
+def _validate_dataset_element_count(ds, count, fn_name):
+  structure = dataset_ops.get_structure(ds)
+  if not isinstance(structure, tuple) or len(structure) != count:
+    if count > 1 or not isinstance(structure, tensor_spec.TensorSpec):
+      raise ValueError(fn_name +
+                       "() requires a dataset containing a tuple of " +
+                       str(count) + " elements.")
+
+
+def _get_dataset_and_count(x, y, batch_size):
+  adapter_cls = data_adapter.select_data_adapter(x, y)
+  adapter = adapter_cls(x, y, batch_size=batch_size)
+  return adapter.get_dataset(), adapter.get_size()
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
@@ -278,8 +294,8 @@ class _IpuModelBase(KerasModel):
           "training.Optimizer subclasses are supported.")
 
   @trackable.no_automatic_dependency_tracking
-  def _do_internal(self, mode, ds, epochs, verbose, callbacks, initial_epoch,
-                   steps_per_epoch, steps_per_run, **kwargs):
+  def _do_internal(self, mode, ds, size, epochs, verbose, callbacks,
+                   initial_epoch, steps_per_epoch, steps_per_run, **kwargs):
 
     self.args = kwargs
 
@@ -306,9 +322,12 @@ class _IpuModelBase(KerasModel):
 
     if require_steps_per_epoch:
       if not steps_per_epoch:
-        raise ValueError(
-            "When using an infinitely repeating dataset, you must provide "
-            "the number of steps per epoch (steps_per_epoch).")
+        if size is None:
+          raise ValueError(
+              "When using an infinitely repeating dataset, you must provide "
+              "the number of steps per epoch (steps_per_epoch).")
+        else:
+          steps_per_epoch = size // self.accumulation_count
 
     # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
@@ -483,87 +502,72 @@ class _IpuModelBase(KerasModel):
     return aggregator.results
 
   @trackable.no_automatic_dependency_tracking
-  def fit(self, x, *, epochs, verbose, callbacks, shuffle, initial_epoch,
-          steps_per_epoch, steps_per_run, **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ +
-                       " can only `fit` with a `tf.data.Dataset` "
-                       "as input.")
+  def fit(self, x, y, batch_size, epochs, verbose, callbacks, shuffle,
+          initial_epoch, steps_per_epoch, steps_per_run, **kwargs):
 
-    if 'y' in kwargs:
-      raise ValueError(
-          "Labels should be provided by the 'x' DataSet containing a tuple.")
-
-    if 'batch_size' in kwargs:
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
                        self.__class__.__name__ + ".fit(). Use the "
                        "DataSet.batch() method to apply batching at the input "
                        "dataset level.")
 
-    _validate_args(kwargs, "fit")
+    ds, size = _get_dataset_and_count(x, y, batch_size)
 
-    structure = dataset_ops.get_structure(x)
-    if not isinstance(structure, tuple) or len(structure) != 2:
-      raise ValueError(
-          self.__class__.__name__ + ".fit requires a dataset containing a "
-          "tuple of two elements, the data value and the target value.")
+    _validate_args(kwargs, "fit")
+    _validate_dataset_element_count(ds, 2, "fit")
 
     self._assert_compile_was_called()
 
-    return self._do_internal(ModeKeys.TRAIN, x, epochs, verbose, callbacks,
-                             initial_epoch, steps_per_epoch, steps_per_run,
-                             **kwargs)
+    return self._do_internal(ModeKeys.TRAIN, ds, size, epochs, verbose,
+                             callbacks, initial_epoch, steps_per_epoch,
+                             steps_per_run, **kwargs)
 
   def evaluate(self,
                x=None,
-               *,
+               y=None,
+               batch_size=None,
                verbose=1,
                steps=None,
                callbacks=None,
                steps_per_run=None,
                **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ + " can only `evaluate` with a "
-                       "`tf.data.Dataset` as input.")
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError("Do not specify `batch_size` in " +
+                       self.__class__.__name__ + ".evaluate(). Use the "
+                       "DataSet.batch() method to apply batching at the input "
+                       "dataset level.")
+
+    ds, size = _get_dataset_and_count(x, y, batch_size)
 
     _validate_args(kwargs, "evaluate")
-
-    structure = dataset_ops.get_structure(x)
-    if not isinstance(structure, tuple) or len(structure) != 2:
-      raise ValueError(
-          self.__class__.__name__ + ".evaluate requires a dataset containing "
-          "a tuple of two elements, the data value and the target value.")
+    _validate_dataset_element_count(ds, 2, "evaluate")
 
     self._assert_compile_was_called()
 
-    return self._do_internal(ModeKeys.TEST, x, 1, verbose, callbacks, 0, steps,
-                             steps_per_run, **kwargs)
+    return self._do_internal(ModeKeys.TEST, ds, size, 1, verbose, callbacks, 0,
+                             steps, steps_per_run, **kwargs)
 
   def predict(self,
               x,
-              *,
+              batch_size=None,
               verbose=0,
               steps=None,
               callbacks=None,
               steps_per_run=None,
               **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ + " can only `predict` with a "
-                       "`tf.data.Dataset` as input.")
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError("Do not specify `batch_size` in " +
+                       self.__class__.__name__ + ".predict(). Use the "
+                       "DataSet.batch() method to apply batching at the input "
+                       "dataset level.")
+
+    ds, size = _get_dataset_and_count(x, None, batch_size)
 
     _validate_args(kwargs, "predict")
+    _validate_dataset_element_count(ds, 1, "predict")
 
-    structure = dataset_ops.get_structure(x)
-    if not (isinstance(structure, tensor_spec.TensorSpec) or
-            (isinstance(structure, tensor_spec.TensorSpec)
-             and len(structure) != 1)):
-      raise ValueError(
-          self.__class__.__name__ + ".predict requires a dataset containing "
-          "either a tuple of one single data value, or just a single data "
-          "value.")
-
-    return self._do_internal(ModeKeys.PREDICT, x, 1, verbose, callbacks, 0,
-                             steps, steps_per_run, **kwargs)
+    return self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose, callbacks,
+                             0, steps, steps_per_run, **kwargs)
 
   def _get_replication_factor(self):
     if not self.got_replication_factor:
@@ -737,7 +741,9 @@ class IPUSequential(_IpuModelBase):
   @trackable.no_automatic_dependency_tracking
   def fit(self,
           x=None,
+          y=None,
           *,
+          batch_size=None,
           epochs=1,
           verbose=1,
           callbacks=None,
@@ -758,6 +764,8 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().fit(x,
+                       y,
+                       batch_size=batch_size,
                        epochs=epochs,
                        verbose=verbose,
                        callbacks=callbacks,
@@ -769,7 +777,9 @@ class IPUSequential(_IpuModelBase):
 
   def evaluate(self,
                x=None,
+               y=None,
                *,
+               batch_size=None,
                verbose=1,
                steps=None,
                callbacks=None,
@@ -788,6 +798,8 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().evaluate(x,
+                            y,
+                            batch_size=batch_size,
                             verbose=verbose,
                             steps=steps,
                             callbacks=callbacks,
@@ -797,6 +809,7 @@ class IPUSequential(_IpuModelBase):
   def predict(self,
               x,
               *,
+              batch_size=None,
               verbose=0,
               steps=None,
               callbacks=None,
@@ -821,6 +834,7 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().predict(x,
+                           batch_size=batch_size,
                            verbose=verbose,
                            steps=steps,
                            callbacks=callbacks,

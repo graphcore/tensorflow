@@ -229,7 +229,9 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
   @trackable.no_automatic_dependency_tracking
   def fit(self,
           x=None,
+          y=None,
           *,
+          batch_size=None,
           epochs=1,
           verbose=1,
           callbacks=None,
@@ -250,6 +252,8 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     repeated indefinitely, then this will be ok.
     """
     return super(PipelinedModel, self).fit(x,
+                                           y,
+                                           batch_size=batch_size,
                                            epochs=epochs,
                                            verbose=verbose,
                                            callbacks=callbacks,
@@ -261,7 +265,9 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
 
   def evaluate(self,
                x=None,
+               y=None,
                *,
+               batch_size=None,
                verbose=1,
                steps=None,
                callbacks=None,
@@ -279,6 +285,8 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     repeated indefinitely, then this will be ok.
     """
     return super(PipelinedModel, self).evaluate(x,
+                                                y,
+                                                batch_size=batch_size,
                                                 verbose=verbose,
                                                 steps=steps,
                                                 callbacks=callbacks,
@@ -288,6 +296,7 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
   def predict(self,
               x,
               *,
+              batch_size=None,
               verbose=0,
               steps=None,
               callbacks=None,
@@ -311,6 +320,7 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     repeated indefinitely, then this will be ok.
     """
     return super(PipelinedModel, self).predict(x,
+                                               batch_size=batch_size,
                                                verbose=verbose,
                                                steps=steps,
                                                callbacks=callbacks,
