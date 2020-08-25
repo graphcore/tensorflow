@@ -797,7 +797,6 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
   auto tshape = target->operand(input_index)->shape();
   const auto optional_layout = tensor_target.layout;
   const auto optional_layout_output_idx = tensor_target.layout_output_idx;
-  const auto forward_path = tensor_target.forward_path;
   VLOG(1) << "Allocation target " << target->ToString() << " index "
           << input_index;
 

@@ -52,7 +52,7 @@ uint64 GetShardForOutputIndex(const HloInstruction* inst,
   if (inst->has_sharding()) {
     const auto& sharding = GetShardingDeviceIdVector(inst->sharding());
 
-    // If the instruction is not allowed tuple shardding, then all the outputs
+    // If the instruction is not allowed tuple sharding, then all the outputs
     // have the same shard.
     if (!IsAllowedTupleSharding(inst)) {
       flattened_output_tuple_index = 0;

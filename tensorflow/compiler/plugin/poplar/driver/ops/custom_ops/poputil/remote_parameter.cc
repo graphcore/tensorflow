@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
@@ -39,28 +38,41 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
     const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
+    const int64 num_inputs = inst->operand_count();
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+    const auto shapes = output_shape.IsTuple()
+                            ? output_shape.tuple_shapes()
+                            : std::vector<xla::Shape>{output_shape};
+    CHECK_EQ(shapes.size(), num_inputs);
 
-    if (!UseSyntheticData()) {
-      TensorOrRemoteBufferVector inputs =
-          FindInstructionInputs(tensor_map, res, inst, 0, seq, true);
+    poplar::program::Sequence seq;
 
-      poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
+    for (int64 i = 0; i < num_inputs; ++i) {
+      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
 
-      seq.add(poplar::program::Copy(remote_buffer, tensor));
-    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-      // Initialize the tensor to a constant value.
-      auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-      TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(output_shape));
-      TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                          AddTensor(shard_graph, TensorLocation{inst, i},
+                                    shapes[i], res, tensor_map));
+
+      if (!UseSyntheticData()) {
+        TensorOrRemoteBufferVector inputs =
+            FindInstructionInputs(tensor_map, res, inst, i, seq, true);
+
+        CHECK_EQ(inputs.size(), 1);
+        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
+
+        seq.add(poplar::program::Copy(remote_buffer, tensor));
+      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+        // Initialize the tensor to a constant value.
+        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(output_shape));
+        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
+      }
+
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, tensor));
     return seq;
   }
 };
@@ -72,22 +84,37 @@ class RemoteParameterStoreOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    const int64 num_inputs = inst->operand_count();
+    CHECK_EQ(num_inputs % 2, 0);
+    const int64 num_outputs = num_inputs / 2;
+
+    const auto shapes = output_shape.IsTuple()
+                            ? output_shape.tuple_shapes()
+                            : std::vector<xla::Shape>{output_shape};
+    CHECK_EQ(shapes.size(), num_outputs);
+
     poplar::program::Sequence seq;
 
-    TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
+    TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
                         FindInplaceOutputs(tensor_map, res, inst, seq));
+    CHECK_EQ(outputs.size(), num_outputs);
 
-    CHECK_EQ(inputs.size(), 1);
-    CHECK_EQ(inputs[0].size(), 1);
-    poplar::RemoteBuffer remote_buffer = inputs[0][0].AsRemoteBuffer();
+    for (int64 i = 0; i < num_outputs; ++i) {
+      CHECK_EQ(outputs[i].size(), 1);
+      poplar::RemoteBuffer remote_buffer = outputs[i][0].AsRemoteBuffer();
 
-    if (!UseSyntheticData()) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          FindInstructionInput(tensor_map, res, inst, 1, seq));
+      if (!UseSyntheticData()) {
+        const int64 input_value_index = num_outputs + i;
 
-      seq.add(poplar::program::Copy(tensor, remote_buffer));
+        TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                            FindInstructionInput(tensor_map, res, inst,
+                                                 input_value_index, seq));
+
+        seq.add(poplar::program::Copy(tensor, remote_buffer));
+      }
+      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, remote_buffer));
     }
-    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, remote_buffer));
+
     return seq;
   }
 };
