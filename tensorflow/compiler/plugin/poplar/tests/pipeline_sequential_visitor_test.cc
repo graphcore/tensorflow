@@ -185,9 +185,9 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-IPU-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.4"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-IPU-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.5"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -217,22 +217,22 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 1
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call.3: 5
-/custom-call: 1
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call.3: 5
-/custom-call: 1
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call.3: 5
-/custom-call: 1
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call.3: 5
+  const std::string expected = R"(/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor.3: 5
+/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor.3: 5
+/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor.3: 5
+/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor.3: 5
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -320,9 +320,9 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-IPU-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-IPU-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.2"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -352,12 +352,12 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
+  const std::string expected = R"(/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -450,9 +450,9 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.2"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
@@ -482,14 +482,14 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
+  const std::string expected = R"(/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -603,15 +603,15 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_e"), 4},
       {entry_computation->GetInstructionWithName("d"), 5},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.6"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("custom-call.7"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.8"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("custom-call.9"), 3},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("custom-call.10"), 4},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 4},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -640,54 +640,54 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
-/custom-call: 0
-/custom-call.1: 1
-/custom-call.2: 2
-/custom-call.3: 3
-/custom-call.4: 4
-/custom-call.5: 5
+  const std::string expected = R"(/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
+/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor.2: 2
+/print-tensor.3: 3
+/print-tensor.4: 4
+/print-tensor.5: 5
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -781,12 +781,12 @@ ENTRY e {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
+  const std::string expected = R"(/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
 )";
 
   ASSERT_EQ(expected, ss.str());

@@ -25,6 +25,8 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 
+#include "tensorflow/core/platform/str_util.h"
+
 namespace xla {
 namespace poplarplugin {
 
@@ -47,6 +49,11 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
     PoplarBackendConfig backend_config;
     backend_config.set_hash_of_custom_attributes(hash);
     set_backend_config(backend_config);
+
+    // Give it a name based on the Poplar op name.
+    auto name = tensorflow::str_util::ArgDefCase(PoplarOp_Name(op));
+    std::replace(name.begin(), name.end(), '_', '-');
+    SetAndSanitizeName(name);
   }
 
   // Allocating indexes used by the Allocation Finder - op specific.
