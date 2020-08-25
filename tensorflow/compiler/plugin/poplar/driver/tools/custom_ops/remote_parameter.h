@@ -31,7 +31,8 @@ namespace poplarplugin {
  */
 class HloRemoteParameterLoad : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterLoad(HloInstruction* const rbuffer);
+  HloRemoteParameterLoad(const Shape& shape,
+                         absl::Span<HloInstruction* const> rbuffers);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -60,8 +61,9 @@ std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
  */
 class HloRemoteParameterStore : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterStore(HloInstruction* const rbuffer,
-                                   HloInstruction* const value);
+  explicit HloRemoteParameterStore(
+      const xla::Shape& shape,
+      absl::Span<HloInstruction* const> rbuffers_and_values);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -70,6 +72,9 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
 
   bool IsPopOpsElementwise() const override;
+
+  absl::Span<HloInstruction* const> RemoteBuffers() const;
+  absl::Span<HloInstruction* const> ValuesToStore() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

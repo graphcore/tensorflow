@@ -167,6 +167,8 @@ bool IsAllowedTupleSharding(const HloInstruction* inst) {
     case HloOpcode::kOutfeed:
     case HloOpcode::kGetTupleElement:
       return true;
+    case HloOpcode::kCustomCall:
+      return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
     default:
       return false;
   }

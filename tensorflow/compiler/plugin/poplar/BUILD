@@ -186,6 +186,7 @@ cc_library(
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_instructions.cc",
+        "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
@@ -330,6 +331,7 @@ cc_library(
         "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/post_serialize_gradient_accumulation.h",
         "driver/passes/recompute_instructions.h",
+        "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
@@ -1602,6 +1604,19 @@ xla_test(
     name = "combine_instructions_test",
     size = "small",
     srcs = ["tests/combine_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "remote_parameter_parallel_combiner_test",
+    size = "small",
+    srcs = ["tests/remote_parameter_parallel_combiner_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4468,6 +4483,7 @@ test_suite(
         "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",
+        "remote_parameter_parallel_combiner_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
         "report_framework_info_test",
