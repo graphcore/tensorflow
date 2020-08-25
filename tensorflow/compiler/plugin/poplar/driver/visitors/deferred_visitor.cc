@@ -1094,6 +1094,21 @@ poplar::program::Sequence DeferredVisitor::GetSequence(
   return seq;
 }
 
+poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
+  if (!function_) {
+    // Do not copy the execution counters as part of the function - the
+    // callsites might be different.
+    poplar::program::Sequence func_seq = GetSequence(false);
+    function_ = GetMasterGraph(resources_).addFunction(func_seq);
+  }
+
+  poplar::program::Sequence seq;
+  TF_CHECK_OK(
+      CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+  seq.add(poplar::program::Call(*function_));
+  return seq;
+}
+
 namespace {
 ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
                                              bool reallocate) {
