@@ -15,8 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 
+#include <gcl/Collectives.hpp>
 #include <poplar/Program.hpp>
-#include <popops/Collectives.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Expr.hpp>
 #include <popops/Zero.hpp>
@@ -94,7 +94,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
     {
       if (do_all_reduce) {
         // All reduce the accumulator tensor into the output.
-        popops::replicatedAllReduceWithOutput(
+        gcl::allReduceToDestination(
             GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
             if_true, GetDebugName(inst), GetReplicateAllReduceOptions(res));
       } else {
@@ -244,7 +244,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       {
         if (do_all_reduce_and_norm) {
           // All reduce the accumulator tensor into the output.
-          popops::replicatedAllReduceWithOutput(
+          gcl::allReduceToDestination(
               GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
               if_true, GetDebugName(inst), GetReplicateAllReduceOptions(res));
 

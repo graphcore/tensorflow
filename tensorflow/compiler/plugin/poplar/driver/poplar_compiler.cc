@@ -21,7 +21,7 @@ limitations under the License.
 #include <unistd.h>
 
 #include <fstream>
-#include <gcl/ct/TileAllocation.hpp>
+#include <gcl/TileAllocation.hpp>
 #include <limits>
 #include <mutex>
 #include <popfloat/experimental/codelets.hpp>
