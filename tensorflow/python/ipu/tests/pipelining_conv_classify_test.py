@@ -148,7 +148,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -209,7 +209,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -272,7 +272,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -335,7 +335,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -400,14 +400,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
       l = array_ops.placeholder(np.int32, shape=[1])
 
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                     inputs=[x, l])
-
-    tu.move_variable_initialization_to_cpu()
-    outfeed_queue.dequeue()
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                       inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
 
       report = tu.ReportJSON(self, sess, pipelining=True)
       sess.run(variables.global_variables_initializer())
