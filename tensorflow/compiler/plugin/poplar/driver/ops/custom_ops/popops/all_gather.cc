@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 
-#include <popops/Collectives.hpp>
+#include <gcl/Collectives.hpp>
 #include <popops/DynamicSlice.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -41,8 +41,8 @@ class AllGatherOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     // Replicated sum the concatenated tensor
     poplar::Tensor output =
-        popops::replicatedAllGather(graph, input, seq, GetDebugName(inst),
-                                    GetReplicatedCollectiveOptions(res));
+        gcl::allGather(graph, input, seq, GetDebugName(inst),
+                       GetReplicatedCollectiveOptions(res));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;

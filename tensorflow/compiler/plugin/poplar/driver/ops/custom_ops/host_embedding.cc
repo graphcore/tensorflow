@@ -15,9 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
 
+#include <gcl/Collectives.hpp>
 #include <popnn/Loss.hpp>
 #include <popops/Cast.hpp>
-#include <popops/Collectives.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Encoding.hpp>
 #include <popops/HostSliceTensor.hpp>
@@ -186,9 +186,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                                   res, tensor_map));
 
     // All-Gather the indices from all replicas.
-    indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices",
-                                          GetReplicatedCollectiveOptions(res));
+    indices =
+        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+                       GetReplicatedCollectiveOptions(res));
 
     // Create a replication factor constant tensor.
     poplar::Tensor rep =
@@ -251,7 +251,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // Given that invalid elements will be zero and valid elements will contain
     // the correct value, we can replicatedReduceScatter sum to distribute the
     // results to the correct replica.
-    host_sliceable.tensor = popops::replicatedReduceScatter(
+    host_sliceable.tensor = gcl::reduceScatter(
         graph, host_sliceable.tensor.flatten(), popops::Operation::ADD, seq,
         GetDebugName(inst) + "/reduce_scatter",
         GetReplicatedCollectiveOptions(res));
@@ -277,9 +277,9 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                                   res, tensor_map));
 
     // All-Gather the indices from all replicas.
-    indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices",
-                                          GetReplicatedCollectiveOptions(res));
+    indices =
+        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+                       GetReplicatedCollectiveOptions(res));
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
@@ -448,15 +448,14 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const HloHostEmbeddingUpdateInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map) {
     // All-Gather the indices from all replicas.
-    indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices",
-                                          GetReplicatedCollectiveOptions(res));
+    indices =
+        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+                       GetReplicatedCollectiveOptions(res));
     indices = indices.flatten(0, 2);
 
     // All-Gather the grads from all replicas.
-    grads = popops::replicatedAllGather(graph, grads, seq,
-                                        GetDebugName(inst) + "/grads",
-                                        GetReplicatedCollectiveOptions(res));
+    grads = gcl::allGather(graph, grads, seq, GetDebugName(inst) + "/grads",
+                           GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
@@ -540,9 +539,9 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const HloHostEmbeddingUpdateInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map) {
     // All-Gather the indices from all replicas.
-    indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices",
-                                          GetReplicatedCollectiveOptions(res));
+    indices =
+        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+                       GetReplicatedCollectiveOptions(res));
 
     // Check whether we need to pad the gradients because the replication factor
     // isn't a factor of the encoding width.
