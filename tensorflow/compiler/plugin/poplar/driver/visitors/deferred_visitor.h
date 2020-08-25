@@ -276,8 +276,6 @@ class DeferredVisitor : public FullVisitor {
   poplar::program::Sequence GetSequence(
       bool copy_execution_counters = true) final;
 
-  poplar::program::Sequence GetFunctionCall();
-
  protected:
   // Returns the sequence to be used by the given instruction.
   virtual StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
@@ -389,8 +387,6 @@ class DeferredVisitor : public FullVisitor {
   TensorInputDescription allocated_tensors_;
 
  private:
-  absl::optional<poplar::Function> function_;
-
   const bool mark_all_input_tensors_as_used_;
   const bool allocate_all_input_tensors_;
   poplar::program::Sequence merged_infeed_sequence;
