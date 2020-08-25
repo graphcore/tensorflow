@@ -83,8 +83,8 @@ class MultiIpuTest(xla_test.XLATestCase):
           '__seed*',
           'add*/add*/Add',
           'switchControlBroadcast2/*OnTileCopy',
-          'Copy_XLA_Args*/arg0.1_to_/custom-call*/OnTileCopy',
-          'Copy_/custom-call_to_/custom-call*/OnTileCopy',
+          'Copy_XLA_Args*/arg0.1_to_/ipu-inter-copy*/OnTileCopy',
+          'Copy_/ipu-inter-copy_to_/ipu-inter-copy*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -234,7 +234,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       # There are 2 inter-ipu copies
       n_inter_ipu_copies = 0
       for n in cs_list:
-        if fnmatch.fnmatch(n, '*custom-call*/GlobalPre/*'):
+        if fnmatch.fnmatch(n, '*ipu-inter-copy*/GlobalPre/*'):
           n_inter_ipu_copies = n_inter_ipu_copies + 1
 
       self.assertEqual(n_inter_ipu_copies, 2)
@@ -277,7 +277,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       # There is 1 piece of global exchange (apart from progId)
       wl = [
           'switchControlBroadcast*/GlobalPre',
-          '*_to_/custom-call*/GlobalPre',
+          '*_to_/ipu-inter-copy*/GlobalPre',
           '__seed/set/setMasterSeed',
       ]
       report.assert_all_global_exchanges_and_list(wl)

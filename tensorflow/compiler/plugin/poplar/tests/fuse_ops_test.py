@@ -59,7 +59,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'Sigmoid/custom-call/Nonlinearity']
+      ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity']
       report.assert_all_compute_sets_and_list(ok)
 
   def testSigmoidNotInplace(self):
@@ -81,8 +81,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args*/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
-          'Sigmoid/custom-call/Nonlinearity', 'add/add.*/Add'
+          'Copy_XLA_Args*/arg0.*_to_Sigmoid/sigmoid/Nonlinearity/out/OnTileCopy-0',
+          'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -103,7 +103,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'SigmoidGrad/custom-call/NonLinearityGrad']
+      ok = ['__seed*', 'SigmoidGrad/sigmoid-grad/NonLinearityGrad']
       report.assert_all_compute_sets_and_list(ok)
 
   def testRelu(self):
@@ -121,7 +121,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'Relu/custom-call/Nonlinearity']
+      ok = ['__seed*', 'Relu/relu/Nonlinearity']
       report.assert_all_compute_sets_and_list(ok)
 
   def testReluNotInPlace(self):
@@ -142,8 +142,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args*/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
-          'Relu/custom-call/Nonlinearity', 'add/add.*/Add'
+          'Copy_XLA_Args*/arg0.*_to_Relu/relu/Nonlinearity/out/OnTileCopy-0',
+          'Relu/relu/Nonlinearity', 'add/add.*/Add'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -168,8 +168,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args*/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
-          'Relu/custom-call/Nonlinearity'
+          'Copy_XLA_Args*/arg0.*_to_Relu/relu/Nonlinearity/out/OnTileCopy-0',
+          'Relu/relu/Nonlinearity'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -190,7 +190,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'ReluGrad/custom-call/NonLinearityGrad']
+      ok = ['__seed*', 'ReluGrad/relu-grad/NonLinearityGrad']
       report.assert_all_compute_sets_and_list(ok)
 
   def testMaxPool(self):
@@ -215,7 +215,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'max/custom-call*/maxPool5x5']
+      ok = ['__seed*', 'max/max-pool*/maxPool5x5']
       report.assert_all_compute_sets_and_list(ok)
 
   def testFwdAndBwdMaxPool(self):
@@ -255,8 +255,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       ok = [
-          '__seed*', 'Copy_*', 'MaxPool/custom-call*/maxPool2x2/',
-          'MaxPoolGrad/custom-call*/maxPool2x2'
+          '__seed*', 'Copy_*', 'MaxPool/max-pool*/maxPool2x2/',
+          'MaxPoolGrad/max-pool-grad*/maxPool2x2'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -466,7 +466,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'avg/custom-call*/avgPool10x10']
+      ok = ['__seed*', 'avg/avg-pool*/avgPool10x10']
       report.assert_all_compute_sets_and_list(ok)
 
   def testAvgPoolValidWithBroadcast(self):
@@ -500,7 +500,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'avg/custom-call*/avgPool5x5']
+      ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
       report.assert_all_compute_sets_and_list(ok)
 
   def testAvgPoolSameWithReshape(self):
@@ -541,7 +541,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'avg/custom-call*/avgPool5x5']
+      ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
       report.assert_all_compute_sets_and_list(ok)
 
   def testFullyConnectedWithBias(self):
@@ -630,7 +630,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d/BiasAdd',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
-          'vs/Relu/custom-call/Nonlinearity'
+          'vs/Relu/relu/Nonlinearity'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -766,7 +766,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           '__seed*',
           'host-exchange-local-copy-*/OnTileCopy-0',
           '/negate/Op/Negate',
-          'ExpandDims/input/custom-call.3/multiUpdateAdd',
+          'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
           'Copy_*/OnTileCopy',
           'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/Add',
@@ -830,7 +830,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           '__seed*',
           'host-exchange-local-copy-*/OnTileCopy-0',
           '/negate/Op/Negate',
-          'ExpandDims/input/custom-call.3/multiUpdateAdd',
+          'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
           'Copy_*/OnTileCopy-0',
           'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/Add',
@@ -887,7 +887,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           '__seed*',
           'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
           'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
-          'GradientDescent/update_vs/w/ResourceScatterAdd/custom-call*/multiUpdateAdd',
+          'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           'vs/embedding_lookup/gather.*/multiSlice',
@@ -954,7 +954,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           '/negate/Op/Negate',
-          'gradients/vs/Reshape_grad/Reshape/tensor/custom*/multiUpdateAdd',
+          'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd',
           'vs/embedding_lookup/gather.*/multiSlice',
           'vs/embedding_lookup_1/gather.*/multiSlice',
           'vs/absolute_difference/Sub/subtract.*/Subtract',

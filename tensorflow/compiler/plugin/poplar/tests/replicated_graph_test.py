@@ -545,7 +545,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       # Check that the reduce scatters were combined into one.
       report.parse_log()
       report.assert_compute_sets_matches(
-          "IpuReduceScatter*/custom-call*/ReduceScatter", 1)
+          "IpuReduceScatter*/reduce-scatter*/ReduceScatter", 1)
 
       # Check padded lengths.
       self.assertEqual(len(out[0]), np.ceil(1 / num_replicas) * num_replicas)

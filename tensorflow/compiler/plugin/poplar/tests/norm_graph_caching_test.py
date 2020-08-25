@@ -281,7 +281,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
-          'vs/PopnnGroupNormInference/custom-call*/'
+          'vs/PopnnGroupNormInference/group-norm-inference*/'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -340,8 +340,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
-          'vs/PopnnGroupNormStatistics/custom-call*/',
-          'vs/PopnnGroupNormInference/custom-call*/'
+          'vs/PopnnGroupNormStatistics/group-norm-statistics*/',
+          'vs/PopnnGroupNormInference/group-norm-inference*/'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -391,7 +391,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
-          'vs/PopnnGroupNormInference/custom-call*/',
+          'vs/PopnnGroupNormInference/group-norm-inference*/',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -464,11 +464,11 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           '__seed*',
           'Copy_',
           'vs/conv1/Conv2D/convolution*/Conv_1x1/Convolve',
-          'vs/PopnnGroupNormTraining/custom-call*/Norm',
-          'vs/PopnnGroupNormTraining/custom-call*/iStdDev',
-          'vs/PopnnGroupNormTraining/custom-call*/Whiten',
+          'vs/PopnnGroupNormTraining/group-norm-training*/Norm',
+          'vs/PopnnGroupNormTraining/group-norm-training*/iStdDev',
+          'vs/PopnnGroupNormTraining/group-norm-training*/Whiten',
           'Sum/reduce.*/*/Reduce',
-          'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/custom-call*/',
+          'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/group-norm-grad*/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/*Transpose',
       ]

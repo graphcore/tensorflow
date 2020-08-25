@@ -83,9 +83,9 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
 
       # This tests gather simplifier hlo pass for embedding_lookup case.
       # It checks if "embedding_lookup/gather*/multiSlice" string was
-      # replaced by embedding_lookup/custom-call/*/multiSlice".
+      # replaced by embedding_lookup/multi-slice/*/multiSlice".
       ok = [
-          'embedding_lookup/custom-call/output/multiSlice/*',
+          'embedding_lookup/multi-slice/output/multiSlice/*',
           '__seed/set/setMasterSeed',
           'host-exchange-local-copy-',
       ]
