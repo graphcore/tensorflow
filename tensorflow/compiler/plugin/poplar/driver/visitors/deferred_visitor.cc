@@ -1094,14 +1094,6 @@ poplar::program::Sequence DeferredVisitor::GetSequence(
   return seq;
 }
 
-poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
-  if (!function_) {
-    poplar::program::Sequence seq = GetSequence();
-    function_ = GetMasterGraph(resources_).addFunction(seq);
-  }
-  return poplar::program::Sequence(poplar::program::Call(*function_));
-}
-
 namespace {
 ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
                                              bool reallocate) {
