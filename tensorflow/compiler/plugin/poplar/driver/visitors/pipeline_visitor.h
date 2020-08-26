@@ -103,6 +103,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
   virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);
 
+  Status VerifyPipelineArguments(int64 iterations) const;
+
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
       int64 iterations) const;
 
