@@ -17,9 +17,7 @@ IPU specific maths operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.python.ipu.ops import functional_ops
-from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
@@ -125,18 +123,16 @@ def serialized_matmul(a,
                           transpose_rhs,
                           name,
                           output_shape=None,
-                          output_reduction_axis=None,
-                          ml_type=None):
+                          output_reduction_axis=None):
     name = name + "SplitAColumns"
 
     @functional_ops.function
     def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
+      return math_ops.matmul(lhs_,
+                             rhs_,
+                             transpose_lhs,
+                             transpose_rhs,
+                             name=name)
 
     lhs_shape = lhs.shape.as_list()
     # Get the slice dimension, taking transpose into account.
@@ -178,18 +174,16 @@ def serialized_matmul(a,
                                  transpose_rhs,
                                  name,
                                  output_shape=None,
-                                 output_reduction_axis=None,
-                                 ml_type=None):
+                                 output_reduction_axis=None):
     name = name + 'SplitARowsBColumns'
 
     @functional_ops.function
     def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
+      return math_ops.matmul(lhs_,
+                             rhs_,
+                             transpose_lhs,
+                             transpose_rhs,
+                             name=name)
 
     lhs_shape = lhs.shape.as_list()
     rhs_shape = rhs.shape.as_list()
@@ -235,18 +229,16 @@ def serialized_matmul(a,
                           transpose_rhs,
                           name,
                           output_shape=None,
-                          output_reduction_axis=None,
-                          ml_type=None):
+                          output_reduction_axis=None):
     name = name + 'SplitBRows'
 
     @functional_ops.function
     def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
+      return math_ops.matmul(lhs_,
+                             rhs_,
+                             transpose_lhs,
+                             transpose_rhs,
+                             name=name)
 
     # Get the slice dimension, taking transpose into account.
     rhs_shape = rhs.shape.as_list()
@@ -345,24 +337,24 @@ def serialized_matmul(a,
 
       if not transpose_a and not transpose_b:
         grad_lhs = grad_a_fn(grad, rhs, False, True, grad_lhs_name, lhs_shape,
-                             lhs_reduction, backend_config_pb2.TRAINING_BWD)
+                             lhs_reduction)
         grad_rhs = grad_b_fn(lhs, grad, True, False, grad_rhs_name, rhs_shape,
-                             rhs_reduction, backend_config_pb2.TRAINING_WU)
+                             rhs_reduction)
       elif not transpose_a and transpose_b:
         grad_lhs = grad_a_fn(grad, rhs, False, False, grad_lhs_name, lhs_shape,
-                             lhs_reduction, backend_config_pb2.TRAINING_BWD)
+                             lhs_reduction)
         grad_rhs = grad_b_fn(grad, lhs, True, False, grad_rhs_name, rhs_shape,
-                             rhs_reduction, backend_config_pb2.TRAINING_WU)
+                             rhs_reduction)
       elif transpose_a and not transpose_b:
         grad_lhs = grad_a_fn(rhs, grad, False, True, grad_lhs_name, lhs_shape,
-                             lhs_reduction, backend_config_pb2.TRAINING_BWD)
+                             lhs_reduction)
         grad_rhs = grad_b_fn(lhs, grad, False, False, grad_rhs_name, rhs_shape,
-                             rhs_reduction, backend_config_pb2.TRAINING_WU)
+                             rhs_reduction)
       elif transpose_a and transpose_b:
         grad_lhs = grad_a_fn(rhs, grad, True, True, grad_lhs_name, lhs_shape,
-                             lhs_reduction, backend_config_pb2.TRAINING_BWD)
+                             lhs_reduction)
         grad_rhs = grad_b_fn(grad, lhs, True, True, grad_rhs_name, rhs_shape,
-                             rhs_reduction, backend_config_pb2.TRAINING_WU)
+                             rhs_reduction)
       return [grad_lhs, grad_rhs]
 
     return fwd_fn(lhs, rhs, transpose_a, transpose_b, name), grad_fn
