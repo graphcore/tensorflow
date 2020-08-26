@@ -367,7 +367,7 @@ class _IpuModelBase(KerasModel):
 
     outer_loop_count = int(steps_per_epoch / steps_per_run)
 
-    total_samples = mini_batches_per_epoch * (epochs - initial_epoch)
+    total_batches = mini_batches_per_epoch * (epochs - initial_epoch)
 
     # Prepare for progress reporting
     callbacks = cbks.configure_callbacks(callbacks,
@@ -402,11 +402,11 @@ class _IpuModelBase(KerasModel):
 
     # Aggregator for combining the various outputs/metrics together
     if mode != ModeKeys.PREDICT:
-      aggregator = training_utils.MetricsAggregator(use_steps=False,
-                                                    num_samples=total_samples)
+      aggregator = training_utils.MetricsAggregator(use_steps=True,
+                                                    steps=total_batches)
     else:
-      aggregator = training_utils.OutputsAggregator(use_steps=False,
-                                                    num_samples=total_samples)
+      aggregator = training_utils.OutputsAggregator(use_steps=True,
+                                                    steps=total_batches)
 
     # Outer loop
     try:
@@ -467,14 +467,13 @@ class _IpuModelBase(KerasModel):
 
           results = gen(results)
 
-        results = enumerate(results)
         # Get the final loss and metrics
-        i, r = next(results)
+        r = next(results)
         aggregator.create(r)
-        aggregator.aggregate(r, 0, 1)
+        aggregator.aggregate(r)
 
-        for i, r in results:
-          aggregator.aggregate(r, i, i + 1)
+        for r in results:
+          aggregator.aggregate(r)
 
         aggregator.finalize()
         results = aggregator.results

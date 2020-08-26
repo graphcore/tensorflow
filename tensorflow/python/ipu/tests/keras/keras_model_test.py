@@ -747,34 +747,34 @@ class IPUModelTest(test.TestCase):
 
     self.assertAllClose(ipu_output, cpu_out)
 
-  # @test_util.run_v2_only
-  # def testPredictBs2_CpuMatch(self):
-  #   strategy = ipu.ipu_strategy.IPUStrategy()
-  #   with strategy.scope():
-  #     m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+  @test_util.run_v2_only
+  def testPredictBs2_CpuMatch(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
 
-  #     cfg = ipu.utils.create_ipu_config(profiling=True)
-  #     cfg = ipu.utils.auto_select_ipus(cfg, 1)
-  #     ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
 
-  #     # Fit the weights to the dataset
-  #     result = m.predict(test_inference_dataset(length=96, batch_size=2))
+      # Fit the weights to the dataset
+      result = m.predict(test_inference_dataset(length=96, batch_size=2))
 
-  #     # The result is the tuple of concatenated output tensors
-  #     self.assertEqual(type(result), tuple)
-  #     self.assertEqual(len(result), 1)
-  #     self.assertEqual(type(result[0]), np.ndarray)
-  #     self.assertEqual(result[0].shape, (96, 2))
+      # The result is the tuple of concatenated output tensors
+      self.assertEqual(type(result), tuple)
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result[0]), np.ndarray)
+      self.assertEqual(result[0].shape, (96, 2))
 
-  #   cpu_out = run_model_on_cpu(fixed_weight_model(), test_dataset(length=96),
-  #                              12, 8, None, None)
-  #   cpu_out = list(map(lambda x: x.numpy(), cpu_out))
-  #   cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
+    cpu_out = run_model_on_cpu(fixed_weight_model(), test_dataset(length=96),
+                               12, 8, None, None)
+    cpu_out = list(map(lambda x: x.numpy(), cpu_out))
+    cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
 
-  #   # result is the predicted values
-  #   ipu_output = result[0]
+    # result is the predicted values
+    ipu_output = result[0]
 
-  #   self.assertAllClose(ipu_output, cpu_out)
+    self.assertAllClose(ipu_output, cpu_out)
 
   @test_util.run_v2_only
   def testFitWithTensorDataNoBatchSize(self):
@@ -874,6 +874,31 @@ class IPUModelTest(test.TestCase):
 
       self.assertEqual(len(result), 1)
       self.assertEqual(type(result), list)
+      self.assertAllClose(result[0], 1.1664)
+
+  @test_util.run_v2_only
+  def testEvalWithNumpyDataBs2(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([72, 32], 1.0, dtype=np.single)
+      input_y = np.full([72, 2], 0.2, dtype=np.single)
+
+      # Fit the weights to the dataset
+      result = m.evaluate(input_x, input_y, batch_size=2)
+
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result), list)
+      self.assertAllClose(result[0], 1.1664)
 
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs1(self):
@@ -900,30 +925,30 @@ class IPUModelTest(test.TestCase):
       self.assertEqual(type(result[0]), np.ndarray)
       self.assertEqual(result[0].shape, (96, 2))
 
-  # @test_util.run_v2_only
-  # def testPredictWithNumpyDataBs2(self):
-  #   strategy = ipu.ipu_strategy.IPUStrategy()
-  #   with strategy.scope():
-  #     m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+  @test_util.run_v2_only
+  def testPredictWithNumpyDataBs2(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
 
-  #     cfg = ipu.utils.create_ipu_config(profiling=True)
-  #     cfg = ipu.utils.auto_select_ipus(cfg, 1)
-  #     ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
 
-  #     opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-  #     m.compile(opt, loss='mse')
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
 
-  #     # Input data
-  #     input_x = np.full([96, 32], 1.0, dtype=np.single)
+      # Input data
+      input_x = np.full([96, 32], 1.0, dtype=np.single)
 
-  #     # Fit the weights to the dataset
-  #     result = m.predict(input_x, batch_size=2)
+      # Fit the weights to the dataset
+      result = m.predict(input_x, batch_size=2)
 
-  #     # The result is the tuple of concatenated output tensors
-  #     self.assertEqual(type(result), tuple)
-  #     self.assertEqual(len(result), 1)
-  #     self.assertEqual(type(result[0]), np.ndarray)
-  #     self.assertEqual(result[0].shape, (96, 2))
+      # The result is the tuple of concatenated output tensors
+      self.assertEqual(type(result), tuple)
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result[0]), np.ndarray)
+      self.assertEqual(result[0].shape, (96, 2))
 
 
 if __name__ == '__main__':
