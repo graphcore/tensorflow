@@ -1034,5 +1034,5 @@ test_suite(
     tests = [
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
         "//tensorflow/python/ipu:all_tests",
-    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test"]),
+    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
 )
