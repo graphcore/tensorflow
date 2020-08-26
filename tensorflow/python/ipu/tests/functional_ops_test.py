@@ -158,8 +158,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1193804)
-      report.assert_max_tile_memory(4138)
+      report.assert_total_tile_memory(1167740)
+      report.assert_max_tile_memory(3534)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
@@ -240,8 +240,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1148984)
-      report.assert_max_tile_memory(4238)
+      report.assert_total_tile_memory(1129384)
+      report.assert_max_tile_memory(3634)
 
       # Entry computastion and 4 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 5)
@@ -477,8 +477,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/MatMul_1_grad/MatMul/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1342820)
-      report.assert_max_tile_memory(5605)
+      report.assert_total_tile_memory(1324608)
+      report.assert_max_tile_memory(5005)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)

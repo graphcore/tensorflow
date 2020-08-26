@@ -60,6 +60,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/function_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
@@ -1071,6 +1072,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           resources.enable_fast_math);
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
+      pass.AddPass<FunctionOptimizer>();
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConditionSimplify>();
       pass.AddPass<PipelineOptimizer>();
