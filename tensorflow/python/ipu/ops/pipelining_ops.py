@@ -29,7 +29,6 @@ from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
-from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
@@ -536,7 +535,6 @@ def pipeline(computational_stages,
                                 stage_id,
                                 device_mapping[stage_id],
                                 outputs,
-                                training=optimizer_function is not None,
                                 infeed_queue=stage_infeed_queue,
                                 outfeed_queue=stage_outfeed_queue,
                                 name=stage_name)
@@ -654,7 +652,6 @@ def _pipeline_stage(func,
                     stage_id,
                     device_id,
                     args,
-                    training,
                     infeed_queue=None,
                     outfeed_queue=None,
                     name=None):
@@ -698,7 +695,6 @@ def _pipeline_stage(func,
       return func(*(args + dequeue_ops))
 
     func_to_compile = infeed_func_wrapper
-
   # If we have an outfeed, then we wrap the function in another function which
   # enqueues the outfeed.
   if outfeed_queue:
@@ -715,15 +711,11 @@ def _pipeline_stage(func,
 
     func_to_compile = outfeed_func_wrapper
 
-  def gradient_override_wrapper(*args, **kwargs):
-    with op_util.gradient_override_scope(training):
-      return func_to_compile(*args, **kwargs)
-
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
     try:
       func_graph, captured_args = functional_ops._compile_function(
-          gradient_override_wrapper, args, scope, control_outputs)
+          func_to_compile, args, scope, control_outputs)
     except functional_ops._InvalidCaptureException as e:
       raise ValueError(
           "Trying to capture the tensor %s which is not a resource. This tensor"
