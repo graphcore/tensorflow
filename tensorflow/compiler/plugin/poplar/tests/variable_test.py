@@ -315,7 +315,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal',
+          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
           'z1/Initializer/truncated_normal/mul/multiply.*/Op/Multiply',
           'z1/Initializer/truncated_normal/add*/Add'
       ]
@@ -347,7 +347,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal',
+          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
           'z1/Initializer/truncated_normal/fusion*/Op/Multiply',
           'z1/Initializer/truncated_normal/fusion*/Add'
       ]
@@ -376,7 +376,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal'
+          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -403,7 +403,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal'
+          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)

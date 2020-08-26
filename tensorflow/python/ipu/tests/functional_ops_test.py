@@ -78,7 +78,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ok = [
           'MatMul/dot*/Conv_1',
           'add/add*/Op/Add',
-          'Sigmoid/custom-call/Nonlinearity',
+          'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
           'Copy_',
@@ -144,14 +144,14 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ok = [
           'MatMul/dot*/Conv_1',
           'add/add*/Op/Add',
-          'Sigmoid/custom-call/Nonlinearity',
+          'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
           'Copy_',
           'SparseSoftmaxCrossEntropyWithLogits',
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
-          'gradients/Sigmoid_grad/SigmoidGrad/custom-call*/NonLinearityGrad',
+          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply',
           'gradients/AddN/fusion/AddTo',
           'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
@@ -228,10 +228,10 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           '__seed/set/setMasterSeed',
           'matmul/dot*/Conv_1',
           'add_0/fusion/Op/Add',
-          'Sigmoid/custom-call/Nonlinearity',
+          'Sigmoid/sigmoid/Nonlinearity',
           'SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits',
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/',
-          'gradients/Sigmoid_grad/SigmoidGrad/custom-call.2/NonLinearityGrad',
+          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad/NonLinearityGrad',
           'gradients/add_grad/Sum/reduce*/Reduce',
           'GradientDescent/update_1/bias/ResourceApplyGradientDescent/fusion.5/AddTo',
           'GradientDescent/update_1/w/ResourceApplyGradientDescent/fusion.4/AddTo',
@@ -302,7 +302,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Less/fusion*/Op/LessThan',
           'GreaterEqual/fusion*/Op/GreaterThanEqual',
           'sub/fusion/Op/Subtract',
-          'embedding_lookup/custom-call/output/multiSlice',
+          'embedding_lookup/multi-slice/output/multiSlice',
           'LogicalAnd/and*/Op/LogicalAnd',
           'Cast/convert*/Cast',
           'mul_0/fusion*/Op/Multiply',
@@ -356,8 +356,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.parse_log()
       # Two non-linearties, as one of them has a different type.
       ok = [
-          'Relu/custom-call/Nonlinearity',
-          'Relu/custom-call.*/Nonlinearity',
+          'Relu/relu/Nonlinearity',
+          'Relu/relu.*/Nonlinearity',
           '__seed',
           'Copy_',
       ]
@@ -393,7 +393,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.parse_log()
 
       ok = [
-          'Relu/custom-call*/Nonlinearity',
+          'Relu/relu*/Nonlinearity',
           '__seed',
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -458,8 +458,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       # cached.
       ok = [
           'MatMul/dot*/Conv_1',
-          '*/custom-call*/Op/Add',
-          'Sigmoid/custom-call/Nonlinearity',
+          '*/slice-apply*/Op/Add',
+          'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
           'Copy_',
@@ -468,7 +468,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'SparseSoftmaxCrossEntropyWithLogits',
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
-          'gradients/Sigmoid_grad/SigmoidGrad/custom-call*/NonLinearityGrad',
+          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply',
           'gradients/AddN/fusion/AddTo',
           'gradients/AddN/add*/Op/Add',
@@ -478,7 +478,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1342820)
-      report.assert_max_tile_memory(5285)
+      report.assert_max_tile_memory(5605)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
