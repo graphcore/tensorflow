@@ -80,27 +80,6 @@ StatusOr<HloInstruction*> HashCombine(HloInstruction* seed,
       HloInstruction::CreateBitcastConvert(shape, seed));
 }
 
-Status StandardizeLoopLikeOutputs(HloInstruction* const inst) {
-  // When hoisting in a loop/pipeline, additional inputs/outputs need to be
-  // added. To do this, all the users of the instruction need  to be GTE
-  // instructions.
-  const bool all_gtes =
-      absl::c_all_of(inst->users(), [](const HloInstruction* user) {
-        return user->opcode() == HloOpcode::kGetTupleElement;
-      });
-  if (!all_gtes) {
-    TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
-                        ConvertAllUsersToGTEs(inst));
-    // Make sure all non-gte users now use the new output.
-    for (HloInstruction* user : inst->users()) {
-      if (user->opcode() != HloOpcode::kGetTupleElement) {
-        TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, new_output));
-      }
-    }
-  }
-  return Status::OK();
-}
-
 StatusOr<HloInstruction*> AddParametersToCall(
     HloInstruction* call, const std::vector<HloInstruction*>& new_parameters,
     HloCloneContext* context, bool add_parameters_as_outputs = false) {
@@ -344,7 +323,7 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
               ShapeUtil::TupleElementCount(callsite->shape())) {
             continue;
           }
-          TF_RETURN_IF_ERROR(StandardizeLoopLikeOutputs(callsite));
+          TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(callsite).status());
           TF_RETURN_IF_ERROR(HoistFromRepeatLoop(inst, callsite));
         } else {
           CHECK(IsPipelineStage(callsite));
@@ -356,7 +335,7 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
           }
           HloInstruction* pipeline = stage_callsites[0].instruction();
           CHECK(IsPipelineOp(pipeline));
-          TF_RETURN_IF_ERROR(StandardizeLoopLikeOutputs(pipeline));
+          TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(pipeline).status());
           TF_RETURN_IF_ERROR(HoistFromPipelineStage(inst, callsite, pipeline));
         }
         return true;

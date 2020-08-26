@@ -297,6 +297,17 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
         "Expected the instruction %s to have a tuple output shape.",
         inst->ToString().c_str());
   }
+  const bool all_gtes =
+      absl::c_all_of(inst->users(), [](const HloInstruction* user) {
+        return user->opcode() == HloOpcode::kGetTupleElement;
+      });
+
+  const bool is_root = comp->root_instruction() == inst;
+
+  if (all_gtes && !is_root) {
+    return inst;
+  }
+
   // Create a GTE from each subshape.
   const int64 num_elements = ShapeUtil::TupleElementCount(inst->shape());
   std::vector<HloInstruction*> gtes(num_elements);
@@ -313,6 +324,17 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
   HloInstruction* tuple =
       comp->AddInstruction(HloInstruction::CreateTuple(gtes));
   inst->SetupDerivedInstruction(tuple);
+
+  // Make sure all non-gte users now use the new output.
+  for (HloInstruction* user : inst->users()) {
+    if (user->opcode() != HloOpcode::kGetTupleElement) {
+      TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, tuple));
+    }
+  }
+
+  if (is_root) {
+    comp->set_root_instruction(tuple);
+  }
   return tuple;
 }
 
@@ -321,8 +343,7 @@ StatusOr<bool> FixRootInstruction(HloComputation* comp) {
   if (root->opcode() == HloOpcode::kTuple) {
     return false;
   }
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_root, ConvertAllUsersToGTEs(root));
-  comp->set_root_instruction(new_root);
+  TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(root).status());
   return true;
 }
 
