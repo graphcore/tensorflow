@@ -30,6 +30,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import math_ops as ipu_math_ops
 from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
@@ -347,6 +348,75 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       # 2x matmul in 2 stages = 4 (4x updates, 2x grads)
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 2, 4])
+
+  @test_util.deprecated_graph_mode_only
+  def testOutlinedFunction(self):
+    # Check that we get all classifications for a simple conv
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[224, 48],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        a = ipu_math_ops.serialized_matmul(
+            x, weight, 2, serialization_dimension="a_rows_b_columns")
+        a = nn.relu(a)
+        b = fc(x, 48)
+        b = nn.relu(b)
+        return a + b, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        a = fc(x, 100)
+        a = nn.relu(a)
+        b = fc(x, 100)
+        b = nn.relu(b)
+        return a + b, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
+        return loss
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    # Run the pipeline twice.
+    def model_pipeline(x, lr):
+      return pipelining_ops.pipeline([stage1, stage2, stage3],
+                                     12,
+                                     inputs=[x, lr],
+                                     outfeed_queue=outfeed_queue,
+                                     optimizer_function=optimizer_function)
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 224])
+      l = array_ops.placeholder(np.int32, shape=[1])
+
+    with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                      inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
+
+      report = tu.ReportJSON(self, sess, pipelining=True)
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
+      report.parse_log()
+
+      # 3 matmul in stage 1, 2 matmuls in stage 2 = 5 (5x updates, 5x grads)
+      self.assertAllEqual(report.get_ml_type_counts(), [0, 5, 2, 5])
 
 
 if __name__ == "__main__":
