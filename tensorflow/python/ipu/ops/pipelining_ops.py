@@ -428,7 +428,7 @@ def pipeline(computational_stages,
   if infeed_queue:
     if not isinstance(infeed_queue, ipu_infeed_queue.IPUInfeedQueue):
       raise TypeError("infeed_queue is not an instance of "
-                      "ipu_infeed_queue.IPUOutfeedQueue")
+                      "ipu_infeed_queue.IPUInfeedQueue")
 
   if outfeed_queue:
     if not isinstance(outfeed_queue, ipu_outfeed_queue.IPUOutfeedQueue):

@@ -92,6 +92,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_stage_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_tuple_remover.h"
@@ -1053,6 +1054,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ZeroSizedHloElimination>();
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloPassFix<SeedHoisting>>();
+    pipeline.AddPass<PipelineRecomputation>(
+        poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
     // pass.AddPass<ConditionalSimplifier>();
