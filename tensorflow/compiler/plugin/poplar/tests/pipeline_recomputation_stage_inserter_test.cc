@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
@@ -33,9 +33,9 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using PipelineRecomputationTest = HloTestBase;
+using PipelineRecomputationStageInserterTest = HloTestBase;
 
-TEST_F(PipelineRecomputationTest, TestRecomputation1) {
+TEST_F(PipelineRecomputationStageInserterTest, TestRecomputation1) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -398,7 +398,7 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -443,7 +443,7 @@ ENTRY cluster {
   }
 }
 
-TEST_F(PipelineRecomputationTest, TestNoBackwardStages) {
+TEST_F(PipelineRecomputationStageInserterTest, TestNoBackwardStages) {
   std::string hlo = R"(
 HloModule top
 
@@ -493,12 +493,12 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineRecomputationTest, TestRecomputationDisabled) {
+TEST_F(PipelineRecomputationStageInserterTest, TestRecomputationDisabled) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -861,12 +861,12 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(false);
+  PipelineRecomputationStageInserter recomputation(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineRecomputationTest, TestControlDependencies) {
+TEST_F(PipelineRecomputationStageInserterTest, TestControlDependencies) {
   std::string hlo = R"(
 HloModule top
 
@@ -952,7 +952,7 @@ ENTRY e {
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
@@ -963,7 +963,7 @@ ENTRY e {
               ::testing::ElementsAre(stages.forward[0]));
 }
 
-TEST_F(PipelineRecomputationTest, TestStatefulOp) {
+TEST_F(PipelineRecomputationStageInserterTest, TestStatefulOp) {
   std::string hlo = R"(
 HloModule top
 
@@ -1053,7 +1053,7 @@ ENTRY e {
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
 

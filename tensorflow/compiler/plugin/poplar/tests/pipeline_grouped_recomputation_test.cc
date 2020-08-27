@@ -16,7 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -397,7 +397,7 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -492,7 +492,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
@@ -860,7 +860,7 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(false);
+  PipelineRecomputationStageInserter recomputation(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
@@ -951,7 +951,7 @@ ENTRY e {
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
