@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
 
 #include <list>
 #include <memory>
@@ -167,10 +167,11 @@ StatusOr<HloInstruction*> CreateRecomputationStage(
 }
 
 }  // namespace
-PipelineRecomputation::PipelineRecomputation(bool allow_recomputation)
+PipelineRecomputationStageInserter::PipelineRecomputationStageInserter(
+    bool allow_recomputation)
     : allow_recomputation_(allow_recomputation) {}
 
-StatusOr<bool> PipelineRecomputation::RecomputePipeline(
+StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
@@ -327,7 +328,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
   return changed;
 }
 
-StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
+StatusOr<bool> PipelineRecomputationStageInserter::Run(HloModule* module) {
   if (!allow_recomputation_) {
     return false;
   }
@@ -339,13 +340,21 @@ StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
     return false;
   }
   CHECK_EQ(pipeline_ops.size(), 1);
-  VLOG(2) << "Before PipelineRecomputation:";
+
+  TF_ASSIGN_OR_RETURN(const auto schedule,
+                      GetPipelineSchedule(pipeline_ops[0]));
+  if (schedule == PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+    VLOG(2) << "The Sequential pipeline does not insert recomputation stages";
+    return false;
+  }
+
+  VLOG(2) << "Before PipelineRecomputationStageInserter:";
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
 
   TF_ASSIGN_OR_RETURN(bool changed, RecomputePipeline(pipeline_ops[0]));
 
   if (changed) {
-    VLOG(2) << "After PipelineRecomputation:";
+    VLOG(2) << "After PipelineRecomputationStageInserter:";
     XLA_VLOG_LINES(2, module->ToString());
   } else {
     VLOG(2) << "No changes were made to the Pipeline.";
