@@ -4108,6 +4108,17 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "example_tf2_model_fit",
+    size = "large",
+    srcs = ["docs/example_tf2_model_fit.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "example_tf2_fit",
     size = "small",
     srcs = ["docs/example_tf2_fit.py"],
@@ -4573,6 +4584,7 @@ test_suite(
         "distributed_training_example",
         "example_tf2_custom_training",
         "example_tf2_fit",
+        "example_tf2_model_fit",
         "example_tf2_pipelined_model",
         "function_block1",
         "function_block2",

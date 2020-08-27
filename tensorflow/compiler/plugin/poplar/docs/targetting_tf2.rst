@@ -78,25 +78,29 @@ context.
 
 - https://www.tensorflow.org/guide/keras/train_and_evaluate
 
-The Model.fit method
-____________________
+IPU optimized drop-in replacements for Keras Model and Keras Sequential are
+available and described below.
 
-This method of the Keras ``Model`` class can be used within an ``IPUStrategy``
-to train a model without the need for a specialised training loop.
+Model class
+________________
 
-For high performance training, the ``fit`` API should be avoided, because it
-does not provide an on-device training loop.
+A higher performance alternative to using the standard Keras Model is
+available. It is called ``Model``, and found at
+``tensorflow.python.ipu.keras.Model``. It supports the following features:
 
-Custom training loops
-_____________________
+* On device training loop for reduction of communication overhead.
+* Gradient accumulation for simulating larger batch sizes.
+* Automatic data-parallelism of the model when placed on a multi-IPU device,
+  which means that during training the gradients will be reduced across
+  replicas.
 
-If a more sophisticated training loop is required, then it can be described
-inside a function which is marked as a ``@tf.function``. See the examples
-section for a full example.
+It is a substitute for the Keras Model class, when only a single IPU
+is used for training. For a high performance multi-IPU solution use the
+``PipelinedModel`` described below.
 
-The outer training function should be called using the ``experimental_run_v2``
-method on the ``IPUStrategy`` object, to ensure that it is executed using the
-strategy's configuration.
+Unlike the standard Keras model classes, it must be trained, evaluated and
+operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
+called directly.
 
 Sequential class
 ________________
@@ -116,9 +120,9 @@ is used for training. For a high performance multi-IPU solution use the
 ``PipelinedModel`` described below.
 
 Unlike the standard Keras model classes, it must be trained, evaluated and
-operatored with the ``fit``, ``evaluate`` and ``predict`` methods. It
-cannot be called directly. For a similar reason, you cannot get the list
-of trainable variables before you have executed it.
+operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
+called directly. For a similar reason, you cannot get the list of trainable
+variables before you have executed it.
 
 PipelinedModel class
 ____________________
@@ -147,3 +151,14 @@ entries in the Keras History.
 
 Note that similarly to the ``Sequentual`` class, ``PipelinedModel`` also
 supports automatic data-parallelism.
+
+Custom training loops
+_____________________
+
+If a more sophisticated training loop is required, then it can be described
+inside a function which is marked as a ``@tf.function``. See the examples
+section for a full example.
+
+The outer training function should be called using the ``experimental_run_v2``
+method on the ``IPUStrategy`` object, to ensure that it is executed using the
+strategy's configuration.
