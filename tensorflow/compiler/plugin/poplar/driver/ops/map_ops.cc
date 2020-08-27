@@ -557,11 +557,12 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
       auto visitor,
       GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
                          GetDebugName(inst)));
+  TF_RETURN_IF_ERROR(visitor->VerifyPipelineArguments(pipeline_depth));
+
   auto order = pipeline_computation->parent()
                    ->schedule()
                    .sequence(pipeline_computation)
                    .instructions();
-
   TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.

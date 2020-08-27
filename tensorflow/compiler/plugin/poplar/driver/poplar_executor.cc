@@ -1433,6 +1433,12 @@ Status PoplarExecutor::CreatePoplarTarget() {
 
       num_ipus = device_config.auto_count();
     }
+
+    if (HasMultiReplicaDistributionOptions()) {
+      return Unimplemented(
+          "Multi-replica distribution is not supported with the IPU model");
+    }
+
     poplar::IPUModel model;
     model.numIPUs = num_ipus;
 

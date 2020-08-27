@@ -1101,8 +1101,7 @@ PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                       GetNumberOfBackwardPipelineStages(pipeline), res, inputs,
                       description, name) {}
 
-StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
-    int64 iterations) const {
+Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   const int64 overlap_length =
       ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
 
@@ -1120,6 +1119,15 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
         "The pipeline depth of the pipeline must be at least %d, but it is %d.",
         overlap_length, iterations);
   }
+  return Status::OK();
+}
+
+StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
+    int64 iterations) const {
+  TF_RETURN_IF_ERROR(VerifyPipelineArguments(iterations));
+
+  const int64 overlap_length =
+      ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
 
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();
   poplar::program::Program repeat_block =

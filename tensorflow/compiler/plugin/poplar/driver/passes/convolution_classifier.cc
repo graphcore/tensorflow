@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -168,13 +169,6 @@ bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
   }
 }
 
-void GetTypeFromInstruction(MLType* type, const HloInstruction* inst) {
-  const auto attributes = inst->frontend_attributes();
-  auto itr = attributes.map().find(FrontendAttributeId_Name(ML_TYPE));
-  if (itr != attributes.map().end()) {
-    CHECK(MLType_Parse(itr->second, type));
-  }
-}
 }  // namespace
 
 StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
@@ -287,18 +281,14 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
   }
 
   for (auto& it : classifications) {
-    MLType type = it.second;
-
-    if (type == MLType::INFERENCE_FWD) {
-      GetTypeFromInstruction(&type, it.first);
-    }
-
-    TF_RETURN_IF_ERROR(SetInstructionMLType(it.first, type));
+    TF_RETURN_IF_ERROR(SetInstructionMLType(it.first, it.second));
     HloInstruction* mapped = annotations_.flattened_inst_map_bwd.at(it.first);
-    TF_RETURN_IF_ERROR(SetInstructionMLType(mapped, type));
+    TF_RETURN_IF_ERROR(SetInstructionMLType(mapped, it.second));
+  }
 
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << mapped->name() << " : " << MLType_Name(type);
+  if (VLOG_IS_ON(2)) {
+    for (const auto& it : classifications) {
+      VLOG(2) << it.first->name() << " : " << MLType_Name(it.second);
     }
   }
 

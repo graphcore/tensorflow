@@ -45,6 +45,10 @@ class IPUOutfeedMode(Enum):
 class IPUOutfeedQueue:
   """Generates and adds outfeed enqueue/dequeue operations to the graph.
 
+  An outfeed is the counterpart to an infeed and manages the
+  transfer of data (like tensors, tuples or dictionaries of tensors)
+  from the IPU graph to the host.
+
   The queue has two modes of operation - outfeed all or outfeed last.
   In outfeed all mode every element that is enqueued will be stored
   for a subsequent dequeue. All of the enqueued elements will be returned

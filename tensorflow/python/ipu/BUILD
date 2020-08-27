@@ -20,7 +20,6 @@ py_library(
         "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
-        "ops/op_util.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
@@ -128,7 +127,6 @@ py_library(
         "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
-        "ops/op_util.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/reduce_scatter_op.py",
@@ -1036,5 +1034,5 @@ test_suite(
     tests = [
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
         "//tensorflow/python/ipu:all_tests",
-    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test"]),
+    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
 )
