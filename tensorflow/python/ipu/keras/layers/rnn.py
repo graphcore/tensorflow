@@ -192,7 +192,7 @@ class _PopnnRNN(Layer):
                            shape=self.canonical_bias_shapes)
 
   # pylint: disable=unused-argument
-  def call(self, inputs, training=True, initial_state=None):
+  def call(self, inputs, training=None, initial_state=None):
     raise ValueError("This method needs to be overridden.")
 
   # pylint: disable=unused-argument
@@ -451,7 +451,7 @@ class PopnnLSTM(_PopnnRNN):
                            initializer=bias_initializer,
                            shape=self.canonical_bias_shapes)
 
-  def call(self, inputs, training=True, initial_state=None):
+  def call(self, inputs, training=None, initial_state=None):
     """Runs the forward step for the LSTM layer.
 
     Args:
@@ -471,6 +471,9 @@ class PopnnLSTM(_PopnnRNN):
                     `return_state` is set to True.
 
     """
+    if training is None:
+      training = K.learning_phase()
+
     dtype = self.dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
 
@@ -483,12 +486,9 @@ class PopnnLSTM(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
-    # PopnnLSTM doesn't support a dynamic training parameter.
-    if not isinstance(training, bool):
-      raise ValueError(
-          "PopnnLSTM does not support a dynamic training argument.  Please "
-          "pass a boolean True/False to the call method.  If you are using "
-          "keras.Sequential, you should change to another model type.")
+    # PopnnLSTM doesn't support a dynamic training parameter. If the training
+    # parameter is not constant, assume training.
+    training = training if isinstance(training, bool) else True
 
     if initial_state is not None:
       pass
@@ -779,7 +779,7 @@ class PopnnGRU(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, training=True, initial_state=None):
+  def call(self, inputs, training=None, initial_state=None):
     """Runs the forward step for the GRU layer.
 
     Args:
@@ -801,6 +801,9 @@ class PopnnGRU(_PopnnRNN):
       ValueError: if initial_state is not valid.
 
     """
+    if training is None:
+      training = K.learning_phase()
+
     dtype = self.dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
 
@@ -813,12 +816,9 @@ class PopnnGRU(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
-    # PopnnGRU doesn't support a dynamic training parameter.
-    if not isinstance(training, bool):
-      raise ValueError(
-          "PopnnGRU does not support a dynamic training argument.  Please pass "
-          "a boolean True/False to the call method.  If you are using "
-          "keras.Sequential, you should change to another model type.")
+    # PopnnGRU doesn't support a dynamic training parameter. If the training
+    # parameter is not constant, assume training.
+    training = training if isinstance(training, bool) else True
 
     if initial_state is not None:
       pass
