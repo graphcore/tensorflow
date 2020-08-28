@@ -93,7 +93,17 @@ def _validate_dataset_element_count(ds, count, fn_name):
 def _get_dataset_and_count(x, y, batch_size):
   adapter_cls = data_adapter.select_data_adapter(x, y)
   adapter = adapter_cls(x, y, batch_size=batch_size)
-  return adapter.get_dataset(), adapter.get_size()
+
+  dataset = adapter.get_dataset()
+  size = adapter.get_size()
+
+  if adapter.has_partial_batch():
+    dataset = dataset.unbatch()
+    # Remove the partial batch from the dataset.
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+    size -= 1
+
+  return dataset, size
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
