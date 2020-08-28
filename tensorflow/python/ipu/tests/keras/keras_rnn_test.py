@@ -153,14 +153,6 @@ class IpuLstmTest(test.TestCase):
     self.assertTrue(isinstance(ipu_result[0][0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
-  def test_no_dynamic_training(self):
-    x, h, c = self._get_random_inputs()
-
-    with self.assertRaisesRegex(ValueError,
-                                'PopnnLSTM does not support a dynamic'):
-      _lstmIPU(self, x, h, c, training=None)
-
-  @test_util.deprecated_graph_mode_only
   def test_class_alias(self):
     self.assertTrue(isinstance(ipu.layers.LSTM, type))
     self.assertEqual(ipu.layers.PopnnLSTM, ipu.layers.LSTM)
@@ -326,14 +318,6 @@ class IpuGruTest(test.TestCase):
 
     ipu_result = _gruIPU(self, x, init, return_state=False)
     self.assertTrue(isinstance(ipu_result[0], np.ndarray))
-
-  @test_util.deprecated_graph_mode_only
-  def test_no_dynamic_training(self):
-    x, init = self._get_random_inputs()
-
-    with self.assertRaisesRegex(ValueError,
-                                'PopnnGRU does not support a dynamic'):
-      _gruIPU(self, x, init, training=None)
 
   @test_util.deprecated_graph_mode_only
   def test_class_alias(self):

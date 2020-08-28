@@ -71,7 +71,7 @@ class Embedding(Layer):
     self.built = True
 
   # pylint: disable=arguments-differ
-  def call(self, inputs):
+  def call(self, inputs, training=None):
     """
     Perform an embedding lookup.
 
@@ -82,6 +82,7 @@ class Embedding(Layer):
         The entries of the embedding tensor corresponding to the ids tensor
         indices.
     """
+    del training
     return embedding_ops.embedding_lookup(self.embeddings,
                                           ids=inputs,
                                           name=self.name)
