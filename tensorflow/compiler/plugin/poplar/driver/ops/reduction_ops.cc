@@ -13,12 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <algorithm>
+#include <gcl/Collectives.hpp>
 #include <limits>
 #include <poplar/TensorCloneMethod.hpp>
 #include <popnn/Pooling.hpp>
 #include <popnn/PoolingDef.hpp>
 #include <popops/Cast.hpp>
-#include <popops/Collectives.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Pad.hpp>
 #include <popops/Reduce.hpp>
@@ -912,9 +912,9 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
 
     // Replicated sum the concatenated tensor.
-    popops::replicatedAllReduceInPlace(
-        GetMasterGraph(res), flat_tensor, popops::Operation::ADD, seq,
-        GetDebugName(inst), GetReplicateAllReduceOptions(res));
+    gcl::allReduceInPlace(GetMasterGraph(res), flat_tensor,
+                          popops::Operation::ADD, seq, GetDebugName(inst),
+                          GetReplicateAllReduceOptions(res));
   }
 
   for (int64 i = 0; i != flat_tensors.size(); ++i) {
@@ -956,9 +956,8 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
   } else {
     // Perfom the actual Replica->Replica exchange version.
-    output_tensor = popops::allToAllPersonalizedExchange(
-        graph, target_input, seq, GetDebugName(inst),
-        GetReplicatedCollectiveOptions(res));
+    output_tensor = gcl::allToAll(graph, target_input, seq, GetDebugName(inst),
+                                  GetReplicatedCollectiveOptions(res));
   }
 
   for (int i = 0; i < inst->operand_count(); ++i) {

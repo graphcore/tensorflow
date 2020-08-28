@@ -165,6 +165,7 @@ cc_library(
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
         "driver/passes/forward_allocation.cc",
+        "driver/passes/function_optimizer.cc",
         "driver/passes/fuse_ops_early.cc",
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
@@ -312,6 +313,7 @@ cc_library(
         "driver/passes/expression_outliner.h",
         "driver/passes/f16_constant_folding.h",
         "driver/passes/forward_allocation.h",
+        "driver/passes/function_optimizer.h",
         "driver/passes/fuse_ops_early.h",
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
@@ -2803,6 +2805,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "function_optimizer_test",
+    size = "small",
+    srcs = ["tests/function_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4397,6 +4414,7 @@ test_suite(
         "f16_test",
         "find_all_users_test",
         "forward_allocation_test",
+        "function_optimizer_test",
         "fuse_ops_test",
         "fuse_wide_const_test",
         "fused_batch_norm_test",
