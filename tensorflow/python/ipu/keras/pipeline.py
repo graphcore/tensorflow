@@ -26,6 +26,7 @@ from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import tf_inspect
 
 
 class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-access
@@ -167,6 +168,7 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
+    training = mode == ModeKeys.TRAIN
 
     # Plain functions to build a stage
     def call_inference_stage(stage_id, inputs):
@@ -176,7 +178,11 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
 
       x = inputs
       for l in self.stages[stage_id]:
-        x = l(x)
+        kwargs = {}
+        argspec = tf_inspect.getfullargspec(l.call).args
+        if 'training' in argspec:
+          kwargs['training'] = training
+        x = l(x, **kwargs)
 
       return x
 

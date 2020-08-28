@@ -41,12 +41,13 @@ from tensorflow.python.keras import Model as KerasModel
 from tensorflow.python.keras import optimizers
 from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.engine import data_adapter
-from tensorflow.python.keras.engine import training
+from tensorflow.python.keras.engine import training as keras_training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import tf_inspect
 
 
 def _validate_args(kwargs, fn):
@@ -233,7 +234,7 @@ class _IpuModelBase(KerasModel):
     self._training_endpoints = []
     for o, n, l, t in zip(self.outputs, self.output_names, self.loss_functions,
                           target_tensors):
-      endpoint = training._TrainingEndpoint(o, n, l)  # pylint: disable=protected-access
+      endpoint = keras_training._TrainingEndpoint(o, n, l)  # pylint: disable=protected-access
       endpoint.create_training_target(t, run_eagerly=self.run_eagerly)
       self._training_endpoints.append(endpoint)
 
@@ -682,6 +683,8 @@ class IPUSequential(_IpuModelBase):
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
+    training = mode == ModeKeys.TRAIN
+
     def main_body(inputs):
 
       if not self.inputs:
@@ -689,7 +692,11 @@ class IPUSequential(_IpuModelBase):
 
       x = inputs
       for l in self.model_layers:
-        x = l(x)
+        kwargs = {}
+        argspec = tf_inspect.getfullargspec(l.call).args
+        if 'training' in argspec:
+          kwargs['training'] = training
+        x = l(x, **kwargs)
 
       return x
 
