@@ -24,6 +24,7 @@ import weakref
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
+from tensorflow.python.distribute import input_lib
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
@@ -98,9 +99,14 @@ def _get_dataset_and_count(x, y, batch_size):
   size = adapter.get_size()
 
   if adapter.has_partial_batch():
+    _, _, prefetch_buffer = input_lib._get_dataset_attributes(dataset)  # pylint: disable=protected-access
     dataset = dataset.unbatch()
     # Remove the partial batch from the dataset.
     dataset = dataset.batch(batch_size, drop_remainder=True)
+
+    if prefetch_buffer is not None:
+      dataset = dataset.prefetch(prefetch_buffer)
+
     size -= 1
 
   return dataset, size
