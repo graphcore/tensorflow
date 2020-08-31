@@ -29,6 +29,7 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import nn_grad
 
@@ -122,9 +123,8 @@ def multi_conv(func=None, options=None):
         flag.value = value
 
       def func_wrapper(*args):
-        with ops.get_default_graph().as_default() as g:
-          with g.gradient_override_map(_gradient_override_map):
-            return inner_func(*args)
+        with op_util.gradient_override_scope(training=False):
+          return inner_func(*args)
 
       args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
       with ops.name_scope("multi_conv") as scope:
@@ -151,130 +151,3 @@ def multi_conv(func=None, options=None):
     return decorated(func)
 
   return decorated
-
-
-def _SetMlType(op, ml_type):
-  attrs = xla_data_pb2.FrontendAttributes()
-  attr_name = backend_config_pb2.FrontendAttributeId.Name(
-      backend_config_pb2.FrontendAttributeId.ML_TYPE)
-  attrs.map[attr_name] = ml_type
-  serial_attrs = attrs.SerializeToString()
-  op._set_attr(  # pylint: disable=protected-access
-      scopes.FRONTEND_ATTRIBUTES_NAME,
-      attr_value_pb2.AttrValue(s=serial_attrs))
-
-
-def _SetOpAsBwd(grad):
-  type_name = backend_config_pb2.MLType.Name(backend_config_pb2.TRAINING_BWD)
-  _SetMlType(grad.op, type_name)
-
-
-def _SetOpAsWU(grad):
-  type_name = backend_config_pb2.MLType.Name(backend_config_pb2.TRAINING_WU)
-  _SetMlType(grad.op, type_name)
-
-
-# Override all the convolution operation gradients so that they can be annotated
-# with the "ML type".
-@ops.RegisterGradient("CustomConv2D")
-def _CustomConv2DGrad(op, grad):
-  grads = nn_grad._Conv2DGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 2
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[1])
-  return grads
-
-
-@ops.RegisterGradient("CustomConv2DBackpropInput")
-def _CustomConv2DBackpropInputGrad(op, grad):
-  grads = nn_grad._Conv2DBackpropInputGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[1])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-@ops.RegisterGradient("CustomConv2DBackpropFilter")
-def _CustomConv2DBackpropFilterGrad(op, grad):
-  grads = nn_grad._Conv2DBackpropFilterGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-@ops.RegisterGradient("CustomDepthwiseConv2dNative")
-def _CustomDepthwiseConv2dNativeGrad(op, grad):
-  grads = nn_grad._DepthwiseConv2dNativeGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 2
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[1])
-  return grads
-
-
-@ops.RegisterGradient("CustomDepthwiseConv2dNativeBackpropInput")
-def _CustomDepthwiseConv2dNativeBackpropInputGrad(op, grad):
-  grads = nn_grad._DepthwiseConv2dNativeBackpropInputGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[1])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-@ops.RegisterGradient("CustomDepthwiseConv2dNativeBackpropFilter")
-def _CustomDepthwiseConv2dNativeBackpropFilterGrad(op, grad):
-  grads = nn_grad._DepthwiseConv2dNativeBackpropFilterGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-@ops.RegisterGradient("CustomConv3D")
-def _CustomConv3DGrad(op, grad):
-  grads = nn_grad._Conv3DGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 2
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[1])
-  return grads
-
-
-@ops.RegisterGradient("CustomConv3DBackpropInputV2")
-def _CustomConv3DBackpropInputGrad(op, grad):
-  grads = nn_grad._Conv3DBackpropInputGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[1])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-@ops.RegisterGradient("CustomConv3DBackpropFilterV2")
-def _CustomConv3DBackpropFilterGrad(op, grad):
-  grads = nn_grad._Conv3DBackpropFilterGrad(op, grad)  # pylint: disable=protected-access
-  assert len(grads) == 3
-  _SetOpAsBwd(grads[0])
-  _SetOpAsWU(grads[2])
-  return grads
-
-
-# Map the TF convolution ops to gradient wrapper functions.
-_gradient_override_map = {
-    "Conv2D":
-    "CustomConv2D",
-    "Conv2DBackpropInput":
-    "CustomConv2DBackpropInput",
-    "Conv2DBackpropFilter":
-    "CustomConv2DBackpropFilter",
-    "Conv3D":
-    "CustomConv3D",
-    "Conv3DBackpropInputV2":
-    "CustomConv3DBackpropInputV2",
-    "Conv3DBackpropFilterV2":
-    "CustomConv3DBackpropFilterV2",
-    "DepthwiseConv2dNative":
-    "CustomDepthwiseConv2dNative",
-    "DepthwiseConv2dNativeBackpropInput":
-    "CustomDepthwiseConv2dNativeBackpropInput",
-    "DepthwiseConv2dNativeBackpropFilter":
-    "CustomDepthwiseConv2dNativeBackpropFilter"
-}

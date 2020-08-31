@@ -18,6 +18,7 @@ Dropout Keras layer
 """
 
 from tensorflow.python.ipu import rand_ops
+from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
@@ -65,21 +66,19 @@ class Dropout(Layer):
     super(Dropout, self).build(input_shape)
 
   # pylint: disable=arguments-differ
-  def call(self, x, training=True):
-    if not isinstance(training, bool):
-      raise ValueError(
-          "ipu.keras.Dropout does not support a dynamic training parameter.  "
-          "Pass a boolean True or False. If you are using keras Sequential, "
-          "pass the `training` parameter to its `__call__` function.")
+  def call(self, inputs, training=None):
+    if training is None:
+      training = K.learning_phase()
 
-    if training:
-      output = rand_ops.dropout(x,
-                                seed=self.seed,
-                                rate=self.rate,
-                                noise_shape=self.noise_shape,
-                                name=self.name)
-    else:
-      output = array_ops.identity(x)
+    def dropped_inputs():
+      return rand_ops.dropout(inputs,
+                              seed=self.seed,
+                              rate=self.rate,
+                              noise_shape=self.noise_shape,
+                              name=self.name)
+
+    output = tf_utils.smart_cond(training, dropped_inputs,
+                                 lambda: array_ops.identity(inputs))
 
     return output
 
