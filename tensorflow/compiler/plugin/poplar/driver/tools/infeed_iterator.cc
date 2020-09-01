@@ -133,7 +133,8 @@ InfeedIterator::InfeedIterator(
   for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
     for (uint64 i = 0; i < shapes.size(); i++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
-      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue());
+      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue(),
+                                              tensorflow::port::AlignedFree);
       infeed_queues_ptrs_[replica_id].emplace_back(
           infeed_queues_[replica_id].back().get());
     }
