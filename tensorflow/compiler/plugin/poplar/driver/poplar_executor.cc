@@ -288,7 +288,8 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
     for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
-          new (ptr) OutfeedQueueType(num_bytes_per_replica));
+          new (ptr) OutfeedQueueType(num_bytes_per_replica),
+          tensorflow::port::AlignedFree);
     }
   }
 }

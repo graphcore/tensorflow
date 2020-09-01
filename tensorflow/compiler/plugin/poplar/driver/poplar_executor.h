@@ -877,8 +877,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
-    std::vector<std::vector<std::unique_ptr<OutfeedQueueType>>>
-        callback_to_io_thread_queues;
+    using OutfeedQueueStorage =
+        std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
+    std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
