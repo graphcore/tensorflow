@@ -157,6 +157,7 @@ class PipelineStageOptions:
 def pipeline(computational_stages,
              pipeline_depth,
              repeat_count=1,
+             batch_serialization_iterations=1,
              inputs=None,
              infeed_queue=None,
              outfeed_queue=None,
@@ -348,6 +349,9 @@ def pipeline(computational_stages,
       outputs of the previous pipeline state as its inputs.
     pipeline_depth: the number of times each pipeline stage will be executed.
     repeat_count: the number of times the pipeline will be executed.
+    batch_serialization_iterations: number of times a loop executes to compute a
+      batch on each pipeline stage execution. Currently only supported with the
+      `PipelineSchedule.Sequential`.
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and
       passed as an input in the first pipeline stage.
@@ -418,8 +422,24 @@ def pipeline(computational_stages,
       logging.warn("Passing tensor {} by value.".format(str(input)))
       inputs[i] = input.value()
 
-  device_mapping = device_mapping if device_mapping else list(
-      range(0, len(computational_stages)))
+  if pipeline_schedule is None:
+    pipeline_schedule = (PipelineSchedule.Sequential
+                         if batch_serialization_iterations > 1 else
+                         PipelineSchedule.Grouped)
+
+  if not isinstance(pipeline_schedule, PipelineSchedule):
+    raise TypeError("The given pipeline_schedule is not a member of the "
+                    "PipelineSchedule enumeration.")
+
+  if (batch_serialization_iterations > 1
+      and pipeline_schedule != PipelineSchedule.Sequential):
+    raise NotImplementedError("Batch serialization is only supported with the "
+                              "`Sequential` schedule.")
+
+  if device_mapping is None:
+    device_mapping = [0] * len(
+        computational_stages) if batch_serialization_iterations > 1 else list(
+            range(len(computational_stages)))
 
   if not isinstance(computational_stages, (list, tuple)):
     raise TypeError(
@@ -447,13 +467,6 @@ def pipeline(computational_stages,
         "Each stage must be mapped to an IPU: %d mappings != %d stages" %
         (len(device_mapping), len(computational_stages)))
 
-  if pipeline_schedule is None:
-    pipeline_schedule = PipelineSchedule.Grouped
-
-  if not isinstance(pipeline_schedule, PipelineSchedule):
-    raise TypeError("The given pipeline_schedule is not a member of the "
-                    "PipelineSchedule enumeration.")
-
   # TODO(T18660) interleaved schedule does not support multiple stages on the
   # same IPU during training.
   if pipeline_schedule == PipelineSchedule.Interleaved and len(
@@ -462,6 +475,13 @@ def pipeline(computational_stages,
         "The pipelining schedule 'Interleaved' does not currently support "
         "multiple pipeline stages on the same device for training graphs. "
         "Please use a different pipeline schedule.")
+
+  if (pipeline_schedule == PipelineSchedule.Sequential
+      and batch_serialization_iterations > 1
+      and len(set(device_mapping)) != 1):
+    raise NotImplementedError(
+        "When using batch serialization, all the pipeline stages need to be "
+        "mapped to a single IPU.")
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -638,6 +658,7 @@ def pipeline(computational_stages,
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
           pipeline_depth=pipeline_depth,
+          batch_serialization_iterations=batch_serialization_iterations,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
           pipeline_poplar_config=json_format.MessageToJson(

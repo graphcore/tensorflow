@@ -13,6 +13,8 @@
 # limitations under the License.
 # =============================================================================
 
+import math
+
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -40,10 +42,15 @@ def next_feed_id():
 next_feed_id.feed_count = 0
 
 
+def get_num_ipus(device_mapping):
+  min_ipus = max(device_mapping) + 1
+  return int(math.pow(2, math.ceil(math.log2(min_ipus))))
+
+
 class PipelineTester(object):
   @staticmethod
   def _cpu_with_grad_accum(test_wrapper, stages, inputs_fn, input_values,
-                           repeat_count, pipeline_depth, dataset_fn,
+                           repeat_count, num_batches_to_accumulate, dataset_fn,
                            optimizer):
 
     g = ops.Graph()
@@ -88,7 +95,7 @@ class PipelineTester(object):
       with ops.device("cpu"):
         for _ in range(repeat_count):
           session.run(zero_ops)
-          for _ in range(pipeline_depth):
+          for _ in range(num_batches_to_accumulate):
             l, _ = session.run([loss, accum_ops],
                                feed_dict=dict(zip(inputs, input_values)))
             losses.append(l)
@@ -99,8 +106,8 @@ class PipelineTester(object):
 
   @staticmethod
   def _sharded_on_ipu(stages, inputs_fn, input_values, repeat_count,
-                      pipeline_depth, dataset_fn, optimizer, test_wrapper,
-                      recomp):
+                      num_batches_to_accumulate, dataset_fn, optimizer,
+                      test_wrapper, recomp, device_mapping):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -112,23 +119,25 @@ class PipelineTester(object):
       with variable_scope.variable_scope("ipu_sharded",
                                          use_resource=True,
                                          reuse=False):
+        if device_mapping is None:
+          device_mapping = range(len(stages))
 
         def pipeline(*args):
           outputs = args
-          for i, stage in enumerate(stages):
+          for i, stage in zip(device_mapping, stages):
             with scopes.ipu_shard(i):
               outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
           loss = outputs
           enqueue_op = outfeed_queue.enqueue(loss)
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
-              optimizer, pipeline_depth)
+              optimizer, num_batches_to_accumulate)
           outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
           outs.append(enqueue_op)
           outs.append(opt.minimize(loss))
           return outs
 
         def my_net(*args):
-          return loops.repeat(pipeline_depth,
+          return loops.repeat(num_batches_to_accumulate,
                               pipeline,
                               inputs=args,
                               infeed_queue=infeed_queue)
@@ -146,7 +155,8 @@ class PipelineTester(object):
       cfg = utils.set_ipu_model_options(cfg,
                                         compile_ipu_code=True,
                                         tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
+      num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
+      cfg = utils.auto_select_ipus(cfg, num_ipus)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
       utils.configure_ipu_system(cfg)
@@ -171,7 +181,8 @@ class PipelineTester(object):
                       expected_max_tile_memory,
                       recomp,
                       schedule,
-                      device_mapping=None):
+                      device_mapping=None,
+                      batch_serialization_iterations=1):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -187,15 +198,17 @@ class PipelineTester(object):
           return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
         def my_net(*args):
-          return pipelining_ops.pipeline(stages,
-                                         pipeline_depth,
-                                         repeat_count=repeat_count,
-                                         inputs=args,
-                                         optimizer_function=optimizer_function,
-                                         infeed_queue=infeed_queue,
-                                         outfeed_queue=outfeed_queue,
-                                         pipeline_schedule=schedule,
-                                         device_mapping=device_mapping)
+          return pipelining_ops.pipeline(
+              stages,
+              pipeline_depth,
+              repeat_count=repeat_count,
+              batch_serialization_iterations=batch_serialization_iterations,
+              inputs=args,
+              optimizer_function=optimizer_function,
+              infeed_queue=infeed_queue,
+              outfeed_queue=outfeed_queue,
+              pipeline_schedule=schedule,
+              device_mapping=device_mapping)
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
@@ -208,7 +221,8 @@ class PipelineTester(object):
       cfg = utils.set_ipu_model_options(cfg,
                                         compile_ipu_code=True,
                                         tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
+      num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
+      cfg = utils.auto_select_ipus(cfg, num_ipus)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
       utils.configure_ipu_system(cfg)
@@ -246,7 +260,12 @@ class PipelineTester(object):
                               expected_max_tile_memory,
                               recomp=False,
                               schedule=None,
-                              device_mapping=None):
+                              device_mapping=None,
+                              batch_serialization_iterations=1):
+
+    if batch_serialization_iterations > 1:
+      assert device_mapping is None
+      device_mapping = [0] * len(stages)
 
     # Run pipeline_on_ipu before the CPU version as pipeline_on_ipu
     # will initialize the IPU which might be needed by the CPU path
@@ -254,12 +273,12 @@ class PipelineTester(object):
     pipeline_losses = PipelineTester.pipeline_on_ipu(
         stages, inputs_fn, input_values, repeat_count, pipeline_depth,
         dataset_fn, optimizer, test_wrapper, expected_max_tile_memory, recomp,
-        schedule, device_mapping)
-    cpu_losses = PipelineTester._cpu_with_grad_accum(test_wrapper, stages,
-                                                     inputs_fn, input_values,
-                                                     repeat_count,
-                                                     pipeline_depth,
-                                                     dataset_fn, optimizer)
+        schedule, device_mapping, batch_serialization_iterations)
+
+    num_batches_to_accumulate = pipeline_depth * batch_serialization_iterations
+    cpu_losses = PipelineTester._cpu_with_grad_accum(
+        test_wrapper, stages, inputs_fn, input_values, repeat_count,
+        num_batches_to_accumulate, dataset_fn, optimizer)
 
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
@@ -275,24 +294,22 @@ class PipelineTester(object):
                                    expected_max_tile_memory,
                                    recomp=False,
                                    schedule=None,
-                                   device_mapping=None):
-    pipeline_losses = PipelineTester.pipeline_on_ipu(
-        stages,
-        inputs_fn,
-        input_values,
-        repeat_count,
-        pipeline_depth,
-        dataset_fn,
-        optimizer,
-        test_wrapper,
-        expected_max_tile_memory,
-        recomp=recomp,
-        schedule=schedule,
-        device_mapping=device_mapping)
+                                   device_mapping=None,
+                                   batch_serialization_iterations=1):
+    if batch_serialization_iterations > 1:
+      assert device_mapping is None
+      device_mapping = [0] * len(stages)
 
+    pipeline_losses = PipelineTester.pipeline_on_ipu(
+        stages, inputs_fn, input_values, repeat_count, pipeline_depth,
+        dataset_fn, optimizer, test_wrapper, expected_max_tile_memory, recomp,
+        schedule, device_mapping, batch_serialization_iterations)
+
+    num_batches_to_accumulate = pipeline_depth * batch_serialization_iterations
     sharded_losses = PipelineTester._sharded_on_ipu(stages, inputs_fn,
                                                     input_values, repeat_count,
-                                                    pipeline_depth, dataset_fn,
-                                                    optimizer, test_wrapper,
-                                                    recomp)
+                                                    num_batches_to_accumulate,
+                                                    dataset_fn, optimizer,
+                                                    test_wrapper, recomp,
+                                                    device_mapping)
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)

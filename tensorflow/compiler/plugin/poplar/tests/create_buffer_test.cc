@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
 #include "tensorflow/compiler/xla/execution_options_util.h"
@@ -110,8 +111,11 @@ POPLAR_TEST_P(CreateBufferTest, DoIt) {
         HloInstruction::CreateGetTupleElement(buffer_shape, tuple_body, 1));
 
     auto counter = builder_body.AddInstruction(CreateExecutionCounter());
-    auto buffer = builder_body.AddInstruction(
-        CreateHloCreateBuffer(buffer_shape, spec.is_remote));
+    IPUCustomKernelsUtil::AttributeMap attribute_map;
+    attribute_map.AddAttribute("is_remote", spec.is_remote);
+    auto buffer = builder_body.AddInstruction(HloInstruction::CreateCustomCall(
+        buffer_shape, {}, PoplarOp_Name(PoplarOp::CreateBuffer),
+        attribute_map.Serialise()));
 
     // Get a slice, copy it into the buffer and then copy it back.
     auto* slice =

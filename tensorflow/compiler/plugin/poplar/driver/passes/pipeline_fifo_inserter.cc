@@ -78,6 +78,7 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
         }
         case HloOpcode::kCustomCall: {
           if (IsPoplarInstruction(PoplarOp::ExecutionCounter)(operand) ||
+              IsPoplarInstruction(PoplarOp::CreateBuffer)(operand) ||
               IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
                   operand)) {
             // We don't need to do anything for these creators.

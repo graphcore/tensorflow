@@ -118,7 +118,6 @@ ENTRY main {
 
   PostSerializeGradientAccumulation psga;
   EXPECT_TRUE(psga.Run(module).ValueOrDie());
-  VLOG(0) << module->ToString();
 
   HloComputation* comp = module->entry_computation();
   HloInstruction* root = comp->root_instruction();

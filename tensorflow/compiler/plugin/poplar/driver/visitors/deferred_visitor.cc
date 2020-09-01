@@ -50,7 +50,8 @@ Status DeferredAllocations::AddDeferredAllocation(
     }
     case HloOpcode::kCustomCall: {
       if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
-              location.instruction)) {
+              location.instruction) ||
+          IsPoplarInstruction(PoplarOp::CreateBuffer)(location.instruction)) {
         break;
       }
       // Fall through.
