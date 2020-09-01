@@ -66,5 +66,17 @@ ConversionFn GetOutputConversionFunction(const xla::Shape& shape) {
   }
 }
 
+std::size_t HostSizeToDeviceSize(std::size_t size, PrimitiveType type) {
+  CHECK_NE(type, PRIMITIVE_TYPE_INVALID);
+  switch (type) {
+    case xla::S64:
+    case xla::U64:
+      CHECK_EQ(size % 2, 0);
+      return size / 2;
+    default:
+      return size;
+  }
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

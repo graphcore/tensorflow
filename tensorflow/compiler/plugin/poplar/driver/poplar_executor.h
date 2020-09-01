@@ -596,6 +596,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   struct TensorControl {
     size_t size = 0;
+    PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     unsigned int ref_count = 0;
     bool on_device = false;
     bool in_remote_memory = false;
@@ -607,6 +608,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
     TensorControl(size_t size_);
     ~TensorControl();
+
+    TF_DISALLOW_COPY_AND_ASSIGN(TensorControl);
   };
 
   struct InputDef {
