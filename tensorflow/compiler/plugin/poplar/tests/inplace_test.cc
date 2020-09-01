@@ -1013,7 +1013,17 @@ ENTRY c1 {
   }
 }
 
-TEST_F(HloInplaceDependencyTest, DISABLED_InplaceRepeatLoop) {
+void EnableLoopAliasAnalysis(HloInstruction* repeat_loop) {
+  auto backend_config =
+      repeat_loop->backend_config<PoplarBackendConfig>().ValueOrDie();
+  auto* call_config = backend_config.mutable_call_config();
+  call_config->set_type(PoplarBackendConfig::CallConfig::RepeatLoop);
+  auto* repeat_cfg = call_config->mutable_repeat_config();
+  repeat_cfg->set_allow_finer_alias_analysis(true);
+  repeat_loop->set_backend_config(backend_config);
+}
+
+TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop) {
   const char* const hlo = R"(
 HloModule ModuleWithWhile
 
@@ -1055,6 +1065,7 @@ ENTRY entry {
   EXPECT_TRUE(HloDCE().Run(module0).ValueOrDie());
   auto entry = module0->entry_computation();
   EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
+  EnableLoopAliasAnalysis(entry->root_instruction());
   EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(entry);
@@ -1064,7 +1075,7 @@ ENTRY entry {
               ::testing::ElementsAre(2));
 }
 
-TEST_F(HloInplaceDependencyTest, DISABLED_InplaceRepeatLoop2) {
+TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop2) {
   const char* const hlo = R"(
 HloModule ModuleWithWhile
 
@@ -1107,6 +1118,7 @@ ENTRY entry {
   EXPECT_TRUE(HloDCE().Run(module0).ValueOrDie());
   auto entry = module0->entry_computation();
   EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
+  EnableLoopAliasAnalysis(entry->root_instruction());
   EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
 
   auto inplace_instructions = GetInplaceInstructions(entry);
