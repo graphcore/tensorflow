@@ -48,6 +48,8 @@ class DataInitializer {
   // Get an initialised xla::Literal.
   StatusOr<Literal> GetData(const Shape& shape);
 
+  virtual ~DataInitializer() = default;
+
  protected:
   DataInitializer(const std::string& type_string);
 
