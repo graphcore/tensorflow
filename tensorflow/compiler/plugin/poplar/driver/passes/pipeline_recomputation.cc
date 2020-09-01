@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 
-#include <list>
+#include <map>
 #include <memory>
+#include <stack>
 #include <utility>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
@@ -37,136 +39,234 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
-std::list<HloInstruction*> GetStatefulInstructions(HloComputation* comp) {
-  std::list<HloInstruction*> stateful_ops;
-  for (auto inst : comp->instructions()) {
-    if (!IsPoplarInstruction(PoplarOp::StatefulNoop)(inst) &&
-        inst->HasSideEffect()) {
-      stateful_ops.emplace_back(inst);
-    }
-  }
-  return stateful_ops;
-}
+// Helper struct for storing information about which forward stage outputs are
+// used as backward stage inputs and the corresponding output instructions.
+struct OutputToInputInfo {
+  std::vector<int64> bwd_input_idices;
+  std::vector<int64> fwd_output_idices;
+  std::vector<HloInstruction*> fwd_outputs;
+};
 
-// Create a new stage which returns the original stage's outputs followed by
-// the output of all the stateful ops.
-StatusOr<HloComputation*> CloneStageCompWithStates(
-    HloInstruction* stage, HloComputation* pipeline_comp) {
-  HloComputation* stage_comp = pipeline_comp->parent()->AddEmbeddedComputation(
-      stage->to_apply()->Clone("state"));
+// Go through all the inputs to the backward stage, and find all the ones which
+// are outputs of the forward stage.
+StatusOr<OutputToInputInfo> GetForwardOutputsUsed(
+    const HloInstruction* fwd_stage, const HloInstruction* bwd_stage) {
+  OutputToInputInfo info;
 
-  // Return the output of all the stateful ops to pipeline
-  auto* root = stage_comp->root_instruction();
-  CHECK_EQ(root->opcode(), HloOpcode::kTuple);
-  HloInstruction::InstructionVector new_outputs = root->operands();
+  HloComputation* fwd_comp = fwd_stage->to_apply();
+  HloInstruction* fwd_root = fwd_comp->root_instruction();
+  CHECK_EQ(fwd_root->opcode(), HloOpcode::kTuple);
 
-  // Add the output of the stateful ops to the output of the computation - need
-  // to preserve inplaceness here and add copies if the output of the stateful
-  // op is used inplace elsewhere.
-  for (HloInstruction* inst : GetStatefulInstructions(stage_comp)) {
-    auto optional_inplace_user = GetInplaceModifier(inst);
-    if (optional_inplace_user) {
-      // Add a copy for the instruction.
-      HloInstruction* copy = stage_comp->AddInstruction(
-          HloInstruction::CreateUnary(inst->shape(), HloOpcode::kCopy, inst));
-      inst->SetupDerivedInstruction(copy);
-      inst = copy;
-      if (*optional_inplace_user != root) {
-        // Add a control dependency to make sure the copy is executed before the
-        // inplace instruction.
-        TF_RETURN_IF_ERROR(
-            copy->AddControlDependencyTo(*optional_inplace_user));
+  for (int64 op_idx = 0; op_idx != bwd_stage->operand_count(); ++op_idx) {
+    const HloInstruction* operand = bwd_stage->operand(op_idx);
+    switch (operand->opcode()) {
+      case HloOpcode::kGetTupleElement: {
+        const HloInstruction* source = operand->operand(0);
+        if (source == fwd_stage) {
+          const int64 output_idx = operand->tuple_index();
+          info.bwd_input_idices.push_back(op_idx);
+          info.fwd_output_idices.push_back(output_idx);
+          info.fwd_outputs.push_back(fwd_root->mutable_operand(output_idx));
+        }
+        break;
+      }
+      case HloOpcode::kParameter: {
+        // We don't need to do anything for parameters.
+        break;
+      }
+      case HloOpcode::kCustomCall: {
+        if (IsPoplarInstruction(PoplarOp::ExecutionCounter)(operand) ||
+            IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(operand)) {
+          // We don't need to do anything for these creators.
+          break;
+        }
+        TF_FALLTHROUGH_INTENDED;
+      }
+      default: {
+        return InternalErrorStrCat("Invalid input ", operand->ToString(),
+                                   " to pipeline stage ", bwd_stage->ToString(),
+                                   ".");
       }
     }
-    new_outputs.push_back(inst);
   }
+  return info;
+}
 
-  // Go through any inputs to the pipeline stage which are not parameters in the
-  // pipeline and add copies if they are used inplace to make sure the inputs
-  // are preserved when storing them in FIFOs for recomputation.
-  for (int64 idx = 0; idx != stage_comp->num_parameters(); ++idx) {
-    if (stage->operand(idx)->opcode() == HloOpcode::kParameter) {
+// Helper struct for storing the information about the cluster for
+// recomputation.
+struct ClusterInfo {
+  // Stores the inputs to the cluster.
+  std::vector<HloInstruction*> inputs;
+  // All the instructions which can be recomputed - stored in post order.
+  std::vector<HloInstruction*> instructions;
+};
+
+StatusOr<ClusterInfo> GetRecomputationCluster(
+    HloInstruction* stage, const OutputToInputInfo& oi_info) {
+  HloComputation* comp = stage->to_apply();
+  HloInstruction* root = comp->root_instruction();
+  CHECK_EQ(root->opcode(), HloOpcode::kTuple);
+
+  // Given the forward stage outputs which are used in the backward stage,
+  // build a cluster of instructions which can be recomputed inside of the
+  // backward stage.
+  std::vector<HloInstruction*> inputs;
+  std::vector<HloInstruction*> instructions;
+
+  // Walk through the cluster to create a post order.
+  std::stack<HloInstruction*> worklist;
+  absl::c_for_each(oi_info.fwd_outputs,
+                   [&worklist](HloInstruction* inst) { worklist.push(inst); });
+
+  enum VisitState { kVisiting, kVisited };
+  absl::flat_hash_map<HloInstruction*, VisitState> visited;
+
+  auto is_cluster_input = [](const HloInstruction* a) -> bool {
+    if (a->HasSideEffect()) {
+      return true;
+    }
+    if (a->opcode() == HloOpcode::kParameter) {
+      return true;
+    }
+    if (a->opcode() == HloOpcode::kGetTupleElement &&
+        a->operand(0)->HasSideEffect()) {
+      return true;
+    }
+    return false;
+  };
+
+  // Traverse the graph to create a post order - visit the inputs before
+  // visiting the current node.
+  while (!worklist.empty()) {
+    HloInstruction* inst = worklist.top();
+
+    // Visit inputs straight away.
+    if (is_cluster_input(inst)) {
+      visited.insert({inst, kVisiting});
+    }
+
+    auto itr = visited.find(inst);
+    if (itr != visited.end()) {
+      worklist.pop();
+      if (itr->second == kVisiting) {
+        if (is_cluster_input(inst)) {
+          inputs.push_back(inst);
+        } else {
+          instructions.push_back(inst);
+        }
+        itr->second = kVisited;
+      } else {
+        CHECK_EQ(itr->second, kVisited);
+      }
       continue;
     }
 
-    HloInstruction* parameter_inst = stage_comp->parameter_instruction(idx);
-    if (IsOutputModifiedInplace(parameter_inst)) {
-      HloInstruction* copy =
-          stage_comp->AddInstruction(HloInstruction::CreateUnary(
-              parameter_inst->shape(), HloOpcode::kCopy, parameter_inst));
-      parameter_inst->SetupDerivedInstruction(copy);
-      TF_RETURN_IF_ERROR(parameter_inst->ReplaceAllUsesWith(copy));
+    visited.insert({inst, kVisiting});
+
+    for (HloInstruction* operand : inst->operands()) {
+      worklist.push(operand);
     }
   }
 
-  Shape shape = stage->shape();
+  // Make sure each input shape is an array(tensor).
+  const bool all_shapes_allowed =
+      absl::c_all_of(inputs, [](const HloInstruction* inst) {
+        return absl::c_all_of(ShapeUtil::GetLeafShapes(inst->shape()),
+                              [](const ShapeUtil::IndexedShape& is) {
+                                return is.shape.IsArray();
+                              });
+      });
+
+  if (!all_shapes_allowed) {
+    return ClusterInfo{};
+  }
+
+  VLOG(2) << "Cluster inputs are:";
+  for (const HloInstruction* inst : inputs) {
+    VLOG(2) << "* " << inst->ToString();
+  }
+  VLOG(2) << "Cluster is:";
+  for (const HloInstruction* inst : instructions) {
+    VLOG(2) << "* " << inst->ToString();
+  }
+
+  return ClusterInfo{inputs, instructions};
+}
+
+Status AddNewOutputsToStage(
+    HloInstruction* const stage,
+    const std::vector<HloInstruction*>& outputs_to_add) {
+  HloComputation* comp = stage->to_apply();
+  HloInstruction* old_root = comp->root_instruction();
+  CHECK_EQ(old_root->opcode(), HloOpcode::kTuple);
+
+  HloInstruction::InstructionVector new_outputs = old_root->operands();
+  new_outputs.insert(new_outputs.end(), outputs_to_add.begin(),
+                     outputs_to_add.end());
+
   HloInstruction* new_root =
-      stage_comp->AddInstruction(HloInstruction::CreateTuple(new_outputs));
-  root->SetupDerivedInstruction(new_root);
-  auto optional_sharding = stage->sharding().ExtractSingleSharding();
-  if (!optional_sharding) {
-    return FailedPrecondition("Could not extract single sharding.");
-  }
-  new_root->set_sharding(
-      HloSharding::SingleTuple(stage->shape(), *optional_sharding));
-  stage_comp->set_root_instruction(new_root, true);
+      comp->AddInstruction(HloInstruction::CreateTuple(new_outputs));
 
-  // Make sure that the root tuple preserves the inplace information - any extra
-  // outputs had to insert copies if the stateful output was used inplace
-  // elsewhere so if the root instruction was inplace before, it can be inplace
-  // now. Also note that tuples support inplace even if the same operand appears
-  // twice (every occurrence but the first one adds a copy.)
-  if (IsLoweredInplace(root)) {
-    MakeUsedInplace(new_root);
-  }
+  // Replace the root with the new shape with a different shape.
+  comp->set_root_instruction(new_root, true);
+  TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_root));
 
-  TF_RETURN_IF_ERROR(stage_comp->RemoveInstruction(root));
-  return stage_comp;
+  // Update the stage shape.
+  *stage->mutable_shape() = new_root->shape();
+
+  return Status::OK();
 }
 
-StatusOr<HloInstruction*> CreateRecomputationStage(
-    HloComputation* original_stage_comp, HloInstruction* stage,
-    HloComputation* pipeline_comp, const HloSharding& sharding) {
-  absl::flat_hash_map<const HloInstruction*, std::unique_ptr<HloInstruction>>
-      replacements;
-  HloInstruction::InstructionVector recomp_operands = stage->operands();
-  // Outputs of the stateful ops are passed as extra parameters after
-  // the regular stage operands.
-  const int64 first_parameter_idx = stage->operands().size();
-  int64 tuple_index =
-      original_stage_comp->root_instruction()->operands().size();
-  {
-    int64 parameter_idx = first_parameter_idx;
-    // Create the gte (Fifos will be created later)
-    for (auto inst : GetStatefulInstructions(original_stage_comp)) {
-      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                          MakeGetTupleElementHlo(stage, tuple_index++));
-      gte->set_sharding(sharding);
-      // Mark the new GTEs as inplace - it is guaranteed that they are unique.
-      MakeUsedInplace(gte);
+Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
+                                 HloInstruction* bwd_stage,
+                                 const ClusterInfo& cluster_info,
+                                 const OutputToInputInfo& oi_info) {
+  HloCloneContext context(fwd_stage->GetModule());
 
-      recomp_operands.push_back(gte);
-      auto param = HloInstruction::CreateParameter(
-          parameter_idx++, gte->shape(), inst->name() + "_state");
-      param->set_sharding(sharding);
-      replacements.emplace(inst, std::move(param));
-    }
+  // The recomputation cluster is added to the pipeline computation and then
+  // lowered into the backward pipeline stage.
+  HloComputation* pipeline_comp = fwd_stage->parent();
+
+  // Get the cluster inputs which were previously added as outputs of the
+  // forward stage.
+  const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
+                            cluster_info.inputs.size();
+  for (int64 i = 0; i != cluster_info.inputs.size(); ++i) {
+    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                        MakeGetTupleElementHlo(fwd_stage, start_index + i));
+    context.MapInstruction(cluster_info.inputs[i], gte);
   }
-  HloComputation* recomp_stage_comp =
-      pipeline_comp->parent()->AddEmbeddedComputation(
-          original_stage_comp->CloneWithReplacements(
-              std::move(replacements), {}, nullptr, "recomputation"));
 
-  HloInstruction* recomp_stage =
-      pipeline_comp->AddInstruction(stage->CloneWithNewOperands(
-          original_stage_comp->root_instruction()->shape(), recomp_operands));
-  recomp_stage->set_sharding(sharding);
-  recomp_stage->set_to_apply(recomp_stage_comp);
-  recomp_stage->SetAndSanitizeName(recomp_stage_comp->name());
-  return recomp_stage;
+  std::vector<HloInstruction*> to_lower;
+  to_lower.reserve(cluster_info.instructions.size());
+  for (HloInstruction* old_inst : cluster_info.instructions) {
+    std::vector<HloInstruction*> new_operands(old_inst->operand_count());
+    absl::c_transform(old_inst->operands(), new_operands.begin(),
+                      [&context](HloInstruction* old_operand) {
+                        return context.GetInstruction(old_operand);
+                      });
+    HloInstruction* new_inst = pipeline_comp->AddInstruction(
+        old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+
+    context.MapInstruction(old_inst, new_inst);
+    to_lower.push_back(new_inst);
+  }
+
+  // Lower the instructions into the backward pipeline stage, replacing all the
+  // uses of the fwd stage with the outputs of the recomputation cluster.
+  std::map<int64, HloInstruction*> replacements;
+  for (int64 i = 0; i != oi_info.fwd_outputs.size(); ++i) {
+    HloInstruction* new_output =
+        context.GetInstruction(oi_info.fwd_outputs.at(i));
+    replacements.emplace(oi_info.bwd_input_idices.at(i), new_output);
+  }
+
+  TF_ASSIGN_OR_RETURN(bwd_stage, AddInstructionsToPipelineStage(
+                                     bwd_stage, to_lower, replacements));
+  return Status::OK();
 }
-
 }  // namespace
+
 PipelineRecomputation::PipelineRecomputation(bool allow_recomputation)
     : allow_recomputation_(allow_recomputation) {}
 
@@ -174,7 +274,8 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
+
   // Do not perform recomputation if there are no backward stages.
   if (stages.backward.empty()) {
     return false;
@@ -187,141 +288,30 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
        stage_id != static_cast<int64>(stages.forward.size()) - 1; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
-    // Do not recompute a stage if it has no outputs which go into the
-    // corresponding backward stage (i.e. there is no FIFO).
-    const bool bwd_uses_fwd = absl::c_any_of(
-        bwd_stage->operands(), IsPoplarInstruction(PoplarOp::Fifo));
-    if (!bwd_uses_fwd) {
+
+    // Find all the forward outputs used by the backward pass.
+    TF_ASSIGN_OR_RETURN(OutputToInputInfo oi_info,
+                        GetForwardOutputsUsed(fwd_stage, bwd_stage));
+
+    if (oi_info.fwd_output_idices.empty()) {
       continue;
     }
 
-    // Stages containing stateful ops require special treatment.
-    // Note that to prevent DCE each pipeline stage has had a stateful noop
-    // inserted inside, so we cannot just call `HasSideEffect` on the stage
-    // computation.
-    const bool has_side_effects = absl::c_any_of(
-        fwd_stage->to_apply()->instructions(), [](const HloInstruction* inst) {
-          return IsPoplarInstruction(PoplarOp::StatefulNoop)(inst)
-                     ? false
-                     : inst->HasSideEffect();
-        });
-    HloInstruction* recomp_stage;
+    // Find a cluster which can be recomputed.
+    TF_ASSIGN_OR_RETURN(ClusterInfo cluster_info,
+                        GetRecomputationCluster(fwd_stage, oi_info));
 
-    if (has_side_effects) {
-      // Find all the stateful instructions in that stage.
-      HloComputation* original_fwd_stage_comp = fwd_stage->to_apply();
-      TF_ASSIGN_OR_RETURN(auto comp_states,
-                          CloneStageCompWithStates(fwd_stage, pipeline_comp));
-      fwd_stage->set_to_apply(comp_states);
-      // Update the stage shape.
-      *fwd_stage->mutable_shape() =
-          fwd_stage->to_apply()->root_instruction()->shape();
-
-      CHECK_EQ(fwd_stage->to_apply()->root_instruction()->sharding(),
-               fwd_stage->sharding());
-      TF_ASSIGN_OR_RETURN(
-          recomp_stage,
-          CreateRecomputationStage(original_fwd_stage_comp, fwd_stage,
-                                   pipeline_comp, fwd_stage->sharding()));
-      TF_RETURN_IF_ERROR(pipeline_comp->parent()->RemoveUnusedComputations());
-    } else {
-      HloComputation* fwd_stage_comp = fwd_stage->to_apply();
-      // Clone the stage and its computation.
-      HloComputation* recomp_stage_comp =
-          pipeline_comp->parent()->AddEmbeddedComputation(
-              fwd_stage_comp->Clone("_recomputation"));
-      recomp_stage =
-          pipeline_comp->AddInstruction(fwd_stage->Clone("_recomputation"));
-      recomp_stage->set_to_apply(recomp_stage_comp);
+    if (cluster_info.instructions.empty()) {
+      LOG(INFO) << "Cannot recompute pipline stage " << fwd_stage->ToString();
+      continue;
     }
 
-    // Mark this stage as a Recomputation stage.
-    TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
-                        recomp_stage->backend_config<PoplarBackendConfig>());
-    config.mutable_call_config()->set_type(
-        PoplarBackendConfig::CallConfig::PipelineStageRecomputation);
-    recomp_stage->set_backend_config(config);
-    CHECK(IsPipelineStageRecomputation(recomp_stage));
+    // Make all the cluster inputs as outputs of the forward pipeline stage.
+    TF_RETURN_IF_ERROR(AddNewOutputsToStage(fwd_stage, cluster_info.inputs));
 
-    TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
-                        GetFifoDepthMultiplier(pipeline_op));
-
-    if (schedule !=
-        PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
-      // Replace all the non read-only inputs with FIFOs.
-      auto recomp_operands = recomp_stage->operands();
-      for (size_t op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
-        HloInstruction* operand = recomp_operands[op_idx];
-        if (IsPipelineStageReadOnlyInput(operand)) {
-          continue;
-        }
-
-        // Create the FIFO.
-        HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
-            operand,
-            fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
-
-        fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
-        fifo_inst->set_sharding(operand->sharding());
-        // Use the fifo as the input.
-        TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));
-        // If there is an inplace user of the operand, then we need to add a
-        // control dependency from the new FIFO instruction to that user.
-        auto optional_inplace_user = GetInplaceModifier(operand);
-        if (optional_inplace_user) {
-          TF_RETURN_IF_ERROR(
-              fifo_inst->AddControlDependencyTo(*optional_inplace_user));
-        }
-      }
-    }
-
-    // Wire inputs to the bwd stage so that they use the recomp stage outputs.
-    auto bwd_operands = bwd_stage->operands();
-    for (size_t op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
-      HloInstruction* operand = bwd_operands[op_idx];
-      HloInstruction* gte;
-      if (schedule ==
-          PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
-        if (operand->opcode() != HloOpcode::kGetTupleElement) {
-          continue;
-        }
-        gte = operand;
-      } else {
-        if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
-          continue;
-        }
-        // We expect the FIFO input to be a GTE.
-        gte = operand->mutable_operand(0);
-        CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
-      }
-
-      CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
-      const HloInstruction* gte_operand = gte->operand(0);
-      // If it is not on the fwd stage, then it is a FIFO on some other bwd
-      // stage which should be on the same shard.
-      if (gte_operand != fwd_stage) {
-        CHECK(IsPipelineStageBackward(gte_operand));
-        CHECK_EQ(*gte_operand->sharding_unique_device(),
-                 *bwd_stage->sharding_unique_device());
-        continue;
-      }
-
-      // Create a GTE from the recomputation output and wire it to the BWD
-      // stage.
-      HloInstruction* new_gte = pipeline_comp->AddInstruction(
-          gte->CloneWithNewOperands(gte->shape(), {recomp_stage}));
-      TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(op_idx, new_gte));
-
-      // Remove the old operand.
-      TF_RETURN_IF_ERROR(operand->DropAllControlDeps());
-      TF_RETURN_IF_ERROR(
-          pipeline_comp->RemoveInstructionAndUnusedOperands(operand));
-    }
-
-    // Make sure that the fwd pass is executed before the recomputation
-    fwd_stage->AddControlDependencyTo(recomp_stage);
-
-    VLOG(1) << "Added recomputation for pipeline stage " << stage_id;
+    // Lower the recomputation cluster into the backward stage.
+    TF_RETURN_IF_ERROR(
+        AddClusterToBackwardStage(fwd_stage, bwd_stage, cluster_info, oi_info));
     changed = true;
   }
   return changed;
@@ -339,6 +329,15 @@ StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
     return false;
   }
   CHECK_EQ(pipeline_ops.size(), 1);
+
+  TF_ASSIGN_OR_RETURN(const auto schedule,
+                      GetPipelineSchedule(pipeline_ops[0]));
+  if (schedule != PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+    VLOG(2) << "Non sequential schedules use "
+               "PipelineRecomputationStageInserter for recomputation.";
+    return false;
+  }
+
   VLOG(2) << "Before PipelineRecomputation:";
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
 

@@ -1,4 +1,4 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_STAGE_INSERTER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_STAGE_INSERTER_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -25,14 +25,15 @@ class HloModule;
 namespace poplarplugin {
 
 /**
- * Pass which copies all the non-stateful computation operations from the
- * forward pass into the backward pass.
+ * Pass which inserts Pipeline recomputation stages into the graph.
  */
-class PipelineRecomputation : public HloModulePass {
+class PipelineRecomputationStageInserter : public HloModulePass {
  public:
-  explicit PipelineRecomputation(bool allow_recomputation);
+  explicit PipelineRecomputationStageInserter(bool allow_recomputation);
 
-  absl::string_view name() const override { return "pipeline_recomputation"; }
+  absl::string_view name() const override {
+    return "pipeline_recomputation_stage_inserter";
+  }
 
   StatusOr<bool> Run(HloModule* module) override;
 
@@ -46,4 +47,4 @@ class PipelineRecomputation : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_STAGE_INSERTER_H_
