@@ -398,6 +398,21 @@ bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }
 
+int64 GetPipelineRepeatCount(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().repeat_count();
+}
+
+int64 GetPipelineDepth(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().pipeline_depth();
+}
+
+int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().batch_serialization_iterations();
+}
+
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();

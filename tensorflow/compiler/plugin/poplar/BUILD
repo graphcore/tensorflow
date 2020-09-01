@@ -171,6 +171,8 @@ cc_library(
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
+        "driver/passes/pipeline_batch_serialization_buffer_inserter.cc",
+        "driver/passes/pipeline_batch_serialization_loop_inserter.cc",
         "driver/passes/pipeline_communication_optimizer.cc",
         "driver/passes/pipeline_copy_inserter.cc",
         "driver/passes/pipeline_feed_hoisting.cc",
@@ -320,6 +322,8 @@ cc_library(
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
+        "driver/passes/pipeline_batch_serialization_buffer_inserter.h",
+        "driver/passes/pipeline_batch_serialization_loop_inserter.h",
         "driver/passes/pipeline_communication_optimizer.h",
         "driver/passes/pipeline_copy_inserter.h",
         "driver/passes/pipeline_feed_hoisting.h",
@@ -2818,6 +2822,36 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "pipeline_batch_serialization_buffer_inserter_test",
+    size = "small",
+    srcs = ["tests/pipeline_batch_serialization_buffer_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_batch_serialization_loop_inserter_test",
+    size = "small",
+    srcs = ["tests/pipeline_batch_serialization_loop_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4507,6 +4541,8 @@ test_suite(
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
         "outside_compilation_scope_test",
+        "pipeline_batch_serialization_buffer_inserter_test",
+        "pipeline_batch_serialization_loop_inserter_test",
         "pipeline_communication_optimizer_test",
         "pipeline_copy_inserter_test",
         "pipeline_feed_hoisting_test",

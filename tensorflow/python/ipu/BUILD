@@ -877,7 +877,7 @@ tf_py_test(
     data = [
         ":libpipelining_stateful_op.so",
     ],
-    shard_count = 4,
+    shard_count = 16,
 )
 
 tf_py_test(
@@ -926,7 +926,7 @@ tf_py_test(
     data = [
         ":libpipelining_stateful_op.so",
     ],
-    shard_count = 4,
+    shard_count = 16,
 )
 
 tf_py_test(
@@ -951,6 +951,42 @@ tf_py_test(
     name = "pipelining_sequential_test",
     size = "large",
     srcs = ["tests/pipelining_sequential_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 16,
+)
+
+tf_py_test(
+    name = "pipelining_batch_serial_sequential_recomputation_test",
+    size = "large",
+    srcs = ["tests/pipelining_batch_serial_sequential_recomputation_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 16,
+)
+
+tf_py_test(
+    name = "pipelining_batch_serial_sequential_test",
+    size = "large",
+    srcs = ["tests/pipelining_batch_serial_sequential_test.py"],
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -1099,6 +1135,8 @@ test_suite(
         "math_ops_test",
         "multi_conv_test",
         "outfeed_ordinal_test",
+        "pipelining_batch_serial_sequential_recomputation_test",
+        "pipelining_batch_serial_sequential_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",

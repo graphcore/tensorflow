@@ -994,7 +994,7 @@ StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
       return 0;
     default:
-      return FailedPrecondition("Unknown pipeline schedule.");
+      return FailedPrecondition("Unsupported pipeline schedule.");
   }
 }
 
@@ -1721,6 +1721,16 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
                   "stage ID.");
             }
           }
+        }
+        return false;
+      } else if (IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)) {
+        if (inst->user_count() != 1) {
+          return FailedPrecondition(
+              "Expected the buffer to be used exactly once.");
+        }
+        if (!IsAnyPipelineStageOp(inst->users()[0])) {
+          return FailedPrecondition(
+              "Expected the buffer to be used by a pipeline stage.");
         }
         return false;
       } else {
