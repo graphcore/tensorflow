@@ -253,6 +253,107 @@ poplar::Target CreateMultiReplicaDistributionTarget(
   return poplar::Target::createIPUTarget(global_num_ipus, target_arch);
 }
 
+struct UserOpsExecutionState {
+  explicit UserOpsExecutionState(const StreamMetaInfos& stream_meta_infos) {
+    // We add one call back to the stream which allocates the buffers and
+    // once all buffers have been allocated finally calls down to the user
+    // operation.
+    for (auto& pair : stream_meta_infos) {
+      StreamCopyMetaInfo infos = pair.second;
+
+      const HloInstruction* instruction = infos.parent_instruction;
+
+      out_buffer[instruction].resize(infos.output_stream_info.size());
+
+      // Resize the input vectors to be the number of inputs in advance.
+      in_buffers[instruction].resize(infos.num_inputs);
+      in_sizes[instruction].resize(infos.num_inputs);
+
+      // For each of the output stream copies allocate a buffer.
+      for (StreamCopyInfo* stream_copy : infos.output_stream_info) {
+        CHECK_LT(stream_copy->operand_number, infos.output_stream_info.size())
+            << "Operand ID is greater than the number of output streams "
+               "StreamCopyMetaInfo can see.";
+
+        const std::uint32_t total_size =
+            stream_copy->size_of_element * stream_copy->number_of_elements;
+        memory_buffer.push_back(std::unique_ptr<char[]>(new char[total_size]));
+
+        out_buffer[instruction][stream_copy->operand_number] =
+            static_cast<void*>(memory_buffer.back().get());
+      }
+    }
+  }
+
+  void ConnectStream(const StreamCopyInfo& info, poplar::Engine& engine) {
+    // If there is a functor then this is an input tensor, we will
+    // attach the callbacks to the stream otherwise just copy into the
+    // previously allocated pegged memory.
+    if (info.callback_to_register != nullptr) {
+      engine.connectStreamToCallback(info.stream_handle, CreateCallback(info));
+    } else {
+      // Connect the output stream to the correct pre-allocated buffer.
+      engine.connectStream(
+          info.stream_handle,
+          out_buffer[info.parent_instruction][info.operand_number]);
+    }
+  }
+
+ private:
+  poplar::StreamCallbackHandle CreateCallback(const StreamCopyInfo& info) {
+    // Create a custom callback which we use to copy the inputs as
+    // these callbacks are called in a random order we have to work
+    // out which tensor we are writing into and we have to check how
+    // many inputs we have already initialized so we know to call the
+    // user provided operation once they have all been set up.
+    return [this, info](void* buffer) {
+      StreamCopyInfo::FunctionTy functor = info.callback_to_register;
+
+      std::vector<void*>& in_buffer = in_buffers[info.parent_instruction];
+      std::vector<std::uint32_t>& in_size = in_sizes[info.parent_instruction];
+      std::uint32_t& number_of_inputs_initialized =
+          numbers_of_inputs_initialized[info.parent_instruction];
+
+      // Allocate space for the input tensor and then memcopy into it.
+      // The 'buffer' pointer is only garunteed to be alive for the
+      // duration of this callback.
+      std::uint32_t totalSize = info.size_of_element * info.number_of_elements;
+      memory_buffer.push_back(std::unique_ptr<char[]>(new char[totalSize]));
+      in_buffer[info.operand_number] =
+          static_cast<void*>(memory_buffer.back().get());
+
+      // Copy into the newly allocated memory.
+      std::memcpy(in_buffer[info.operand_number], buffer, totalSize);
+      number_of_inputs_initialized++;
+
+      // Store the size of each input.
+      in_size[info.operand_number] = info.number_of_elements;
+
+      // These callbacks are called in a random order by poplar so we
+      // need to only call the user provided callback once, after all
+      // of the data has been initialized.
+      if (number_of_inputs_initialized == in_buffer.size()) {
+        functor(in_buffer, in_size, out_buffer[info.parent_instruction]);
+      }
+    };
+  }
+
+  // Create our own free list which we use to allocate all the memory used
+  // by all the tensors.
+  std::list<std::unique_ptr<char[]>> memory_buffer;
+
+  // Allocate the parameters for each of the functors, sorted by the user
+  // instruction which they are created for.
+  std::unordered_map<const HloInstruction*, std::vector<void*>> in_buffers;
+  std::unordered_map<const HloInstruction*, std::vector<std::uint32_t>>
+      in_sizes;
+  std::unordered_map<const HloInstruction*, std::vector<void*>> out_buffer;
+
+  // Track how many inputs have been initialized so far.
+  std::unordered_map<const HloInstruction*, uint32_t>
+      numbers_of_inputs_initialized;
+};
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -3040,57 +3141,10 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     // Create any outfeed queues which do not already exist
     TF_RETURN_IF_ERROR(RegisterOutfeeds(executable.GetOutfeedInfos()));
 
-    // Create our own free list which we use to allocate all the memory used
-    // by all the tensors.
-    std::list<std::unique_ptr<char[]>> memory_buffer;
-
-    // Allocate the parameters for each of the functors, sorted by the user
-    // instruction which they are created for.
-    std::unordered_map<const HloInstruction*, std::vector<void*>> in_buffers;
-    std::unordered_map<const HloInstruction*, std::vector<std::uint32_t>>
-        in_sizes;
-    std::unordered_map<const HloInstruction*, std::vector<void*>> out_buffer;
-
-    // Track how many inputs have been initialized so far.
-    std::unordered_map<const HloInstruction*, std::uint32_t>
-        numbers_of_inputs_initialized;
-
     try {
       // Connect the streams to and from the device
       ConnectStreamedVariablesHostToDevice();
       ConnectStreamedVariablesDeviceToHost();
-      const StreamInfos& stream_infos = executable.GetStreamInfos();
-
-      // If this is a user op copy the buffers.
-      // We add one call back to the stream which allocates the buffers and
-      // once all buffers have been allocated finally calls down to the user
-      // operation.
-      for (auto& pair : executable.GetStreamMetaInfos()) {
-        StreamCopyMetaInfo infos = pair.second;
-
-        const HloInstruction* instruction = infos.parent_instruction;
-
-        out_buffer[instruction].resize(infos.output_stream_info.size());
-
-        // Resize the input vectors to be the number of inputs in advance.
-        in_buffers[instruction].resize(infos.num_inputs);
-        in_sizes[instruction].resize(infos.num_inputs);
-
-        // For each of the output stream copies allocate a buffer.
-        for (StreamCopyInfo* stream_copy : infos.output_stream_info) {
-          assert(stream_copy->operand_number <
-                     infos.output_stream_info.size() &&
-                 "Operand ID is greater than the number of output streams "
-                 "StreamCopyMetaInfo can see.");
-
-          const std::uint32_t totalSize =
-              stream_copy->size_of_element * stream_copy->number_of_elements;
-          memory_buffer.push_back(std::unique_ptr<char[]>(new char[totalSize]));
-
-          out_buffer[instruction][stream_copy->operand_number] =
-              (void*)memory_buffer.back().get();
-        }
-      }
 
       // The send/recv callbacks only need to be re-connected when the engine
       // has changed as they do not depend on any external state and are
@@ -3136,66 +3190,15 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         ConnectOutfeedToStreamCallback(outfeed_infos);
       }
 
+      // Handle user ops.
+      UserOpsExecutionState user_ops_state(executable.GetStreamMetaInfos());
+      const StreamInfos& stream_infos = executable.GetStreamInfos();
       for (auto& pair : stream_infos) {
-        const std::string name = pair.first;
         const std::list<StreamCopyInfo>& list = pair.second;
 
         // For all of the stream copies, both inputs and outputs.
         for (const StreamCopyInfo& info : list) {
-          StreamCopyInfo::FunctionTy functor = info.callback_to_register;
-
-          // If there is a functor then this is an input tensor, we will
-          // attach the callbacks to the stream otherwise just copy into the
-          // previously allocated pegged memory.
-          if (functor != nullptr) {
-            // Create a custom callback which we use to copy the inputs as
-            // these callbacks are called in a random order we have to work
-            // out which tensor we are writing into and we have to check how
-            // many inputs we have already initialized so we know to call the
-            // user provided operation once they have all been set up.
-            auto callback = [&, functor](void* buffer) {
-              std::vector<void*>& in_buffer =
-                  in_buffers[info.parent_instruction];
-              std::vector<std::uint32_t>& in_size =
-                  in_sizes[info.parent_instruction];
-              std::uint32_t& number_of_inputs_initialized =
-                  numbers_of_inputs_initialized[info.parent_instruction];
-
-              // Allocate space for the input tensor and then memcopy into it.
-              // The 'buffer' pointer is only garunteed to be alive for the
-              // duration of this callback.
-              std::uint32_t totalSize =
-                  info.size_of_element * info.number_of_elements;
-              memory_buffer.push_back(
-                  std::unique_ptr<char[]>(new char[totalSize]));
-              in_buffer[info.operand_number] =
-                  (void*)memory_buffer.back().get();
-
-              // Copy into the newly allocated memory.
-              std::memcpy((char*)in_buffer[info.operand_number], (char*)buffer,
-                          totalSize);
-              number_of_inputs_initialized++;
-
-              // Store the size of each input.
-              in_size[info.operand_number] = info.number_of_elements;
-
-              // These callbacks are called in a random order by poplar so we
-              // need to only call the user provided callback once, after all
-              // of the data has been initialized.
-              if (number_of_inputs_initialized == in_buffer.size()) {
-                functor(in_buffer, in_size,
-                        out_buffer[info.parent_instruction]);
-              }
-            };
-
-            current_engine_->connectStreamToCallback(info.stream_handle,
-                                                     callback);
-          } else {
-            // Connect the output stream to the correct pre-allocated buffer.
-            current_engine_->connectStream(
-                info.stream_handle,
-                out_buffer[info.parent_instruction][info.operand_number]);
-          }
+          user_ops_state.ConnectStream(info, *current_engine_);
         }
       }
 
