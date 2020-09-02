@@ -361,6 +361,11 @@ int64 GetRepeatLoopCount(const HloInstruction* inst) {
   return cfg.call_config().repeat_config().repeat_count();
 }
 
+bool GetRepeatLoopAllowFinerAliasAnalysis(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().repeat_config().allow_finer_alias_analysis();
+}
+
 bool IsPipelineStage(const HloInstruction* inst) {
   return CallConfigHasType(inst,
                            PoplarBackendConfig::CallConfig::PipelineStage);

@@ -94,6 +94,8 @@ message PoplarBackendConfig {
 
     message RepeatConfig {
       int64 repeat_count = 1;
+      // TODO(T25039): always enable this option.
+      bool allow_finer_alias_analysis = 2;
     }
 
     message PipelineStageConfig {

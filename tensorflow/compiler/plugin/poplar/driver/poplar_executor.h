@@ -600,6 +600,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   struct TensorControl {
     size_t size = 0;
+    PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     unsigned int ref_count = 0;
     bool on_device = false;
     bool in_remote_memory = false;
@@ -611,6 +612,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
     TensorControl(size_t size_);
     ~TensorControl();
+
+    TF_DISALLOW_COPY_AND_ASSIGN(TensorControl);
   };
 
   struct InputDef {
@@ -881,8 +884,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
-    std::vector<std::vector<std::unique_ptr<OutfeedQueueType>>>
-        callback_to_io_thread_queues;
+    using OutfeedQueueStorage =
+        std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
+    std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.

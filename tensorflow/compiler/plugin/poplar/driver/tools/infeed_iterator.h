@@ -160,7 +160,8 @@ class InfeedIterator {
   // The device iterator used for this queue.
   std::unique_ptr<tensorflow::data::IteratorBase> iterator_;
   // Storage of infeed queues.
-  std::vector<std::vector<std::unique_ptr<InfeedQueue>>> infeed_queues_;
+  using InfeedQueueStorage = std::unique_ptr<InfeedQueue, void (*)(void*)>;
+  std::vector<std::vector<InfeedQueueStorage>> infeed_queues_;
   // Used by the accessor.
   std::vector<std::vector<InfeedQueue*>> infeed_queues_ptrs_;
 };

@@ -288,7 +288,8 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
     for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
-          new (ptr) OutfeedQueueType(num_bytes_per_replica));
+          new (ptr) OutfeedQueueType(num_bytes_per_replica),
+          tensorflow::port::AlignedFree);
     }
   }
 }
@@ -1976,6 +1977,7 @@ void PoplarExecutor::UpdateArgsHandleMap(
         modified_resources.insert(input.tc);
       }
 
+      input.tc->element_type = shapes[a].element_type();
       args_map_[input_handle] = input;
     }
   }
@@ -2046,6 +2048,7 @@ se::DeviceMemoryBase PoplarExecutor::ConstantOutputAllocation::GetAllocation(
       allocator->Allocate(ordinal, size, false).ConsumeValueOrDie().Release();
   TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
   tc->size = size;
+  tc->element_type = shape.element_type();
   tc->on_device = false;
   tc->output_handle = std::string();
   tc->output_convertor = nullptr;
@@ -2118,6 +2121,7 @@ se::DeviceMemoryBase PoplarExecutor::BufferOutputAllocation::GetAllocation(
     }
     TensorControl* tc = it->second.tc;
     tc->size = size;
+    tc->element_type = shape.element_type();
     tc->on_device = output_info.IsStreaming() ? false : true;
     tc->ref_count++;
     tc->output_handle = output_info.Handles().at(flat_tensor_index);
@@ -2129,6 +2133,7 @@ se::DeviceMemoryBase PoplarExecutor::BufferOutputAllocation::GetAllocation(
         allocator->Allocate(ordinal, size, false).ConsumeValueOrDie().Release();
     TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
     tc->size = size;
+    tc->element_type = shape.element_type();
     tc->on_device = output_info.IsStreaming() ? false : true;
     tc->output_handle = output_info.Handles().at(flat_tensor_index);
     tc->output_convertor = GetOutputConversionFunction(shape);
@@ -2296,7 +2301,8 @@ StatusOr<bool> PoplarExecutor::CheckMoveHostToDeviceRequired(
 void PoplarExecutor::ConnectReplicatedDeviceToHost(
     const std::string& stream_name, TensorControl* tc) {
   void* dest = static_cast<void*>(tc->data);
-  const std::size_t size = tc->size;
+  const std::size_t size = HostSizeToDeviceSize(tc->size, tc->element_type);
+
   for (int64 replica_id = 0; replica_id < current_replication_factor_;
        ++replica_id) {
     auto callback = [dest, size, replica_id](void* ptr) {

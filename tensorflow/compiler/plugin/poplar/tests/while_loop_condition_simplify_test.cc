@@ -95,27 +95,31 @@ TEST_F(WhileLoopConditionSimplifyTest, SimplifyDoubleConditionalTie) {
   hlo_module->AddEntryComputation(builder_main.Build());
   WhileLoopConditionSimplify wlcs;
   EXPECT_TRUE(wlcs.Run(hlo_module.get()).ValueOrDie());
+
+  const absl::flat_hash_set<HloInstruction*> cond_instructions(
+      comp_cond->instructions().begin(), comp_cond->instructions().end());
+
   EXPECT_TRUE(limit0_cond->parent() == comp_cond ||
               limit1_cond->parent() == comp_cond);
   if (limit0_cond->parent() == comp_cond) {
-    EXPECT_TRUE(limit0_cond->parent() == comp_cond);
-    EXPECT_TRUE(limit1_cond->parent() != comp_cond);
-    EXPECT_TRUE(c0_cond->parent() == comp_cond);
-    EXPECT_TRUE(c1_cond->parent() != comp_cond);
-    EXPECT_TRUE(lt0_cond->parent() == comp_cond);
-    EXPECT_TRUE(lt1_cond->parent() != comp_cond);
-    EXPECT_TRUE(and_cond->parent() != comp_cond);
+    EXPECT_TRUE(cond_instructions.contains(limit0_cond));
+    EXPECT_FALSE(cond_instructions.contains(limit1_cond));
+    EXPECT_TRUE(cond_instructions.contains(c0_cond));
+    EXPECT_FALSE(cond_instructions.contains(c1_cond));
+    EXPECT_TRUE(cond_instructions.contains(lt0_cond));
+    EXPECT_FALSE(cond_instructions.contains(lt1_cond));
+    EXPECT_FALSE(cond_instructions.contains(and_cond));
     EXPECT_TRUE(c0_body->parent() == comp_body);
     EXPECT_TRUE(new_c0_body->parent() == comp_body);
     EXPECT_EQ(new_tuple_body->operand(0), new_c0_body);
   } else {
-    EXPECT_TRUE(limit0_cond->parent() != comp_cond);
-    EXPECT_TRUE(limit1_cond->parent() == comp_cond);
-    EXPECT_TRUE(c0_cond->parent() != comp_cond);
-    EXPECT_TRUE(c1_cond->parent() == comp_cond);
-    EXPECT_TRUE(lt0_cond->parent() != comp_cond);
-    EXPECT_TRUE(lt1_cond->parent() == comp_cond);
-    EXPECT_TRUE(and_cond->parent() != comp_cond);
+    EXPECT_FALSE(cond_instructions.contains(limit0_cond));
+    EXPECT_TRUE(cond_instructions.contains(limit1_cond));
+    EXPECT_FALSE(cond_instructions.contains(c0_cond));
+    EXPECT_TRUE(cond_instructions.contains(c1_cond));
+    EXPECT_FALSE(cond_instructions.contains(lt0_cond));
+    EXPECT_TRUE(cond_instructions.contains(lt1_cond));
+    EXPECT_FALSE(cond_instructions.contains(and_cond));
     EXPECT_TRUE(c1_body->parent() == comp_body);
     EXPECT_TRUE(new_c1_body->parent() == comp_body);
     EXPECT_EQ(new_tuple_body->operand(1), new_c1_body);
@@ -193,13 +197,17 @@ TEST_F(WhileLoopConditionSimplifyTest, SimplifyDoubleConditionalUneven) {
   hlo_module->AddEntryComputation(builder_main.Build());
   WhileLoopConditionSimplify wlcs;
   EXPECT_TRUE(wlcs.Run(hlo_module.get()).ValueOrDie());
-  EXPECT_TRUE(limit0_cond->parent() == comp_cond);
-  EXPECT_TRUE(limit1_cond->parent() != comp_cond);
-  EXPECT_TRUE(c0_cond->parent() == comp_cond);
-  EXPECT_TRUE(c1_cond->parent() != comp_cond);
-  EXPECT_TRUE(lt0_cond->parent() == comp_cond);
-  EXPECT_TRUE(lt1_cond->parent() != comp_cond);
-  EXPECT_TRUE(and_cond->parent() != comp_cond);
+
+  const absl::flat_hash_set<HloInstruction*> cond_instructions(
+      comp_cond->instructions().begin(), comp_cond->instructions().end());
+
+  EXPECT_TRUE(cond_instructions.contains(limit0_cond));
+  EXPECT_FALSE(cond_instructions.contains(limit1_cond));
+  EXPECT_TRUE(cond_instructions.contains(c0_cond));
+  EXPECT_FALSE(cond_instructions.contains(c1_cond));
+  EXPECT_TRUE(cond_instructions.contains(lt0_cond));
+  EXPECT_FALSE(cond_instructions.contains(lt1_cond));
+  EXPECT_FALSE(cond_instructions.contains(and_cond));
   EXPECT_TRUE(c0_body->parent() == comp_body);
   EXPECT_TRUE(new_c0_body->parent() == comp_body);
   EXPECT_EQ(new_tuple_body->operand(0), new_c0_body);
