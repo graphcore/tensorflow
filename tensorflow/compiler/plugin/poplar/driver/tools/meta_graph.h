@@ -21,6 +21,8 @@ limitations under the License.
 #include <queue>
 #include <set>
 #include <stack>
+#include <utility>
+#include <vector>
 
 #include "absl/types/optional.h"
 
@@ -228,6 +230,50 @@ class MetaGraph {
     }
     return true;
   };
+
+  struct ShortestPaths {
+    absl::optional<std::vector<T>> To(T dst) const {
+      if (prev.count(dst) == 0) {
+        return absl::nullopt;
+      }
+
+      std::vector<T> path = {dst};
+      while (path.back() != src) {
+        path.push_back(prev.at(path.back()));
+      }
+      std::reverse(path.begin(), path.end());
+      return path;
+    }
+
+    T src;
+    MetaGraphMap<T> prev;
+  };
+
+  ShortestPaths ShortestPathsFrom(T src) const {
+    // Use a breadth-first search from the source to all targets. As this is an
+    // unweighted graph, the path discovered first is the shortest one.
+
+    MetaGraphMap<T> prev;
+    std::queue<T> queue;
+    queue.push(src);
+
+    while (!queue.empty()) {
+      const auto u = queue.front();
+      queue.pop();
+
+      const auto itr = graph_.find(u);
+      if (itr != graph_.end()) {
+        for (const auto& v : itr->second) {
+          if (v != src && prev.count(v) == 0) {
+            queue.push(v);
+            prev[v] = u;
+          }
+        }
+      }
+    }
+
+    return ShortestPaths{src, std::move(prev)};
+  }
 
   MetaGraphSet& operator[](T& key) { return graph_[key]; }
 
