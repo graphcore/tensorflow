@@ -148,6 +148,72 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 };
 REGISTER_POPLAR_OP(RemoteParameterStore, RemoteParameterStoreOp);
 
+class BufferLoadSliceOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    poplar::program::Sequence seq;
+
+    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
+                                  res, tensor_map));
+
+    if (!UseSyntheticData()) {
+      // Get the remote buffer input.
+      TensorOrRemoteBufferVector inputs =
+          FindInstructionInputs(tensor_map, res, inst, 0, seq);
+      CHECK_EQ(inputs.size(), 1);
+      poplar::RemoteBuffer input = inputs[0].AsRemoteBuffer();
+
+      TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
+                          FindInstructionInput(tensor_map, res, inst, 1, seq));
+
+      seq.add(poplar::program::Copy(input, tensor, offset));
+    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+      // Initialize the tensor to a constant value.
+      auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+      TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(output_shape));
+      TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
+    }
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, tensor));
+
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
+
+class BufferStoreSliceOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    poplar::program::Sequence seq;
+
+    TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
+                        FindInplaceOutputs(tensor_map, res, inst, seq));
+    CHECK_EQ(outputs.size(), 1);
+    CHECK_EQ(outputs[0].size(), 1);
+    poplar::RemoteBuffer remote_buffer = outputs[0][0].AsRemoteBuffer();
+
+    if (!UseSyntheticData()) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor value,
+                          FindInstructionInput(tensor_map, res, inst, 1, seq));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
+                          FindInstructionInput(tensor_map, res, inst, 2, seq));
+
+      seq.add(poplar::program::Copy(value, remote_buffer, offset));
+    }
+    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, remote_buffer));
+
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(BufferStoreSlice, BufferStoreSliceOp);
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

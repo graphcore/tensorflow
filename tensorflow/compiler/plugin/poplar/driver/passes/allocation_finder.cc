@@ -119,10 +119,12 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
         IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)
             ? !Cast<HloCreateBuffer>(inst)->IsRemoteBuffer()
             : false;
+    const bool is_buffer_load_slice =
+        IsPoplarInstruction(PoplarOp::BufferLoadSlice)(inst);
 
     if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
         is_rw_user_op || is_recv_from_host || is_gradient_accumulator_create ||
-        is_in_memory_create_buffer) {
+        is_in_memory_create_buffer || is_buffer_load_slice) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});

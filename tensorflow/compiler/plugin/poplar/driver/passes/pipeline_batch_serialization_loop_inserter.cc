@@ -84,7 +84,9 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
           const HloInstruction* source = operand->operand(0);
           CHECK(IsPipelineStageOrBackwardOp(source));
           CHECK_EQ(param->user_count(), 1);
-          CHECK_EQ(param->users()[0]->opcode(), HloOpcode::kDynamicSlice);
+          const HloInstruction* param_user = param->users()[0];
+          CHECK(param_user->opcode() == HloOpcode::kDynamicSlice ||
+                IsPoplarInstruction(PoplarOp::BufferLoadSlice)(param_user));
           // Not modified hence the loop parameter is unmodified.
           loop_inputs.push_back(param);
           loop_outputs.push_back(param);
@@ -125,13 +127,21 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
             // are updated with values every iteration.
             CHECK_EQ(param->user_count(), 1);
             HloInstruction* user = param->users()[0];
-            CHECK_EQ(user->opcode(), HloOpcode::kDynamicUpdateSlice);
+            CHECK(user->opcode() == HloOpcode::kDynamicUpdateSlice ||
+                  IsPoplarInstruction(PoplarOp::BufferStoreSlice)(user));
             CHECK_EQ(user->user_count(), 1);
             CHECK_EQ(user->users()[0], root);
             // Map the parameter to the user as it is updated every iteration of
             // the loop.
             loop_inputs.push_back(param);
             loop_outputs.push_back(user);
+            break;
+          }
+          if (IsPoplarInstruction(PoplarOp::ExecutionCounter)(operand)) {
+            // The input value from the pipeline execution counter does not
+            // change during the loop execution.
+            loop_inputs.push_back(param);
+            loop_outputs.push_back(param);
             break;
           }
           TF_FALLTHROUGH_INTENDED;

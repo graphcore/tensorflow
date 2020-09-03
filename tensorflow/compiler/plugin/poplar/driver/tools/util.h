@@ -143,6 +143,7 @@ bool IsPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
 int64 GetPipelineDepth(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
+ThreeState GetPipelineOffloadActivations(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);

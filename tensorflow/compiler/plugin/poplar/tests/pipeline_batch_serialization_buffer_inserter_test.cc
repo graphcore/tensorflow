@@ -33,8 +33,8 @@ namespace {
 
 using PipelineBatchSerializationBufferInserterTest = HloTestBase;
 
-TEST_F(PipelineBatchSerializationBufferInserterTest, Test) {
-  std::string hlo = R"(
+std::string GetHlo(ThreeState offload_variables) {
+  constexpr absl::string_view hlo_format = R"(
 HloModule top
 
 stage_0_fwd {
@@ -114,19 +114,22 @@ pipeline {
 
 ENTRY e {
   e.weights0 = f32[2] parameter(0), parameter_replication={false}
-  ROOT e.call = (f32[2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0,\"batch_serialization_iterations\":5}}}"
+  ROOT e.call = (f32[2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":2,\"batch_serialization_iterations\":5,\"offload_activations\":\"%s\"}}}"
 }
 )";
+  return absl::StrFormat(hlo_format, ThreeState_Name(offload_variables));
+}
 
+TEST_F(PipelineBatchSerializationBufferInserterTest, TestInMemory) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
+                                           GetHlo(THREESTATE_OFF), config));
   auto module0 = module.get();
 
   ASSERT_TRUE(CustomOpReplacer().Run(module0).ValueOrDie());
 
-  PipelineBatchSerializationBufferInserter inserter;
+  PipelineBatchSerializationBufferInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module0));
   EXPECT_TRUE(changed);
 
@@ -243,6 +246,159 @@ ENTRY e {
                                           m::ConstantScalar(0))))));
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter1));
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter2));
+  }
+
+  const HloInstruction* resource_update = *stages.resource_update;
+  const HloInstruction* gradient_accumulator_sink = resource_update->operand(0);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
+      gradient_accumulator_sink));
+  EXPECT_EQ(gradient_accumulator_sink->operand_count(), 1);
+  // Make sure the sink shape doesn't change.
+  EXPECT_THAT(gradient_accumulator_sink->shape().dimensions(),
+              ::testing::ElementsAre(2));
+}
+
+TEST_F(PipelineBatchSerializationBufferInserterTest, TestOffloaded) {
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetHlo(THREESTATE_ON), config));
+  auto module0 = module.get();
+
+  ASSERT_TRUE(CustomOpReplacer().Run(module0).ValueOrDie());
+
+  PipelineBatchSerializationBufferInserter inserter(true);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module0));
+  EXPECT_TRUE(changed);
+
+  // Remove all the unused outputs/inputs in pipeline stages.
+  while (PipelineOptimizer().Run(module0).ValueOrDie() ||
+         HloDCE().Run(module0).ValueOrDie() ||
+         HloCSE(true).Run(module0).ValueOrDie()) {
+  }
+  HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+
+  {
+    auto stage = stages.forward[0];
+    EXPECT_THAT(stage->operand(0)->opcode(), HloOpcode::kParameter);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CreateBuffer)(stage->operand(1)));
+    HloInstruction* store;
+    EXPECT_TRUE(
+        Match(stage->to_apply()->root_instruction(), m::Tuple(m::Op(&store))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferStoreSlice)(store));
+    HloInstruction* counter;
+    EXPECT_TRUE(Match(store, m::CustomCall(m::Parameter(1),
+                                           m::Reshape(m::Log(m::Parameter(0))),
+                                           m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+  }
+  {
+    auto stage = stages.forward[1];
+    EXPECT_TRUE(Match(stage->operand(0),
+                      m::GetTupleElement(m::Op().Is(stages.forward[0]), 0)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CreateBuffer)(stage->operand(1)));
+    HloInstruction *store, *load;
+    EXPECT_TRUE(
+        Match(stage->to_apply()->root_instruction(), m::Tuple(m::Op(&store))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferStoreSlice)(store));
+    HloInstruction* counter;
+    EXPECT_TRUE(
+        Match(store, m::CustomCall(m::Parameter(1),
+                                   m::Reshape(m::Log(m::Reshape(m::Op(&load)))),
+                                   m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load));
+    EXPECT_TRUE(Match(load, m::CustomCall(m::Parameter(0), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+  }
+  {
+    auto stage = stages.forward[2];
+    EXPECT_TRUE(Match(stage->operand(0),
+                      m::GetTupleElement(m::Op().Is(stages.forward[1]), 0)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CreateBuffer)(stage->operand(1)));
+    HloInstruction *store, *load;
+    EXPECT_TRUE(
+        Match(stage->to_apply()->root_instruction(), m::Tuple(m::Op(&store))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferStoreSlice)(store));
+    HloInstruction* counter;
+    EXPECT_TRUE(
+        Match(store, m::CustomCall(m::Parameter(1),
+                                   m::Reshape(m::Log(m::Reshape(m::Op(&load)))),
+                                   m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load));
+    EXPECT_TRUE(Match(load, m::CustomCall(m::Parameter(0), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+  }
+  {
+    auto stage = stages.backward[2];
+    EXPECT_TRUE(Match(stage->operand(0),
+                      m::GetTupleElement(m::Op().Is(stages.forward[1]), 0)));
+    EXPECT_TRUE(Match(stage->operand(1),
+                      m::GetTupleElement(m::Op().Is(stages.forward[2]), 0)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CreateBuffer)(stage->operand(2)));
+    HloInstruction *store, *load0, *load1;
+    EXPECT_TRUE(
+        Match(stage->to_apply()->root_instruction(), m::Tuple(m::Op(&store))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferStoreSlice)(store));
+    HloInstruction* counter;
+    EXPECT_TRUE(Match(
+        store, m::CustomCall(m::Parameter(2),
+                             m::Reshape(m::Add(m::Reshape(m::Op(&load0)),
+                                               m::Reshape(m::Op(&load1)))),
+                             m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load0));
+    EXPECT_TRUE(Match(load0, m::CustomCall(m::Parameter(1), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load1));
+    EXPECT_TRUE(Match(load1, m::CustomCall(m::Parameter(0), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+  }
+  {
+    auto stage = stages.backward[1];
+    EXPECT_TRUE(Match(stage->operand(0),
+                      m::GetTupleElement(m::Op().Is(stages.backward[2]), 0)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::CreateBuffer)(stage->operand(1)));
+    HloInstruction *store, *load;
+    EXPECT_TRUE(
+        Match(stage->to_apply()->root_instruction(), m::Tuple(m::Op(&store))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferStoreSlice)(store));
+    HloInstruction* counter;
+    EXPECT_TRUE(Match(store, m::CustomCall(m::Parameter(1),
+                                           m::Reshape(m::Reshape(m::Op(&load))),
+                                           m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load));
+    EXPECT_TRUE(Match(load, m::CustomCall(m::Parameter(0), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+  }
+  {
+    auto stage = stages.backward[0];
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+        stage->operand(0)));
+    EXPECT_TRUE(Match(stage->operand(1),
+                      m::GetTupleElement(m::Op().Is(stages.forward[0]), 0)));
+    EXPECT_TRUE(Match(stage->operand(2),
+                      m::GetTupleElement(m::Op().Is(stages.backward[1]), 0)));
+    HloInstruction* accumulator_add;
+    EXPECT_TRUE(Match(stage->to_apply()->root_instruction(),
+                      m::Tuple(m::Op(&accumulator_add))));
+    EXPECT_TRUE(
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+    HloInstruction *counter, *load0, *load1;
+    EXPECT_TRUE(Match(
+        accumulator_add,
+        m::CustomCall(m::Parameter(0), m::Add(m::Reshape(m::Op(&load0)),
+                                              m::Reshape(m::Op(&load1))))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load0));
+    EXPECT_TRUE(Match(load0, m::CustomCall(m::Parameter(2), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::BufferLoadSlice)(load1));
+    EXPECT_TRUE(Match(load1, m::CustomCall(m::Parameter(1), m::Op(&counter))));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(counter));
   }
 
   const HloInstruction* resource_update = *stages.resource_update;

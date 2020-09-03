@@ -267,6 +267,8 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
                                      &batch_serialization_iterations_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("offload_activations", &offload_activations_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
     OP_REQUIRES_OK(
@@ -383,6 +385,11 @@ class PipelineOp : public XlaOpKernel {
         ctx, builder->SetInstructionFrontendAttribute(
                  outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
                  pipeline_poplar_config_));
+    // Set the offload_activations flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_ACTIVATIONS),
+                       offload_activations_));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -414,6 +421,7 @@ class PipelineOp : public XlaOpKernel {
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;
+  std::string offload_activations_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

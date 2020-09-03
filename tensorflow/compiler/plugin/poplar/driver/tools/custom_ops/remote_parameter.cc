@@ -283,5 +283,56 @@ StatusOr<std::unique_ptr<HloInstruction>> HloCreateBufferFactoryFunc(
 static HloPoplarInstructionFactory create_buffer_factory(
     PoplarOp::CreateBuffer, HloCreateBufferFactoryFunc);
 }  // namespace
+
+HloBufferLoadSlice::HloBufferLoadSlice(const Shape& shape,
+                                       HloInstruction* const buffer,
+                                       HloInstruction* const offset)
+    : HloPoplarInstruction(shape, {buffer, offset}, PoplarOp::BufferLoadSlice) {
+}
+
+std::unique_ptr<HloInstruction> HloBufferLoadSlice::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 2);
+  return absl::make_unique<HloBufferLoadSlice>(shape, operands[0], operands[1]);
+}
+
+std::vector<std::string> HloBufferLoadSlice::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
+    const Shape& shape, HloInstruction* const buffer,
+    HloInstruction* const offset) {
+  return absl::make_unique<HloBufferLoadSlice>(shape, buffer, offset);
+}
+
+HloBufferStoreSlice::HloBufferStoreSlice(HloInstruction* const buffer,
+                                         HloInstruction* const slice,
+                                         HloInstruction* const offset)
+    : HloPoplarInstruction(buffer->shape(), {buffer, slice, offset},
+                           PoplarOp::BufferStoreSlice) {
+  set_custom_call_has_side_effect(true);
+}
+
+std::unique_ptr<HloInstruction> HloBufferStoreSlice::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 3);
+  return absl::make_unique<HloBufferStoreSlice>(operands[0], operands[1],
+                                                operands[2]);
+}
+
+std::vector<std::string> HloBufferStoreSlice::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateBufferStoreSlice(
+    HloInstruction* const buffer, HloInstruction* const slice,
+    HloInstruction* const offset) {
+  return absl::make_unique<HloBufferStoreSlice>(buffer, slice, offset);
+}
 }  // namespace poplarplugin
 }  // namespace xla

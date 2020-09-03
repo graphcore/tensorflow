@@ -35,6 +35,9 @@ namespace poplarplugin {
  */
 class PipelineBatchSerializationBufferInserter : public HloModulePass {
  public:
+  explicit PipelineBatchSerializationBufferInserter(
+      bool remote_memory_supported);
+
   absl::string_view name() const override {
     return "pipeline-batch-serialization-buffer-inserter";
   }
@@ -43,6 +46,7 @@ class PipelineBatchSerializationBufferInserter : public HloModulePass {
 
  private:
   Status InsertIntoPipeline(HloInstruction* pipeline_op);
+  const bool remote_memory_supported_;
 };
 
 }  // namespace poplarplugin

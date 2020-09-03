@@ -1128,7 +1128,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
           "pipeline-batch-serialization-fixer-wrapper");
       batch_serialization_pass
-          .AddPass<PipelineBatchSerializationBufferInserter>();
+          .AddPass<PipelineBatchSerializationBufferInserter>(
+              resources.remote_memory_supported);
       AddPipelineOptimizerPass(batch_serialization_pass);
       batch_serialization_pass
           .AddPass<PipelineBatchSerializationLoopInserter>();
