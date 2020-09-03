@@ -55,8 +55,8 @@ enum PoplarOp {
   BlockRecompute = 51;
   ReduceScatter = 52;
   Seed = 53;
-  // retired = 54;
-  // retired = 55;
+  BufferLoadSlice = 54;
+  BufferStoreSlice = 55;
   // retired = 56;
   HostEmbeddingLookup = 57;
   HostEmbeddingUpdate = 58;

@@ -47,7 +47,11 @@ Shape GetSliceShape(const Shape& shape) {
 StatusOr<HloInstructionSet> GetOutputUsers(HloInstruction* output) {
   CHECK_EQ(output->opcode(), HloOpcode::kGetTupleElement);
   HloInstructionSet users;
+
   for (HloInstruction* user : output->users()) {
+    auto error_msg =
+        absl::StrCat("Invalid user ", user->ToString(),
+                     " of pipeline stage output ", output->ToString(), ".");
     switch (user->opcode()) {
       case HloOpcode::kCall: {
         if (IsAnyPipelineStageOp(user)) {
@@ -61,19 +65,104 @@ StatusOr<HloInstructionSet> GetOutputUsers(HloInstruction* output) {
         if (IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(user)) {
           // We don't need to do anything for gradient accumulator sink.
           break;
+        } else {
+          return InternalErrorStrCat(error_msg);
         }
-        TF_FALLTHROUGH_INTENDED;
       }
-      default: {
-        return InternalErrorStrCat("Invalid user ", user->ToString(),
-                                   " of pipeline stage output ",
-                                   output->ToString(), ".");
+      case HloOpcode::kTuple: {
+        if (user == output->parent()->root_instruction()) {
+          break;
+        } else {
+          return InternalErrorStrCat(error_msg);
+        }
       }
+      default: { return InternalErrorStrCat(error_msg); }
     }
   }
   return users;
 }
+
+StatusOr<HloInstruction*> CreateBufferStore(
+    bool offload_activations, HloComputation* const pipeline_comp,
+    HloInstruction* const buffer, HloInstruction* const value,
+    std::vector<HloInstruction*>* const instructions_to_lower) {
+  const Shape& buffer_shape = buffer->shape();
+  const Shape slice_shape = GetSliceShape(buffer_shape);
+  TF_ASSIGN_OR_RETURN(HloInstruction * reshaped_value,
+                      MakeReshapeHlo(slice_shape, value));
+
+  HloInstruction* counter =
+      pipeline_comp->AddInstruction(CreateExecutionCounter());
+
+  HloInstruction* update;
+  if (offload_activations) {
+    update = pipeline_comp->AddInstruction(
+        CreateBufferStoreSlice(buffer, reshaped_value, counter));
+
+    (*instructions_to_lower) = {counter, reshaped_value, update};
+  } else {
+    // Create a dynamic update which sets the output values at the end of each
+    // batch serialization loop iteration. Note that the dynamic update is
+    // only done on the first dimension.
+    std::vector<HloInstruction*> update_start_indices(buffer_shape.rank());
+    HloInstruction* zero = MakeR0ConstantHlo<int32>(pipeline_comp, 0);
+    update_start_indices[0] = counter;
+    std::fill(std::next(update_start_indices.begin()),
+              update_start_indices.end(), zero);
+    update =
+        pipeline_comp->AddInstruction(HloInstruction::CreateDynamicUpdateSlice(
+            buffer_shape, buffer, reshaped_value, update_start_indices));
+
+    (*instructions_to_lower) = {counter, zero, reshaped_value, update};
+  }
+
+  return update;
+}
+
+StatusOr<HloInstruction*> CreateBufferLoad(
+    bool offload_activations, HloComputation* const pipeline_comp,
+    HloInstruction* const buffer, const Shape& output_shape,
+    std::vector<HloInstruction*>* const instructions_to_lower) {
+  const Shape& buffer_shape = buffer->shape();
+  const Shape slice_shape = GetSliceShape(buffer_shape);
+
+  HloInstruction* counter =
+      pipeline_comp->AddInstruction(CreateExecutionCounter());
+
+  HloInstruction* slice;
+  if (offload_activations) {
+    slice = pipeline_comp->AddInstruction(
+        CreateBufferLoadSlice(slice_shape, buffer, counter));
+
+    (*instructions_to_lower) = {counter, slice};
+  } else {
+    // Create a dynamic slice which gets the input slice at the beginning of
+    // each batch serialization loop iteration.
+    HloInstruction* zero = MakeR0ConstantHlo<int32>(pipeline_comp, 0);
+
+    std::vector<HloInstruction*> start_indices(buffer_shape.rank());
+    start_indices[0] = counter;
+    std::fill(std::next(start_indices.begin()), start_indices.end(), zero);
+
+    slice = pipeline_comp->AddInstruction(HloInstruction::CreateDynamicSlice(
+        slice_shape, buffer, start_indices, slice_shape.dimensions()));
+
+    (*instructions_to_lower) = {counter, zero, slice};
+  }
+
+  TF_ASSIGN_OR_RETURN(HloInstruction * reshape_slice,
+                      MakeReshapeHlo(output_shape, slice));
+
+  instructions_to_lower->push_back(reshape_slice);
+
+  return reshape_slice;
+}
+
 }  // namespace
+
+PipelineBatchSerializationBufferInserter::
+    PipelineBatchSerializationBufferInserter(bool remote_memory_supported)
+    : remote_memory_supported_(remote_memory_supported) {}
 
 Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
     HloInstruction* pipeline_op) {
@@ -85,6 +174,33 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
   TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   OrderedPipelineStages ordered_stages(stages,
                                        /*include_resource_update*/ false);
+
+  bool offload_activations;
+  switch (GetPipelineOffloadActivations(pipeline_op)) {
+    case THREESTATE_OFF: {
+      offload_activations = false;
+      break;
+    }
+    case THREESTATE_ON: {
+      if (!remote_memory_supported_) {
+        return FailedPrecondition(
+            "Activations offloading has been enabled, however the current "
+            "configuration of the IPU devices does not support remote memory. "
+            "Set the `offload_activations` argument of "
+            "`pipelining_ops.pipeline` to `False` to stop seeing this "
+            "message.");
+      }
+      offload_activations = true;
+      break;
+    }
+    case THREESTATE_UNDEFINED: {
+      // If the option has not been specified, then offload if there is remote
+      // memory support.
+      offload_activations = remote_memory_supported_;
+      break;
+    }
+    default: { return FailedPrecondition("Unknown state."); }
+  }
 
   // Go through all the pipeline stages in order, and insert buffers for all the
   // outputs used.
@@ -105,11 +221,10 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
       // Insert a buffer for storing outputs of a pipeline stage.
       // 1. Create a buffer which can hold all the outputs N times (where N is
       // the number of times a stage gets executed).
-      // 2. Pass that buffer into the stage, and dynamic slice update the
-      // outputs into the buffer. Return the updated buffer as an output of the
-      // stage.
+      // 2. Pass that buffer into the stage, and update the outputs into the
+      // buffer. Return the updated buffer as an output of the stage.
       // 3. Pass the updated buffer as an input to other stages which use it,
-      // and use a dynamic slice.
+      // and use a slice.
 
       // Create the buffer.
       const Shape& output_shape = gte->shape();
@@ -119,24 +234,16 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
       const Shape slice_shape = GetSliceShape(buffer_shape);
 
       HloInstruction* buffer = pipeline_comp->AddInstruction(
-          CreateHloCreateBuffer(buffer_shape, /*is_remote*/ false));
+          CreateHloCreateBuffer(buffer_shape, offload_activations));
 
-      // Create a dynamic update which sets the output values at the end of each
-      // batch serialization loop iteration. Note that the dynamic update is
-      // only done on the first dimension.
-      std::vector<HloInstruction*> update_start_indices(buffer_shape.rank());
-      HloInstruction* counter =
-          pipeline_comp->AddInstruction(CreateExecutionCounter());
-      HloInstruction* zero = MakeR0ConstantHlo<int32>(pipeline_comp, 0);
-      update_start_indices[0] = counter;
-      std::fill(std::next(update_start_indices.begin()),
-                update_start_indices.end(), zero);
+      // Keep track of which instructions need to be lowered into the current
+      // stage.
+      std::vector<HloInstruction*> lower_to_current_stage;
 
-      TF_ASSIGN_OR_RETURN(HloInstruction * reshaped_gte,
-                          MakeReshapeHlo(slice_shape, gte));
-      HloInstruction* update = pipeline_comp->AddInstruction(
-          HloInstruction::CreateDynamicUpdateSlice(
-              buffer_shape, buffer, reshaped_gte, update_start_indices));
+      TF_ASSIGN_OR_RETURN(
+          HloInstruction * update,
+          CreateBufferStore(offload_activations, pipeline_comp, buffer, gte,
+                            &lower_to_current_stage));
 
       // Create a dynamic slice on the updated buffer inside of each pipeline
       // stage which uses the buffer.
@@ -144,32 +251,20 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
         VLOG(3) << "Adding slice operations for buffer in " << user->ToString();
 
         const int64 user_idx = ordered_stages.GetIndex(user);
+        // Keep track of which instructions need to be lowered into the user
+        // stage.
+        std::vector<HloInstruction*> lower_to_user_stage;
 
-        // Need to create counter and zero per user as they are lowered directly
-        // into the stage.
-        HloInstruction* slice_counter =
-            pipeline_comp->AddInstruction(CreateExecutionCounter());
-        HloInstruction* slice_zero = MakeR0ConstantHlo<int32>(pipeline_comp, 0);
+        TF_ASSIGN_OR_RETURN(
+            HloInstruction * slice,
+            CreateBufferLoad(offload_activations, pipeline_comp, update,
+                             output_shape, &lower_to_user_stage));
 
-        std::vector<HloInstruction*> slice_start_indices(buffer_shape.rank());
-        slice_start_indices[0] = slice_counter;
-        std::fill(std::next(slice_start_indices.begin()),
-                  slice_start_indices.end(), slice_zero);
-
-        HloInstruction* slice =
-            pipeline_comp->AddInstruction(HloInstruction::CreateDynamicSlice(
-                slice_shape, update, slice_start_indices,
-                slice_shape.dimensions()));
-        TF_ASSIGN_OR_RETURN(HloInstruction * reshape_slice,
-                            MakeReshapeHlo(output_shape, slice));
-
-        // Lower the instructions into the stage and replace the uses with the
-        // new (reshaped) slice.
-        std::vector<HloInstruction*> lower_to_user_stage = {
-            slice_counter, slice_zero, slice, reshape_slice};
+        // Replace the uses of the previous output with the new (reshaped)
+        // slice.
         std::map<int64, HloInstruction*> replacements;
         absl::c_for_each(user->OperandIndices(gte), [&](int64 operand_idx) {
-          replacements[operand_idx] = reshape_slice;
+          replacements[operand_idx] = slice;
         });
         TF_ASSIGN_OR_RETURN(user, AddInstructionsToPipelineStage(
                                       user, lower_to_user_stage, replacements));
@@ -178,8 +273,6 @@ Status PipelineBatchSerializationBufferInserter::InsertIntoPipeline(
       }
 
       VLOG(3) << "Adding update operations for buffer in " << stage->ToString();
-      std::vector<HloInstruction*> lower_to_current_stage = {
-          counter, zero, reshaped_gte, update};
 
       TF_ASSIGN_OR_RETURN(
           stage, AddInstructionsToPipelineStage(stage, lower_to_current_stage));

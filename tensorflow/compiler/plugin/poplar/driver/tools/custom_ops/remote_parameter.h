@@ -97,8 +97,11 @@ std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
     absl::Span<HloInstruction* const> rbuffers_and_values,
     uint64 replication_factor = 1);
 
-// HloCreateBuffer represents a creation of a buffer, where the buffer can be
-// stored in either device memory or remote memory.
+/**
+ * HloCreateBuffer represents a creation of a buffer, where the buffer can be
+ * stored in either device memory or remote memory.
+ * Note that the buffer is sliceable on the outter dimension.
+ */
 class HloCreateBuffer : public HloPoplarInstruction {
  public:
   explicit HloCreateBuffer(const Shape& shape, bool is_remote);
@@ -127,6 +130,73 @@ class HloCreateBuffer : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
                                                       bool is_remote);
+
+/**
+ * HloBufferLoadSlice represents an instruction which loads a slice of data
+ * from a buffer, which is stored in remote memory, at a given offset.
+ */
+class HloBufferLoadSlice : public HloPoplarInstruction {
+ public:
+  HloBufferLoadSlice(const Shape& shape, HloInstruction* const buffer,
+                     HloInstruction* const offset);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 0; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
+    const Shape& shape, HloInstruction* const buffer,
+    HloInstruction* const offset);
+
+/**
+ * HloBufferStoreSlice represents an instruction which stores a slice of data
+ * into a buffer, which is stored in remote memory, at a given offset.
+ * Outputs the updated buffer.
+ */
+class HloBufferStoreSlice : public HloPoplarInstruction {
+ public:
+  HloBufferStoreSlice(HloInstruction* const buffer, HloInstruction* const slice,
+                      HloInstruction* const offset);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 1; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateBufferStoreSlice(
+    HloInstruction* const buffer, HloInstruction* const slice,
+    HloInstruction* const offset);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -413,6 +413,11 @@ int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().batch_serialization_iterations();
 }
 
+ThreeState GetPipelineOffloadActivations(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().offload_activations();
+}
+
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();

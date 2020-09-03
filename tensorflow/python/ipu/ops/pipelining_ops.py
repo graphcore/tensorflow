@@ -170,6 +170,7 @@ def pipeline(computational_stages,
              weight_update_poplar_options=None,
              offload_weight_update_variables=None,
              replicated_optimizer_state_sharding=None,
+             offload_activations=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -400,6 +401,15 @@ def pipeline(computational_stages,
       `tf.MomentumOptimizer`), will be partitioned across the replicas. This
       can exploit the additional bandwidth of the IPU-Links to improve overall
       throughput.
+    offload_activations: When enabled, all the activations for the batches which
+      are not being executed by the pipeline stages at the given time are stored
+      in remote memory. Requires the machine to be configured with support for
+      `Poplar remote buffers`. Offloading activations into remote memory can
+      reduce maximum memory liveness, but can also increase the computation time
+      as activations have to be copied from/to the device(s).
+      When set to `None`, the activations might be offloaded when beneficial.
+      This feature is currently only supported when the pipeline schedule is
+      `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -444,6 +454,13 @@ def pipeline(computational_stages,
       and pipeline_schedule != PipelineSchedule.Sequential):
     raise NotImplementedError("Batch serialization is only supported with the "
                               "`Sequential` schedule.")
+
+  if offload_activations and (
+      batch_serialization_iterations < 2
+      or pipeline_schedule != PipelineSchedule.Sequential):
+    raise NotImplementedError("Activation offloading is only supported with "
+                              "the `Sequential` schedule and when "
+                              "`batch_serialization_iterations > 1`.")
 
   if device_mapping is None:
     device_mapping = [0] * len(
@@ -501,12 +518,17 @@ def pipeline(computational_stages,
     return backend_config_pb2.ThreeState.Name(
         backend_config_pb2.THREESTATE_OFF)
 
+  # Convert some of the binary options into three states.
   offload_weight_update_variables = bool_to_three_state(
       offload_weight_update_variables,
       backend_config_pb2.ThreeState.Name(
           backend_config_pb2.THREESTATE_UNDEFINED))
   replicated_optimizer_state_sharding = bool_to_three_state(
       replicated_optimizer_state_sharding, offload_weight_update_variables)
+  offload_activations = bool_to_three_state(
+      offload_activations,
+      backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_UNDEFINED))
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -689,7 +711,8 @@ def pipeline(computational_stages,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
           pipeline_poplar_config=json_format.MessageToJson(
-              pipeline_poplar_config))
+              pipeline_poplar_config),
+          offload_activations=offload_activations)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

@@ -98,6 +98,14 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
                   std::stoi(schedule_str));
               pipeline_config->set_schedule({schedule});
+
+              // Set the offload activations flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_activations_str,
+                  GetAttribute(attributes, OFFLOAD_ACTIVATIONS));
+              TF_ASSIGN_OR_RETURN(auto offload_activations,
+                                  ParseThreeState(offload_activations_str));
+              pipeline_config->set_offload_activations(offload_activations);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:

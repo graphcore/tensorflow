@@ -408,7 +408,7 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   if (!remote_memory_supported_) {
     const std::string message = absl::StrCat(
         "Current configuration of the IPU devices does not support remote "
-        "buffers and therefore weight update only variables cannot be "
+        "memory and therefore weight update only variables cannot be "
         "offloaded to remote memory. Set the `offload_weight_update_variables` "
         "argument of ",
         IsPipelineOp(call_op) ? "`pipelining_ops.pipeline`"

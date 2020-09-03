@@ -854,10 +854,12 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
   if (create_buffer->IsRemoteBuffer()) {
     poplar::Graph& graph = GetGraph(resources_, inst);
     TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
-    std::size_t element_count = ShapeUtil::ElementsIn(shape);
+    std::size_t num_repeats = ShapeUtil::GetDimension(shape, 0);
+    std::size_t element_count =
+        ShapeUtil::ElementsIn(ShapeUtil::DeleteDimension(0, shape));
 
-    poplar::RemoteBuffer result =
-        graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
+    poplar::RemoteBuffer result = graph.addRemoteBuffer(
+        inst->name(), type, element_count, num_repeats, true);
 
     TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, result));
   } else {
