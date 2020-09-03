@@ -702,9 +702,10 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
       std::vector<HloInstruction*> targets =
           find_all_targets(edges.second, is_valid_target);
 
+      const auto shortest_paths = g.ShortestPathsFrom(source);
       for (auto target : targets) {
         // Try and find the shortest paths to target.
-        auto optional_prefix = g.ShortestPath(source, target);
+        auto optional_prefix = shortest_paths.To(target);
         if (!optional_prefix) {
           continue;
         }

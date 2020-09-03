@@ -2943,6 +2943,10 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         in_sizes;
     std::unordered_map<const HloInstruction*, std::vector<void*>> out_buffer;
 
+    // Track how many inputs have been initialized so far.
+    std::unordered_map<const HloInstruction*, std::uint32_t>
+        numbers_of_inputs_initialized;
+
     try {
       // Connect the streams to and from the device
       ConnectStreamedVariablesHostToDevice();
@@ -3018,9 +3022,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         const std::string name = pair.first;
         const std::list<StreamCopyInfo>& list = pair.second;
 
-        // Track how many inputs have been initalized so far.
-        std::uint32_t number_of_inputs_initalized = 0;
-
         // For all of the stream copies, both inputs and outputs.
         for (const StreamCopyInfo& info : list) {
           StreamCopyInfo::FunctionTy functor = info.callback_to_register;
@@ -3039,6 +3040,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
                   in_buffers[info.parent_instruction];
               std::vector<std::uint32_t>& in_size =
                   in_sizes[info.parent_instruction];
+              std::uint32_t& number_of_inputs_initialized =
+                  numbers_of_inputs_initialized[info.parent_instruction];
 
               // Allocate space for the input tensor and then memcopy into it.
               // The 'buffer' pointer is only garunteed to be alive for the
@@ -3053,7 +3056,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
               // Copy into the newly allocated memory.
               std::memcpy((char*)in_buffer[info.operand_number], (char*)buffer,
                           totalSize);
-              number_of_inputs_initalized++;
+              number_of_inputs_initialized++;
 
               // Store the size of each input.
               in_size[info.operand_number] = info.number_of_elements;
@@ -3061,7 +3064,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
               // These callbacks are called in a random order by poplar so we
               // need to only call the user provided callback once, after all
               // of the data has been initialized.
-              if (number_of_inputs_initalized == in_buffer.size()) {
+              if (number_of_inputs_initialized == in_buffer.size()) {
                 functor(in_buffer, in_size,
                         out_buffer[info.parent_instruction]);
               }

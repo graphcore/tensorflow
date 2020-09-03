@@ -30,7 +30,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-constexpr char kFusionName[] = "";
 
 bool IsSerializedGradientAccumulation(const HloInstruction* inst) {
   return IsPopOpsFusion(inst, "serialized_gradient_accumulation");

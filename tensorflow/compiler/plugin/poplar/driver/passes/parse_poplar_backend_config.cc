@@ -66,6 +66,16 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               int64 pipeline_depth = std::stoll(pipeline_depth_str);
               pipeline_config->set_pipeline_depth(pipeline_depth);
 
+              // Get the batch serialization iterations.
+              TF_ASSIGN_OR_RETURN(
+                  std::string batch_serialization_iterations_str,
+                  GetAttribute(attributes,
+                               PIPELINE_BATCH_SERIALIZATION_ITERATIONS));
+              int64 batch_serialization_iterations =
+                  std::stoll(batch_serialization_iterations_str);
+              pipeline_config->set_batch_serialization_iterations(
+                  batch_serialization_iterations);
+
               // Get the repeat count.
               TF_ASSIGN_OR_RETURN(
                   std::string repeat_count_str,

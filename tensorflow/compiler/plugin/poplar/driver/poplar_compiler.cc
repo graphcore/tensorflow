@@ -85,6 +85,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_buffer_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_loop_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_communication_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_feed_hoisting.h"
@@ -809,6 +811,14 @@ void SetMultiReplicaDistributionOptions(poplar::OptionFlags* opt_flags,
   opt_flags->set("target.syncReplicasIndependently", "true");
 }
 
+void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
+  auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+      "pipeline-optimizer-wrapper");
+  pass.AddPass<PipelineOptimizer>();
+  pass.AddPass<HloDCE>();
+  pass.AddPass<HloCSE>(true);
+}
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -1035,6 +1045,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
     pipeline.AddPass<MultiConvFixer>();
     pipeline.AddPass<HloCSE>(false);
+
     pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
         resources.enable_fast_math);
     {
@@ -1122,12 +1133,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.information.minimum_remote_tensor_size);
     pipeline.AddPass<PipelineStageMerger>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
+    AddPipelineOptimizerPass(pipeline);
     {
-      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-          "post-pipeline-communication-optimizer");
-      pass.AddPass<HloDCE>();
-      pass.AddPass<HloCSE>(true);
-      pass.AddPass<PipelineOptimizer>();
+      auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
+          "pipeline-batch-serialization-fixer-wrapper");
+      batch_serialization_pass
+          .AddPass<PipelineBatchSerializationBufferInserter>();
+      AddPipelineOptimizerPass(batch_serialization_pass);
+      batch_serialization_pass
+          .AddPass<PipelineBatchSerializationLoopInserter>();
     }
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();

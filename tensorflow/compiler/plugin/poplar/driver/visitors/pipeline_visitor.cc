@@ -385,9 +385,18 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     result[inst] = get_stage_from_users(inst);
   }
 
+  // Partition out buffers - these are assigned to the first stage in which
+  // they are used in.
+  auto buffers_end = std::stable_partition(
+      execution_counters_end, instructions.end(), IsCreateBuffer());
+  for (auto itr = parameters_end; itr != buffers_end; ++itr) {
+    HloInstruction* inst = *itr;
+    result[inst] = get_stage_from_users(inst);
+  }
+
   // Go through the remaining instructions and assign them to stages given their
   // operands. Note that we are visiting in post-order.
-  for (auto itr = execution_counters_end; itr != instructions.end(); ++itr) {
+  for (auto itr = buffers_end; itr != instructions.end(); ++itr) {
     HloInstruction* inst = *itr;
     // Only assign the stage if no other instruction assigned it for us.
     if (!result.contains(inst)) {

@@ -255,6 +255,8 @@ class PipelineOp : public XlaOpKernel {
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
+                                     &batch_serialization_iterations_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
     OP_REQUIRES_OK(
@@ -349,6 +351,13 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
                             std::to_string(pipeline_depth_)));
+    // Set the batch serialization iterations.
+    OP_REQUIRES_OK(
+        ctx,
+        builder->SetInstructionFrontendAttribute(
+            outputs,
+            FrontendAttributeId_Name(PIPELINE_BATCH_SERIALIZATION_ITERATIONS),
+            std::to_string(batch_serialization_iterations_)));
     // Set the repeat count.
     OP_REQUIRES_OK(ctx,
                    builder->SetInstructionFrontendAttribute(
@@ -391,6 +400,7 @@ class PipelineOp : public XlaOpKernel {
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
   int64 pipeline_depth_;
+  int64 batch_serialization_iterations_;
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;

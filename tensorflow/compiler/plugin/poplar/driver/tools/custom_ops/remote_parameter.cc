@@ -199,5 +199,16 @@ std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
   return absl::make_unique<HloCreateBuffer>(shape, is_remote);
 }
 
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloCreateBufferFactoryFunc(
+    HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(bool is_remote,
+                      attribute_map.GetAttributeAsBool("is_remote"));
+  return CreateHloCreateBuffer(call->shape(), is_remote);
+}
+static HloPoplarInstructionFactory create_buffer_factory(
+    PoplarOp::CreateBuffer, HloCreateBufferFactoryFunc);
+}  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

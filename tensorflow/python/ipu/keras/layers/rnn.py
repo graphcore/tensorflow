@@ -211,9 +211,15 @@ class _PopnnRNN(Layer):
     if not training:
       return inputs
 
+    # Apply the same dropout mask across the sequence - this function is called
+    # when the inputs is shaped as [S, B, N].
+    noise_shape = inputs.get_shape().as_list()
+    noise_shape[0] = 1
+
     return rand_ops.dropout(inputs,
                             seed=self._dropout_seed,
                             rate=self._dropout,
+                            noise_shape=noise_shape,
                             name=self.name + "_dropout")
 
 

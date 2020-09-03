@@ -37,6 +37,9 @@ enum FrontendAttributeId {
   ML_TYPE = 10;
   // Used to set Poplar OptionFlags of an instruction.
   OPTION_FLAGS = 11;
+  // The number of times a loop executes to compute a batch on each pipeline
+  // stage execution.
+  PIPELINE_BATCH_SERIALIZATION_ITERATIONS = 12;
 };
 
 enum StochasticRounding {
@@ -110,8 +113,9 @@ message PoplarBackendConfig {
       };
 
       int64 pipeline_depth = 1;
-      int64 repeat_count = 2;
-      Schedule schedule = 3;
+      int64 batch_serialization_iterations = 2;
+      int64 repeat_count = 3;
+      Schedule schedule = 4;
     }
 
     message CallConfig {

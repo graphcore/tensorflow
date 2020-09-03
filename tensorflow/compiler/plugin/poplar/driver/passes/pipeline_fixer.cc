@@ -586,7 +586,8 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
   return Status::OK();
 }
 
-StatusOr<bool> PipelineFixer::FixConstantGradients() {
+StatusOr<bool> PipelineFixer::FixConstantGradients(
+    int64 batch_serialization_iterations) {
   if (!stages_.resource_update) {
     return false;
   }
@@ -619,11 +620,12 @@ StatusOr<bool> PipelineFixer::FixConstantGradients() {
           lhs->ToString().c_str());
     }
     HloInstruction* rhs = sink_input->mutable_operand(1);
-    VLOG(3) << "Replacing an accumulated constant gradient with a constnat.";
-    const int32 mutliplier = sink->MiniBatchesToAccumulate();
+    VLOG(3) << "Replacing an accumulated constant gradient with a constant.";
+    const int32 multiplier =
+        sink->MiniBatchesToAccumulate() * batch_serialization_iterations;
     // Create the constant for the gradient accumulation.
     Literal literal(ShapeUtil::MakeShape(S32, operand->shape().dimensions()));
-    literal.PopulateWithValue(mutliplier);
+    literal.PopulateWithValue(multiplier);
     HloInstruction* const_multiplier = pipeline_comp->AddInstruction(
         HloInstruction::CreateConstant(std::move(literal)));
     // Convert it to the right type.
@@ -817,7 +819,9 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   // Run the lowering on pipeline stages.
   TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
   // Run the fixing for constant gradients.
-  TF_RETURN_IF_ERROR(FixConstantGradients().status());
+  TF_RETURN_IF_ERROR(
+      FixConstantGradients(GetPipelineBatchSerializationIterations(pipeline_op))
+          .status());
   // Run the lowering on the resource update.
   TF_RETURN_IF_ERROR(LowerResourceUpdateInputs().status());
   // Tidy again.

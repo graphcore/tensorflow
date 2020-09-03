@@ -39,10 +39,9 @@ class ExecutionCounterOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::Tensor counter, GetExecutionCounter(res, inst));
 
     // Create a copy to prevent modification of the counter itself.
-    auto counterCopy = poputil::duplicate(
+    auto counter_copy = poputil::duplicate(
         graph, counter, seq, GetDebugName(inst) + "/ExecutionCounterCopy");
-
-    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, counterCopy));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, counter_copy));
 
     return seq;
   }
