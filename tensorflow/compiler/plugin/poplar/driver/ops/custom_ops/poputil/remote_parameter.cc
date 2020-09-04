@@ -50,10 +50,10 @@ class RemoteParameterLoadOp : public PoplarOpDef {
 
     for (int64 i = 0; i < num_inputs; ++i) {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
-
+      const Shape& shape = shapes[i];
       TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AddTensor(shard_graph, TensorLocation{inst, i},
-                                    shapes[i], res, tensor_map));
+                          AddTensor(shard_graph, TensorLocation{inst, i}, shape,
+                                    res, tensor_map));
 
       if (!UseSyntheticData()) {
         TensorOrRemoteBufferVector inputs =
@@ -66,7 +66,7 @@ class RemoteParameterLoadOp : public PoplarOpDef {
       } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
         // Initialize the tensor to a constant value.
         auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(output_shape));
+        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
         TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
       }
 
