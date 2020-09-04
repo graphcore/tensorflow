@@ -442,10 +442,11 @@ class PopnnLSTM(_PopnnRNN):
     if self.unit_forget_bias:
 
       def bias_initializer(_, *args, **kwargs):
-        # Forget gate is the first slice.
+        # Forget gate is the second slice.
         init = K.concatenate([
+            self._bias_initializer((1, self.num_units), *args, **kwargs),
             initializers.Ones()((1, self.num_units), *args, **kwargs),
-            self._bias_initializer((3, self.num_units), *args, **kwargs),
+            self._bias_initializer((2, self.num_units), *args, **kwargs),
         ],
                              axis=0)
         return array_ops.reshape(init, self.canonical_bias_shapes)
