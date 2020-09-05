@@ -31,8 +31,8 @@ namespace poplarplugin {
  */
 class HloRemoteParameterLoad : public HloPoplarInstruction {
  public:
-  HloRemoteParameterLoad(const Shape& shape,
-                         absl::Span<HloInstruction* const> rbuffers);
+  explicit HloRemoteParameterLoad(absl::Span<HloInstruction* const> rbuffers,
+                                  uint64 replication_factor = 1);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -42,18 +42,22 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
+  uint64 GetReplicationFactor() const { return replication_factor_; }
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
+  uint64 replication_factor_ = 1;
+
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
-    HloInstruction* const rbuffer);
+    absl::Span<HloInstruction* const> rbuffers, uint64 replication_factor = 1);
 
 /**
  * HloRemoteParameterStore represents a write to a variable stored in remote
@@ -62,8 +66,8 @@ std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
 class HloRemoteParameterStore : public HloPoplarInstruction {
  public:
   explicit HloRemoteParameterStore(
-      const xla::Shape& shape,
-      absl::Span<HloInstruction* const> rbuffers_and_values);
+      absl::Span<HloInstruction* const> rbuffers_and_values,
+      uint64 replication_factor = 1);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -75,19 +79,23 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
 
   absl::Span<HloInstruction* const> RemoteBuffers() const;
   absl::Span<HloInstruction* const> ValuesToStore() const;
+  uint64 GetReplicationFactor() const { return replication_factor_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
+  uint64 replication_factor_ = 1;
+
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
-    HloInstruction* const rbuffer, HloInstruction* const value);
+    absl::Span<HloInstruction* const> rbuffers_and_values,
+    uint64 replication_factor = 1);
 
 // HloCreateBuffer represents a creation of a buffer, where the buffer can be
 // stored in either device memory or remote memory.

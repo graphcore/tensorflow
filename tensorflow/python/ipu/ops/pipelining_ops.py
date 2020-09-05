@@ -168,6 +168,7 @@ def pipeline(computational_stages,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
              offload_weight_update_variables=True,
+             replicated_optimizer_state_sharding=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -391,6 +392,11 @@ def pipeline(computational_stages,
       memory can reduce maximum memory liveness, but can also increase the
       computation time of the weight update. Note that this option has no effect
       for inference only pipelines.
+    replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
+      offloaded (for example the accumulator variable when using the
+      `tf.MomentumOptimizer`), will be partitioned across the replicas. This
+      can exploit the additional bandwidth of the IPU-Links to improve overall
+      throughput.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -482,6 +488,9 @@ def pipeline(computational_stages,
     raise NotImplementedError(
         "When using batch serialization, all the pipeline stages need to be "
         "mapped to a single IPU.")
+
+  if replicated_optimizer_state_sharding is None:
+    replicated_optimizer_state_sharding = offload_weight_update_variables
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -622,6 +631,8 @@ def pipeline(computational_stages,
             Tout=func_graph.output_types,
             output_shapes=func_graph.output_shapes,
             offload_weight_update_variables=offload_weight_update_variables,
+            replicated_optimizer_state_sharding=
+            replicated_optimizer_state_sharding,
             num_batches_to_accumulate=pipeline_depth)
 
     if not isinstance(outputs, ops.Operation):

@@ -43,6 +43,9 @@ void TensorMaps::AddTensorMapForComputation(const std::string& computation_name,
 
 Status TensorMap::AddOutputTensor(const HloInstruction* inst,
                                   int64 output_index, poplar::Tensor tensor) {
+  VLOG(2) << "Adding output tensor for instruction " << inst->name()
+          << " at output index " << output_index;
+
   TensorLocation location(inst, output_index);
   auto it = _map.find(location);
   if (it != _map.end()) {
@@ -58,15 +61,84 @@ Status TensorMap::AddOutputTensor(const HloInstruction* inst,
 Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
                                         int64 output_index,
                                         poplar::RemoteBuffer rbuffer) {
+  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer, false,
+                                   absl::nullopt);
+}
+
+Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
+                                        int64 output_index,
+                                        poplar::RemoteBuffer rbuffer,
+                                        bool is_replica_partitioned) {
+  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer,
+                                   is_replica_partitioned, absl::nullopt);
+}
+
+Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
+                                        int64 output_index,
+                                        poplar::RemoteBuffer rbuffer,
+                                        int64 slice_dimension) {
+  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer, false,
+                                   slice_dimension);
+}
+
+Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
+                                        int64 output_index,
+                                        poplar::RemoteBuffer rbuffer,
+                                        bool is_replica_partitioned,
+                                        int64 slice_dimension) {
+  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer,
+                                   is_replica_partitioned, slice_dimension);
+}
+
+Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
+                            TensorOrRemoteBuffer torb) {
+  VLOG(1) << "Adding output for instruction " << inst->name()
+          << " at output index " << output_index;
+
   TensorLocation location(inst, output_index);
   auto it = _map.find(location);
   if (it != _map.end()) {
     return tensorflow::errors::Unknown(
-        StrCat("[Poplar] Output Tensor ", location.flattened_output_tuple_index,
+        StrCat("[Poplar] Output ", location.flattened_output_tuple_index,
                " for ", GetDebugName(inst), " already exists"));
   }
-  _map[location].tensor = rbuffer;
+
+  if (!torb.IsTensor() && !torb.IsRemoteBuffer()) {
+    return tensorflow::errors::Unknown(StrCat(
+        "[Poplar] Output ", location.flattened_output_tuple_index, " for ",
+        GetDebugName(inst), " is neither a tensor or a remote buffer."));
+  }
+
+  _map[location].tensor = torb;
   _map[location].name = inst->metadata().op_name();
+  return Status::OK();
+}
+
+Status TensorMap::AddOutputRemoteBufferImpl(
+    const HloInstruction* inst, int64 output_index,
+    poplar::RemoteBuffer rbuffer, bool is_replica_partitioned,
+    absl::optional<int64> slice_dimension) {
+  VLOG(2) << "Adding output remote buffer for instruction " << inst->name()
+          << " at output index " << output_index;
+
+  TensorLocation location(inst, output_index);
+  auto it = _map.find(location);
+  if (it != _map.end()) {
+    return tensorflow::errors::Unknown(StrCat(
+        "[Poplar] Output RemoteBuffer ", location.flattened_output_tuple_index,
+        " for ", GetDebugName(inst), " already exists"));
+  }
+  if (slice_dimension) {
+    return tensorflow::errors::Unknown(StrCat(
+        "[Poplar] Output RemoteBuffer ", location.flattened_output_tuple_index,
+        " for ", GetDebugName(inst),
+        " has a slice dimension, but this is not currently supported."));
+  }
+
+  _map[location].tensor =
+      TensorOrRemoteBuffer(rbuffer, is_replica_partitioned, slice_dimension);
+  _map[location].name = inst->metadata().op_name();
+
   return Status::OK();
 }
 
@@ -96,6 +168,7 @@ TensorOrRemoteBufferVector TensorMap::FindInstructionOutputs(
   absl::c_transform(
       tensor_vector, std::back_inserter(outputs),
       [](const NamedTensorLocation& value) { return value.tensor; });
+
   return outputs;
 }
 

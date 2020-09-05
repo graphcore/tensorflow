@@ -1382,8 +1382,7 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     // Set the outputs.
     const TensorOrRemoteBufferVector& pipeline_outputs = visitor.outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-      poplar::Tensor output = pipeline_outputs[i];
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
+      TF_CHECK_OK(AddOutput(tensor_map, inst, i, pipeline_outputs[i]));
     }
   } else {
     ReusablePipelineStageVisitor* reusable_visitor =
@@ -1418,7 +1417,7 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     const TensorOrRemoteBufferVector& pipeline_outputs =
         forward_stage_visitor->outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+      TF_CHECK_OK(AddOutput(tensor_map, inst, i, pipeline_outputs[i]));
     }
   }
   return seq;
