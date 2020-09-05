@@ -1045,15 +1045,109 @@ class IPUModel(_IpuModelBase):
     self.input_names = [layer.name for layer in self._input_layers]
     self._set_output_names()
 
+    self._create_post_order()
+
   def _get_output_loss_metrics(self):
     return self._loss_metrics
 
+  def _create_post_order(self):
+    self._post_order_node_execution = []
+    # Set of reference tensors which were computed.
+    computed_set = set()
+
+    # Execute input layers first.
+    for op, layer in zip(self.inputs, self._input_layers):
+      assert len(layer.inbound_nodes) == 1
+      self._post_order_node_execution.append(layer.inbound_nodes[0])
+      computed_set.add(str(id(op)))
+
+    depth_keys = list(self._nodes_by_depth.keys())
+    depth_keys.sort(reverse=True)
+    # Remove the input layers as they have already been computed.
+    depth_keys = depth_keys[1:]
+
+    for depth in depth_keys:
+      nodes = self._nodes_by_depth[depth]
+      for node in nodes:
+        # Check all the node inputs have been executed.
+        if all(
+            str(id(tensor)) in computed_set
+            for tensor in nest.flatten(node.input_tensors)):
+
+          self._post_order_node_execution.append(node)
+          # Update computed_set.
+          computed_set.update(
+              [str(id(x)) for x in nest.flatten(node.output_tensors)])
+
+    assert len(self._post_order_node_execution) == len(self._network_nodes)
+
+  def _execute_layer_node(self, node, training, tensor_dict):
+    convert_kwargs_to_constants = True
+    # This is always a single layer, never a list.
+    layer = node.outbound_layer
+
+    # Call layer (reapplying ops to new inputs).
+    computed_tensors = nest.map_structure(lambda t: tensor_dict[str(id(t))],
+                                          node.input_tensors)
+
+    # Ensure `training` arg propagation if applicable.
+    kwargs = copy.copy(node.arguments) if node.arguments else {}
+    if convert_kwargs_to_constants:
+      kwargs = network._map_tensors_to_constants(kwargs)  # pylint: disable=protected-access
+
+    argspec = self._layer_call_argspecs[layer].args
+    if 'training' in argspec:
+      kwargs.setdefault('training', training)
+      if (type(kwargs['training']) is ops.Tensor and  # pylint: disable=unidiomatic-typecheck
+          any([
+              kwargs['training'] is x
+              for x in backend._GRAPH_LEARNING_PHASES.values()  # pylint: disable=protected-access
+          ])):
+        kwargs['training'] = training  # Materialize placeholder.
+
+    # Map Keras tensors in kwargs to their computed value.
+    def _map_tensor_if_from_keras_layer(t):
+      if isinstance(t, ops.Tensor) and hasattr(t, '_keras_history'):
+        t_id = str(id(t))
+        return tensor_dict[t_id]
+      return t
+
+    kwargs = nest.map_structure(_map_tensor_if_from_keras_layer, kwargs)
+
+    # Compute outputs.
+    output_tensors = layer(computed_tensors, **kwargs)
+
+    # Update tensor_dict.
+    for x, y in zip(nest.flatten(node.output_tensors),
+                    nest.flatten(output_tensors)):
+      tensor_dict[str(id(x))] = y
+
+  def _get_output_tensors(self, tensor_dict):
+    output_tensors = []
+    for output_layer, node_index, tensor_index in self._output_coordinates:
+      # Map the output node tensor to an output in the graph.
+      output = output_layer.get_output_at(node_index)
+      if isinstance(output, list):
+        output = output[tensor_index]
+      else:
+        assert tensor_index == 0
+
+      assert str(
+          id(output)) in tensor_dict, 'Could not compute output ' + str(output)
+      tensor = tensor_dict[str(id(output))]
+      output_tensors.append(tensor)
+
+    output_tensors = nest.pack_sequence_as(self._nested_outputs,
+                                           output_tensors)
+    return output_tensors
+
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
-    def main_body(inputs, training):
+    training = mode == ModeKeys.TRAIN
+
+    def main_body(inputs):
       inputs = nest.flatten(inputs)
       assert len(inputs) == len(self.inputs)
-      convert_kwargs_to_constants = True
 
       # Dictionary mapping reference tensors to computed tensors.
       tensor_dict = {}
@@ -1070,79 +1164,15 @@ class IPUModel(_IpuModelBase):
                 're-called on a Tensor with incompatible shape {}.'.format(
                     op, op.shape, tensor.shape))
 
-      depth_keys = list(self._nodes_by_depth.keys())
-      depth_keys.sort(reverse=True)
-      # Remove the input layers as they have already been computed.
-      depth_keys = depth_keys[1:]
+      # Execute the remaining nodes.
+      for node in self._post_order_node_execution[len(inputs):]:
+        self._execute_layer_node(node, training, tensor_dict)
 
-      for depth in depth_keys:
-        nodes = self._nodes_by_depth[depth]
-        for node in nodes:
-          # This is always a single layer, never a list.
-          layer = node.outbound_layer
-
-          # Check we can execute the layer.
-          if all(
-              str(id(tensor)) in tensor_dict
-              for tensor in nest.flatten(node.input_tensors)):
-
-            # Call layer (reapplying ops to new inputs).
-            computed_tensors = nest.map_structure(
-                lambda t: tensor_dict[str(id(t))], node.input_tensors)
-
-            # Ensure `training` arg propagation if applicable.
-            kwargs = copy.copy(node.arguments) if node.arguments else {}
-            if convert_kwargs_to_constants:
-              kwargs = network._map_tensors_to_constants(kwargs)  # pylint: disable=protected-access
-
-            argspec = self._layer_call_argspecs[layer].args
-            if 'training' in argspec:
-              kwargs.setdefault('training', training)
-              if (type(kwargs['training']) is ops.Tensor and  # pylint: disable=unidiomatic-typecheck
-                  any([
-                      kwargs['training'] is x
-                      for x in backend._GRAPH_LEARNING_PHASES.values()  # pylint: disable=protected-access
-                  ])):
-                kwargs['training'] = training  # Materialize placeholder.
-
-            # Map Keras tensors in kwargs to their computed value.
-            def _map_tensor_if_from_keras_layer(t):
-              if isinstance(t, ops.Tensor) and hasattr(t, '_keras_history'):
-                t_id = str(id(t))
-                return tensor_dict[t_id]
-              return t
-
-            kwargs = nest.map_structure(_map_tensor_if_from_keras_layer,
-                                        kwargs)
-
-            # Compute outputs.
-            output_tensors = layer(computed_tensors, **kwargs)
-
-            # Update tensor_dict.
-            for x, y in zip(nest.flatten(node.output_tensors),
-                            nest.flatten(output_tensors)):
-              tensor_dict[str(id(x))] = y
-
-      output_tensors = []
-      for output_layer, node_index, tensor_index in self._output_coordinates:
-        # Map the output node tensor to an output in the graph.
-        output = output_layer.get_output_at(node_index)
-        if isinstance(output, list):
-          output = output[tensor_index]
-        else:
-          assert tensor_index == 0
-
-        assert str(id(
-            output)) in tensor_dict, 'Could not compute output ' + str(output)
-        tensor = tensor_dict[str(id(output))]
-        output_tensors.append(tensor)
-
-      output_tensors = nest.pack_sequence_as(self._nested_outputs,
-                                             output_tensors)
+      output_tensors = self._get_output_tensors(tensor_dict)
       return output_tensors
 
     def inference_body(*args):
-      outfeed_queue.enqueue(main_body(args, training=False))
+      outfeed_queue.enqueue(main_body(args))
       return []
 
     def training_body(*args):
@@ -1150,7 +1180,7 @@ class IPUModel(_IpuModelBase):
       inputs = list(args[:n_inputs])
       targets = list(args[n_inputs:])
 
-      x = main_body(inputs, training=mode == ModeKeys.TRAIN)
+      x = main_body(inputs)
       self._set_output_attrs(x)
 
       losses = self._add_loss(targets)
@@ -1160,7 +1190,7 @@ class IPUModel(_IpuModelBase):
         raise ValueError("Model must have at least one trainable parameter.")
 
       opt = self._get_optimizer()
-      if opt and mode == ModeKeys.TRAIN:
+      if opt and training:
         if self.accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
               opt, self.accumulation_count)

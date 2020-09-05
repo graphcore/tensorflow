@@ -218,7 +218,7 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     for stage_id in range(len(self.stages)):
       stages.append(partial(stage_fn, stage_id))
 
-    opt = optimizer_function if mode == ModeKeys.TRAIN else None
+    opt = optimizer_function if training else None
 
     pipeline = pipelining_ops.pipeline(stages,
                                        pipeline_depth=self.pipeline_depth,
