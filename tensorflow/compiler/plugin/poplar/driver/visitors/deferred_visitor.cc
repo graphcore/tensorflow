@@ -219,7 +219,7 @@ DeferredVisitor::DeferredVisitor(
       used_tensors_(callsite_inputs.size()),
       allocated_tensors_(callsite_inputs.size()),
       mark_all_input_tensors_as_used_(mark_all_input_tensors_as_used),
-      allocate_all_input_tensors_(true) {
+      allocate_all_input_tensors_(allocate_all_input_tensors) {
   for (size_t i = 0; i < callsite_inputs.size(); i++) {
     computation_inputs_[i].resize(callsite_inputs[i].size());
     used_tensors_[i].resize(callsite_inputs[i].size());
@@ -355,7 +355,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     return tensor;
   };
 
-  if (callsite_tensor->IsRemoteBuffer()) {
+  if (callsite_tensor && callsite_tensor->IsRemoteBuffer()) {
     // Add the remote buffer to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] =
