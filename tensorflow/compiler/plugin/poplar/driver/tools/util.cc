@@ -428,6 +428,13 @@ bool GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
   return cfg.call_config().resource_update_config().offload_variables();
 }
 
+bool GetResourceUpdatePartitionOffloadedVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .resource_update_config()
+      .partition_offloaded_variables();
+}
+
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
     const HloInstruction* inst, const int64 operand_idx) {
   const HloInstruction* operand = inst->operand(operand_idx);

@@ -311,6 +311,29 @@ bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res) {
          IsRemoteParameter(inst->parameter_number(), res);
 }
 
+bool IsReplicaPartitioned(int64 parameter_number,
+                          const RemoteParameterInfos& remote_parameter_infos) {
+  auto itr = remote_parameter_infos.find(RemoteParameterInfo{parameter_number});
+
+  // Assume unknown parameters are not partitioned.
+  if (itr == remote_parameter_infos.end()) {
+    return false;
+  }
+
+  return itr->is_replica_partitioned;
+}
+
+bool IsReplicaPartitioned(int64 parameter_number,
+                          const CompilerResources& res) {
+  return IsReplicaPartitioned(parameter_number,
+                              res.annotations.remote_parameter_infos);
+}
+
+bool IsReplicaPartitioned(HloInstruction* inst, const CompilerResources& res) {
+  return IsInstructionInEntryComputation(inst) &&
+         IsReplicaPartitioned(inst->parameter_number(), res);
+}
+
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res) {
   auto call_sites =
       res.module_call_graph->GetNode(inst->parent()).caller_callsites();

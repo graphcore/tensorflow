@@ -145,6 +145,7 @@ int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 bool GetResourceUpdateOffloadVariables(const HloInstruction*);
+bool GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 

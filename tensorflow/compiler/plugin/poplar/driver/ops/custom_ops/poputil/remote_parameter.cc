@@ -38,6 +38,7 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    VLOG(1) << "Processing " << GetDebugName(inst);
     const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
     const int64 num_inputs = inst->operand_count();
 
@@ -45,6 +46,12 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                             ? output_shape.tuple_shapes()
                             : std::vector<xla::Shape>{output_shape};
     CHECK_EQ(shapes.size(), num_inputs);
+
+    if (load_inst->GetReplicationFactor() != res.replication_factor) {
+      return xla::FailedPrecondition(
+          "RemoteBuffer load instruction replication factor doesn't match "
+          "graph replication factor.");
+    }
 
     poplar::program::Sequence seq;
 
@@ -60,6 +67,13 @@ class RemoteParameterLoadOp : public PoplarOpDef {
             FindInstructionInputs(tensor_map, res, inst, i, seq, true);
 
         CHECK_EQ(inputs.size(), 1);
+
+        if (!inputs[0].IsRemoteBuffer()) {
+          return xla::FailedPrecondition(
+              "Expected a Poplar RemoteBuffer as operand %d to %s", i,
+              GetDebugName(inst));
+        }
+
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
 
         seq.add(poplar::program::Copy(remote_buffer, tensor));
@@ -84,6 +98,8 @@ class RemoteParameterStoreOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    VLOG(1) << "Processing " << GetDebugName(inst);
+
     const int64 num_inputs = inst->operand_count();
     CHECK_EQ(num_inputs % 2, 0);
     const int64 num_outputs = num_inputs / 2;
@@ -93,26 +109,38 @@ class RemoteParameterStoreOp : public PoplarOpDef {
                             : std::vector<xla::Shape>{output_shape};
     CHECK_EQ(shapes.size(), num_outputs);
 
-    poplar::program::Sequence seq;
+    const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
 
+    if (store_inst->GetReplicationFactor() != res.replication_factor) {
+      return xla::FailedPrecondition(
+          "RemoteBuffer store instruction replication factor doesn't match "
+          "graph replication factor.");
+    }
+
+    poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
                         FindInplaceOutputs(tensor_map, res, inst, seq));
     CHECK_EQ(outputs.size(), num_outputs);
 
     for (int64 i = 0; i < num_outputs; ++i) {
       CHECK_EQ(outputs[i].size(), 1);
+
+      if (!outputs[i][0].IsRemoteBuffer()) {
+        return xla::FailedPrecondition(
+            "Expected a Poplar RemoteBuffer as operand %d to %s", i,
+            GetDebugName(inst));
+      }
+
       poplar::RemoteBuffer remote_buffer = outputs[i][0].AsRemoteBuffer();
 
       if (!UseSyntheticData()) {
-        const int64 input_value_index = num_outputs + i;
-
         TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
                             FindInstructionInput(tensor_map, res, inst,
-                                                 input_value_index, seq));
+                                                 outputs.size() + i, seq));
 
         seq.add(poplar::program::Copy(tensor, remote_buffer));
       }
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, remote_buffer));
+      TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i][0]));
     }
 
     return seq;

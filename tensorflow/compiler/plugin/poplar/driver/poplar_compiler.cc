@@ -1126,7 +1126,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported,
-        resources.information.minimum_remote_tensor_size);
+        resources.information.minimum_remote_tensor_size,
+        resources.replication_factor);
     pipeline.AddPass<PipelineStageMerger>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
     AddPipelineOptimizerPass(pipeline);

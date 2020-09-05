@@ -1341,6 +1341,7 @@ StatusOr<poplar::Tensor> BroadcastTensor(const poplar::Tensor& in,
 
 bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
                                 const xla::Shape& shape) {
+  VLOG(5) << "Checking Tensor shape";
   if (tensor.rank() != shape.rank()) return false;
   for (size_t d = 0; d < tensor.rank(); d++) {
     if (tensor.dim(d) != (unsigned)shape.dimensions(d)) return false;
@@ -1351,10 +1352,37 @@ bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
 
 bool PoplarShapeMatchesXLAShape(poplar::RemoteBuffer remote_buffer,
                                 const xla::Shape& shape) {
+  VLOG(5) << "Checking RemoteBuffer shape";
   std::size_t element_count = ShapeUtil::ElementsIn(shape);
 
   return (remote_buffer.numElements() * remote_buffer.getRepeats()) ==
          element_count;
+}
+
+bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
+                                const xla::Shape& shape,
+                                CompilerResources& resources) {
+  VLOG(5) << "Checking TensorOrRemoteBuffer shape";
+  if (torb.IsTensor()) {
+    return PoplarShapeMatchesXLAShape(torb.AsTensor(), shape);
+  }
+
+  poplar::RemoteBuffer remote_buffer = torb.AsRemoteBuffer();
+
+  std::size_t element_count =
+      remote_buffer.numElements() * remote_buffer.getRepeats();
+
+  if (torb.IsReplicaPartitioned()) {
+    element_count *= resources.replication_factor;
+
+    // Check the remote buffer shape is correct, allowing for padding.
+    return element_count >= ShapeUtil::ElementsIn(shape) &&
+           (ShapeUtil::ElementsIn(shape) + resources.replication_factor) >
+               element_count;
+  }
+
+  // Check the remote buffer shape is correct.
+  return PoplarShapeMatchesXLAShape(remote_buffer, shape);
 }
 
 std::pair<int64, int64> FindTupleInputIndices(const HloInstruction* tuple,
@@ -1575,8 +1603,8 @@ poplar::Tensor GetTensorForInplaceOp(
   return tensor;
 }
 
-StatusOr<poplar::RemoteBuffer> GetRemoteBufferForInplaceOp(
-    poplar::RemoteBuffer remote_buffer, CompilerResources& res,
+StatusOr<TensorOrRemoteBuffer> GetRemoteBufferForInplaceOp(
+    TensorOrRemoteBuffer remote_buffer, CompilerResources& res,
     const HloInstruction* inst, int64 operand_index, uint64 operand_tuple_idx,
     poplar::program::Sequence& seq, bool is_lowered_inplace) {
   // We need to add a copy before an inplace op if inst is not marked as inplace
@@ -1662,12 +1690,11 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
             t, res, inst, inplace_indexes[i], tuple_idx, seq, is_still_inplace,
             parallel_writeable_output);
       } else if (tensors[i][tuple_idx].IsRemoteBuffer()) {
-        poplar::RemoteBuffer rb = tensors[i][tuple_idx];
-
         TF_ASSIGN_OR_RETURN(
             tensors[i][tuple_idx],
-            GetRemoteBufferForInplaceOp(rb, res, inst, inplace_indexes[i],
-                                        tuple_idx, seq, is_still_inplace));
+            GetRemoteBufferForInplaceOp(tensors[i][tuple_idx], res, inst,
+                                        inplace_indexes[i], tuple_idx, seq,
+                                        is_still_inplace));
       } else {
         return xla::FailedPrecondition(
             "Unknown tensor type in instruction `%s` at %d:%d, expected a "
@@ -1680,6 +1707,11 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
   return tensors;
 }
 
+Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
+                 const TensorOrRemoteBuffer& torb) {
+  return map.AddOutput(inst, n, torb);
+}
+
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor) {
   return map.AddOutputTensor(inst, n, tensor);
@@ -1688,6 +1720,26 @@ Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
                              int64 n, poplar::RemoteBuffer rbuffer) {
   return map.AddOutputRemoteBuffer(inst, n, rbuffer);
+}
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             bool is_replica_partitioned) {
+  return map.AddOutputRemoteBuffer(inst, n, rbuffer, is_replica_partitioned);
+}
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             int64 slice_dimension) {
+  return map.AddOutputRemoteBuffer(inst, n, rbuffer, slice_dimension);
+}
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             bool is_replica_partitioned,
+                             int64 slice_dimension) {
+  return map.AddOutputRemoteBuffer(inst, n, rbuffer, is_replica_partitioned,
+                                   slice_dimension);
 }
 
 }  // namespace poplarplugin

@@ -344,33 +344,59 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
                                       {tuple_index, tuple_index + 1}));
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
-    if (out.IsTensor() && !PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          Join(out.AsTensor().shape(), ","), ") and XLA (",
-          Join(shape.dimensions(), ","), ") shapes.");
-    }
-    if (out.IsRemoteBuffer() &&
-        !PoplarShapeMatchesXLAShape(out.AsRemoteBuffer(), shape)) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsRemoteBuffer().numElements() *
-              out.AsRemoteBuffer().getRepeats(),
-          ") and XLA (", Join(shape.dimensions(), ","), ") shapes.");
-    }
+
     TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
-    if (out.IsTensor() && expected_type != out.AsTensor().elementType()) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsTensor().elementType().toString().cloneAsString(),
-          ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+    if (out.IsTensor()) {
+      // Check shape
+      if (!PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(), " has mismatched Poplar (",
+            Join(out.AsTensor().shape(), ","), ") and XLA (",
+            Join(shape.dimensions(), ","), ") shapes. ", __FUNCTION__, " ",
+            __LINE__);
+      }
+
+      // Check type
+      if (expected_type != out.AsTensor().elementType()) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(), " has mismatched Poplar (",
+            out.AsTensor().elementType().toString().cloneAsString(),
+            ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+      }
     }
-    if (out.IsRemoteBuffer() &&
-        expected_type != out.AsRemoteBuffer().elementType()) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsRemoteBuffer().elementType().toString().cloneAsString(),
-          ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+
+    if (out.IsRemoteBuffer()) {
+      // Check shape of non-replicated case
+      if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
+          ((resources_.replication_factor < 2) ||
+           !out.IsReplicaPartitioned())) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(), " has mismatched Poplar (",
+            out.AsRemoteBuffer().numElements() *
+                out.AsRemoteBuffer().getRepeats(),
+            ") and XLA (", Join(shape.dimensions(), ","), ") shapes. ",
+            __FUNCTION__, " ", __LINE__);
+      }
+
+      // Check shape of replicated case
+      if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
+          (resources_.replication_factor > 1) && out.IsReplicaPartitioned()) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(), " has mismatched Poplar (",
+            out.AsRemoteBuffer().numElements() *
+                out.AsRemoteBuffer().getRepeats() *
+                resources_.replication_factor,
+            ") and XLA (", Join(shape.dimensions(), ","),
+            ") replica partitioned shapes. ", __FUNCTION__, " ", __LINE__);
+      }
+
+      // Check type
+      if (expected_type != out.AsRemoteBuffer().elementType()) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(), " has mismatched Poplar (",
+            out.AsRemoteBuffer().elementType().toString().cloneAsString(),
+            ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+      }
     }
   }
   return Status::OK();

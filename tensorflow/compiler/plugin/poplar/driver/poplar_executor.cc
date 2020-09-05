@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <string.h>
 
+#include <algorithm>
 #include <deque>
 #include <fstream>
 #include <memory>
@@ -2333,9 +2334,26 @@ Status PoplarExecutor::MoveDeviceToHost() {
           // Note that only resource variables are on device, hence they must
           // have the input handle set too.
           CHECK(tc->input_handle.size());
-          const unsigned replica_id = 0;
-          current_engine_->copyFromRemoteBuffer(tc->input_handle, tc->data, 0,
-                                                replica_id);
+          // Pad the per-replica length up.
+          const std::size_t length =
+              4 * tensorflow::MathUtil::CeilOfRatio<int64>(
+                      tensorflow::MathUtil::CeilOfRatio<int64>(tc->size, 4),
+                      current_replication_factor_);
+          std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
+          // This is a remote parameter - copy it to the remote buffer for
+          // each replica.
+          tc->in_remote_memory = true;
+          for (int replica_id = 0; replica_id < current_replication_factor_;
+               ++replica_id) {
+            const std::size_t offset = replica_id * length;
+            const std::size_t replica_length =
+                std::min(length, tc->size - offset);
+
+            current_engine_->copyFromRemoteBuffer(tc->input_handle,
+                                                  buffer.get(), 0, replica_id);
+
+            std::memcpy(tc->data + offset, buffer.get(), replica_length);
+          }
         } else {
           ConnectReplicatedDeviceToHost(tc->output_handle, tc);
         }
@@ -2397,11 +2415,30 @@ Status PoplarExecutor::MoveHostToDevice() {
         buf = PreProcessBuffer(arg.second);
 
         if (arg.second.remote_parameter) {
+          // Pad the per-replica length up.
+          const std::size_t length =
+              4 * tensorflow::MathUtil::CeilOfRatio<int64>(
+                      tensorflow::MathUtil::CeilOfRatio<int64>(tc->size, 4),
+                      current_replication_factor_);
+
+          std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
           // This is a remote parameter - copy it to the remote buffer for
           // each replica.
           tc->in_remote_memory = true;
           for (int replica_id = 0; replica_id < current_replication_factor_;
                ++replica_id) {
+            const std::size_t offset = replica_id * length;
+            const std::size_t replica_length =
+                std::min(length, tc->size - offset);
+
+            // Copy the replica-local region into the tmp buffer (with padding).
+            std::memcpy(buffer.get(), tc->data + offset, replica_length);
+
+            // Zero the padding
+            std::memset(buffer.get() + replica_length, 0,
+                        length - replica_length);
+
+            // Copy the padded buffer to the remote buffer.
             current_engine_->copyToRemoteBuffer(buf, arg.first, 0, replica_id);
           }
         } else {

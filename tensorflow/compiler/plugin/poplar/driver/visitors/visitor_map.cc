@@ -33,11 +33,7 @@ Status MapVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   for (uint64 t = 0; t < operands_[inst->parameter_number()].size(); t++) {
     auto& v = operands_[inst->parameter_number()];
-    if (v[t].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, t, v[t]));
-    } else if (v[t].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, t, v[t]));
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, t, v[t]));
   }
   return Status::OK();
 }

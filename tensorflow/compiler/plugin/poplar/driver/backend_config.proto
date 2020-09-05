@@ -40,6 +40,8 @@ enum FrontendAttributeId {
   // The number of times a loop executes to compute a batch on each pipeline
   // stage execution.
   PIPELINE_BATCH_SERIALIZATION_ITERATIONS = 12;
+  // Whether to partition offloaded variables across the replicas
+  PARTITION_OFFLOADED_VARIABLES = 13;
 };
 
 enum StochasticRounding {
@@ -127,6 +129,7 @@ message PoplarBackendConfig {
     message ResourceUpdateConfig {
       int64 num_batches_to_accumulate = 1;
       bool offload_variables = 2;
+      bool partition_offloaded_variables = 3;
     }
 
     Type type = 1;

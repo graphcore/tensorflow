@@ -21,6 +21,8 @@ limitations under the License.
  */
 
 #include <map>
+#include <poplar/DataStream.hpp>
+#include <poplar/Tensor.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,9 +32,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
 #include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/compiler/xla/statusor.h"
-
-#include <poplar/DataStream.hpp>
-#include <poplar/Tensor.hpp>
 
 namespace xla {
 class HloInstruction;
@@ -53,7 +52,7 @@ struct TensorOrRemoteBuffer {
    * This preserves the existing behaviour where we would always default
    * construct the tensor, because it could only be a tensor.
    */
-  TensorOrRemoteBuffer() : content_type(ContentType::Empty) {}
+  TensorOrRemoteBuffer() = default;
 
   /**
    * Construct with a poplar tensor.
@@ -64,8 +63,34 @@ struct TensorOrRemoteBuffer {
   /**
    * Construct with a poplar remote buffer.
    */
-  explicit TensorOrRemoteBuffer(poplar::RemoteBuffer rbuffer)
-      : content_type(ContentType::RemoteBuffer), remote_buffer(rbuffer) {}
+  explicit TensorOrRemoteBuffer(poplar::RemoteBuffer rbuffer,
+                                bool is_replica_partitioned,
+                                absl::optional<int64> slice_dimension)
+      : content_type(ContentType::RemoteBuffer),
+        remote_buffer(rbuffer),
+        is_replica_partitioned(is_replica_partitioned),
+        slice_dimension(slice_dimension) {}
+
+  /**
+   * Construct with a remote buffer or tensor.
+   */
+  TensorOrRemoteBuffer(const TensorOrRemoteBuffer& rhs) {
+    switch (rhs.content_type) {
+      case ContentType::Empty:
+        content_type = ContentType::Empty;
+        break;
+      case ContentType::Tensor:
+        content_type = ContentType::Tensor;
+        tensor = rhs.tensor;
+        break;
+      case ContentType::RemoteBuffer:
+        content_type = ContentType::RemoteBuffer;
+        remote_buffer = rhs.remote_buffer;
+        is_replica_partitioned = rhs.is_replica_partitioned;
+        slice_dimension = rhs.slice_dimension;
+        break;
+    }
+  }
 
   /**
    * Helper function to test whether a tensor is stored in the element.
@@ -79,11 +104,24 @@ struct TensorOrRemoteBuffer {
     return content_type == ContentType::RemoteBuffer;
   }
 
+  bool IsReplicaPartitioned() const {
+    return IsRemoteBuffer() && is_replica_partitioned;
+  }
+
+  absl::optional<int64> GetSliceDimension() const {
+    if (!IsRemoteBuffer()) {
+      return absl::nullopt;
+    }
+
+    return slice_dimension;
+  }
+
   /**
    * Helper functions to force the cast to a poplar tensor when it is
    * unambiguous.
    */
   poplar::Tensor AsTensor() const {
+    // VLOG(0) << (content_type == ContentType::Tensor);
     CHECK(content_type == ContentType::Tensor);
     return tensor;
   }
@@ -93,6 +131,7 @@ struct TensorOrRemoteBuffer {
    * unambiguous.
    */
   poplar::RemoteBuffer AsRemoteBuffer() const {
+    // VLOG(0) << (content_type == ContentType::RemoteBuffer);
     CHECK(content_type == ContentType::RemoteBuffer);
     return remote_buffer;
   }
@@ -115,6 +154,8 @@ struct TensorOrRemoteBuffer {
       case ContentType::RemoteBuffer:
         content_type = ContentType::RemoteBuffer;
         remote_buffer = rhs.remote_buffer;
+        is_replica_partitioned = rhs.is_replica_partitioned;
+        slice_dimension = rhs.slice_dimension;
         break;
     }
 
@@ -136,6 +177,8 @@ struct TensorOrRemoteBuffer {
   TensorOrRemoteBuffer& operator=(poplar::RemoteBuffer rbuffer) {
     content_type = ContentType::RemoteBuffer;
     remote_buffer = rbuffer;
+    is_replica_partitioned = false;
+    slice_dimension = absl::nullopt;
     return *this;
   }
 
@@ -166,9 +209,15 @@ struct TensorOrRemoteBuffer {
   poplar::Tensor tensor;
   poplar::RemoteBuffer remote_buffer;
 
+  /**
+   * Additional meta-data is stored here
+   */
+  bool is_replica_partitioned = false;
+  absl::optional<int64> slice_dimension = absl::nullopt;
+
   enum class ContentType { Empty, Tensor, RemoteBuffer };
 
-  ContentType content_type;
+  ContentType content_type = ContentType::Empty;
 };
 
 using TensorOrRemoteBufferVector = std::vector<TensorOrRemoteBuffer>;
@@ -218,6 +267,19 @@ class TensorMap {
                          poplar::Tensor tensor);
   Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
                                poplar::RemoteBuffer rbuffer);
+  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
+                               poplar::RemoteBuffer rbuffer,
+                               bool is_replica_partitioned);
+  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
+                               poplar::RemoteBuffer rbuffer,
+                               int64 slice_dimension);
+  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
+                               poplar::RemoteBuffer rbuffer,
+                               bool is_replica_partitioned,
+                               int64 slice_dimension);
+  Status AddOutput(const HloInstruction* inst, int64 output_index,
+                   TensorOrRemoteBuffer torb);
+
   Status UpdateTensor(TensorLocation key, poplar::Tensor tensor);
   poplar::Tensor GetTensor(TensorLocation key) const;
   poplar::Tensor FindTensorByName(const std::string& name,
@@ -242,6 +304,12 @@ class TensorMap {
 
  private:
   std::map<TensorLocation, NamedTensor> _map;
+
+  Status AddOutputRemoteBufferImpl(const HloInstruction* inst,
+                                   int64 output_index,
+                                   poplar::RemoteBuffer rbuffer,
+                                   bool is_replica_partitioned,
+                                   absl::optional<int64> slice_dimension);
 };
 
 struct ComputationTensorMap {
