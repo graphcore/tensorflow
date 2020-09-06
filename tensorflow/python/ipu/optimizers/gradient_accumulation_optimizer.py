@@ -216,6 +216,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
                opt,
                num_mini_batches,
                offload_weight_update_variables=True,
+               replicated_optimizer_state_sharding=None,
                name="CrossReplicaGradientAccumulationOptimizerV2"):
     """Construct a Cross Replica Gradient Accumulation Optimizer V2.
 
@@ -232,6 +233,11 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
         `Poplar remote buffers`. Offloading variables into remote memory can
         reduce maximum memory liveness, but can also increase the computation
         time of the weight update.
+      replicated_optimizer_state_sharding: If True, any any `tf.Variable` which
+        is offloaded will be partitioned across the replicas. A collective
+        all-gather will be inserted to restore the tensor on each replica.
+        If `None`, this value will match the value of
+        `offload_weight_update_variables`.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizerV2".
     """
@@ -244,7 +250,8 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
     # Internally we just wrap the optimizer in a GradientAccumulationOptimizer and CrossReplicaOptimizer.
     self._opt = GradientAccumulationOptimizerV2(
         cross_replica_optimizer.CrossReplicaOptimizer(opt), num_mini_batches,
-        offload_weight_update_variables, name)
+        offload_weight_update_variables, replicated_optimizer_state_sharding,
+        name)
 
   def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Compute gradients of "loss" for the variables in "var_list".
