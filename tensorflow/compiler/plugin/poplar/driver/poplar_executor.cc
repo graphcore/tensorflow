@@ -188,6 +188,7 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   hashable_config.mutable_profiling()->set_enable_poplar_reports_cbor(false);
   hashable_config.mutable_profiling()->set_report_directory(std::string());
   hashable_config.mutable_profiling()->set_max_report_size(0);
+  hashable_config.set_device_connection_type(IpuDeviceConnectionType::ALWAYS);
   hashable_config.mutable_device_config()->Clear();
 
   std::string config_proto_str;
