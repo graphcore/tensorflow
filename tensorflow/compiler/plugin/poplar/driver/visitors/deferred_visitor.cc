@@ -1245,7 +1245,7 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
       reallocate_inputs_info_[param_num]
                              [input_location.flattened_output_tuple_index];
 
-  if (callsite_tensor->IsRemoteBuffer()) {
+  if (callsite_tensor && callsite_tensor->IsRemoteBuffer()) {
     // Add the remote buffer to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] =
