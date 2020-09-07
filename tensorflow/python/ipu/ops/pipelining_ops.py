@@ -22,6 +22,7 @@ from enum import IntEnum
 
 from google.protobuf import json_format
 
+from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
@@ -167,7 +168,7 @@ def pipeline(computational_stages,
              forward_propagation_stages_poplar_options=None,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
-             offload_weight_update_variables=True,
+             offload_weight_update_variables=None,
              replicated_optimizer_state_sharding=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
@@ -382,7 +383,7 @@ def pipeline(computational_stages,
     weight_update_poplar_options: If provided, a PipelineStageOptions object
       which allows for fine grained control of the Poplar options for the
       weight update stage.
-    offload_weight_update_variables: If True, any `tf.Variable` which is
+    offload_weight_update_variables: When enabled, any `tf.Variable` which is
       only used by the weight update of the pipeline (for example the
       accumulator variable when using the `tf.MomentumOptimizer`), will be
       stored in the remote memory. During the weight update this variable will
@@ -390,8 +391,10 @@ def pipeline(computational_stages,
       after it has been updated. Requires the machine to be configured with
       support for `Poplar remote buffers`. Offloading variables into remote
       memory can reduce maximum memory liveness, but can also increase the
-      computation time of the weight update. Note that this option has no effect
-      for inference only pipelines.
+      computation time of the weight update.
+      When set to `None` the variables will be placed in either in-processor or
+      remote memory automatically based on the current best placement strategy.
+      Note that this option has no effect for inference only pipelines.
     replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
       offloaded (for example the accumulator variable when using the
       `tf.MomentumOptimizer`), will be partitioned across the replicas. This
@@ -489,8 +492,19 @@ def pipeline(computational_stages,
         "When using batch serialization, all the pipeline stages need to be "
         "mapped to a single IPU.")
 
-  if replicated_optimizer_state_sharding is None:
-    replicated_optimizer_state_sharding = offload_weight_update_variables
+  def bool_to_three_state(value, default):
+    if value is None:
+      return default
+    elif value:
+      return backend_config_pb2.ThreeState.Name(backend_config_pb2.STATE_ON)
+    return backend_config_pb2.ThreeState.Name(backend_config_pb2.STATE_OFF)
+
+  offload_weight_update_variables = bool_to_three_state(
+      offload_weight_update_variables,
+      backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_UNDEFINED))
+  replicated_optimizer_state_sharding = bool_to_three_state(
+      replicated_optimizer_state_sharding, offload_weight_update_variables)
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,

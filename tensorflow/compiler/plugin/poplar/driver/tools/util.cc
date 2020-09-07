@@ -423,12 +423,13 @@ int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction* inst) {
   return cfg.call_config().resource_update_config().num_batches_to_accumulate();
 }
 
-bool GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
+ThreeState GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().resource_update_config().offload_variables();
 }
 
-bool GetResourceUpdatePartitionOffloadedVariables(const HloInstruction* inst) {
+ThreeState GetResourceUpdatePartitionOffloadedVariables(
+    const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config()
       .resource_update_config()
