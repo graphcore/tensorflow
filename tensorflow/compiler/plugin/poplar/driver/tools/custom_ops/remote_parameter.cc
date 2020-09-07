@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -27,9 +28,79 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+namespace {
+Shape ComputePerReplicaLoadShape(Shape remote_buffer_shape,
+                                 uint64 replication_factor) {
+  if (replication_factor < 2) {
+    return remote_buffer_shape;
+  }
+
+  const int64 grain_size = 4 / ShapeUtil::ByteSizeOfPrimitiveType(
+                                   remote_buffer_shape.element_type());
+
+  // Pad the element count appropriately
+  const int64 element_count =
+      grain_size *
+      tensorflow::MathUtil::CeilOfRatio<int64>(
+          tensorflow::MathUtil::CeilOfRatio<int64>(
+              ShapeUtil::ElementsIn(remote_buffer_shape), grain_size),
+          replication_factor);
+
+  return ShapeUtil::MakeShape(remote_buffer_shape.element_type(),
+                              {element_count});
+}
+
+Shape ComputePerReplicaLoadShape(HloInstruction* remote_buffer,
+                                 uint64 replication_factor) {
+  return ComputePerReplicaLoadShape(remote_buffer->shape(), replication_factor);
+}
+
+Shape ComputePerReplicaLoadShape(absl::Span<HloInstruction* const> rbuffers,
+                                 uint64 replication_factor) {
+  // for a single input, create a non-tuple shape.
+  if (rbuffers.size() == 1) {
+    return ComputePerReplicaLoadShape(rbuffers[0], replication_factor);
+  }
+
+  std::vector<Shape> result_shape(rbuffers.size());
+
+  std::transform(rbuffers.begin(), rbuffers.end(), result_shape.begin(),
+                 [replication_factor](HloInstruction* const rbuffer) {
+                   return ComputePerReplicaLoadShape(rbuffer,
+                                                     replication_factor);
+                 });
+
+  return ShapeUtil::MakeTupleShape(result_shape);
+}
+
+Shape ComputePerReplicaStoreShape(
+    absl::Span<HloInstruction* const> rbuffers_and_values,
+    uint64 replication_factor) {
+  // for a single input, create a non-tuple shape.
+  if (rbuffers_and_values.size() == 2) {
+    return rbuffers_and_values[0]->shape();
+  }
+
+  rbuffers_and_values =
+      rbuffers_and_values.subspan(0, rbuffers_and_values.size() / 2);
+
+  std::vector<Shape> result_shape(rbuffers_and_values.size());
+  std::transform(rbuffers_and_values.begin(), rbuffers_and_values.end(),
+                 result_shape.begin(),
+                 [replication_factor](HloInstruction* const rbuffer) {
+                   return rbuffer->shape();
+                 });
+
+  return ShapeUtil::MakeTupleShape(result_shape);
+}
+}  // namespace
+
 HloRemoteParameterLoad::HloRemoteParameterLoad(
-    const Shape& shape, absl::Span<HloInstruction* const> rbuffers)
-    : HloPoplarInstruction(shape, rbuffers, PoplarOp::RemoteParameterLoad) {}
+    absl::Span<HloInstruction* const> rbuffers, uint64 replication_factor)
+    : HloPoplarInstruction(
+          ComputePerReplicaLoadShape(rbuffers, replication_factor), rbuffers,
+          PoplarOp::RemoteParameterLoad, replication_factor),
+      replication_factor_(replication_factor) {}
 
 absl::flat_hash_set<int64> HloRemoteParameterLoad::AllocatingIndices() const {
   return {};
@@ -48,26 +119,29 @@ std::unique_ptr<HloInstruction>
 HloRemoteParameterLoad::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return absl::make_unique<HloRemoteParameterLoad>(shape, operands);
+  return CreateHloRemoteParameterLoad(operands, replication_factor_);
 }
 
 std::vector<std::string>
 HloRemoteParameterLoad::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  return {"replication_factor=" + std::to_string(replication_factor_)};
 }
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
-    HloInstruction* const rbuffer) {
-  return absl::make_unique<HloRemoteParameterLoad>(
-      rbuffer->shape(), std::vector<HloInstruction*>{rbuffer});
+    absl::Span<HloInstruction* const> rbuffers, uint64 replication_factor) {
+  return absl::make_unique<HloRemoteParameterLoad>(rbuffers,
+                                                   replication_factor);
 }
 
 HloRemoteParameterStore::HloRemoteParameterStore(
-    const xla::Shape& shape,
-    absl::Span<HloInstruction* const> rbuffers_and_values)
-    : HloPoplarInstruction(shape, rbuffers_and_values,
-                           PoplarOp::RemoteParameterStore) {
+    absl::Span<HloInstruction* const> rbuffers_and_values,
+    uint64 replication_factor)
+    : HloPoplarInstruction(
+          ComputePerReplicaStoreShape(rbuffers_and_values, replication_factor),
+          rbuffers_and_values, PoplarOp::RemoteParameterStore,
+          replication_factor),
+      replication_factor_(replication_factor) {
   // The first half of the operands are the remote buffers, the second half
   // are the corresponding values to store in the buffers.
   CHECK_GE(rbuffers_and_values.size(), 2);
@@ -105,35 +179,35 @@ std::unique_ptr<HloInstruction>
 HloRemoteParameterStore::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return absl::make_unique<HloRemoteParameterStore>(shape, operands);
+  return CreateHloRemoteParameterStore(operands, replication_factor_);
 }
 
 std::vector<std::string>
 HloRemoteParameterStore::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  return {"replication_factor=" + std::to_string(replication_factor_)};
 }
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
-    HloInstruction* const rbuffer, HloInstruction* const value) {
-  return absl::make_unique<HloRemoteParameterStore>(
-      rbuffer->shape(), std::vector<HloInstruction*>{rbuffer, value});
+    absl::Span<HloInstruction* const> rbuffers_and_values,
+    uint64 replication_factor) {
+  return absl::make_unique<HloRemoteParameterStore>(rbuffers_and_values,
+                                                    replication_factor);
 }
 
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloRemoteParameterLoadFactoryFunc(
     HloCustomCallInstruction* call) {
   if (call->operand_count() != 1) {
-    return xla::FailedPrecondition(
+    return FailedPrecondition(
         "Expected remote buffer load to have one operand, but got %d",
         call->operand_count());
   }
   if (call->mutable_operand(0)->opcode() != HloOpcode::kParameter) {
-    return xla::FailedPrecondition(
-        "Can only remote buffer load from a parameter");
+    return FailedPrecondition("Can only remote buffer load from a parameter");
   }
 
-  return CreateHloRemoteParameterLoad(call->mutable_operand(0));
+  return CreateHloRemoteParameterLoad(call->operands());
 }
 
 static HloPoplarInstructionFactory remote_parameter_load_factory(
@@ -142,17 +216,16 @@ static HloPoplarInstructionFactory remote_parameter_load_factory(
 StatusOr<std::unique_ptr<HloInstruction>> HloRemoteParameterStoreFactoryFunc(
     HloCustomCallInstruction* call) {
   if (call->operand_count() != 2) {
-    return xla::FailedPrecondition(
+    return FailedPrecondition(
         "Expected remote buffer store to have two operands, but got %d",
         call->operand_count());
   }
   if (call->mutable_operand(0)->opcode() != HloOpcode::kParameter) {
-    return xla::FailedPrecondition(
-        "Can only remote buffer store to a parameter");
+    return FailedPrecondition("Can only remote buffer store to a parameter");
   }
 
-  return CreateHloRemoteParameterStore(call->mutable_operand(0),
-                                       call->mutable_operand(1));
+  return CreateHloRemoteParameterStore(
+      {call->mutable_operand(0), call->mutable_operand(1)});
 }
 
 static HloPoplarInstructionFactory remote_parameter_store_factory(

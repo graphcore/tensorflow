@@ -84,11 +84,14 @@ struct HostEmbeddingInfo {
 };
 
 struct RemoteParameterInfo {
-  explicit RemoteParameterInfo(int64 parameter_number)
-      : parameter_number(parameter_number) {}
+  explicit RemoteParameterInfo(int64 parameter_number,
+                               bool is_replica_partitioned = false)
+      : parameter_number(parameter_number),
+        is_replica_partitioned(is_replica_partitioned) {}
   RemoteParameterInfo() = delete;
 
   const int64 parameter_number;
+  const bool is_replica_partitioned;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;

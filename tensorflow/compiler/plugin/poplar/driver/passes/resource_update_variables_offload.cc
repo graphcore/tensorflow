@@ -21,7 +21,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
@@ -39,10 +42,167 @@ namespace poplarplugin {
 
 ResourceUpdateVariablesOffload::ResourceUpdateVariablesOffload(
     CompilerAnnotations& annotations, bool remote_memory_supported,
-    int64 minimum_remote_tensor_size)
+    int64 minimum_remote_tensor_size, int64 replication_factor)
     : annotations_(annotations),
       remote_memory_supported_(remote_memory_supported),
-      minimum_remote_tensor_size_(minimum_remote_tensor_size) {}
+      minimum_remote_tensor_size_(minimum_remote_tensor_size),
+      replication_factor_(replication_factor) {}
+
+namespace {
+/**
+ * Insert instruction sequence to gather all the elements of the loaded tensor
+ * from all replicas.
+ *
+ * We expect the resulting program to look like this:
+ * // pretend this is the "true" shape ignoring partitioning
+ * remote_buffer = param(0) : f32[3, 5, 7]
+ *
+ * // Load the replica-local region
+ * a = load(remote_buffer) : f32[27]
+ *
+ * // gather from all replicas
+ * b = all-gather(a) : f32[4, 27]
+ *
+ * // slice off the padding, if needed
+ * c = flatten(b) : f32[108]
+ * d = slice(c), begin=0, end=105, dim=0 : f32[105]
+ *
+ * // reshape back to the "true" shape
+ * e = reshape(d), shape=[3, 5, 7] : f32[3, 5, 7]
+ *
+ * @param computation The computation to add the instructions to.
+ * @param load The load instruction to be gathered.
+ * @param replication_factor The graph replication factor.
+ *
+ * @returns The final instruction with the gathered values.
+ *
+ * @note `load` must be an element of `computation`.
+ */
+HloInstruction* InsertReplicatedLoadInstructions(HloComputation* computation,
+                                                 HloInstruction* load,
+                                                 int64 replication_factor) {
+  // If there's no replication, then we don't need to add any instructions.
+  if (replication_factor < 2) {
+    return load;
+  }
+
+  PrimitiveType element_type = load->shape().element_type();
+
+  // All-gather from the replicas.
+  Shape all_gather_shape = ShapeUtil::MakeShape(
+      element_type, {replication_factor, ShapeUtil::ElementsIn(load->shape())});
+  HloInstruction* all_gather =
+      computation->AddInstruction(CreateAllGather(load, all_gather_shape));
+
+  // If there's no padding, just return the reshaped tensor.
+  if (ShapeUtil::ElementsIn(all_gather_shape) ==
+      ShapeUtil::ElementsIn(load->operand(0)->shape())) {
+    // Reshape back to the user shape.
+    return computation->AddInstruction(
+        HloInstruction::CreateReshape(load->operand(0)->shape(), all_gather));
+  }
+
+  // Flatten the tensor.
+  Shape flat_shape = ShapeUtil::MakeShape(
+      element_type, {ShapeUtil::ElementsIn(all_gather->shape())});
+  HloInstruction* reshape = computation->AddInstruction(
+      HloInstruction::CreateReshape(flat_shape, all_gather));
+
+  // Slice off the padding.
+  Shape slice_shape = ShapeUtil::MakeShape(
+      element_type, {ShapeUtil::ElementsIn(load->operand(0)->shape())});
+  HloInstruction* slice =
+      computation->AddInstruction(HloInstruction::CreateSlice(
+          slice_shape, reshape, {0},
+          {ShapeUtil::ElementsIn(load->operand(0)->shape())}, {1}));
+
+  // Reshape back to the user shape.
+  return computation->AddInstruction(
+      HloInstruction::CreateReshape(load->operand(0)->shape(), slice));
+}
+
+/**
+ * Insert instruction sequence to select the elements for storing in the
+ * replica-local remote buffer.
+ *
+ * @param computation The computation to add the instructions to.
+ * @param to_store The to_store instruction that we would like to store.
+ * @param replication_factor The graph replication factor.
+ *
+ * @returns The final instruction with the values to be stored.
+ *
+ * @note `to_store` must be an element of `computation`.
+ */
+HloInstruction* InsertReplicatedStoreInstructions(HloComputation* computation,
+                                                  HloInstruction* to_store,
+                                                  int64 replication_factor) {
+  // If there's no replication, then we don't need to add any instructions.
+  if (replication_factor < 2) {
+    return to_store;
+  }
+
+  PrimitiveType element_type = to_store->shape().element_type();
+  const int64 grain_size = 4 / ShapeUtil::ByteSizeOfPrimitiveType(element_type);
+
+  // Pad the element count appropriately
+  const int64 element_count =
+      grain_size *
+      tensorflow::MathUtil::CeilOfRatio<int64>(
+          tensorflow::MathUtil::CeilOfRatio<int64>(
+              ShapeUtil::ElementsIn(to_store->shape()), grain_size),
+          replication_factor);
+
+  // Add padding, if it is needed
+  if ((ShapeUtil::ElementsIn(to_store->shape()) % replication_factor) != 0) {
+    HloInstruction* zero_f = computation->AddInstruction(
+        HloInstruction::CreateConstant(LiteralUtil::Zero(element_type)));
+
+    // Flatten the incoming tensor
+    Shape flat_shape = ShapeUtil::MakeShape(
+        element_type, {ShapeUtil::ElementsIn(to_store->shape())});
+    HloInstruction* flat = computation->AddInstruction(
+        HloInstruction::CreateReshape(flat_shape, to_store));
+
+    // Pad the tensor to be a multiple of `replication_factor`.
+    Shape pad_shape = ShapeUtil::MakeShape(
+        element_type, {element_count * replication_factor});
+
+    PaddingConfig padding_config;
+    std::size_t difference =
+        ShapeUtil::ElementsIn(pad_shape) - ShapeUtil::ElementsIn(flat->shape());
+    auto padding_config_dim = padding_config.add_dimensions();
+    padding_config_dim->set_edge_padding_high(difference);
+    padding_config_dim->set_edge_padding_low(0);
+    padding_config_dim->set_interior_padding(0);
+
+    to_store = computation->AddInstruction(
+        HloInstruction::CreatePad(pad_shape, flat, zero_f, padding_config));
+  }
+
+  // Reshape to the storage shape.
+  Shape store_shape =
+      ShapeUtil::MakeShape(element_type, {replication_factor, element_count});
+  HloInstruction* reshaped = computation->AddInstruction(
+      HloInstruction::CreateReshape(store_shape, to_store));
+
+  HloInstruction* replica_id =
+      computation->AddInstruction(CreateReplicationIndex());
+  HloInstruction* zero_i =
+      computation->AddInstruction(HloInstruction::CreateConstant(
+          LiteralUtil::Zero(replica_id->shape().element_type())));
+
+  // Slice off this replica's storage elements.
+  Shape slice_shape = ShapeUtil::MakeShape(element_type, {1, element_count});
+  HloInstruction* slice =
+      computation->AddInstruction(HloInstruction::CreateDynamicSlice(
+          slice_shape, reshaped, {replica_id, zero_i}, {1, element_count}));
+
+  // Squeeze off the outermost dimension.
+  Shape squeeze_shape = ShapeUtil::MakeShape(element_type, {element_count});
+  return computation->AddInstruction(
+      HloInstruction::CreateReshape(squeeze_shape, slice));
+}
+}  // namespace
 
 StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
     HloInstruction* call_op, HloInstruction* resource_update) {
@@ -70,6 +230,12 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   if (!GetResourceUpdateOffloadVariables(resource_update)) {
     return changed;
   }
+
+  const bool partition_offloaded_variables =
+      GetResourceUpdatePartitionOffloadedVariables(resource_update);
+
+  const std::size_t replication_factor =
+      partition_offloaded_variables ? replication_factor_ : 1;
 
   if (call_op == entry_comp->root_instruction()) {
     // Make sure this is not the root instruction.
@@ -264,33 +430,50 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
 
     // Create a load instruction inside the resource update and use that instead
     // of the parameter.
-    HloInstruction* remote_load = resource_update_comp->AddInstruction(
-        CreateHloRemoteParameterLoad(offload_info.input_in_resource_update));
-    TF_RETURN_IF_ERROR(
-        offload_info.input_in_resource_update->ReplaceAllUsesWith(remote_load));
+    HloInstruction* remote_load =
+        resource_update_comp->AddInstruction(CreateHloRemoteParameterLoad(
+            {offload_info.input_in_resource_update}, replication_factor));
+
+    // If required, insert the collective operations to gather the complete
+    // tensor.
+    HloInstruction* replicated_remote_load = InsertReplicatedLoadInstructions(
+        resource_update_comp, remote_load, replication_factor);
+
+    // Replace all users of the input, except load instructions.
+    auto users = offload_info.input_in_resource_update->users();
+    users.erase(absl::c_find(users, remote_load));
+
+    for (auto user : users) {
+      TF_RETURN_IF_ERROR(offload_info.input_in_resource_update->ReplaceUseWith(
+          user, replicated_remote_load));
+    }
 
     // If the input and output are the same instruction, then we use the remote
     // resource but don't modify it. In this case we simply reconnect the input
     // remote buffer to the original output position.
     if (offload_info.input_in_resource_update ==
         offload_info.output_in_resource_update) {
-      TF_RETURN_IF_ERROR(
-          remote_load->ReplaceUseWith(resource_update_comp->root_instruction(),
-                                      offload_info.input_in_resource_update));
+      TF_RETURN_IF_ERROR(replicated_remote_load->ReplaceUseWith(
+          resource_update_comp->root_instruction(),
+          offload_info.input_in_resource_update));
     } else {
+      HloInstruction* to_store = InsertReplicatedStoreInstructions(
+          resource_update_comp, offload_info.output_in_resource_update,
+          replication_factor);
+
       // Add a remote store for the updated value inside the resource update.
       HloInstruction* remote_store =
           resource_update_comp->AddInstruction(CreateHloRemoteParameterStore(
-              offload_info.input_in_resource_update,
-              offload_info.output_in_resource_update));
+              {offload_info.input_in_resource_update, to_store},
+              replication_factor));
 
       TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
           resource_update_comp->root_instruction(), remote_store));
     }
 
     // Mark this input as being stored in a remote buffer.
-    annotations_.remote_parameter_infos.insert(
-        RemoteParameterInfo{offload_info.entry_param_number});
+    annotations_.remote_parameter_infos.insert(RemoteParameterInfo{
+        offload_info.entry_param_number, replication_factor > 1});
   }
 
   return true;

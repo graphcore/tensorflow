@@ -262,8 +262,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
   std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
 
-  // Check whether this is a remote parameter - if so do not allocate the tensor
-  // as the RemoteParameterLoad will allocate it and add the copy.
+  // Check whether this is a remote parameter.
   if (IsRemoteParameter(inst, resources_)) {
     CHECK(IsInstructionInEntryComputation(inst));
     CHECK_EQ(shapes.size(), 1);
@@ -274,6 +273,17 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
     int64 element_count = absl::c_accumulate(shapes[0].dimensions(), int64{1},
                                              std::multiplies<int64>{});
 
+    const bool is_replica_partitioned = IsReplicaPartitioned(inst, resources_);
+
+    const std::size_t grain_size = 4 / graph.getTarget().getTypeSize(type);
+
+    if (is_replica_partitioned) {
+      element_count = grain_size * tensorflow::MathUtil::CeilOfRatio<int64>(
+                                       tensorflow::MathUtil::CeilOfRatio<int64>(
+                                           element_count, grain_size),
+                                       resources_.replication_factor);
+    }
+
     const std::string remote_buffer_name =
         resources_.annotations.input_output_aliasing_map
             .GetEntryInputInfos()[inst->parameter_number()]
@@ -282,7 +292,10 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
     poplar::RemoteBuffer output =
         graph.addRemoteBuffer(remote_buffer_name, type, element_count, 1, true);
-    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
+
+    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, output,
+                                      is_replica_partitioned));
+
     return Status::OK();
   }
 
@@ -302,6 +315,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
     // Delegate the handling of parameter tensor.
     TF_RETURN_IF_ERROR(HandleParameterTensor(input_location, shape));
   }
+
   return Status::OK();
 }
 
@@ -341,9 +355,21 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     return tensor;
   };
 
+  if (callsite_tensor && callsite_tensor->IsRemoteBuffer()) {
+    // Add the remote buffer to the computation inputs.
+    computation_inputs_[param_num]
+                       [input_location.flattened_output_tuple_index] =
+                           *callsite_tensor;
+
+    TF_CHECK_OK(AddOutput(tensor_map, input_location.instruction,
+                          input_location.flattened_output_tuple_index,
+                          *callsite_tensor));
+
+    return Status::OK();
+  }
+
   poplar::Tensor output;
   bool add_output_tensor = true;
-
   if (!allocated[input_location.flattened_output_tuple_index] &&
       callsite_tensor) {
     // If it is not allocated in this computation and there is a tensor layout
@@ -528,8 +554,7 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
                 "instruction %s input %d.",
                 inst->name(), i);
           }
-          TF_RETURN_IF_ERROR(
-              AddOutputRemoteBuffer(tensor_map, inst, i, outputs[0]));
+          TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, i, outputs[0]));
         }
       }
     }
@@ -605,6 +630,7 @@ DeferredVisitor::GetInputsForDeferredInplaceRBInstruction(
             TensorOrRemoteBufferVector outputs,
             FindInstructionOutputsInRange(tensor_map, resources_, input_inst,
                                           {i, i + 1}));
+
         CHECK_EQ(outputs.size(), 1);
         if (outputs[0].IsTensor()) {
           poplar::Tensor tensor = outputs[0];
@@ -655,9 +681,8 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
       } else if (inputs[operand_idx][i] &&
                  inputs[operand_idx][i]->IsRemoteBuffer()) {
         // If a tensor exists then just forward it.
-        poplar::RemoteBuffer output = *inputs[operand_idx][i];
-        TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst,
-                                                 output_tuple_index, output));
+        TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, output_tuple_index,
+                                     *inputs[operand_idx][i]));
       } else {
         // No tensor, therefore defer allocation.
         VLOG(1) << "Deferring use of " << inst->name() << " operand "
@@ -688,6 +713,7 @@ Status DeferredVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     // Get inputs preserving any deferred allocations.
     TF_ASSIGN_OR_RETURN(auto inputs,
                         GetInputsForDeferredInplaceRBInstruction(inst));
+
     TF_ASSIGN_OR_RETURN(auto seq,
                         CreatePipelineOp(resources_, inst, inputs,
                                          GetOutputShape(inst), tensor_map));
@@ -826,7 +852,14 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
   TensorLocation output_location(inst, 0);
   if (create_buffer->IsRemoteBuffer()) {
-    return FailedPrecondition("Buffers in remote memory are not supported.");
+    poplar::Graph& graph = GetGraph(resources_, inst);
+    TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
+    std::size_t element_count = ShapeUtil::ElementsIn(shape);
+
+    poplar::RemoteBuffer result =
+        graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
+
+    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, result));
   } else {
     // Allocate now if there is an allocation target.
     const bool allocate_now =
@@ -1218,9 +1251,9 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
                        [input_location.flattened_output_tuple_index] =
                            *callsite_tensor;
 
-    TF_CHECK_OK(AddOutputRemoteBuffer(
-        tensor_map, input_location.instruction,
-        input_location.flattened_output_tuple_index, *callsite_tensor));
+    TF_CHECK_OK(AddOutput(tensor_map, input_location.instruction,
+                          input_location.flattened_output_tuple_index,
+                          *callsite_tensor));
 
     return Status::OK();
   }

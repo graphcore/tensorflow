@@ -111,6 +111,16 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                                   GetAttribute(attributes, OFFLOAD_VARIABLES));
               auto offload_variables = std::stoi(offload_variables_str);
               resource_update_config->set_offload_variables(offload_variables);
+
+              // Get the partition offload variables flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string partition_offload_variables_str,
+                  GetAttribute(attributes, PARTITION_OFFLOADED_VARIABLES));
+              auto partition_offload_variables =
+                  std::stoi(partition_offload_variables_str);
+              resource_update_config->set_partition_offloaded_variables(
+                  partition_offload_variables);
+
               // Get the num batches to accumulate flag.
               TF_ASSIGN_OR_RETURN(
                   std::string num_batches_to_accumulate_str,
