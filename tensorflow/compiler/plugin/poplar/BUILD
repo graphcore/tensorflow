@@ -4104,6 +4104,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4134,6 +4135,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
