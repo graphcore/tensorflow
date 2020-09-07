@@ -757,5 +757,11 @@ Status CreateDirIfMissing(const std::string& path) {
   return Status::OK();
 }
 
+StatusOr<Tileset> GetTileset(const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(const auto backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  return backend_config.tileset();
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

@@ -51,7 +51,13 @@ namespace poplarplugin {
 struct CompilerResources {
   std::unique_ptr<poplar::Graph> main_graph;
 
-  std::vector<poplar::Graph> shard_graphs;
+  // If IO tiles are not in use, these are nullopt (use main_graph instead).
+  absl::optional<poplar::Graph> compute_graph;
+  absl::optional<poplar::Graph> io_graph;
+
+  // If IO tiles are not in use, only shard_compute_graphs is populated.
+  std::vector<poplar::Graph> shard_compute_graphs;
+  std::vector<poplar::Graph> shard_io_graphs;
 
   std::vector<unsigned> shard_to_ipu_id;
 
@@ -146,6 +152,8 @@ struct CompilerResources {
 
   bool enable_fast_math;
 
+  int64 num_io_tiles;
+
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
 
   CompilerResources(
@@ -162,7 +170,8 @@ struct CompilerResources {
       bool use_stable_norm_statistics, bool remote_memory_supported,
       const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size,
-      bool enable_experimental_remote_buffer_embedding, bool enable_fast_math)
+      bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
+      int64 num_io_tiles)
       : annotations(module),
         information(information),
         global_floating_point_behaviour(floating_point_behaviour),
@@ -186,7 +195,8 @@ struct CompilerResources {
             triangular_solve_expander_block_size),
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
-        enable_fast_math(enable_fast_math) {}
+        enable_fast_math(enable_fast_math),
+        num_io_tiles(num_io_tiles) {}
 
   static std::unique_ptr<CompilerResources> CreateTestDefault(
       HloModule* module,
@@ -207,7 +217,8 @@ struct CompilerResources {
         /*gcl_options=*/poplar::OptionFlags(),
         /*triangular_solve_expander_block_size=*/0,
         /*enable_experimental_remote_buffer_embedding=*/false,
-        /*enable_fast_math=*/false);
+        /*enable_fast_math=*/false,
+        /*num_io_tiles=*/0);
   }
 };
 

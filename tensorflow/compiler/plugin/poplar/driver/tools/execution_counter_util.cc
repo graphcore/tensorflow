@@ -65,11 +65,12 @@ Status CopyExecutionCountersFromScope(CompilerResources& resources,
 namespace {
 // Helper functions to make sure there is at least one shard.
 uint64 GetNumCounters(CompilerResources& resources) {
-  return std::max(resources.shard_graphs.size(), 1UL);
+  return std::max(resources.shard_compute_graphs.size(), 1UL);
 }
 poplar::Graph& GetGraphForShard(CompilerResources& resources, size_t shard) {
-  return resources.shard_graphs.size() ? resources.shard_graphs.at(shard)
-                                       : *resources.main_graph;
+  return resources.shard_compute_graphs.size()
+             ? resources.shard_compute_graphs.at(shard)
+             : *resources.main_graph;
 }
 }  // namespace
 

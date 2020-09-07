@@ -193,13 +193,25 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "report_tf2_test",
+    name = "io_tiles_test",
     size = "medium",
-    srcs = ["tests/report_tf2_test.py"],
+    srcs = ["tests/io_tiles_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "report_tf2_test",
+    size = "medium",
+    srcs = ["tests/report_tf2_test.py"],
+    additional_deps = [
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
     ],
 )
 
@@ -1131,6 +1143,7 @@ test_suite(
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
+        "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",

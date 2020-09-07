@@ -763,7 +763,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
   def testGclOptions(self):
     cfg = ipu.utils.create_ipu_config()
     self.assertEqual(len(cfg.gcl_options), 0)
-    self.assertEqual(cfg.gcl_num_io_tiles, 0)
+    self.assertEqual(cfg.num_io_tiles, 0)
 
     with self.assertRaisesRegex(TypeError,
                                 "`gcl_options` must be a dictionary"):
@@ -773,7 +773,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
                                     num_io_tiles=32,
                                     gcl_options={"maxBytesPerTile": "128"})
 
-    self.assertEqual(cfg.gcl_num_io_tiles, 32)
+    self.assertEqual(cfg.num_io_tiles, 32)
     self.assertEqual(len(cfg.gcl_options), 1)
     self.assertEqual(cfg.gcl_options[0].option, "maxBytesPerTile")
     self.assertEqual(cfg.gcl_options[0].value, "128")

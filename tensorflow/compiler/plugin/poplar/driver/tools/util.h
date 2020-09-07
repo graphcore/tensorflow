@@ -255,6 +255,8 @@ struct HloComputationEquals {
 
 Status CreateDirIfMissing(const std::string& path);
 
+StatusOr<Tileset> GetTileset(const HloInstruction* inst);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -308,6 +308,17 @@ std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
   return absl::make_unique<HloBufferLoadSlice>(shape, buffer, offset);
 }
 
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloBufferLoadSliceFactoryFunc(
+    HloCustomCallInstruction* call) {
+  CHECK_EQ(call->operand_count(), 2) << call->ToString();
+  return CreateBufferLoadSlice(call->shape(), call->mutable_operand(0),
+                               call->mutable_operand(1));
+}
+static HloPoplarInstructionFactory buffer_load_slice_factory(
+    PoplarOp::BufferLoadSlice, HloBufferLoadSliceFactoryFunc);
+}  // namespace
+
 HloBufferStoreSlice::HloBufferStoreSlice(HloInstruction* const buffer,
                                          HloInstruction* const slice,
                                          HloInstruction* const offset)
@@ -334,5 +345,17 @@ std::unique_ptr<HloInstruction> CreateBufferStoreSlice(
     HloInstruction* const offset) {
   return absl::make_unique<HloBufferStoreSlice>(buffer, slice, offset);
 }
+
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloBufferStoreSliceFactoryFunc(
+    HloCustomCallInstruction* call) {
+  CHECK_EQ(call->operand_count(), 3) << call->ToString();
+  return CreateBufferStoreSlice(call->mutable_operand(0),
+                                call->mutable_operand(1),
+                                call->mutable_operand(2));
+}
+static HloPoplarInstructionFactory buffer_store_slice_factory(
+    PoplarOp::BufferStoreSlice, HloBufferStoreSliceFactoryFunc);
+}  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

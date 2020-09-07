@@ -417,7 +417,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool SupportsRemoteBuffers() const;
 
-  int64 GclNumIoTiles() const { return current_config_.gcl_num_io_tiles(); }
+  int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }
+
+  bool ShouldPlaceOpsOnIoTiles() const {
+    return current_config_.place_ops_on_io_tiles() && GetNumIoTiles() > 0;
+  }
 
   poplar::OptionFlags GclOptions() const { return gcl_options_; }
 

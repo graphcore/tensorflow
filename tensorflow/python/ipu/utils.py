@@ -936,19 +936,43 @@ def set_floating_point_behaviour_options(opts,
   return opts
 
 
+def set_io_tile_options(opts, num_io_tiles, place_ops_on_io_tiles=None):
+  """Set the number of tiles reserved for I/O per IPU.
+
+  Args:
+    num_io_tiles: Number of tiles to reserve I/O.
+    place_ops_on_io_tiles: Whether to place TensorFlow I/O operations on the
+      I/O tiles. The value `None` leaves the current value unchanged.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.num_io_tiles = num_io_tiles
+
+  if place_ops_on_io_tiles is not None:
+    if place_ops_on_io_tiles and num_io_tiles == 0:
+      raise ValueError("Cannot place ops on I/O tiles when num_io_tiles == 0")
+    opts.place_ops_on_io_tiles = place_ops_on_io_tiles
+
+  return opts
+
+
+@deprecation.deprecated_args(
+    None, "num_io_tiles is deprecated, use set_io_tile_options instead",
+    "num_io_tiles")
 def set_gcl_options(opts, num_io_tiles=0, gcl_options=None):
   """Set the IPU options for the Graphcore Communication Library.
 
   Args:
-    num_io_tiles: Number of tiles to reserve per IPU for the GCL collective
-      operations.
+    num_io_tiles: Number of tiles to reserve per IPU for the IO operations.
+      Deprecated. Use `set_io_tile_options` instead.
     gcl_options: A dictionary with options for configuring the GCL collective
       operations.
 
   Returns:
     The IpuOptions configuration protobuf.
   """
-  opts.gcl_num_io_tiles = num_io_tiles
+  opts = set_io_tile_options(opts, num_io_tiles)
 
   if gcl_options:
     if not isinstance(gcl_options, dict):

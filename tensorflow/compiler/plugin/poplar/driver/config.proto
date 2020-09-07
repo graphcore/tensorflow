@@ -236,8 +236,8 @@ message IpuOptions {
   // Options controlling the configuration of Poplar data transfers.
   VerifiedTransfers verified_transfers = 29;
 
-  // How many tiles to reserve per IPU for the Graphcore Communication Library.
-  int64 gcl_num_io_tiles = 30;
+  // How many tiles to reserve per IPU for IO operations.
+  int64 num_io_tiles = 30;
 
   // Collective operations options for the Graphcore Communication Library.
   repeated PoplarOptionFlag gcl_options = 31;
@@ -258,4 +258,7 @@ message IpuOptions {
   // The minimum size a tensor (in bytes) has to be in order to be consider for
   // being stored in remote memory.
   int64 minimum_remote_tensor_size = 37;
+
+  // Whether to place TensorFlow operations on IO tiles.
+  bool place_ops_on_io_tiles = 38;
 };

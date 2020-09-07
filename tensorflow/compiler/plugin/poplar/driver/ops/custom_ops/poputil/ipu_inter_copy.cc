@@ -94,7 +94,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
 
   // Get the destination device id by looking through the virtual graph to IPU
   // mapping.
-  CHECK_EQ(res.shard_to_ipu_id.size(), res.shard_graphs.size());
+  CHECK_EQ(res.shard_to_ipu_id.size(), res.shard_compute_graphs.size());
   unsigned dst_device_id = res.shard_to_ipu_id[*std::begin(dst_devices)];
   t = poputil::copyToIpu(GetMasterGraph(res), t, seq, dst_device_id,
                          GetDebugName(inst),
