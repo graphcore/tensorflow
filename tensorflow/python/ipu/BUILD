@@ -190,6 +190,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "io_tiles_test",
+    size = "medium",
+    srcs = ["tests/io_tiles_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -1027,6 +1040,7 @@ test_suite(
         "gradient_accumulation_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
+        "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",

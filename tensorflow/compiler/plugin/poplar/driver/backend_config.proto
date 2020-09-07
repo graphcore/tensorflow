@@ -81,8 +81,14 @@ enum ConvType {
   DepthwiseFilter = 3;
 };
 
+// An enum representing a subset of tiles per IPU.
+enum Tileset {
+  TILESET_COMPUTE_TILES = 0;
+  TILESET_IO_TILES = 1;
+};
+
 // Backend specific HloInstruction config
-// NEXT ID = 10
+// NEXT ID = 11
 message PoplarBackendConfig {
   // Instruction config for a fusion instruction
   message FusionConfig {
@@ -182,4 +188,7 @@ message PoplarBackendConfig {
 
   // Flags to be used by the matmul.
   repeated PoplarOptionFlag matmul_options = 9;
+
+  // The tile subset that should be used by this instruction.
+  Tileset tileset = 10;
 };

@@ -74,7 +74,7 @@ std::unique_ptr<CompilerResources> GetMockResources(
 
   // Add mock vgraphs
   for (int i = 0; i < number_of_vgraphs; ++i) {
-    resources->shard_graphs.emplace_back(
+    resources->shard_compute_graphs.emplace_back(
         resources->main_graph->createVirtualGraph(i * 4, (i + 1) * 4));
   }
   resources->shard_to_ipu_id.resize(number_of_vgraphs);

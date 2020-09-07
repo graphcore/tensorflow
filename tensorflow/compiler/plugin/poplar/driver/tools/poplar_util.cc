@@ -72,18 +72,32 @@ uint64 GetShardForOutputIndex(const HloInstruction* inst,
 poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
                                        const HloInstruction* inst,
                                        int flattened_output_tuple_index) {
-  if (inst->has_sharding()) {
-    int device_id = GetShardForOutputIndex(inst, flattened_output_tuple_index);
+  const auto tileset_or_status = GetTileset(inst);
+  TF_CHECK_OK(tileset_or_status.status());
+  const auto tileset = tileset_or_status.ValueOrDie();
 
-    if (device_id >= static_cast<int>(res.shard_graphs.size())) {
-      LOG(FATAL) << "Graph index " << device_id << " out of range on "
-                 << inst->ToString();
+  if (inst->has_sharding()) {
+    const auto device_id =
+        GetShardForOutputIndex(inst, flattened_output_tuple_index);
+
+    if (tileset == TILESET_IO_TILES) {
+      CHECK_LT(device_id, res.shard_io_graphs.size()) << inst->ToString();
+      return res.shard_io_graphs[device_id];
     }
 
-    return res.shard_graphs[device_id];
+    CHECK_EQ(tileset, TILESET_COMPUTE_TILES);
+    CHECK_LT(device_id, res.shard_compute_graphs.size()) << inst->ToString();
+    return res.shard_compute_graphs[device_id];
   }
 
-  return GetMasterGraph(res);
+  if (tileset == TILESET_IO_TILES) {
+    CHECK(res.io_graph.has_value())
+        << "IO tiles not allocated, but requested by " << inst->ToString();
+    return *res.io_graph;
+  }
+
+  CHECK_EQ(tileset, TILESET_COMPUTE_TILES);
+  return res.compute_graph.has_value() ? *res.compute_graph : *res.main_graph;
 }
 
 poplar::Graph& GetGraph(CompilerResources& res, const HloInstruction* inst) {
