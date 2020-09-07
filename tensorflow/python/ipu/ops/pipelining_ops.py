@@ -496,8 +496,10 @@ def pipeline(computational_stages,
     if value is None:
       return default
     elif value:
-      return backend_config_pb2.ThreeState.Name(backend_config_pb2.STATE_ON)
-    return backend_config_pb2.ThreeState.Name(backend_config_pb2.STATE_OFF)
+      return backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_ON)
+    return backend_config_pb2.ThreeState.Name(
+        backend_config_pb2.THREESTATE_OFF)
 
   offload_weight_update_variables = bool_to_three_state(
       offload_weight_update_variables,
