@@ -76,7 +76,7 @@ std::string GetTemplateHloString() {
     %custom-call.2 = f32[$R,$E] custom-call(f32[$R,$E] %arg1, s32[$BS,1] %broadcast.indices, f32[$BS,$E] %broadcast.update, f32[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"serialization_factor\":1}"
     %custom-call.3 = f32[$R,$E] custom-call(f32[$R,$E] %custom-call.1, f32[$R,$E] %custom-call.2), custom_call_target="GradientAccumulatorAdd", metadata={op_type="GradientAccumulatorAdd" op_name="GradientAccumulatorAdd"}, backend_config="{}"
     %custom-call.4 = f32[$R,$E] custom-call(f32[$R,$E] %custom-call.3), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1, f32[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":true}}}"
+    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1, f32[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main (arg0: f32[$R,$E], arg1: f32[$R,$E]) -> f32[$R,$E] {
@@ -126,7 +126,7 @@ std::string GetPipelineTemplateHloString() {
     %call.1 = (f32[$R,$E]) call(f32[$R,$E] %arg0, f32[$R,$E] %arg1, f32[$R,$E] %custom-call.1), to_apply=%PipelineStage, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, metadata={op_type="PipelineStageBackward" op_name="gradients/pipeline_stage_1/PipelineStage_grad/PipelineStageBackward"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
     %get-tuple-element.1 = f32[$R,$E] get-tuple-element((f32[$R,$E]) %call.1), index=0
     %custom-call.2 = f32[$R,$E] custom-call(f32[$R,$E] %get-tuple-element.1), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.2 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1, f32[$R,$E] %custom-call.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":true}}}"
+    ROOT %call.2 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1, f32[$R,$E] %custom-call.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main (arg0: f32[$R,$E], arg1: f32[$R,$E]) -> f32[$R,$E] {

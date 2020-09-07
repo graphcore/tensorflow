@@ -22,11 +22,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/pipeline_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/util.h"
-
 #include "tensorflow/core/platform/human_readable_json.h"
 
 namespace xla {
@@ -124,13 +122,13 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
 
   // Note: we expect all the instructions to have a value for these attributes
   // (For example in scopes.py instructions added after the end of a
-  // stochastic_rounding scope will explicitely be tagged as NOT_SET). However
-  // in some cases optimizers introduce new nodes without preserving the
-  // frontend attributes of the node they replace which is why the variables
-  // used to lower the frontend attributes in this method are declared outside
-  // of the loop. This way we use the last successfully parsed values to
-  // approximate the missing values.
-  StochasticRounding stochastic_rounding = NOT_SET;
+  // stochastic_rounding scope will explicitely be tagged as
+  // THREESTATE_UNDEFINED). However in some cases optimizers introduce new nodes
+  // without preserving the frontend attributes of the node they replace which
+  // is why the variables used to lower the frontend attributes in this method
+  // are declared outside of the loop. This way we use the last successfully
+  // parsed values to approximate the missing values.
+  ThreeState stochastic_rounding = THREESTATE_UNDEFINED;
   PrimitiveType partials_type = PRIMITIVE_TYPE_INVALID;
 
   for (auto* comp : module->computations()) {
@@ -141,8 +139,8 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
       auto stochastic_rounding_attribute =
           attributes.map().find(FrontendAttributeId_Name(STOCHASTIC_ROUNDING));
       if (stochastic_rounding_attribute != attributes.map().end()) {
-        if (!StochasticRounding_Parse(stochastic_rounding_attribute->second,
-                                      &stochastic_rounding)) {
+        if (!ThreeState_Parse(stochastic_rounding_attribute->second,
+                              &stochastic_rounding)) {
           return xla::FailedPrecondition(
               "Could not parse the stochastic rounding value");
         }

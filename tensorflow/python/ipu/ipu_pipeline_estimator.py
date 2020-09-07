@@ -53,7 +53,7 @@ class IPUPipelineEstimatorSpec(
               optimizer_function=None,
               device_mapping=None,
               pipeline_schedule=None,
-              offload_weight_update_variables=True,
+              offload_weight_update_variables=None,
               inputs=None):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 

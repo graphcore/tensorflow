@@ -207,10 +207,11 @@ def stochastic_rounding(override):
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
           backend_config_pb2.STOCHASTIC_ROUNDING),
-      backend_config_pb2.StochasticRounding.Name(
-          backend_config_pb2.FORCE_ON if override else backend_config_pb2.
-          FORCE_OFF),
-      backend_config_pb2.StochasticRounding.Name(backend_config_pb2.NOT_SET)):
+      backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_ON if override else backend_config_pb2.
+          THREESTATE_OFF),
+      backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_UNDEFINED)):
     yield
 
 

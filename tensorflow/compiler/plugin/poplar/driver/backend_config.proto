@@ -27,9 +27,9 @@ enum FrontendAttributeId {
   PIPELINE_SCHEDULE = 6;
   // Used to configure the pipeline lowering to Poplar.
   PIPELINE_POPLAR_CONFIG = 7;
-  // Used to indicate whether to offload variables when gradient
-  // accumulation/pipelining is performed.
-  OFFLOAD_VARIABLES = 8;
+  // Used to indicate whether to offload variables which are only used by the
+  // resource update.
+  OFFLOAD_WEIGHT_UPDATE_VARIABLES = 8;
   // Used to indicate how many batches need to be accumulated during gradient
   // accumulation.
   NUM_BATCHES_TO_ACCUMULATE = 9;
@@ -40,15 +40,17 @@ enum FrontendAttributeId {
   // The number of times a loop executes to compute a batch on each pipeline
   // stage execution.
   PIPELINE_BATCH_SERIALIZATION_ITERATIONS = 12;
-  // Whether to partition offloaded variables across the replicas
-  PARTITION_OFFLOADED_VARIABLES = 13;
+  // Whether to partition offloaded weight update variables across the replicas.
+  PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES = 13;
 };
 
-enum StochasticRounding {
-  NOT_SET = 0;
-  FORCE_ON = 1;
-  FORCE_OFF = 2;
-};
+// An enum for helping with setting a state of something, where the state can be
+// on, off or automatic/not set/undefined.
+enum ThreeState {
+  THREESTATE_OFF = 0;
+  THREESTATE_ON = 1;
+  THREESTATE_UNDEFINED = 2;
+}
 
 // An enum representing the "Machine Learning" type of the instruction.
 enum MLType {
@@ -128,8 +130,8 @@ message PoplarBackendConfig {
 
     message ResourceUpdateConfig {
       int64 num_batches_to_accumulate = 1;
-      bool offload_variables = 2;
-      bool partition_offloaded_variables = 3;
+      ThreeState offload_variables = 2;
+      ThreeState partition_offloaded_variables = 3;
     }
 
     Type type = 1;
@@ -153,7 +155,7 @@ message PoplarBackendConfig {
 
   int64 hash_of_custom_attributes = 4;
 
-  StochasticRounding stochastic_rounding = 5;
+  ThreeState stochastic_rounding = 5;
 
   MLType ml_type = 6;
 

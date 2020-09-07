@@ -205,16 +205,17 @@ class ResourceUpdateOp : public XlaOpKernel {
                        PoplarBackendConfig_CallConfig_Type_Name(
                            PoplarBackendConfig::CallConfig::ResourceUpdate)));
     // Set the offload_weight_update_variables flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
-                       std::to_string(offload_weight_update_variables_)));
-    // Set the offload_weight_update_variables flag.
     OP_REQUIRES_OK(
         ctx,
         builder->SetInstructionFrontendAttribute(
-            outputs, FrontendAttributeId_Name(PARTITION_OFFLOADED_VARIABLES),
-            std::to_string(replicated_optimizer_state_sharding_)));
+            outputs, FrontendAttributeId_Name(OFFLOAD_WEIGHT_UPDATE_VARIABLES),
+            offload_weight_update_variables_));
+    // Set the offload_weight_update_variables flag.
+    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
+                            outputs,
+                            FrontendAttributeId_Name(
+                                PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES),
+                            replicated_optimizer_state_sharding_));
     // Set the num_batches_to_accumulate flag.
     OP_REQUIRES_OK(
         ctx, builder->SetInstructionFrontendAttribute(
@@ -245,8 +246,8 @@ class ResourceUpdateOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  bool offload_weight_update_variables_;
-  bool replicated_optimizer_state_sharding_;
+  std::string offload_weight_update_variables_;
+  std::string replicated_optimizer_state_sharding_;
   int64 num_batches_to_accumulate_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ResourceUpdateOp);

@@ -63,15 +63,15 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
                       inst->backend_config<PoplarBackendConfig>());
   bool new_stochastic_rounding_enabled;
   switch (poplar_backend_config.stochastic_rounding()) {
-    case NOT_SET:
-      new_stochastic_rounding_enabled =
-          resources_.global_floating_point_behaviour.esr();
+    case THREESTATE_OFF:
+      new_stochastic_rounding_enabled = false;
       break;
-    case FORCE_ON:
+    case THREESTATE_ON:
       new_stochastic_rounding_enabled = true;
       break;
-    case FORCE_OFF:
-      new_stochastic_rounding_enabled = false;
+    case THREESTATE_UNDEFINED:
+      new_stochastic_rounding_enabled =
+          resources_.global_floating_point_behaviour.esr();
       break;
     default:
       return InvalidArgument(
