@@ -132,9 +132,9 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
-        ":backend_protos",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
+        ":xla_backend_protos",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:hlo",
         "@com_google_absl//absl/types:any",
