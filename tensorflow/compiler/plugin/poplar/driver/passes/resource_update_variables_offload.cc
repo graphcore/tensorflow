@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
@@ -227,12 +228,16 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
 
   // Do not optimize if there is no resource update or pipeline wu variable
   // offloading is turned off.
-  if (!GetResourceUpdateOffloadVariables(resource_update)) {
+  // If the variable is undefined, then offload the variables if remote memory
+  // is available.
+  auto offload_variables = GetResourceUpdateOffloadVariables(resource_update);
+  if (offload_variables == THREESTATE_OFF) {
     return changed;
   }
 
   const bool partition_offloaded_variables =
-      GetResourceUpdatePartitionOffloadedVariables(resource_update);
+      GetResourceUpdatePartitionOffloadedVariables(resource_update) !=
+      THREESTATE_OFF;
 
   const std::size_t replication_factor =
       partition_offloaded_variables ? replication_factor_ : 1;
@@ -401,7 +406,7 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   }
 
   if (!remote_memory_supported_) {
-    LOG(INFO) << absl::StrCat(
+    const std::string message = absl::StrCat(
         "Current configuration of the IPU devices does not support remote "
         "buffers and therefore weight update only variables cannot be "
         "offloaded to remote memory. Set the `offload_weight_update_variables` "
@@ -409,7 +414,13 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
         IsPipelineOp(call_op) ? "`pipelining_ops.pipeline`"
                               : "`GradientAccumulationOptimizerV2`",
         "to `False` to stop seeing this message.");
-    return changed;
+    if (offload_variables == THREESTATE_UNDEFINED) {
+      VLOG(1) << message;
+      return changed;
+    } else {
+      CHECK(offload_variables == THREESTATE_ON);
+      return FailedPrecondition("%s", message.c_str());
+    }
   }
 
   std::set<int64> call_params_to_remove;

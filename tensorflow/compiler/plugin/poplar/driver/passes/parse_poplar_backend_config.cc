@@ -35,6 +35,14 @@ StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
   }
   return itr->second;
 }
+
+StatusOr<ThreeState> ParseThreeState(const std::string& value) {
+  ThreeState parsed;
+  if (!ThreeState_Parse(value, &parsed)) {
+    return xla::FailedPrecondition("Could not parse the ThreeState value.");
+  }
+  return parsed;
+}
 }  // namespace
 
 StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
@@ -107,17 +115,21 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               auto* resource_update_config =
                   call_config->mutable_resource_update_config();
               // Get the offload variables flag.
-              TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
-                                  GetAttribute(attributes, OFFLOAD_VARIABLES));
-              auto offload_variables = std::stoi(offload_variables_str);
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_variables_str,
+                  GetAttribute(attributes, OFFLOAD_WEIGHT_UPDATE_VARIABLES));
+              TF_ASSIGN_OR_RETURN(auto offload_variables,
+                                  ParseThreeState(offload_variables_str));
               resource_update_config->set_offload_variables(offload_variables);
 
               // Get the partition offload variables flag.
               TF_ASSIGN_OR_RETURN(
                   std::string partition_offload_variables_str,
-                  GetAttribute(attributes, PARTITION_OFFLOADED_VARIABLES));
-              auto partition_offload_variables =
-                  std::stoi(partition_offload_variables_str);
+                  GetAttribute(attributes,
+                               PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES));
+              TF_ASSIGN_OR_RETURN(
+                  auto partition_offload_variables,
+                  ParseThreeState(partition_offload_variables_str));
               resource_update_config->set_partition_offloaded_variables(
                   partition_offload_variables);
 

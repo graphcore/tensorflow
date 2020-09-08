@@ -134,6 +134,7 @@ cc_library(
     deps = [
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
+        ":xla_backend_protos",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:hlo",
         "@com_google_absl//absl/types:any",
@@ -4104,6 +4105,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4134,6 +4136,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",

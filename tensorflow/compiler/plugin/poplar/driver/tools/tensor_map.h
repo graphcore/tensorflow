@@ -58,7 +58,7 @@ struct TensorOrRemoteBuffer {
    * Construct with a poplar tensor.
    */
   explicit TensorOrRemoteBuffer(poplar::Tensor tensor)
-      : content_type(ContentType::Tensor), tensor(tensor) {}
+      : tensor(tensor), content_type(ContentType::Tensor) {}
 
   /**
    * Construct with a poplar remote buffer.
@@ -66,10 +66,10 @@ struct TensorOrRemoteBuffer {
   explicit TensorOrRemoteBuffer(poplar::RemoteBuffer rbuffer,
                                 bool is_replica_partitioned,
                                 absl::optional<int64> slice_dimension)
-      : content_type(ContentType::RemoteBuffer),
-        remote_buffer(rbuffer),
+      : remote_buffer(rbuffer),
         is_replica_partitioned(is_replica_partitioned),
-        slice_dimension(slice_dimension) {}
+        slice_dimension(slice_dimension),
+        content_type(ContentType::RemoteBuffer) {}
 
   /**
    * Construct with a remote buffer or tensor.

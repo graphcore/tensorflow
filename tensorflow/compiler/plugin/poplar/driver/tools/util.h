@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -144,8 +145,8 @@ int64 GetPipelineDepth(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
-bool GetResourceUpdateOffloadVariables(const HloInstruction*);
-bool GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
+ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
+ThreeState GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 

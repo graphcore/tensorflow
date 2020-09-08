@@ -13,9 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
+
+#include <popnn/LstmDef.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 namespace xla {
@@ -48,6 +50,9 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
                                       {input_size, num_channels});
 
   lstm_params.calcInputGradients = lstm_inst->is_training();
+  lstm_params.cellOrder = {
+      BASIC_LSTM_CELL_INPUT_GATE, BASIC_LSTM_CELL_FORGET_GATE,
+      BASIC_LSTM_CELL_CANDIDATE, BASIC_LSTM_CELL_OUTPUT_GATE};
   return lstm_params;
 }
 

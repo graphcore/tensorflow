@@ -17,6 +17,7 @@ Optimizer wrappers which perform local gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
@@ -45,7 +46,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
   def __init__(self,
                opt,
                num_mini_batches,
-               offload_weight_update_variables=True,
+               offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=None,
                name="GradientAccumulationOptimizerV2"):
     """Construct a Gradient Accumulation Optimizer V2.
@@ -54,15 +55,18 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
       opt: An existing `Optimizer` to encapsulate.
       num_mini_batches: Number of mini-batches the gradients will be accumulated
         for.
-      offload_weight_update_variables: If True, any `tf.Variable` which is
-        only used by the weight update of the model (for example the accumulator
-        variable when using the `tf.MomentumOptimizer`), will be stored in the
-        remote memory. During the weight update this variable will be streamed
-        onto the device and then streamed back to the remote memory after it has
-        been updated. Requires the machine to be configured with support for
-        `Poplar remote buffers`. Offloading variables into remote memory can
-        reduce maximum memory liveness, but can also increase the computation
-        time of the weight update.
+      offload_weight_update_variables: When enabled, any `tf.Variable` which is
+        only used by the weight update of the pipeline (for example the
+        accumulator variable when using the `tf.MomentumOptimizer`), will be
+        stored in the remote memory. During the weight update this variable will
+        be streamed onto the device and then streamed back to the remote memory
+        after it has been updated. Requires the machine to be configured with
+        support for `Poplar remote buffers`. Offloading variables into remote
+        memory can reduce maximum memory liveness, but can also increase the
+        computation time of the weight update.
+        When set to `None` the variables will be placed in either in-processor
+        or remote memory automatically based on the current best placement
+        strategy.
       replicated_optimizer_state_sharding: If True, any any `tf.Variable` which
         is offloaded will be partitioned across the replicas. A collective
         all-gather will be inserted to restore the tensor on each replica.
@@ -77,13 +81,24 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
     if num_mini_batches < 1:
       raise ValueError("num_mini_batches must be a positive number.")
 
-    if replicated_optimizer_state_sharding is None:
-      replicated_optimizer_state_sharding = offload_weight_update_variables
-
     self._num_mini_batches = num_mini_batches
-    self._offload_weight_update_variables = offload_weight_update_variables
-    self._replicated_optimizer_state_sharding = \
-      replicated_optimizer_state_sharding
+
+    def bool_to_three_state(value, default):
+      if value is None:
+        return default
+      elif value:
+        return backend_config_pb2.ThreeState.Name(
+            backend_config_pb2.THREESTATE_ON)
+      return backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_OFF)
+
+    self._offload_weight_update_variables = bool_to_three_state(
+        offload_weight_update_variables,
+        backend_config_pb2.ThreeState.Name(
+            backend_config_pb2.THREESTATE_UNDEFINED))
+    self._replicated_optimizer_state_sharding = bool_to_three_state(
+        replicated_optimizer_state_sharding,
+        self._offload_weight_update_variables)
 
   def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Compute gradients of "loss" for the variables in "var_list".
@@ -215,7 +230,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
   def __init__(self,
                opt,
                num_mini_batches,
-               offload_weight_update_variables=True,
+               offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=None,
                name="CrossReplicaGradientAccumulationOptimizerV2"):
     """Construct a Cross Replica Gradient Accumulation Optimizer V2.
