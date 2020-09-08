@@ -118,7 +118,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       def my_net(x):
         return x * x
 
-      v = array_ops.placeholder(dtype=np.float32, shape=(1,))
+      v = array_ops.placeholder(dtype=np.float32, shape=(2,))
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
@@ -127,7 +127,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
                             sess,
                             set_opts_fn=_use_offline_compilation_if_needed)
         try:
-          res = sess.run(result, {v: [2.0]})
+          res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
           if offline_compilation_needed and "compilation only" in e.message:
             res = []
@@ -139,7 +139,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
     with _temporary_executable_cache():
       result0, report0 = self._run_in_new_process(build_and_run_model)
       result1, report1 = self._run_in_new_process(build_and_run_model)
-      self.assertEqual(result0, result1)
+      self.assertAllEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
 
@@ -235,7 +235,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       def my_net(x):
         return x * x
 
-      v = array_ops.placeholder(dtype=np.float32, shape=(1,))
+      v = array_ops.placeholder(dtype=np.float32, shape=(2,))
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
@@ -244,7 +244,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
                             sess,
                             set_opts_fn=_use_offline_compilation_if_needed)
         try:
-          res = sess.run(result, {v: [2.0]})
+          res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
           if offline_compilation_needed and "compilation only" in e.message:
             res = []
@@ -263,7 +263,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       with ops.Graph().as_default():
         result1, events1 = build_and_run_model()
 
-      self.assertEqual(result0, result1)
+      self.assertAllEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 
@@ -294,6 +294,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
 
     def build_and_run_model():
       ipu_options = ipu.utils.create_ipu_config(profiling=True)
+      ipu_options = ipu.utils.auto_select_ipus(ipu_options, 1)
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    ipu_options=ipu_options,

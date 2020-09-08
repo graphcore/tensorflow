@@ -238,7 +238,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
         RemoteParameterInfo{remote_parameter.parameter_number()});
   }
 
-  // Load the poplar compilation options from the serialized executable
+  // Load the additional Poplar engine options that we need to restore.
   poplar::OptionFlags opts;
   for (const auto& flag : proto.option_flags()) {
     opts.set(flag.option(), flag.value());
@@ -439,7 +439,9 @@ Status ExportInternal(
     *(recv_proto->mutable_shape()) = recv.shape.ToProto();
   }
 
-  // write the compilation options into the serialized executable
+  // Note that Poplar will serialize its own state. Here we can serialize
+  // additional engine options (typically run-time options) that Poplar
+  // does not consider a part of its own executable state.
   for (const auto flag : opts) {
     auto* poplar_opt = proto.add_option_flags();
     poplar_opt->set_option(flag.first);
