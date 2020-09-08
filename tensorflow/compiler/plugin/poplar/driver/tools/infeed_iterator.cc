@@ -24,43 +24,24 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
+
 #include "tensorflow/compiler/xla/shape.h"
-#include "tensorflow/core/common_runtime/device_factory.h"
-#include "tensorflow/core/common_runtime/device_mgr.h"
+
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
 #include "tensorflow/core/common_runtime/renamed_device.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function_handle_cache.h"
-#include "tensorflow/core/kernels/data/dataset_utils.h"
 #include "tensorflow/core/kernels/data/unbounded_thread_pool.h"
 #include "tensorflow/core/platform/cpu_info.h"
 #include "tensorflow/core/platform/mem.h"
+
+#include "tensorflow/core/common_runtime/device_factory.h"
+#include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/public/version.h"
 
 namespace xla {
 namespace poplarplugin {
-namespace {
-const char kAnonymousCancellationManagerResource[] =
-    "AnonymousCancellationManagerResource";
-
-// Used to generate unique names for anonymous cancellation managers.
-static std::atomic<int64> current_id_;
-
-class CancellationManagerResource : public tensorflow::ResourceBase {
- public:
-  tensorflow::CancellationManager* cancellation_manager() {
-    return &cancellation_manager_;
-  }
-
-  std::string DebugString() const override {
-    return "Cancellation manager for InfeedIterator";
-  }
-
- private:
-  tensorflow::CancellationManager cancellation_manager_;
-};
-}  // namespace
 
 /* static */ constexpr InfeedQueue::T InfeedQueue::kEndOfQueueSentinel;
 InfeedQueue::InfeedQueue()
@@ -71,15 +52,16 @@ InfeedQueue::InfeedQueue()
         }
       }) {}
 
-InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
-                               tensorflow::data::IteratorContext::Params params,
-                               tensorflow::data::DatasetBase* dataset,
-                               InfeedAllocator* infeed_allocator,
-                               int64 replication_factor,
-                               const std::vector<xla::Shape>& shapes,
-                               const std::string& feed_id)
+InfeedIterator::InfeedIterator(
+    tensorflow::FunctionLibraryRuntime* flr,
+    tensorflow::data::IteratorContext::Params params,
+    tensorflow::data::DatasetBase* dataset,
+    tensorflow::CancellationManager* cancellation_manager,
+    InfeedAllocator* infeed_allocator, int64 replication_factor,
+    const std::vector<xla::Shape>& shapes, const std::string& feed_id)
     : replication_factor_(replication_factor),
       shapes_(shapes),
+      cancellation_manager_(cancellation_manager),
       infeed_allocator_(infeed_allocator),
       infeed_queues_(replication_factor),
       infeed_queues_ptrs_(replication_factor) {
@@ -127,7 +109,7 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
   base_params.allocator_getter = [this](tensorflow::AllocatorAttributes) {
     return infeed_allocator_;
   };
-  base_params.cancellation_manager = &cancellation_manager_;
+  base_params.cancellation_manager = cancellation_manager_;
   base_params.env = tensorflow::Env::Default();
   base_params.flr = new_flr;
   base_params.function_handle_cache = function_handle_cache_.get();
@@ -139,31 +121,10 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
   base_params.thread_factory = unbounded_thread_pool_->get_thread_factory();
   base_params.thread_pool = unbounded_thread_pool_.get();
 
-  // Insert a resource into the device to notify when the device is about to be
-  // destroyed.
-  // The resource manager will take ownership of this pointer.
-  CancellationManagerResource* resource = new CancellationManagerResource();
-  const std::string unique_name = absl::StrCat(
-      kAnonymousCancellationManagerResource, current_id_.fetch_add(1));
-  Status s = device->resource_manager()->Create<CancellationManagerResource>(
-      kAnonymousCancellationManagerResource, unique_name, resource);
-  if (!s.ok()) {
-    LOG(FATAL) << s.ToString();
-  }
-
-  // Connect the cancellation managers so that when the device is being
-  // destroyed, the dataset stops running.
-  s = tensorflow::data::ConnectCancellationManagers(
-      resource->cancellation_manager(), &cancellation_manager_,
-      &deregister_cancellation_manager_parent_fn_);
-  if (!s.ok()) {
-    LOG(FATAL) << s.ToString();
-  }
-
   // Create the context for the iterator.
   iterator_ctx_ = absl::make_unique<tensorflow::IteratorContext>(base_params);
   // Create the iterator.
-  s = dataset->MakeIterator(iterator_ctx_.get(), feed_id, &iterator_);
+  Status s = dataset->MakeIterator(iterator_ctx_.get(), feed_id, &iterator_);
   if (!s.ok()) {
     LOG(FATAL) << s.ToString();
   }
@@ -180,20 +141,10 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
   }
 }
 
-InfeedIterator::~InfeedIterator() {
-  if (!cancellation_manager_.IsCancelled()) {
-    deregister_cancellation_manager_parent_fn_();
-  }
-}
-
 Status InfeedIterator::GetNext(std::vector<tensorflow::Tensor>* outputs,
                                bool* end_of_sequence) {
-  if (cancellation_manager_.IsCancelled()) {
-    *end_of_sequence = true;
-  } else {
-    TF_RETURN_IF_ERROR(
-        iterator_->GetNext(iterator_ctx_.get(), outputs, end_of_sequence));
-  }
+  TF_RETURN_IF_ERROR(
+      iterator_->GetNext(iterator_ctx_.get(), outputs, end_of_sequence));
   return Status::OK();
 }
 

@@ -2565,8 +2565,8 @@ void PoplarExecutor::CreateInfeedIterator(
                   "the same TensorFlow device to have unique names.";
   } else {
     infeed_iterators_[feed_id] = absl::make_unique<InfeedIterator>(
-        flr, params, dataset, GetInfeedAllocator(), config.replication_factor(),
-        shapes, feed_id);
+        flr, params, dataset, cancellation_manager(), GetInfeedAllocator(),
+        config.replication_factor(), shapes, feed_id);
   }
 }
 
