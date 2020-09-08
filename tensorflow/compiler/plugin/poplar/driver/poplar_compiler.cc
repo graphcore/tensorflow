@@ -784,9 +784,9 @@ void AddFrameworkFileToAutoReportDirectory(const std::string& tensorflow_info,
   }
 }
 
-void SetMultiReplicaDistributionOptions(poplar::OptionFlags* opt_flags,
-                                        const PoplarExecutor* poplar_executor,
-                                        int64 global_replication_factor) {
+void SetRuntimeReplicaOptions(poplar::OptionFlags* opt_flags,
+                              const PoplarExecutor* poplar_executor,
+                              int64 global_replication_factor) {
   const int64 process_index = poplar_executor->GetMultiReplicaProcessIndex();
   const int64 process_count = poplar_executor->GetMultiReplicaProcessCount();
 
@@ -798,17 +798,10 @@ void SetMultiReplicaDistributionOptions(poplar::OptionFlags* opt_flags,
   const int64 num_runtime_replica = global_replication_factor / process_count;
   const int64 first_runtime_replica = process_index * num_runtime_replica;
 
-  LOG(INFO) << "Multi-replica distribution: process index " << process_index
-            << ", process count " << process_count
-            << ", global replication factor " << global_replication_factor
-            << ", local replicas [" << first_runtime_replica << ", "
-            << (first_runtime_replica + num_runtime_replica) << ")";
-
   opt_flags->set("target.firstRuntimeReplica",
                  std::to_string(first_runtime_replica));
   opt_flags->set("target.numberRuntimeReplica",
                  std::to_string(num_runtime_replica));
-  opt_flags->set("target.syncReplicasIndependently", "true");
 }
 
 void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
@@ -1387,8 +1380,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       };
 
       if (poplar_executor->HasMultiReplicaDistributionOptions()) {
-        SetMultiReplicaDistributionOptions(&opt_flags, poplar_executor,
-                                           replication_factor);
+        SetRuntimeReplicaOptions(&opt_flags, poplar_executor,
+                                 replication_factor);
+        opt_flags.set("target.syncReplicasIndependently", "true");
       }
 
       poplar::Executable exec =
@@ -1398,10 +1392,20 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         if (!poplar_executor->HaveCachedExecutable(filenames)) {
           TF_RETURN_IF_ERROR(
               poplar_executor->CreateExecutableCacheDirIfMissing());
+
+          // Serialize some additional options that Poplar does not serialize
+          // on its own.
+          poplar::OptionFlags options_to_serialize =
+              poplar_executor->GetReportExecutionFlags();
+
+          if (poplar_executor->HasMultiReplicaDistributionOptions()) {
+            SetRuntimeReplicaOptions(&options_to_serialize, poplar_executor,
+                                     replication_factor);
+          }
+
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               filenames, exec, resources.annotations, replication_factor,
-              poplar_executor->GetReportExecutionFlags(),
-              resources.streams_indices.GetAssignedIds(),
+              options_to_serialize, resources.streams_indices.GetAssignedIds(),
               resources.streams_indices.CheckpointFeedsOrder()));
         }
       }
