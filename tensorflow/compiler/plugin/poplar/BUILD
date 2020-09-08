@@ -524,6 +524,7 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/core:core_cpu",
+        "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/core/kernels/data:unbounded_thread_pool",
         "//third_party/eigen3",
         "@com_google_absl//absl/strings",
