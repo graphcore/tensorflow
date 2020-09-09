@@ -312,17 +312,22 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   auto& used = used_tensors_[param_num];
   auto& allocated = allocated_tensors_[param_num];
 
-  for (size_t i = 0; i < shapes.size(); i++) {
-    const Shape shape = shapes[i];
-    TensorLocation input_location(inst, i);
-
+  size_t flat_tuple_index = 0;
+  for (auto index_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+    const Shape shape = index_shape.shape;
+    TensorLocation input_location(inst, flat_tuple_index);
+    const int64 tuple_index =
+        index_shape.index.empty() ? 0 : index_shape.index[0];
     // For some computations, like entry computation, every input is forced to
     // be marked as used.
-    used[i] = InputIsUsedInThisComputation(input_location, shapes);
-    allocated[i] =
-        InputIsUsedInDependentComputations(input_location) || used[i];
+    used[flat_tuple_index] = InputIsUsedInThisComputation(inst, tuple_index);
+    allocated[flat_tuple_index] =
+        InputIsUsedInDependentComputations(input_location) ||
+        used[flat_tuple_index];
     // Delegate the handling of parameter tensor.
     TF_RETURN_IF_ERROR(HandleParameterTensor(input_location, shape));
+
+    flat_tuple_index++;
   }
 
   return Status::OK();
@@ -1055,34 +1060,27 @@ StatusOr<DeferredAllocations*> DeferredVisitor::GetDeferredAllocations() {
   return &resources_.deferred_allocation_scopes.top();
 }
 
-bool DeferredVisitor::InputIsUsedInThisComputation(
-    TensorLocation location, const std::vector<xla::Shape>& shapes) {
-  if (location.instruction->parent()->root_instruction() ==
-      location.instruction) {
+bool DeferredVisitor::InputIsUsedInThisComputation(const HloInstruction* inst,
+                                                   int64 tuple_index) {
+  if (inst->parent()->root_instruction() == inst) {
     return true;
   }
 
-  if (location.instruction->user_count() == 0) {
+  if (inst->user_count() == 0) {
     return false;
   }
 
   // Non-tuples are considered always used
-  if (!location.instruction->shape().IsTuple()) {
+  if (!inst->shape().IsTuple()) {
     return true;
   }
 
-  // Ignore nested tuples
-  if (static_cast<int64>(shapes.size()) !=
-      ShapeUtil::TupleElementCount(location.instruction->shape())) {
-    return true;
-  }
-
-  for (auto user : location.instruction->users()) {
+  for (auto user : inst->users()) {
     if (user->opcode() != HloOpcode::kGetTupleElement) {
       return true;
     }
 
-    if (user->tuple_index() == location.flattened_output_tuple_index) {
+    if (user->tuple_index() == tuple_index) {
       return true;
     }
   }

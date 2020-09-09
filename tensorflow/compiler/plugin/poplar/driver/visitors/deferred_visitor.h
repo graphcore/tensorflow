@@ -358,8 +358,9 @@ class DeferredVisitor : public FullVisitor {
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
-  bool InputIsUsedInThisComputation(TensorLocation location,
-                                    const std::vector<xla::Shape>& shapes);
+  bool InputIsUsedInThisComputation(const HloInstruction* inst,
+                                    int64 tuple_index);
+
   // Returns true if the input is used in any dependent computation and
   // therefore it needs to be allocated.
   bool InputIsUsedInDependentComputations(TensorLocation location);
