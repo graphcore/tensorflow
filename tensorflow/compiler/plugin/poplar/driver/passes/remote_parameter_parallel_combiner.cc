@@ -187,8 +187,7 @@ using DecreasingSizeQueue =
                         DecreasingSizeComparator>;
 
 StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
-    std::map<int64, DecreasingSizeQueue> shard_queues,
-    const HloReachabilityMap& reachability_map,
+    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues,
     TensorAllocationMap& allocation_map) {
   std::vector<HloInstruction*> combined;
 
@@ -208,10 +207,14 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
       break;
     }
 
+    // We must build a new reachability map because it does not support updates
+    // to reflect the changes made by the combinations.
+    const auto reachability_map = HloReachabilityMap::Build(comp);
+
     // We expect that the instructions in the different shards are not
     // dependent on each other, and hence can be combined safely. If this is
     // not the case, we just bail out of this attempt and try the next.
-    if (!IndependentlySchedulable(to_combine, reachability_map)) {
+    if (!IndependentlySchedulable(to_combine, *reachability_map)) {
       VLOG(2) << "Skipping combination because of dependencies";
       continue;
     }
@@ -266,17 +269,13 @@ StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
     }
   }
 
-  const auto reachability_map = HloReachabilityMap::Build(comp);
+  TF_ASSIGN_OR_RETURN(const auto combined_loads,
+                      CombineFromDifferentShards(comp, std::move(shard_loads),
+                                                 allocation_map_));
 
-  TF_ASSIGN_OR_RETURN(
-      const auto combined_loads,
-      CombineFromDifferentShards(std::move(shard_loads), *reachability_map,
-                                 allocation_map_));
-
-  TF_ASSIGN_OR_RETURN(
-      const auto combined_stores,
-      CombineFromDifferentShards(std::move(shard_stores), *reachability_map,
-                                 allocation_map_));
+  TF_ASSIGN_OR_RETURN(const auto combined_stores,
+                      CombineFromDifferentShards(comp, std::move(shard_stores),
+                                                 allocation_map_));
 
   // Try to help the scheduler a bit by adding some constraints.
   TF_RETURN_IF_ERROR(
