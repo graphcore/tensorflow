@@ -59,6 +59,7 @@ bool IsBiasAdd(const HloInstruction*);
 bool IsPopOpsBiasAdd(const xla::HloInstruction*);
 bool IsPopOpsElementwise(const xla::HloInstruction*);
 bool IsPopOpsElementwiseBinary(const xla::HloInstruction*);
+bool IsPopOpsElementwiseBinaryOperandsDifferent(const xla::HloInstruction*);
 bool IsNormInference(const xla::HloInstruction*);
 bool IsNormTraining(const xla::HloInstruction*);
 bool IsNormInferenceOrTraining(const xla::HloInstruction*);
