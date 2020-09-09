@@ -92,9 +92,8 @@ class DeferredAllocations {
       absl::optional<int64> opt_tensors_start = absl::nullopt,
       absl::optional<int64> opt_tensors_end = absl::nullopt);
 
-  // Called during FinishScopedVisit to make sure everything is allocated at the
-  // end.
-  Status AllocateRemainingLocations();
+  // Get all the input allocations which have not been allocated yet.
+  const std::vector<TensorLocation> GetNotAllocatedLocations() const;
 
  private:
   // This is called by the tensor map when a tensor value for a location has
@@ -225,8 +224,6 @@ class DeferredVisitor : public FullVisitor {
    * tensor is not yet allocated this visitor will allocate it, unless specified
    * by `allocate_all_input_tensors`, in which case if the input tensor is not
    * used inside the computation it will not be allocated.
-   * @param mark_all_input_tensors_as_used Override the liveness analysis for
-   * buffer allocation.
    * @param allocate_all_input_tensors If there are any inputs which were not
    * used in the computation, this flag decides whether to allocate them anyway
    * or not.
@@ -235,9 +232,7 @@ class DeferredVisitor : public FullVisitor {
    */
   DeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-      const std::string& name,
-      const bool mark_all_input_tensors_as_used = false,
-      const bool allocate_all_input_tensors = true,
+      const std::string& name, const bool allocate_all_input_tensors = true,
       const std::vector<const DeferredVisitor*>& dependent_computations = {});
 
   DeferredVisitor() = delete;
@@ -391,7 +386,6 @@ class DeferredVisitor : public FullVisitor {
  private:
   absl::optional<poplar::Function> function_;
 
-  const bool mark_all_input_tensors_as_used_;
   const bool allocate_all_input_tensors_;
   poplar::program::Sequence merged_infeed_sequence;
 };
