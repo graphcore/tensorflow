@@ -42,6 +42,9 @@ enum FrontendAttributeId {
   PIPELINE_BATCH_SERIALIZATION_ITERATIONS = 12;
   // Whether to partition offloaded weight update variables across the replicas.
   PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES = 13;
+  // Used in pipelining to indicate whether activations should be offloaded into
+  // remote memory
+  OFFLOAD_ACTIVATIONS = 14;
 };
 
 // An enum for helping with setting a state of something, where the state can be
@@ -120,6 +123,7 @@ message PoplarBackendConfig {
       int64 batch_serialization_iterations = 2;
       int64 repeat_count = 3;
       Schedule schedule = 4;
+      ThreeState offload_activations = 5;
     }
 
     message CallConfig {

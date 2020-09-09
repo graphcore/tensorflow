@@ -2565,8 +2565,8 @@ void PoplarExecutor::CreateInfeedIterator(
                   "the same TensorFlow device to have unique names.";
   } else {
     infeed_iterators_[feed_id] = absl::make_unique<InfeedIterator>(
-        flr, params, dataset, cancellation_manager(), GetInfeedAllocator(),
-        config.replication_factor(), shapes, feed_id);
+        flr, params, dataset, GetInfeedAllocator(), config.replication_factor(),
+        shapes, feed_id);
   }
 }
 
@@ -2938,7 +2938,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         }
 
         executable.OnEngineLoaded();
-
       } catch (const std::exception& e) {
         return PoplarExceptionToTensorflowStatus("[Load engine] ", e);
       }
@@ -3233,10 +3232,17 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 void PoplarExecutor::SetCurrentReplicationFactor(
     int64 executable_replication_factor) {
   if (HasMultiReplicaDistributionOptions()) {
+    const int64 process_index = GetMultiReplicaProcessIndex();
     const int64 process_count = GetMultiReplicaProcessCount();
     CHECK_GT(process_count, 0);
     CHECK_EQ(executable_replication_factor % process_count, 0);
+
     current_replication_factor_ = executable_replication_factor / process_count;
+
+    LOG(INFO) << "Multi-replica distribution: process index " << process_index
+              << ", process count " << process_count
+              << ", global replication factor " << executable_replication_factor
+              << ", local repliation factor " << current_replication_factor_;
   } else {
     current_replication_factor_ = executable_replication_factor;
   }

@@ -33,6 +33,7 @@ REGISTER_OP("Pipeline")
     .Attr("schedule: int")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("pipeline_poplar_config: string")
+    .Attr("offload_activations: string")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(

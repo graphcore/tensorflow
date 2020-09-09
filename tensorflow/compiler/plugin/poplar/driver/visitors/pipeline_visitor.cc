@@ -1315,14 +1315,14 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   const ShapeTree<bool> add_copies = visitor->GetOutputCopies(inst);
   size_t flat_tuple_index = 0;
   for (const auto& leaf : add_copies.leaves()) {
-    poplar::Tensor output = pipeline_outputs[flat_tuple_index];
+    auto output = pipeline_outputs[flat_tuple_index];
     if (leaf.second && StageOutputsRequireCopies()) {
       output = poputil::duplicate(
           graph, output, seq,
           absl::StrCat(debug_name, "/output/", flat_tuple_index),
           poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
     }
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index, output));
+    TF_CHECK_OK(AddOutput(tensor_map, inst, flat_tuple_index, output));
 
     flat_tuple_index++;
   }

@@ -20,6 +20,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/synchronization/notification.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
 
@@ -118,10 +120,11 @@ class InfeedIterator {
   InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
                  tensorflow::data::IteratorContext::Params params,
                  tensorflow::data::DatasetBase* dataset,
-                 tensorflow::CancellationManager* cancellation_manager,
                  InfeedAllocator* infeed_allocator_, int64 replication_factor,
                  const std::vector<xla::Shape>& shapes,
                  const std::string& feed_id);
+
+  ~InfeedIterator();
 
   Status GetNext(std::vector<tensorflow::Tensor>* outputs,
                  bool* end_of_sequence);
@@ -135,13 +138,18 @@ class InfeedIterator {
   std::vector<Shape> shapes_;
 
   // Not owned.
-  // Cancellation manager from the poplar executor.
-  tensorflow::CancellationManager* cancellation_manager_;
   // Allocator that should be used for allocating buffers for infeeds.
   InfeedAllocator* infeed_allocator_;
 
+  std::shared_ptr<tensorflow::mutex> mu_;
+  std::shared_ptr<absl::Notification> cancelled_notification_;
+
   // Owned
   // Note that member order is important.
+  // Cancellation manager for the dataset.
+  tensorflow::CancellationManager cancellation_manager_;
+  // Function called to deregister the parent of the cancellation manager.
+  std::function<void()> deregister_cancellation_manager_parent_fn_;
   // Resource manager used by the iterators.
   tensorflow::ResourceMgr resource_mgr_;
   // The device manager which contains the device for this iterator.

@@ -13,6 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DeviceManager.hpp>
+#include <poplar/Engine.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplar/replication_factor.hpp>
+#include <poputil/TileMapping.hpp>
+
+#include "absl/container/flat_hash_set.h"
+#include "include/json/json.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
@@ -22,7 +31,12 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-
+#include "tensorflow/compiler/tf2xla/shape_util.h"
+#include "tensorflow/compiler/tf2xla/type_util.h"
+#include "tensorflow/compiler/tf2xla/xla_helpers.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
+#include "tensorflow/compiler/xla/literal_util.h"
+#include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/node_def_util.h"
@@ -38,24 +52,6 @@ limitations under the License.
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/batch_util.h"
 #include "tensorflow/core/util/stream_executor_util.h"
-
-#include "tensorflow/compiler/tf2xla/shape_util.h"
-#include "tensorflow/compiler/tf2xla/type_util.h"
-#include "tensorflow/compiler/tf2xla/xla_helpers.h"
-#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
-#include "tensorflow/compiler/xla/literal_util.h"
-#include "tensorflow/compiler/xla/shape_util.h"
-
-#include "absl/container/flat_hash_set.h"
-
-#include "include/json/json.h"
-
-#include <poplar/DeviceManager.hpp>
-#include <poplar/Engine.hpp>
-#include <poplar/Tensor.hpp>
-#include <poplar/exceptions.hpp>
-#include <poplar/replication_factor.hpp>
-#include <poputil/TileMapping.hpp>
 
 namespace tensorflow {
 namespace {
@@ -205,10 +201,9 @@ class DatasetBenchmark : public OpKernel {
     DatasetBase* dataset;
     OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0), &dataset));
 
-    CancellationManager cancellation_manager;
     xla::poplarplugin::InfeedAllocator infeed_allocator;
     xla::poplarplugin::InfeedIterator infeed_iterator(
-        flr, params, dataset, &cancellation_manager, &infeed_allocator,
+        flr, params, dataset, &infeed_allocator,
         /* replication factor */ 1, shapes_, "benchmark");
 
     Json::Value stats_json;

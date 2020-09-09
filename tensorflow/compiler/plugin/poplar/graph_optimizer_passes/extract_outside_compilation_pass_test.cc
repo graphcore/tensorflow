@@ -273,6 +273,7 @@ TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
                     .Attr("pipeline_depth", 1)
                     .Attr("batch_serialization_iterations", 1)
                     .Attr("schedule", 0)
+                    .Attr("offload_activations", "THREESTATE_FALSE")
                     .Attr("to_apply", to_apply)
                     .Finalize(&g, &pipeline_node));
 
