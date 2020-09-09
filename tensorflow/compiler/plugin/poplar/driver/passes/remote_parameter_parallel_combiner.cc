@@ -108,7 +108,8 @@ StatusOr<HloInstruction*> CombineAndReplace(
         HloInstruction::CreateGetTupleElement(inst->shape(), new_inst, i));
     MakeUsedInplace(gte);
 
-    // Update tensor allocation info.
+    // Update tensor allocation info. Need to handle two cases:
+    // 1) If this instruction was the source of an allocation target.
     auto itr = allocation_map.find(TensorLocation(inst, 0));
     if (itr != allocation_map.end()) {
       auto inserted = allocation_map.emplace(TensorLocation(new_inst, i),
@@ -122,6 +123,17 @@ StatusOr<HloInstruction*> CombineAndReplace(
 
       // Erase the old entry (with a now moved-from value).
       allocation_map.erase(itr);
+    }
+
+    // 2) If this instruction was the layout of an allocation target.
+    for (auto& e : allocation_map) {
+      TensorTarget& target = e.second;
+      if (target.layout == inst) {
+        target.layout = new_inst;
+        CHECK(target.layout_output_idx.has_value());
+        CHECK_EQ(*target.layout_output_idx, 0);
+        target.layout_output_idx = i;
+      }
     }
 
     // Replace the old inst.
