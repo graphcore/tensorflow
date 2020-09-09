@@ -410,8 +410,8 @@ while_Sum-reduction.13 (x.14: f32[], y.15: f32[]) -> f32[] {
   ROOT add.16 = f32[] add(x.14, y.15)
 }
 
-_functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) {
-  arg_tuple.18 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
+_functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2])) -> (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) {
+  arg_tuple.18 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
   get-tuple-element.21 = f32[] get-tuple-element(arg_tuple.18), index=2
   get-tuple-element.19 = s32[] get-tuple-element(arg_tuple.18), index=0
   constant.26 = s32[] constant(1)
@@ -422,7 +422,8 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   get-tuple-element.24 = f32[1,4,4,2] get-tuple-element(arg_tuple.18), index=5
   get-tuple-element.25 = f32[1,1,2,2] get-tuple-element(arg_tuple.18), index=6
   convolution.48 = f32[1,4,4,2] convolution(get-tuple-element.24, get-tuple-element.25), window={size=1x1}, dim_labels=b01f_01io->b01f
-  get-tuple-element.23 = f32[2] get-tuple-element(arg_tuple.18), index=4
+  gte = (f32[2], f32[2]) get-tuple-element(arg_tuple.18), index=4
+  get-tuple-element.23 = f32[2] get-tuple-element(gte), index=0
   constant.33 = f32[] constant(0.1)
   broadcast.34 = f32[2] broadcast(constant.33), dimensions={}
   constant.32 = f32[2] constant({16, 16})
@@ -436,8 +437,7 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   reduce.54 = f32[] reduce(convert.51, convert.53), dimensions={0,1,2,3}, to_apply=while_Sum-reduction.13
   convert.55 = f32[] convert(reduce.54)
   get-tuple-element.22 = s32[] get-tuple-element(arg_tuple.18), index=3
-  tuple.56 = (f32[2]) tuple(f32[2] subtract.36)
-  get-tuple-element.57 = f32[2] get-tuple-element((f32[2]) tuple.56), index=0
+  tuple.56 = (f32[2], f32[2]) tuple(f32[2] subtract.36, f32[2] subtract.36)
   constant.40 = f32[] constant(0.1)
   broadcast.41 = f32[1,4,4,2] broadcast(constant.40), dimensions={}
   constant.28 = f32[] constant(1)
@@ -455,13 +455,12 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   subtract.47 = f32[1,1,2,2] subtract(get-tuple-element.25, multiply.46)
   tuple.60 = (f32[1,1,2,2]) tuple(subtract.47)
   get-tuple-element.61 = f32[1,1,2,2] get-tuple-element(tuple.60), index=0
-  ROOT tuple.62 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(add.27, add.31, convert.55, get-tuple-element.22, get-tuple-element.57, get-tuple-element.59, get-tuple-element.61)
+  ROOT tuple.62 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) tuple(add.27, add.31, convert.55, get-tuple-element.22, tuple.56, get-tuple-element.59, get-tuple-element.61)
 }
 
-_functionalize_cond_1__.63 (arg_tuple.64: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> (pred[]) {
-  arg_tuple.64 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
+cond_wrapper.77 (inputs.78: (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2])) -> pred[] {
+  arg_tuple.64 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
   get-tuple-element.67 = f32[] get-tuple-element(arg_tuple.64), index=2
-  get-tuple-element.69 = f32[2] get-tuple-element(arg_tuple.64), index=4
   get-tuple-element.70 = f32[1,4,4,2] get-tuple-element(arg_tuple.64), index=5
   get-tuple-element.71 = f32[1,1,2,2] get-tuple-element(arg_tuple.64), index=6
   get-tuple-element.65 = s32[] get-tuple-element(arg_tuple.64), index=0
@@ -470,25 +469,19 @@ _functionalize_cond_1__.63 (arg_tuple.64: (s32[], s32[], f32[], s32[], f32[2], f
   get-tuple-element.66 = s32[] get-tuple-element(arg_tuple.64), index=1
   constant.72 = s32[] constant(2)
   less-than.73 = pred[] compare(get-tuple-element.66, constant.72), direction=LT
-  and.75 = pred[] and(pred[] less-than.74, pred[] less-than.73)
-  ROOT tuple.76 = (pred[]) tuple(pred[] and.75)
+  ROOT and.75 = pred[] and(pred[] less-than.74, pred[] less-than.73)
 }
 
-cond_wrapper.77 (inputs.78: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> pred[] {
-  inputs.78 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
-  call.79 = (pred[]) call(inputs.78), to_apply=_functionalize_cond_1__.63
-  ROOT get-tuple-element.80 = pred[] get-tuple-element((pred[]) call.79), index=0
-}
-
-ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32[2], arg2.3: f32[1,1,2,2]) -> (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) {
+ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32[2], arg2.3: f32[1,1,2,2]) -> (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) {
   constant1 = s32[] constant(0)
   constant2 = f32[] constant(10)
   constant3 = s32[] constant(10)
   arg1.2 = f32[2] parameter(1)
   arg0.1 = f32[1,4,4,2] parameter(0)
   arg2.3 = f32[1,1,2,2] parameter(2)
-  tuple.12 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(constant1, constant1, constant2, constant3, arg1.2, arg0.1, arg2.3)
-  ROOT while.81 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) while(tuple.12), condition=cond_wrapper.77, body=_functionalize_body_1__.17
+  t = (f32[2], f32[2]) tuple(arg1.2, arg1.2)
+  tuple.12 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) tuple(constant1, constant1, constant2, constant3, t, arg0.1, arg2.3)
+  ROOT while.81 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) while(tuple.12), condition=cond_wrapper.77, body=_functionalize_body_1__.17
 }
 )";
   std::unique_ptr<HloModule> module =

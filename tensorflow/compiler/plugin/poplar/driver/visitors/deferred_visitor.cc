@@ -149,17 +149,14 @@ Status DeferredAllocations::AllocateIfExists(const HloInstruction* inst,
   return Status::OK();
 }
 
-Status DeferredAllocations::AllocateRemainingLocations() {
+const std::vector<TensorLocation>
+DeferredAllocations::GetNotAllocatedLocations() const {
   // Get all input locations left to allocate.
   std::vector<TensorLocation> input_locations;
   for (auto pair : to_allocate_locations_) {
     input_locations.push_back(pair.first);
   }
-
-  for (auto input_location : input_locations) {
-    TF_RETURN_IF_ERROR(MakeAllocation(input_location, input_location));
-  }
-  return Status::OK();
+  return input_locations;
 }
 
 Status DeferredAllocations::MakeAllocation(TensorLocation input_location,
@@ -209,8 +206,7 @@ Status DeferredAllocations::PostProcessAllocation(
 
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-    const std::string& name, const bool mark_all_input_tensors_as_used,
-    const bool allocate_all_input_tensors,
+    const std::string& name, const bool allocate_all_input_tensors,
     const std::vector<const DeferredVisitor*>& dependent_computations)
     : FullVisitor(res, name),
       callsite_inputs_(callsite_inputs),
@@ -218,7 +214,6 @@ DeferredVisitor::DeferredVisitor(
       dependent_computations_(dependent_computations),
       used_tensors_(callsite_inputs.size()),
       allocated_tensors_(callsite_inputs.size()),
-      mark_all_input_tensors_as_used_(mark_all_input_tensors_as_used),
       allocate_all_input_tensors_(allocate_all_input_tensors) {
   for (size_t i = 0; i < callsite_inputs.size(); i++) {
     computation_inputs_[i].resize(callsite_inputs[i].size());
@@ -308,8 +303,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
     // For some computations, like entry computation, every input is forced to
     // be marked as used.
-    used[i] = InputIsUsedInThisComputation(input_location, shapes) ||
-              mark_all_input_tensors_as_used_;
+    used[i] = InputIsUsedInThisComputation(input_location, shapes);
     allocated[i] =
         InputIsUsedInDependentComputations(input_location) || used[i];
     // Delegate the handling of parameter tensor.
@@ -908,10 +902,23 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
 Status DeferredVisitor::FinishScopedVisit(HloInstruction* inst) {
   // By default allocate all inputs into a callsite.
-  if (allocate_all_input_tensors_) {
-    // Force all deferred allocations to be executed.
-    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-    TF_RETURN_IF_ERROR(deferred_allocation->AllocateRemainingLocations());
+  // Go through all the unallocated input tensors and allocate all the required
+  // ones.
+  TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+  for (auto input_location : deferred_allocation->GetNotAllocatedLocations()) {
+    const HloInstruction* inst = input_location.instruction;
+    const bool is_required_parameter =
+        inst->opcode() == HloOpcode::kParameter &&
+        InputIsAllocated(input_location.instruction->parameter_number(),
+                         input_location.flattened_output_tuple_index);
+
+    // Force the allocation.
+    if (allocate_all_input_tensors_ || is_required_parameter) {
+      VLOG(1) << "Allocating input " << inst->ToString() << " index "
+              << input_location.flattened_output_tuple_index;
+      TF_RETURN_IF_ERROR(deferred_allocation->MakeDeferredAllocation(
+          input_location, input_location));
+    }
   }
 
   outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
@@ -1171,8 +1178,7 @@ InplaceDeferredVisitor::InplaceDeferredVisitor(
     const HloInstructionDescription& description, const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)
-    : DeferredVisitor(res, inputs, name, false, true,
-                      dependent_subcomputations),
+    : DeferredVisitor(res, inputs, name, true, dependent_subcomputations),
       description_(description),
       reallocate_inputs_info_(reallocate_inputs_info) {}
 
