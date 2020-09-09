@@ -58,8 +58,8 @@ class DeferredAllocations {
   explicit DeferredAllocations(TensorMap& tensor_map)
       : tensor_map_(tensor_map) {}
 
-  // Add a deferred allocation location which will be allocated later.
-  Status AddDeferredAllocation(TensorLocation location,
+  // Add a deferred allocation location.
+  Status AddDeferredAllocation(bool allocate_now, TensorLocation location,
                                DeferredAllocateFunction allocate_fn,
                                DeferredPostProcessFunction post_process_fn);
 
