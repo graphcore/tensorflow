@@ -501,7 +501,7 @@ ENTRY top {
 
   EXPECT_OK(load1->AddControlDependencyTo(load3));
   EXPECT_OK(load4->AddControlDependencyTo(load2));
-  EXPECT_OK(module->Verify());
+  module->VerifyOrAddFailure("module should be valid before pass");
 
   // When: Running the pass.
   TensorAllocationMap allocation_map;
@@ -509,13 +509,10 @@ ENTRY top {
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
-  // Then: Only two loads should be combined.
+  // Then: Only one combined instruction and module still valid (no cycles).
   const auto seq = module->entry_computation()->MakeInstructionPostOrder();
   EXPECT_EQ(absl::c_count_if(seq, is_load), 3);
-
-  // And there should be no cycles.
-  const auto verified = module->Verify();
-  EXPECT_OK(verified) << verified.error_message();
+  module->VerifyOrAddFailure("module should be valid after pass");
 }
 
 }  // namespace
