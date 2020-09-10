@@ -604,6 +604,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     unsigned int ref_count = 0;
     bool on_device = false;
     bool in_remote_memory = false;
+    bool replica_partitioned = false;
     std::string input_handle;
     std::string output_handle;
     ConversionFn output_convertor;
@@ -621,19 +622,22 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     ConversionFn fn;
     bool streamed;
     bool remote_parameter;
+    bool replica_partitioned;
 
     InputDef() {}
     InputDef(TensorControl* tc, ConversionFn fn, bool streamed,
-             bool remote_parameter)
+             bool remote_parameter, bool replica_partitioned)
         : tc(tc),
           fn(fn),
           streamed(streamed),
-          remote_parameter(remote_parameter) {}
+          remote_parameter(remote_parameter),
+          replica_partitioned(replica_partitioned) {}
     InputDef(const InputDef& other)
         : tc(other.tc),
           fn(other.fn),
           streamed(other.streamed),
-          remote_parameter(other.remote_parameter) {}
+          remote_parameter(other.remote_parameter),
+          replica_partitioned(other.replica_partitioned) {}
   };
   using InputPairList = std::vector<InputDef>;
   using ArgsHandleMap = std::map<std::string, InputDef>;
@@ -653,7 +657,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static void FlattenedDeviceMemoryList(
       InputPairList&, const xla::Shape&, void*,
-      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter);
+      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter,
+      bool is_replica_partitioned);
 
   static void FlattenedOutputDeviceMemoryList(
       OutputPairList&, const xla::Shape&, void*,
