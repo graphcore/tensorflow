@@ -1893,6 +1893,18 @@ xla_test(
 )
 
 xla_test(
+    name = "meta_graph_test",
+    size = "small",
+    srcs = ["tests/meta_graph_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "deferred_visitor_test",
     srcs = ["tests/deferred_visitor_test.cc"],
     backends = ["poplar"],
@@ -4496,6 +4508,7 @@ test_suite(
         "matmul_graph_caching_test",
         "matmul_option_test",
         "matmul_test",
+        "meta_graph_test",
         "ml_type_classify_test",
         "module_flatten_test",
         "monitored_session_test",

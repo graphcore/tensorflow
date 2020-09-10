@@ -85,7 +85,7 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
-    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry", true) {}
+    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry") {}
 
 StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
     const HloInstruction* inst) {

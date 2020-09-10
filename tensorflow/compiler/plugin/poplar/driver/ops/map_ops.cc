@@ -246,7 +246,6 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   // the conditional computation in order to allow the body to visitor to create
   // the tensors.
   DeferredVisitor condition_visitor(res, inputs, GetDebugName(inst) + "/Cond",
-                                    /*mark_all_input_tensors_as_used*/ false,
                                     /*allocate_all_input_tensors*/ false);
   const HloComputation* condition_comp = inst->while_condition();
   {

@@ -38,6 +38,7 @@ cc_library(
             "lib*/poplibs/libpoputil*",
         ], [
             "lib*/**/libgcl_ct*",
+            "lib*/**/liblibpvti*",
             "lib*/**/libtbb.*",
             "lib*/**/libtbbmalloc.*",
             "lib*/**/libpoplin*",

@@ -113,7 +113,9 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
         if (IsPopOpsElementwise(inst)) {
           // Unless both inst and the target are a binary elementwise operation
           // - this will force a shorter path as inst is also a valid target.
-          if (IsPopOpsElementwiseBinary(inst) &&
+          // target is only valid if operands are different - it doesn't make
+          // sense to map one operand the same as itself.
+          if (IsPopOpsElementwiseBinaryOperandsDifferent(inst) &&
               IsPopOpsElementwiseBinary(target)) {
             return false;
           }
@@ -210,8 +212,10 @@ static bool IsLayoutSensitiveTarget(const HloInstruction* target) {
 // depends on the layout of another input tensor - note that unlike layout
 // sensitive target, we do not need the access to the instruction which created
 // the tensor on which we depend on.
+// The input tensors should also be different - an input tensor's layout cannot
+// depend on itself
 static bool IsLayoutDependentTarget(const HloInstruction* target) {
-  if (IsPopOpsElementwiseBinary(target)) {
+  if (IsPopOpsElementwiseBinaryOperandsDifferent(target)) {
     return true;
   }
 
@@ -598,6 +602,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
       std::vector<HloInstruction*> targets =
           find_all_targets(edges.second, is_valid_target);
 
+      const auto shortest_paths_from_source = g.ShortestPathsFrom(source);
+
       for (HloInstruction* target : targets) {
         // Find layout producers for the target.
         // layout_producer is the op which produces the tensor whose layout is
@@ -620,7 +626,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
         auto* layout_producer = *optional_layout_producer;
 
         // Try and find the shortest paths from/to target.
-        auto optional_prefix = g.ShortestPath(source, target);
+        auto optional_prefix = shortest_paths_from_source.To(target);
         auto optional_suffix = g.ShortestPath(layout_producer, target);
         if (!(optional_prefix && optional_suffix)) {
           continue;

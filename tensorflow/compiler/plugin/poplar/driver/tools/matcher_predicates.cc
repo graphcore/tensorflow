@@ -374,6 +374,12 @@ bool IsPopOpsElementwiseBinary(const HloInstruction* inst) {
          IsPopOpsFusion(inst, "scaled_inplace");
 }
 
+bool IsPopOpsElementwiseBinaryOperandsDifferent(const HloInstruction* inst) {
+  // Check binary operation has same argument as both binary inputs
+  return IsPopOpsElementwiseBinary(inst) &&
+         inst->operand(0) != inst->operand(1);
+}
+
 bool IsNormInference(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBatchNormInference ||
          IsPoplarInstruction(PoplarOp::GroupNormInference)(inst);

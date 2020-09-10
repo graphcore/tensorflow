@@ -41,7 +41,8 @@ namespace xla {
 namespace poplarplugin {
 
 Status DeferredAllocations::AddDeferredAllocation(
-    TensorLocation location, DeferredAllocateFunction allocate_fn,
+    bool allocate_now, TensorLocation location,
+    DeferredAllocateFunction allocate_fn,
     DeferredPostProcessFunction post_process_fn) {
   switch (location.instruction->opcode()) {
     case HloOpcode::kInfeed:
@@ -62,6 +63,20 @@ Status DeferredAllocations::AddDeferredAllocation(
           location.instruction->ToString());
     }
   }
+  if (allocate_now) {
+    // Call the allocation functions immediately.
+    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor, allocate_fn(location));
+    TF_ASSIGN_OR_RETURN(tensor, post_process_fn(tensor));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map_, location.instruction,
+                                       location.flattened_output_tuple_index,
+                                       tensor));
+    return Status::OK();
+  }
+
+  // Otherwise defer the allocation.
+  VLOG(1) << "Deferring allocation of " << location.instruction->name()
+          << " sub tensor " << location.flattened_output_tuple_index << ".";
+
   // Create a new set for this location.
   to_allocate_locations_[location].insert(location);
   // Move the allocation function.
@@ -149,17 +164,14 @@ Status DeferredAllocations::AllocateIfExists(const HloInstruction* inst,
   return Status::OK();
 }
 
-Status DeferredAllocations::AllocateRemainingLocations() {
+const std::vector<TensorLocation>
+DeferredAllocations::GetNotAllocatedLocations() const {
   // Get all input locations left to allocate.
   std::vector<TensorLocation> input_locations;
   for (auto pair : to_allocate_locations_) {
     input_locations.push_back(pair.first);
   }
-
-  for (auto input_location : input_locations) {
-    TF_RETURN_IF_ERROR(MakeAllocation(input_location, input_location));
-  }
-  return Status::OK();
+  return input_locations;
 }
 
 Status DeferredAllocations::MakeAllocation(TensorLocation input_location,
@@ -209,8 +221,7 @@ Status DeferredAllocations::PostProcessAllocation(
 
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-    const std::string& name, const bool mark_all_input_tensors_as_used,
-    const bool allocate_all_input_tensors,
+    const std::string& name, const bool allocate_all_input_tensors,
     const std::vector<const DeferredVisitor*>& dependent_computations)
     : FullVisitor(res, name),
       callsite_inputs_(callsite_inputs),
@@ -218,7 +229,6 @@ DeferredVisitor::DeferredVisitor(
       dependent_computations_(dependent_computations),
       used_tensors_(callsite_inputs.size()),
       allocated_tensors_(callsite_inputs.size()),
-      mark_all_input_tensors_as_used_(mark_all_input_tensors_as_used),
       allocate_all_input_tensors_(allocate_all_input_tensors) {
   for (size_t i = 0; i < callsite_inputs.size(); i++) {
     computation_inputs_[i].resize(callsite_inputs[i].size());
@@ -302,18 +312,22 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   auto& used = used_tensors_[param_num];
   auto& allocated = allocated_tensors_[param_num];
 
-  for (size_t i = 0; i < shapes.size(); i++) {
-    const Shape shape = shapes[i];
-    TensorLocation input_location(inst, i);
-
+  size_t flat_tuple_index = 0;
+  for (auto index_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+    const Shape shape = index_shape.shape;
+    TensorLocation input_location(inst, flat_tuple_index);
+    const int64 tuple_index =
+        index_shape.index.empty() ? 0 : index_shape.index[0];
     // For some computations, like entry computation, every input is forced to
     // be marked as used.
-    used[i] = InputIsUsedInThisComputation(input_location, shapes) ||
-              mark_all_input_tensors_as_used_;
-    allocated[i] =
-        InputIsUsedInDependentComputations(input_location) || used[i];
+    used[flat_tuple_index] = InputIsUsedInThisComputation(inst, tuple_index);
+    allocated[flat_tuple_index] =
+        InputIsUsedInDependentComputations(input_location) ||
+        used[flat_tuple_index];
     // Delegate the handling of parameter tensor.
     TF_RETURN_IF_ERROR(HandleParameterTensor(input_location, shape));
+
+    flat_tuple_index++;
   }
 
   return Status::OK();
@@ -368,37 +382,22 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     return Status::OK();
   }
 
-  poplar::Tensor output;
-  bool add_output_tensor = true;
   if (!allocated[input_location.flattened_output_tuple_index] &&
       callsite_tensor) {
     // If it is not allocated in this computation and there is a tensor layout
     // for this location, then just forward the tensor.
 
     // Do not call the post process for tensors which are not allocated.
-    output = *callsite_tensor;
-  } else {
-    // The tensor is used and/or it doesn't have a layout.
-    if (has_allocation_target) {
-      // If a tensor can allocated now, then do it immediately.
-      TF_ASSIGN_OR_RETURN(output, allocate_fn(input_location));
-      TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
-    } else {
-      // Otherwise defer the allocation.
-      VLOG(1) << "Deferring allocation of "
-              << input_location.instruction->name() << " sub tensor "
-              << input_location.flattened_output_tuple_index << ".";
-      TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-          input_location, std::move(allocate_fn), std::move(post_process_fn)));
-      add_output_tensor = false;
-    }
-  }
-
-  if (add_output_tensor) {
+    poplar::Tensor output = *callsite_tensor;
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
                                 input_location.flattened_output_tuple_index,
                                 output));
+  } else {
+    // The tensor is used and/or it doesn't have a layout.
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        has_allocation_target, input_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
   }
 
   return Status::OK();
@@ -466,19 +465,13 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
       return tensor;
     };
 
-    if (HasTensorAllocationTarget(input_location, resources_)) {
-      // Call the allocation function immediately.
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor, allocate_fn(input_location));
-      TF_ASSIGN_OR_RETURN(tensor, post_process_fn(tensor));
-      TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, i, tensor));
-    } else {
-      // Otherwise defer the allocation.
-      VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor "
-              << i << ".";
-      TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-          input_location, std::move(allocate_fn), std::move(post_process_fn)));
-    }
+    const bool allocate_now =
+        HasTensorAllocationTarget(input_location, resources_);
+
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        allocate_now, input_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
   }
   has_infeed_ = true;
 
@@ -826,19 +819,10 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     return tensor;
   };
 
-  if (allocate_now) {
-    // If a tensor can be allocated now, then do it immediately.
-    poplar::Tensor output;
-    TF_ASSIGN_OR_RETURN(output, allocate_fn(output_location));
-    TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-  } else {
-    // Otherwise defer the allocation.
-    VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor 0.";
-    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-        output_location, std::move(allocate_fn), std::move(post_process_fn)));
-  }
+  TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+  TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+      allocate_now, output_location, std::move(allocate_fn),
+      std::move(post_process_fn)));
 
   return Status::OK();
 }
@@ -888,19 +872,10 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
       return tensor;
     };
 
-    if (allocate_now) {
-      // If a tensor can be allocated now, then do it immediately.
-      poplar::Tensor output;
-      TF_ASSIGN_OR_RETURN(output, allocate_fn(output_location));
-      TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
-      TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, output));
-    } else {
-      // Otherwise defer the allocation.
-      VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor 0.";
-      TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-          output_location, std::move(allocate_fn), std::move(post_process_fn)));
-    }
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        allocate_now, output_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
   }
 
   return Status::OK();
@@ -908,10 +883,23 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
 Status DeferredVisitor::FinishScopedVisit(HloInstruction* inst) {
   // By default allocate all inputs into a callsite.
-  if (allocate_all_input_tensors_) {
-    // Force all deferred allocations to be executed.
-    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-    TF_RETURN_IF_ERROR(deferred_allocation->AllocateRemainingLocations());
+  // Go through all the unallocated input tensors and allocate all the required
+  // ones.
+  TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+  for (auto input_location : deferred_allocation->GetNotAllocatedLocations()) {
+    const HloInstruction* inst = input_location.instruction;
+    const bool is_required_parameter =
+        inst->opcode() == HloOpcode::kParameter &&
+        InputIsAllocated(input_location.instruction->parameter_number(),
+                         input_location.flattened_output_tuple_index);
+
+    // Force the allocation.
+    if (allocate_all_input_tensors_ || is_required_parameter) {
+      VLOG(1) << "Allocating input " << inst->ToString() << " index "
+              << input_location.flattened_output_tuple_index;
+      TF_RETURN_IF_ERROR(deferred_allocation->MakeDeferredAllocation(
+          input_location, input_location));
+    }
   }
 
   outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
@@ -1072,34 +1060,27 @@ StatusOr<DeferredAllocations*> DeferredVisitor::GetDeferredAllocations() {
   return &resources_.deferred_allocation_scopes.top();
 }
 
-bool DeferredVisitor::InputIsUsedInThisComputation(
-    TensorLocation location, const std::vector<xla::Shape>& shapes) {
-  if (location.instruction->parent()->root_instruction() ==
-      location.instruction) {
+bool DeferredVisitor::InputIsUsedInThisComputation(const HloInstruction* inst,
+                                                   int64 tuple_index) {
+  if (inst->parent()->root_instruction() == inst) {
     return true;
   }
 
-  if (location.instruction->user_count() == 0) {
+  if (inst->user_count() == 0) {
     return false;
   }
 
   // Non-tuples are considered always used
-  if (!location.instruction->shape().IsTuple()) {
+  if (!inst->shape().IsTuple()) {
     return true;
   }
 
-  // Ignore nested tuples
-  if (static_cast<int64>(shapes.size()) !=
-      ShapeUtil::TupleElementCount(location.instruction->shape())) {
-    return true;
-  }
-
-  for (auto user : location.instruction->users()) {
+  for (auto user : inst->users()) {
     if (user->opcode() != HloOpcode::kGetTupleElement) {
       return true;
     }
 
-    if (user->tuple_index() == location.flattened_output_tuple_index) {
+    if (user->tuple_index() == tuple_index) {
       return true;
     }
   }
@@ -1171,8 +1152,7 @@ InplaceDeferredVisitor::InplaceDeferredVisitor(
     const HloInstructionDescription& description, const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)
-    : DeferredVisitor(res, inputs, name, false, true,
-                      dependent_subcomputations),
+    : DeferredVisitor(res, inputs, name, true, dependent_subcomputations),
       description_(description),
       reallocate_inputs_info_(reallocate_inputs_info) {}
 
@@ -1240,9 +1220,6 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
     return tensor;
   };
 
-  poplar::Tensor output;
-
-  bool add_output_tensor = true;
   const bool reallocate_input =
       reallocate_inputs_info_[param_num]
                              [input_location.flattened_output_tuple_index];
@@ -1263,30 +1240,16 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
   if (callsite_tensor && !reallocate_input) {
     // If a tensor is passed as an input and we are not reallocating inputs then
     // use it and post process it immediately.
-    output = *callsite_tensor;
+    poplar::Tensor output = *callsite_tensor;
     TF_RETURN_IF_ERROR(post_process_fn(output).status());
-  } else {
-    // The tensor doesn't yet have a layout, so try and defer it.
-    if (has_allocation_target) {
-      // If there is an allocation target then do it immediately.
-      TF_ASSIGN_OR_RETURN(output, allocate_fn(input_location));
-      TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
-    } else {
-      // Otherwise defer the allocation.
-      VLOG(1) << "Deferring allocation of "
-              << input_location.instruction->name() << " sub tensor "
-              << input_location.flattened_output_tuple_index << ".";
-      TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-          input_location, std::move(allocate_fn), std::move(post_process_fn)));
-      add_output_tensor = false;
-    }
-  }
-
-  if (add_output_tensor) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
                                 input_location.flattened_output_tuple_index,
                                 output));
+  } else {
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        has_allocation_target, input_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
   }
 
   return Status::OK();
