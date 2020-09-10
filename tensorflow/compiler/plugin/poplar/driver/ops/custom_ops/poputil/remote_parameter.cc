@@ -47,7 +47,8 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                             : std::vector<xla::Shape>{output_shape};
     CHECK_EQ(shapes.size(), num_inputs);
 
-    if (load_inst->GetReplicationFactor() != res.replication_factor) {
+    if (load_inst->GetReplicationFactor() != res.replication_factor &&
+        load_inst->GetReplicationFactor() != 1) {
       return xla::FailedPrecondition(
           "RemoteBuffer load instruction replication factor doesn't match "
           "graph replication factor.");
@@ -111,7 +112,8 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
 
-    if (store_inst->GetReplicationFactor() != res.replication_factor) {
+    if (store_inst->GetReplicationFactor() != res.replication_factor &&
+        store_inst->GetReplicationFactor() != 1) {
       return xla::FailedPrecondition(
           "RemoteBuffer store instruction replication factor doesn't match "
           "graph replication factor.");
