@@ -72,18 +72,19 @@ strategy = ipu.ipu_strategy.IPUStrategy()
 
 with strategy.scope():
   model = create_model()
+
+  # Print a model summary.
+  model.summary()
+
   # Compile the model, configuring a loss, optimizer and metric.
   model.compile(loss=keras.losses.CategoricalCrossentropy(from_logits=True),
                 optimizer=keras.optimizers.RMSprop(1e-3),
                 metrics=["accuracy"])
 
   # Train for two epochs.
-  model.fit(training_data, epochs=2, steps_per_epoch=128)
+  model.fit(x_train, y_train, batch_size=8, epochs=2, steps_per_epoch=128)
 
   # Evaluate trained model.
-  test_scores = model.evaluate(eval_data, verbose=2)
+  test_scores = model.evaluate(x_test, y_test, batch_size=8, verbose=2)
   print("Test loss:", test_scores[0])
   print("Test accuracy:", test_scores[1])
-
-  # Print a model summary.
-  model.summary()
