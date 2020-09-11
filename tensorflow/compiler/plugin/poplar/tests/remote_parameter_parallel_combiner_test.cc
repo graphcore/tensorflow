@@ -461,6 +461,60 @@ ENTRY e {
       1);
 }
 
+TEST_F(RemoteParameterParallelCombinerTest, TestInterControlDependencies) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY top {
+  arg1 = f32[2] parameter(0)
+  arg2 = f32[2] parameter(1)
+  arg3 = f32[1] parameter(2)
+  arg4 = f32[1] parameter(3)
+  load1 = f32[2] custom-call(arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  ROOT tuple = (f32[2], f32[2]) tuple(load1, load2, load3, load4)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  // Given: Some control dependencies between loads.
+  auto* load1 =
+      module->entry_computation()->root_instruction()->mutable_operand(0);
+  auto* load2 =
+      module->entry_computation()->root_instruction()->mutable_operand(1);
+  auto* load3 =
+      module->entry_computation()->root_instruction()->mutable_operand(2);
+  auto* load4 =
+      module->entry_computation()->root_instruction()->mutable_operand(3);
+
+  EXPECT_OK(load1->AddControlDependencyTo(load3));
+  EXPECT_OK(load4->AddControlDependencyTo(load2));
+  module->VerifyOrAddFailure("module should be valid before pass");
+
+  // When: Running the pass.
+  TensorAllocationMap allocation_map;
+  EXPECT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+                  .RunOnComputation(module->entry_computation())
+                  .ValueOrDie());
+
+  // Then: Only one combined instruction and module still valid (no cycles).
+  const auto seq = module->entry_computation()->MakeInstructionPostOrder();
+  EXPECT_EQ(absl::c_count_if(seq, is_load), 3);
+  module->VerifyOrAddFailure("module should be valid after pass");
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
