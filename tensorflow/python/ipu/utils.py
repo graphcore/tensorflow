@@ -1222,7 +1222,11 @@ def select_ipus(opts, indices):
 
 
 def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
-  """ Configure when to attach to the device.
+  """ Configure when to attach to the device. For example, you can use
+      this to compile and cache a program without attaching to an IPU,
+      and then later run on a real IPU device without recompiling.
+      Setting the connection type doesn't impact the ability to profile
+      a model.
 
   .. code-block:: python
 
@@ -1239,8 +1243,9 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
     connection_type: One of `DeviceConnectionType`.
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
 
-    ipu_version: Version of the IPU hardware used. Required if the
-                 `connection_type` provided is `DeviceConnectionType.NEVER`.
+    ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
+                 and 2 for Mk2. Required if the `connection_type`
+                 provided is `DeviceConnectionType.NEVER`.
   Returns:
     The IpuOptions configuration protobuf.
   """
