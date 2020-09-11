@@ -133,6 +133,7 @@ def run_model_on_cpu(model, dataset, repeat_count, accumulation_count, loss,
       x, t = next(it)
 
       with backprop.GradientTape() as tape:
+
         for l in model:
           x = l(x)
 
@@ -996,6 +997,34 @@ class IPUModelModelTest(test.TestCase):
 
       ds = test_dataset_two_input_output(length=96, batch_size=4)
       m.fit(ds)
+
+  @test_util.run_v2_only
+  def testPredictNumpyData(self):
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 1], w=1)
+      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      ipu_out = m.predict(xs, batch_size=2)
+      # TODO(T26613): Should not have to do a reshape here.
+      ipu_out = np.reshape(ipu_out, [48])
+
+    # CPU
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [32, 32, 1], w=1)
+    m = keras.Model(inputs=input_layer, outputs=x)
+    cpu_out = m.predict(xs, batch_size=2)
+    cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
+
+    self.assertAllClose(ipu_out, cpu_out)
 
 
 if __name__ == '__main__':
