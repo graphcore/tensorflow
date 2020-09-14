@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 
+#include <popnn/GruDef.hpp>
 #include <popnn/LstmDef.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -100,6 +101,8 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
                                    {input_size, num_channels});
 
   gru_params.calcInputGradients = gru_inst->is_training();
+  gru_params.cellOrder = {BASIC_GRU_CELL_UPDATE_GATE, BASIC_GRU_CELL_RESET_GATE,
+                          BASIC_GRU_CELL_CANDIDATE};
   return gru_params;
 }
 
