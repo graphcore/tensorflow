@@ -1913,20 +1913,21 @@ Status PoplarExecutor::GetCompilerEvents(
 void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList& list, const xla::Shape& shape, void* base,
     const InputOutputAliasingMap::InputInfo& input_info,
-    bool is_remote_parameter) {
+    bool is_remote_parameter, bool is_replica_partitioned) {
   TensorControl* tc = static_cast<TensorControl*>(base);
   if (shape.IsTuple()) {
     void** ptrs = reinterpret_cast<void**>(tc->data);
     for (unsigned int t = 0; t < xla::ShapeUtil::TupleElementCount(shape);
          t++) {
       void* ptr = ptrs[t];
-      FlattenedDeviceMemoryList(list,
-                                xla::ShapeUtil::GetTupleElementShape(shape, t),
-                                ptr, input_info, is_remote_parameter);
+      FlattenedDeviceMemoryList(
+          list, xla::ShapeUtil::GetTupleElementShape(shape, t), ptr, input_info,
+          is_remote_parameter, is_replica_partitioned);
     }
   } else {
     list.push_back(InputDef(tc, GetInputConversionFunction(shape),
-                            input_info.IsStreaming(), is_remote_parameter));
+                            input_info.IsStreaming(), is_remote_parameter,
+                            is_replica_partitioned));
   }
 }
 
@@ -1955,9 +1956,11 @@ void PoplarExecutor::UpdateArgsHandleMap(
     InputPairList bufs;
     const bool is_remote_parameter =
         IsRemoteParameter(a, executable.GeRemoteParameterInfos());
+    const bool is_replica_partitioned =
+        IsReplicaPartitioned(a, executable.GeRemoteParameterInfos());
     FlattenedDeviceMemoryList(bufs, shapes[a],
                               const_cast<void*>(args[a].opaque()), input_info,
-                              is_remote_parameter);
+                              is_remote_parameter, is_replica_partitioned);
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
@@ -1973,8 +1976,8 @@ void PoplarExecutor::UpdateArgsHandleMap(
           TensorControl* tc =
               reinterpret_cast<TensorControl*>(allocated.opaque());
           std::memcpy(tc->data, input.tc->data, input.tc->size);
-          input =
-              InputDef(tc, input.fn, input.streamed, input.remote_parameter);
+          input = InputDef(tc, input.fn, input.streamed, input.remote_parameter,
+                           input.replica_partitioned);
         }
         modified_resources.insert(input.tc);
       }
@@ -2335,25 +2338,32 @@ Status PoplarExecutor::MoveDeviceToHost() {
           // Note that only resource variables are on device, hence they must
           // have the input handle set too.
           CHECK(tc->input_handle.size());
-          // Pad the per-replica length up.
-          const std::size_t length =
-              4 * tensorflow::MathUtil::CeilOfRatio<int64>(
-                      tensorflow::MathUtil::CeilOfRatio<int64>(tc->size, 4),
-                      current_replication_factor_);
-          std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
-          // This is a remote parameter - copy it to the remote buffer for
-          // each replica.
-          tc->in_remote_memory = true;
-          for (int replica_id = 0; replica_id < current_replication_factor_;
-               ++replica_id) {
-            const std::size_t offset = replica_id * length;
-            const std::size_t replica_length =
-                std::min(length, tc->size - offset);
+          if (tc->replica_partitioned) {
+            const std::size_t size =
+                HostSizeToDeviceSize(tc->size, tc->element_type);
+            // Pad the per-replica length up.
+            const std::size_t length =
+                4 * tensorflow::MathUtil::CeilOfRatio<int64>(
+                        tensorflow::MathUtil::CeilOfRatio<int64>(size, 4),
+                        current_replication_factor_);
+            std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
+            // This is a remote parameter - copy it to the remote buffer for
+            // each replica.
+            for (int replica_id = 0; replica_id < current_replication_factor_;
+                 ++replica_id) {
+              const std::size_t offset = replica_id * length;
+              const std::size_t replica_length =
+                  std::min(length, size - offset);
 
-            current_engine_->copyFromRemoteBuffer(tc->input_handle,
-                                                  buffer.get(), 0, replica_id);
+              current_engine_->copyFromRemoteBuffer(
+                  tc->input_handle, buffer.get(), 0, replica_id);
 
-            std::memcpy(tc->data + offset, buffer.get(), replica_length);
+              std::memcpy(tc->data + offset, buffer.get(), replica_length);
+            }
+          } else {
+            const unsigned replica_id = 0;
+            current_engine_->copyFromRemoteBuffer(tc->input_handle, tc->data, 0,
+                                                  replica_id);
           }
         } else {
           ConnectReplicatedDeviceToHost(tc->output_handle, tc);
@@ -2389,6 +2399,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
       }
 
       tc->in_remote_memory = false;
+      tc->replica_partitioned = false;
       tc->on_device = false;
       tc->output_handle.clear();
       tc->input_handle.clear();
@@ -2416,34 +2427,48 @@ Status PoplarExecutor::MoveHostToDevice() {
         buf = PreProcessBuffer(arg.second);
 
         if (arg.second.remote_parameter) {
-          // Pad the per-replica length up.
-          const std::size_t length =
-              4 * tensorflow::MathUtil::CeilOfRatio<int64>(
-                      tensorflow::MathUtil::CeilOfRatio<int64>(tc->size, 4),
-                      current_replication_factor_);
-
-          std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
-          // This is a remote parameter - copy it to the remote buffer for
-          // each replica.
           tc->in_remote_memory = true;
-          for (int replica_id = 0; replica_id < current_replication_factor_;
-               ++replica_id) {
-            const std::size_t offset = replica_id * length;
-            const std::size_t replica_length =
-                std::min(length, tc->size - offset);
+          tc->replica_partitioned = arg.second.replica_partitioned;
+          if (arg.second.replica_partitioned) {
+            const std::size_t size =
+                HostSizeToDeviceSize(tc->size, tc->element_type);
+            // Pad the per-replica length up.
+            const std::size_t length =
+                4 * tensorflow::MathUtil::CeilOfRatio<int64>(
+                        tensorflow::MathUtil::CeilOfRatio<int64>(size, 4),
+                        current_replication_factor_);
 
-            // Copy the replica-local region into the tmp buffer (with padding).
-            std::memcpy(buffer.get(), tc->data + offset, replica_length);
+            std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
+            // This is a remote parameter - copy it to the remote buffer for
+            // each replica.
+            for (int replica_id = 0; replica_id < current_replication_factor_;
+                 ++replica_id) {
+              const std::size_t offset = replica_id * length;
+              const std::size_t replica_length =
+                  std::min(length, size - offset);
 
-            // Zero the padding
-            std::memset(buffer.get() + replica_length, 0,
-                        length - replica_length);
+              // Copy the replica-local region into the tmp buffer (with
+              // padding).
+              std::memcpy(buffer.get(), buf + offset, replica_length);
 
-            // Copy the padded buffer to the remote buffer.
-            current_engine_->copyToRemoteBuffer(buf, arg.first, 0, replica_id);
+              // Zero the padding
+              std::memset(buffer.get() + replica_length, 0,
+                          length - replica_length);
+
+              // Copy the padded buffer to the remote buffer.
+              current_engine_->copyToRemoteBuffer(buffer.get(), arg.first, 0,
+                                                  replica_id);
+            }
+          } else {
+            for (int replica_id = 0; replica_id < current_replication_factor_;
+                 ++replica_id) {
+              current_engine_->copyToRemoteBuffer(buf, arg.first, 0,
+                                                  replica_id);
+            }
           }
         } else {
           tc->in_remote_memory = false;
+          tc->replica_partitioned = false;
           current_engine_->connectStream(arg.first, buf);
         }
 
