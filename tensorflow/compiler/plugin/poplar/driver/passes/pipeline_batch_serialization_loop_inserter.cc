@@ -14,10 +14,12 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_loop_inserter.h"
 
+#include <list>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
@@ -60,7 +62,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
 
     // Get the loop body in post order excluding parameters and the root
     // instruction.
-    std::vector<HloInstruction*> loop_instructions;
+    std::list<HloInstruction*> loop_instructions;
     absl::c_copy_if(stage_comp->MakeInstructionPostOrder(),
                     std::back_inserter(loop_instructions),
                     [root](HloInstruction* inst) -> bool {
@@ -71,8 +73,9 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     // For the batch serialization loops inside of the stage, the inputs and
     // outputs need to be connected appropriately.
     std::vector<HloInstruction*> loop_inputs;
-    std::vector<HloInstruction*> loop_outputs;
-    absl::flat_hash_map<const HloInstruction*, int64> loop_outputs_map;
+    std::vector<HloInstruction*> loop_root_tuple_operands;
+    std::vector<HloInstruction*> outputs;
+    absl::flat_hash_map<const HloInstruction*, int64> outputs_map;
 
     for (int64 i = 0; i != stage->operand_count(); ++i) {
       const HloInstruction* operand = stage->operand(i);
@@ -89,36 +92,69 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
                 IsPoplarInstruction(PoplarOp::BufferLoadSlice)(param_user));
           // Not modified hence the loop parameter is unmodified.
           loop_inputs.push_back(param);
-          loop_outputs.push_back(param);
+          loop_root_tuple_operands.push_back(param);
+          outputs.push_back(param);
           break;
         }
         case HloOpcode::kParameter: {
           // Not modified hence the loop parameter is unmodified.
           loop_inputs.push_back(param);
-          loop_outputs.push_back(param);
+          loop_root_tuple_operands.push_back(param);
+          outputs.push_back(param);
           break;
         }
         case HloOpcode::kCustomCall: {
           if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
                   operand)) {
             // Gradient accumulation.
-            CHECK_EQ(param->user_count(), 1);
-            HloInstruction* user = param->users()[0];
-            if (user == root) {
-              // The buffer is just passed through the stage, just map it to
-              // itself.
-              loop_inputs.push_back(param);
-              loop_outputs.push_back(param);
-            } else {
-              // Expect the only user to be the gradient accumulation fusion
-              // which is used by the root tuple.
-              CHECK(IsPopOpsFusion(user, "serialized_gradient_accumulation"));
+            if (param->user_count() == 2) {
+              // Offloaded case.
+              // Make sure the loads and stores of the gradient accumulation are
+              // done outside of the batch serial loop rather than inside, which
+              // would cause extra communication every iteration.
+              HloInstruction *load, *store;
+              TF_RETURN_IF_ERROR(GetRemoteLoadStoreUsers(param, &load, &store));
+              // Expect the only user of the load to be the gradient
+              // accumulation fusion which is used by the store.
+              CHECK_EQ(load->user_count(), 1);
+              HloInstruction* user = load->users()[0];
+              CHECK(IsSerializedGradientAccumulation(user));
               CHECK_EQ(user->user_count(), 1);
-              CHECK_EQ(user->users()[0], root);
-              // Map the parameter to the user as it is updated every iteration
-              // of the loop.
-              loop_inputs.push_back(param);
-              loop_outputs.push_back(user);
+              CHECK_EQ(user->users()[0], store);
+              // Map the load to the user as the buffer is updated every
+              // iteration.
+              loop_inputs.push_back(load);
+              loop_root_tuple_operands.push_back(user);
+              // The loop output needs to be stored, and the store is the actual
+              // loop output.
+              outputs.push_back(store);
+
+              // Erase the load and store from being lowered into the batch
+              // serialization loop.
+              loop_instructions.remove(load);
+              loop_instructions.remove(store);
+            } else {
+              // Non offloaded case.
+              CHECK_EQ(param->user_count(), 1);
+              HloInstruction* user = param->users()[0];
+              if (user == root) {
+                // The buffer is just passed through the stage, just map it to
+                // itself.
+                loop_inputs.push_back(param);
+                loop_root_tuple_operands.push_back(param);
+                outputs.push_back(param);
+              } else {
+                // Expect the only user to be the gradient accumulation fusion
+                // which is used by the root tuple.
+                CHECK(IsSerializedGradientAccumulation(user));
+                CHECK_EQ(user->user_count(), 1);
+                CHECK_EQ(user->users()[0], root);
+                // Map the parameter to the user as it is updated every
+                // iteration of the loop.
+                loop_inputs.push_back(param);
+                loop_root_tuple_operands.push_back(user);
+                outputs.push_back(user);
+              }
             }
             break;
           }
@@ -134,14 +170,16 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
             // Map the parameter to the user as it is updated every iteration of
             // the loop.
             loop_inputs.push_back(param);
-            loop_outputs.push_back(user);
+            loop_root_tuple_operands.push_back(user);
+            outputs.push_back(user);
             break;
           }
           if (IsPoplarInstruction(PoplarOp::ExecutionCounter)(operand)) {
             // The input value from the pipeline execution counter does not
             // change during the loop execution.
             loop_inputs.push_back(param);
-            loop_outputs.push_back(param);
+            loop_root_tuple_operands.push_back(param);
+            outputs.push_back(param);
             break;
           }
           TF_FALLTHROUGH_INTENDED;
@@ -151,22 +189,23 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
                                      " to pipeline stage ", stage_id, ".");
         }
       }
-      loop_outputs_map[loop_outputs.back()] = i;
+      outputs_map[outputs.back()] = i;
     }
 
     // Go through all the stage outputs and find any which were missing.
     for (int64 i = 0; i != root->operand_count(); ++i) {
       HloInstruction* output = root->mutable_operand(i);
-      if (!loop_outputs_map.contains(output)) {
+      if (!outputs_map.contains(output)) {
         // Create zeros as the loop input.
         HloInstruction* zeros =
             BroadcastZeros(stage_comp, output->shape().element_type(),
                            output->shape().dimensions());
         loop_inputs.push_back(zeros);
-        loop_outputs.push_back(output);
+        loop_root_tuple_operands.push_back(output);
+        outputs.push_back(output);
 
-        const int64 output_index = loop_outputs_map.size();
-        loop_outputs_map[output] = output_index;
+        const int64 output_index = outputs_map.size();
+        outputs_map[output] = output_index;
       }
     }
 
@@ -193,10 +232,9 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
       old_inst->SetupDerivedInstruction(new_inst);
       context.MapInstruction(old_inst, new_inst);
     }
-
     // Set up the root instruction.
     std::vector<HloInstruction*> new_operands =
-        GetCloneContextOperands(&context, loop_outputs);
+        GetCloneContextOperands(&context, loop_root_tuple_operands);
     HloInstruction* loop_root =
         builder.AddInstruction(HloInstruction::CreateTuple(new_operands));
 
@@ -216,22 +254,32 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
 
     // Set up all the loop outputs.
     for (int64 i = 0; i != root->operand_count(); ++i) {
-      const HloInstruction* old_operand = root->operand(i);
-      const int64 loop_output_index = loop_outputs_map.at(old_operand);
+      HloInstruction* output = root->mutable_operand(i);
+      const int64 loop_output_index = outputs_map.at(output);
       TF_ASSIGN_OR_RETURN(
           HloInstruction * gte,
           MakeGetTupleElementHlo(repeat_loop, loop_output_index));
-      TF_RETURN_IF_ERROR(root->ReplaceOperandWith(i, gte));
+      const HloInstruction* loop_root_tuple_operand =
+          loop_root_tuple_operands.at(loop_output_index);
+      if (loop_root_tuple_operand != output) {
+        const auto indices = output->OperandIndices(loop_root_tuple_operand);
+        CHECK(indices.size());
+        for (auto index : indices) {
+          TF_RETURN_IF_ERROR(output->ReplaceOperandWith(index, gte));
+        }
+      } else {
+        TF_RETURN_IF_ERROR(root->ReplaceOperandWith(i, gte));
+      }
     }
 
     // Remove all the old instructions in reverse post order.
     for (auto itr = loop_instructions.rbegin(); itr != loop_instructions.rend();
          ++itr) {
-      CHECK_EQ((*itr)->user_count(), 0);
-      TF_RETURN_IF_ERROR(stage_comp->ForceRemoveInstruction(*itr));
+      HloInstruction* inst = *itr;
+      CHECK_EQ(inst->user_count(), 0);
+      TF_RETURN_IF_ERROR(stage_comp->ForceRemoveInstruction(inst));
     }
   }
-
   return Status::OK();
 }
 
