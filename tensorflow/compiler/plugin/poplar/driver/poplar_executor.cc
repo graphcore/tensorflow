@@ -2501,8 +2501,6 @@ Status PoplarExecutor::MoveHostToDevice() {
       tc->converted_data.clear();
     }
   } catch (const std::exception& e) {
-    // Release host embeddings
-    host_embeddings_.clear();
     return PoplarExceptionToTensorflowStatus("[Host to device] ", e);
   }
 
@@ -2696,22 +2694,25 @@ Status PoplarExecutor::RegisterHostEmbedding(
   {
     std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
 
-    // Wait for 5 seconds to register the host embedding.
-    // This ensures the embeddings will eventually be cleaned up, even if
-    // compilation fails.
-    if (!host_embeddings_cv.wait_for(lk, std::chrono::seconds(5), [&] {
-          return host_embedding_registration_is_open_;
-        })) {
+    if (host_embeddings_.contains(embedding_id)) {
       return xla::FailedPrecondition(
-          "Host embedding interface with id='%s' not registered. Did you run "
-          "the associated host_embedding op with the computation session?",
-          embedding_id);
+          "Cannot register host embedding with id='%s' it already exists!",
+          embedding_id.c_str());
     }
 
     host_embeddings_[embedding_id] = std::move(embedding);
   }
 
-  host_embeddings_cv.notify_all();
+  return Status::OK();
+}
+
+Status PoplarExecutor::DeregisterHostEmbedding(
+    const std::string& embedding_id) {
+  {
+    std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
+
+    host_embeddings_.erase(embedding_id);
+  }
 
   return Status::OK();
 }
@@ -2742,22 +2743,6 @@ void PoplarExecutor::ResetSeed(int seed) { seed_generator_.Seed(seed); }
 
 std::string PoplarExecutor::GetCycleCounterStream() {
   return "__cycle_count_stream";
-}
-
-void PoplarExecutor::ClearCompilationFailure() {
-  std::unique_lock<std::mutex> lock(host_embeddings_mutex_);
-
-  // Allow new host embedding registrations.
-  host_embedding_registration_is_open_ = true;
-  host_embeddings_cv.notify_all();
-}
-
-void PoplarExecutor::NotifyCompilationFailure() {
-  std::unique_lock<std::mutex> lock(host_embeddings_mutex_);
-
-  // Block new host embedding registrations.
-  host_embedding_registration_is_open_ = false;
-  host_embeddings_.clear();
 }
 
 void PoplarExecutor::ConnectCycleCounterCallback() {
@@ -2874,32 +2859,19 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
   UpdateArgsHandleMap(args, allocator, executable);
 
-  absl::flat_hash_map<std::string, std::unique_ptr<HostEmbeddingInterface_>>
-      host_embeddings;
   if (!executable.GetHostEmbeddingLookupInfos().empty()) {
     std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
-    host_embedding_registration_is_open_ = true;
-    host_embeddings_cv.notify_all();
 
     // Go through and double check we have all the required host embeddings.
     for (auto& host_embedding_lookup_info :
          executable.GetHostEmbeddingLookupInfos()) {
-      // Wait up to 5 seconds for the embedding interface to be initialized.
-      if (!host_embeddings_cv.wait_for(lk, std::chrono::seconds(5), [&] {
-            return host_embeddings_.count(
-                       host_embedding_lookup_info.embedding_id) > 0;
-          })) {
-        host_embeddings_.clear();
+      if (!host_embeddings_.contains(host_embedding_lookup_info.embedding_id)) {
         return xla::FailedPrecondition(
             "Host embedding interface with id='%s' not registered. Did you run "
             "the associated host_embedding op in the session?",
             host_embedding_lookup_info.embedding_id);
       }
     }
-
-    // Take the host embeddings into the local scope.
-    // This ensures they are cleaned up at the end of execution.
-    host_embeddings = std::move(host_embeddings_);
   }
 
   if (engine == NULL) {
@@ -3065,14 +3037,16 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
            executable.GetHostEmbeddingLookupInfos()) {
         TF_RETURN_IF_ERROR(ConnectHostEmbeddingLookup(
             host_embedding_lookup_info,
-            host_embeddings.at(host_embedding_lookup_info.embedding_id).get()));
+            host_embeddings_.at(host_embedding_lookup_info.embedding_id)
+                .get()));
       }
 
       for (auto& host_embedding_update_info :
            executable.GetHostEmbeddingUpdateInfos()) {
         TF_RETURN_IF_ERROR(ConnectHostEmbeddingUpdateToRendezvous(
             host_embedding_update_info,
-            host_embeddings.at(host_embedding_update_info.embedding_id).get()));
+            host_embeddings_.at(host_embedding_update_info.embedding_id)
+                .get()));
       }
 
       const auto& outfeed_infos = executable.GetOutfeedInfos();
@@ -3165,14 +3139,16 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
            executable.GetHostEmbeddingLookupInfos()) {
         TF_RETURN_IF_ERROR(DisconnectHostEmbeddingLookup(
             host_embedding_lookup_info,
-            host_embeddings.at(host_embedding_lookup_info.embedding_id).get()));
+            host_embeddings_.at(host_embedding_lookup_info.embedding_id)
+                .get()));
       }
 
       for (auto& host_embedding_update_info :
            executable.GetHostEmbeddingUpdateInfos()) {
         TF_RETURN_IF_ERROR(DisconnectHostEmbeddingUpdate(
             host_embedding_update_info,
-            host_embeddings.at(host_embedding_update_info.embedding_id).get()));
+            host_embeddings_.at(host_embedding_update_info.embedding_id)
+                .get()));
       }
 
       // We need to call post process to make sure all the data is in the
