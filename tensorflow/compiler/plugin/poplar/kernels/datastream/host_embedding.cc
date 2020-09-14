@@ -57,35 +57,32 @@ constexpr int max_replication_factor = 16;
 }
 
 template <typename T>
-class IpuHostEmbeddingOp : public AsyncOpKernel {
+class IpuHostEmbeddingRegisterOp : public OpKernel {
  public:
-  explicit IpuHostEmbeddingOp(OpKernelConstruction* ctx)
-      : AsyncOpKernel(ctx), device_ordinal_(0) {
+  explicit IpuHostEmbeddingRegisterOp(OpKernelConstruction* ctx)
+      : OpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_id", &embedding_id_));
   }
 
-  void ComputeAsync(OpKernelContext* ctx,
-                    AsyncOpKernel::DoneCallback done) override {
-    ctx->forward_ref_input_to_ref_output(0, 0);
+  void Compute(OpKernelContext* context) override {
+    context->forward_ref_input_to_ref_output(0, 0);
 
-    // If we are using synthetic data, immediately complete the async op.
-    if (xla::poplarplugin::UseSyntheticData()) {
-      done();
-    } else {
+    // If we are using synthetic data, immediately complete the op.
+    if (!xla::poplarplugin::UseSyntheticData()) {
       auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-      OP_REQUIRES(ctx, platform.ok(), platform.status());
+      OP_REQUIRES(context, platform.ok(), platform.status());
       auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(
           platform.ValueOrDie());
       auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
       auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
           stream_executor->implementation());
 
-      Tensor inp = ctx->mutable_input(0, true);
+      Tensor inp = context->mutable_input(0, true);
 
       Status status = poplar_executor->RegisterHostEmbedding(
-          embedding_id_, absl::make_unique<HostEmbeddingImpl>(inp, done));
-      OP_REQUIRES(ctx, status.ok(), status);
+          embedding_id_, absl::make_unique<HostEmbeddingImpl>(inp));
+      OP_REQUIRES(context, status.ok(), status);
     }
   }
 
@@ -96,10 +93,9 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
   class HostEmbeddingImpl
       : public xla::poplarplugin::PoplarExecutor::HostEmbeddingInterface<T> {
    public:
-    HostEmbeddingImpl(Tensor embedding, AsyncOpKernel::DoneCallback done)
+    explicit HostEmbeddingImpl(Tensor embedding)
         : encoding_width_(embedding.dim_size(1)),
           embedding_(std::move(embedding)),
-          done_(std::move(done)),
           lookup_indices_(max_replication_factor),
           update_indices_(max_replication_factor) {
       embedding_rows_.reserve(embedding_.dim_size(0));
@@ -112,10 +108,10 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       }
     }
 
-    ~HostEmbeddingImpl() { done_(); }
+    virtual ~HostEmbeddingImpl() = default;
 
     Status EnqueueLookupIndices(int replica, const int* indices,
-                                int index_count) override {
+                                int index_count) final {
       lookup_indices_[replica].resize(index_count);
 
       std::memcpy(lookup_indices_[replica].data(), indices,
@@ -124,7 +120,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       return Status::OK();
     }
 
-    Status DequeueLookupActivations(int replica, T* destination) override {
+    Status DequeueLookupActivations(int replica, T* destination) final {
       for (std::size_t i = 0; i < lookup_indices_[replica].size(); ++i) {
         std::memcpy(destination + i * encoding_width_,
                     embedding_rows_[lookup_indices_[replica][i]],
@@ -135,7 +131,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
     }
 
     Status EnqueueUpdateIndices(int replica, const int* indices,
-                                int index_count) override {
+                                int index_count) final {
       update_indices_[replica].resize(index_count);
 
       std::memcpy(update_indices_[replica].data(), indices,
@@ -144,7 +140,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       return Status::OK();
     }
 
-    Status EnqueueUpdateGrads(int replica, const T* grads) override {
+    Status EnqueueUpdateGrads(int replica, const T* grads) final {
       std::size_t index_count = update_indices_[replica].size();
 
       for (std::size_t i = 0; i < index_count; ++i) {
@@ -159,43 +155,77 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       return Status::OK();
     }
 
-    xla::StatusOr<void*> GetRow(int index) const override {
+    xla::StatusOr<void*> GetRow(int index) const final {
       return static_cast<void*>(embedding_rows_[index]);
     }
 
-    xla::StatusOr<int> GetTokenCount() const override {
+    xla::StatusOr<int> GetTokenCount() const final {
       return embedding_rows_.size();
     }
 
-    xla::StatusOr<int> GetEncodingWidth() const override {
+    xla::StatusOr<int> GetEncodingWidth() const final {
       return encoding_width_;
     }
 
-    xla::StatusOr<int> GetElementSize() const override { return sizeof(T); }
+    xla::StatusOr<int> GetElementSize() const final { return sizeof(T); }
 
    private:
     int encoding_width_;
 
     Tensor embedding_;
     std::vector<T*> embedding_rows_;
-    AsyncOpKernel::DoneCallback done_;
-
     std::vector<std::vector<int>> lookup_indices_;
     std::vector<std::vector<int>> update_indices_;
   };
 
-  TF_DISALLOW_COPY_AND_ASSIGN(IpuHostEmbeddingOp);
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuHostEmbeddingRegisterOp);
 };
 
-#define REGISTER_HOST_EMBEDDING_KERNEL(T)                                 \
-  REGISTER_KERNEL_BUILDER(                                                \
-      Name("IpuHostEmbedding").Device(DEVICE_CPU).TypeConstraint<T>("T"), \
-      IpuHostEmbeddingOp<T>);
+#define REGISTER_HOST_EMBEDDING_REGISTER_KERNEL(T)         \
+  REGISTER_KERNEL_BUILDER(Name("IpuHostEmbeddingRegister") \
+                              .Device(DEVICE_CPU)          \
+                              .TypeConstraint<T>("T"),     \
+                          IpuHostEmbeddingRegisterOp<T>);
 
-TF_CALL_half(REGISTER_HOST_EMBEDDING_KERNEL);
-TF_CALL_float(REGISTER_HOST_EMBEDDING_KERNEL);
-TF_CALL_int32(REGISTER_HOST_EMBEDDING_KERNEL);
-TF_CALL_uint32(REGISTER_HOST_EMBEDDING_KERNEL);
+TF_CALL_half(REGISTER_HOST_EMBEDDING_REGISTER_KERNEL);
+TF_CALL_float(REGISTER_HOST_EMBEDDING_REGISTER_KERNEL);
+TF_CALL_int32(REGISTER_HOST_EMBEDDING_REGISTER_KERNEL);
+TF_CALL_uint32(REGISTER_HOST_EMBEDDING_REGISTER_KERNEL);
+
+class IpuHostEmbeddingDeregisterOp : public OpKernel {
+ public:
+  explicit IpuHostEmbeddingDeregisterOp(OpKernelConstruction* ctx)
+      : OpKernel(ctx), device_ordinal_(0) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_id", &embedding_id_));
+  }
+
+  void Compute(OpKernelContext* context) override {
+    context->forward_ref_input_to_ref_output(0, 0);
+
+    if (!xla::poplarplugin::UseSyntheticData()) {
+      auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+      OP_REQUIRES(context, platform.ok(), platform.status());
+      auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(
+          platform.ValueOrDie());
+      auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+      auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+          stream_executor->implementation());
+
+      Status status = poplar_executor->DeregisterHostEmbedding(embedding_id_);
+      OP_REQUIRES(context, status.ok(), status);
+    }
+  }
+
+ private:
+  int device_ordinal_;
+  std::string embedding_id_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuHostEmbeddingDeregisterOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IpuHostEmbeddingDeregister").Device(DEVICE_CPU),
+                        IpuHostEmbeddingDeregisterOp);
 
 template <int IndicesPosition>
 class IpuDeviceEmbeddingLookupOp : public XlaOpKernel, IpuOpKernel {

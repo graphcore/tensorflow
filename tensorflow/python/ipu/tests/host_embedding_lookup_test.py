@@ -69,14 +69,16 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
       sess.run(variables.global_variables_initializer())
       report.reset()
-      result = sess.run([
-          r,
-          gen_pop_datastream_ops.ipu_host_embedding(
-              w, embedding_id="host_embedding")
-      ], {i: i_h})
+      sess.run(
+          gen_pop_datastream_ops.ipu_host_embedding_register(
+              w, "host_embedding"))
+      result = sess.run([r], {i: i_h})
+      v = sess.run(
+          gen_pop_datastream_ops.ipu_host_embedding_deregister(
+              w, "host_embedding"))
 
       # Since we updated with the same activations, we expect to see a 2x
-      self.assertAllClose(result[0][0] * 2, np.take(result[1], i_h, axis=0))
+      self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
       report.assert_max_tile_memory(772, tolerance=0.3)
@@ -117,14 +119,16 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       report.reset()
-      result = sess.run([
-          r,
-          gen_pop_datastream_ops.ipu_host_embedding(
-              w, embedding_id="host_embedding")
-      ], {i: i_h})
+      sess.run(
+          gen_pop_datastream_ops.ipu_host_embedding_register(
+              w, "host_embedding"))
+      result = sess.run([r], {i: i_h})
+      v = sess.run(
+          gen_pop_datastream_ops.ipu_host_embedding_deregister(
+              w, "host_embedding"))
 
       # Since we updated with the same activations, we expect to see a 2x
-      self.assertAllClose(result[0][0] * 2, np.take(result[1], i_h, axis=0))
+      self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
       report.assert_max_tile_memory(5852, tolerance=0.3)
@@ -162,11 +166,13 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       report.reset()
 
-      # training=False should ignore the number of expected updates.
-      result = sess.run([r, host_embedding()], {i: i_h})
+      with host_embedding.register(sess):
+        # training=False should ignore the number of expected updates.
+        result = sess.run([r], {i: i_h})
 
+      v = sess.run(host_embedding.get_embedding_tensor())
       # Check the lookup result, but we are really interested that it doesn't hang.
-      self.assertAllClose(result[0][0], np.take(result[1], i_h, axis=0))
+      self.assertAllClose(result[0][0], np.take(v, i_h, axis=0))
 
   @test_util.deprecated_graph_mode_only
   def testNoLookup(self):
@@ -198,7 +204,9 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       report.reset()
-      result = sess.run([r, host_embedding()], {i: i_h})
+
+      with host_embedding.register(sess):
+        result = sess.run([r], {i: i_h})
 
       # Check the indices are correct, but the real test is no timeout.
       self.assertAllClose(result[0][0], i_h)
