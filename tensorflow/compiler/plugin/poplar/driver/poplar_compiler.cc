@@ -65,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_buffers_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
@@ -1087,6 +1088,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.annotations, resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size,
         resources.replication_factor);
+    pipeline.AddPass<GradientAccumulationBuffersOffload>(
+        resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size);
     pipeline.AddPass<PipelineStageMerger>();
     pipeline.AddPass<PipelineCommunicationOptimizer>();
     AddPipelineOptimizerPass(pipeline);

@@ -171,6 +171,7 @@ def pipeline(computational_stages,
              offload_weight_update_variables=None,
              replicated_optimizer_state_sharding=None,
              offload_activations=None,
+             offload_gradient_accumulation_buffers=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -401,6 +402,7 @@ def pipeline(computational_stages,
       `tf.MomentumOptimizer`), will be partitioned across the replicas. This
       can exploit the additional bandwidth of the IPU-Links to improve overall
       throughput.
+      Note that this option has no effect for inference only pipelines.
     offload_activations: When enabled, all the activations for the batches which
       are not being executed by the pipeline stages at the given time are stored
       in remote memory. Requires the machine to be configured with support for
@@ -410,6 +412,16 @@ def pipeline(computational_stages,
       When set to `None`, the activations might be offloaded when beneficial.
       This feature is currently only supported when the pipeline schedule is
       `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`.
+    offload_gradient_accumulation_buffers: When enabled, all the gradient
+      accumulation buffers are stored in remote memory. Offloading gradient
+      accumulation buffers into remote memory can reduce maximum memory
+      liveness, but can also increase the computation time as the buffers have
+      to be copied to the device, updated and the copied off the device.
+      Requires the machine to be configured with support for `Poplar remote
+      buffers`.
+      When set to `None`, the `offload_gradient_accumulation_buffers` might be
+      offloaded when beneficial.
+      Note that this option has no effect for inference only pipelines.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -509,9 +521,10 @@ def pipeline(computational_stages,
         "When using batch serialization, all the pipeline stages need to be "
         "mapped to a single IPU.")
 
-  def bool_to_three_state(value, default):
+  def bool_to_three_state(value, default=None):
     if value is None:
-      return default
+      return default if default else backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_UNDEFINED)
     elif value:
       return backend_config_pb2.ThreeState.Name(
           backend_config_pb2.THREESTATE_ON)
@@ -520,15 +533,13 @@ def pipeline(computational_stages,
 
   # Convert some of the binary options into three states.
   offload_weight_update_variables = bool_to_three_state(
-      offload_weight_update_variables,
-      backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_UNDEFINED))
+      offload_weight_update_variables)
   replicated_optimizer_state_sharding = bool_to_three_state(
-      replicated_optimizer_state_sharding, offload_weight_update_variables)
-  offload_activations = bool_to_three_state(
-      offload_activations,
-      backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_UNDEFINED))
+      replicated_optimizer_state_sharding,
+      default=offload_weight_update_variables)
+  offload_activations = bool_to_three_state(offload_activations)
+  offload_gradient_accumulation_buffers = bool_to_three_state(
+      offload_gradient_accumulation_buffers)
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -712,7 +723,9 @@ def pipeline(computational_stages,
           schedule=int(pipeline_schedule),
           pipeline_poplar_config=json_format.MessageToJson(
               pipeline_poplar_config),
-          offload_activations=offload_activations)
+          offload_activations=offload_activations,
+          offload_gradient_accumulation_buffers=
+          offload_gradient_accumulation_buffers)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

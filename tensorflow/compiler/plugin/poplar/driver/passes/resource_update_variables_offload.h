@@ -69,19 +69,17 @@ struct CompilerAnnotations;
  * }
  *
  * Here p2 is only used by the resource update computation inside of the
- * pipeline. We therefore remove it from being a paramater to the pipeline and
- * the resource update computations and instead add load/store instructions.
- * Note that we cannot change the input/output signatures of the entry
- * computation so we make sure that p2 has no other uses and the output at the
- * p2 index uses a dummy operation which doesn't do anything, resulting in:
+ * pipeline. We therefore mark it as a remote paramater and add load/store
+ * instructions inside of the resource update, resulting in:
  *
  * wu_comp {
  *   p0 = parameter(0)
  *   p1 = parameter(1)
- *   p2 = remote-parameter-load() entry_parameter_idx = 2
- *   p0', p2' = apply_grads(p0, p1, p2)
- *   token = remote-parameter-store(p2') entry_output_idx = 2
- *   ROOT t = tuple(p0)
+ *   p2 = parameter(2)
+ *   p2_loaded = remote-parameter-load(p2)
+ *   p0', p2' = apply_grads(p0, p1, p2_loaded)
+ *   p2_stored = remote-paramter-store(p2, p2')
+ *   ROOT t = tuple(p0, p2_stored)
  * }
  *
  * pipeline {
@@ -91,22 +89,24 @@ struct CompilerAnnotations;
  *   pipeline_stages(p0, p1, ...)
  *   bwd_pipeline_stages(...., p0, p1, ....)
  *   ...
- *   t = resource_update(..., p0, p1, ...)
+ *   p2 = parameter(2) <- parameter now
+ *   t = resource_update(..., p0, p1, p2, ...)
  *   gte0 = gte(t) index 0 <- updated value of p0
+ *   gte1 = gte(t) index 1 <- updated value of p2
  *   ....
- *   ROOT out = tuple(gte0, p1, , ...)
+ *   ROOT out = tuple(gte0, p1, gte1, ...)
  * }
  *
  * entry {
  *   p0 = parameter(0)
  *   p1 = parameter(1)
- *   p2 = parameter(2) <- has no users.
+ *   p2 = parameter(2)
  *   ...
  *   p = pipeline (p0, p1, p2 ...)
  *   gte0 = gte(p) index 0
  *   gte1 = gte(p) index 1
- *   dummy = output-dummy()
- *   ROOT t = tuple(gte0, gte1, dummy, ...)
+ *   gte2 = gte(p) index 2
+ *   ROOT t = tuple(gte0, gte1, gte2, ...)
  * }
  */
 class ResourceUpdateVariablesOffload : public HloModulePass {

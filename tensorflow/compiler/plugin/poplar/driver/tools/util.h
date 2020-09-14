@@ -144,6 +144,7 @@ int64 GetPipelineRepeatCount(const HloInstruction*);
 int64 GetPipelineDepth(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);
+ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
@@ -215,6 +216,11 @@ SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape);
 
 Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
                            const int64 dimension);
+
+// Get a unique GTE user of `inst` at a given tuple index.
+StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
+                                           int64 tuple_index);
+
 // Poplar's dimShuffle does: return_value.dimensions[i] =
 // argument.dimensions[permutations[i]] Whereas ShapeUtil::PermuteDimensions
 // does: return_value.dimensions[permutation[i]] = argument.dimensions[i].

@@ -418,6 +418,14 @@ ThreeState GetPipelineOffloadActivations(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().offload_activations();
 }
 
+ThreeState GetPipelineOffloadGradientAccumulationBuffers(
+    const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .pipeline_config()
+      .offload_gradient_accumulation_buffers();
+}
+
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();
@@ -684,6 +692,24 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
     LOG(FATAL) << "Failed concatentating shapes together.";
   }
   return statusor.ValueOrDie();
+}
+
+StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
+                                           int64 tuple_index) {
+  absl::flat_hash_set<HloInstruction*> gtes;
+  for (HloInstruction* user : inst->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    if (user->tuple_index() == tuple_index) {
+      gtes.insert(user);
+    }
+  }
+  if (gtes.size() != 1) {
+    return InternalErrorStrCat(
+        "Expected the gradient accumulation buffer to only have a "
+        "single user, but it has ",
+        gtes.size(), " users.");
+  }
+  return *std::begin(gtes);
 }
 
 size_t HloComputationHash::operator()(const HloComputation* comp) const {
