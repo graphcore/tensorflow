@@ -101,7 +101,7 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
                                    {input_size, num_channels});
 
   gru_params.calcInputGradients = gru_inst->is_training();
-  gru_params.cellOrder = {BASIC_GRU_CELL_RESET_GATE, BASIC_GRU_CELL_UPDATE_GATE,
+  gru_params.cellOrder = {BASIC_GRU_CELL_UPDATE_GATE, BASIC_GRU_CELL_RESET_GATE,
                           BASIC_GRU_CELL_CANDIDATE};
   return gru_params;
 }
