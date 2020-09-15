@@ -1,4 +1,4 @@
-/* Copyright 2018-2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -507,6 +507,10 @@ bool IsReduceAddOrMultiply(const HloInstruction* inst) {
     }
   }
   return false;
+}
+
+bool IsSerializedGradientAccumulation(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "serialized_gradient_accumulation");
 }
 
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {

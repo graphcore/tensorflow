@@ -325,11 +325,11 @@ class GradientAccumulatorSinkOp : public PoplarOpDef {
                                  " to have been lowered inplace.");
     }
     poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(auto inputs,
+                        FindInplaceOutputs(tensor_map, res, inst, seq));
     CHECK_EQ(inputs.size(), inst->operand_count());
     CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor output = inputs[0][0];
+    auto output = inputs[0][0];
 
     // Make sure that all the merged gradient accumulation buffers are the same
     // location.
@@ -342,7 +342,7 @@ class GradientAccumulatorSinkOp : public PoplarOpDef {
       }
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(AddOutput(tensor_map, inst, 0, output));
     return seq;
   }
 };

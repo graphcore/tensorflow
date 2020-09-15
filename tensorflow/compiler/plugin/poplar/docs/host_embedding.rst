@@ -40,12 +40,11 @@ created object is then passed to the user model where the
 be called with a similar API to ``tf.nn.embedding_lookup``.
 
 Once the IPU host embedding has been created and used within the model, the
-object must be "executed" with its call operator
-(:py:meth:`tensorflow.python.ipu.embedding_ops.HostEmbedding.__call__`) in the
-``session.run``. If this call is ommitted then the TensorFlow session
-will not configure the underlying Poplar engine correctly and the
-model execution will fail. The potentially modified embedding value
-will be returned from the session.
+object must be "registered" with the session using the context manager created
+by (:py:meth:`tensorflow.python.ipu.embedding_ops.HostEmbedding.register`).
+If TensorFlow session is not called within this context, TensorFlow will not
+configure the underlying Poplar engine correctly and the model execution will
+fail.
 
 Example
 ~~~~~~~~

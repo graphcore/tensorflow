@@ -34,6 +34,7 @@ REGISTER_OP("Pipeline")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("pipeline_poplar_config: string")
     .Attr("offload_activations: string")
+    .Attr("offload_gradient_accumulation_buffers: string")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(

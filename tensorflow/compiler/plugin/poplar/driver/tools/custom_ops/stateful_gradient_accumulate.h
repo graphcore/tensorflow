@@ -116,13 +116,16 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
 //   used in multiple pipeline stages and unifies them into a single buffer.
 class HloGradientAccumulatorCreate : public HloPoplarInstruction {
  public:
-  explicit HloGradientAccumulatorCreate(const Shape& shape);
-  explicit HloGradientAccumulatorCreate(HloInstruction* const variable);
+  explicit HloGradientAccumulatorCreate(const Shape& shape,
+                                        bool is_remote = false);
+  explicit HloGradientAccumulatorCreate(HloInstruction* const variable,
+                                        bool is_remote = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
   bool IsPopOpsElementwise() const override;
+  bool IsRemote() const { return is_remote_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -132,12 +135,14 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloCloneContext*) const override;
+
+  const bool is_remote_;
 };
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
-    const Shape& shape);
+    const Shape& shape, bool is_remote = false);
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
-    HloInstruction* const variable);
+    HloInstruction* const variable, bool is_remote = false);
 
 class HloGradientAccumulatorAdd : public HloPoplarInstruction {
  public:

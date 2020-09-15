@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -114,24 +115,6 @@ Status GradientAccumulationVerifier::VerifyStatefulGradientAccumulation(
 }
 
 namespace {
-StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
-                                           int64 tuple_index) {
-  absl::flat_hash_set<HloInstruction*> gtes;
-  for (HloInstruction* user : inst->users()) {
-    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-    if (user->tuple_index() == tuple_index) {
-      gtes.insert(user);
-    }
-  }
-  if (gtes.size() != 1) {
-    return InternalErrorStrCat(
-        "Expected the gradient accumulation buffer to only have a "
-        "single user, but it has ",
-        gtes.size(), " users.");
-  }
-  return *std::begin(gtes);
-}
-
 StatusOr<int64> VerifyGradientAccumulationInsideComputation(
     const HloComputation* computation, int64 parameter_index) {
   // Expect the gradient accumulator to be used serially, with the final use in
@@ -141,6 +124,13 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
   HloInstruction* inner_user =
       computation->parameter_instruction(parameter_index);
   do {
+    if (inner_user->user_count() == 2) {
+      HloInstruction *load, *store;
+      TF_RETURN_IF_ERROR(GetRemoteLoadStoreUsers(inner_user, &load, &store));
+      inner_user = load;
+      continue;
+    }
+
     if (inner_user->user_count() != 1) {
       return InternalErrorStrCat(
           "Expected the gradient accumulation buffer to be used "
@@ -148,14 +138,22 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
           inner_user->user_count(), " users.");
     }
     HloInstruction* next_user = inner_user->users()[0];
-    const auto next_user_indices = next_user->OperandIndices(inner_user);
 
+    const auto next_user_indices = next_user->OperandIndices(inner_user);
     if (next_user_indices.size() != 1) {
       return InternalErrorStrCat(
           "Expected the gradient accumulation buffer to only appear as "
           "an operand once, but it is used ",
           next_user_indices.size(), " times.");
     }
+    const int64 next_user_index = next_user_indices[0];
+
+    if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(next_user)) {
+      inner_user = next_user;
+      output_index = next_user_index - next_user->operand_count() / 2;
+      continue;
+    }
+
     auto optional_inplace_modifier = GetInplaceModifier(inner_user);
     if (!optional_inplace_modifier) {
       return InternalError(
@@ -186,7 +184,7 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
             ".");
       }
       inner_user = next_user;
-      output_index = next_user_indices[0];
+      output_index = next_user_index;
     }
   } while (computation->root_instruction() != inner_user);
   CHECK_EQ(inner_user->opcode(), HloOpcode::kTuple);

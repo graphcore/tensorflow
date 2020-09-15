@@ -31,10 +31,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-bool IsSerializedGradientAccumulation(const HloInstruction* inst) {
-  return IsPopOpsFusion(inst, "serialized_gradient_accumulation");
-}
-
 Status InlineSerializedGradientAccumulation(HloInstruction* fusion) {
   HloComputation* fusion_comp = fusion->fused_instructions_computation();
   HloComputation* comp = fusion->parent();

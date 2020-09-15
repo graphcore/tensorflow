@@ -171,6 +171,7 @@ cc_library(
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
         "driver/passes/gather_simplifier.cc",
+        "driver/passes/gradient_accumulation_buffers_offload.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
         "driver/passes/gradient_accumulation_verifier.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
@@ -285,6 +286,7 @@ cc_library(
         "driver/tools/matcher_predicates.cc",
         "driver/tools/matmul_util.cc",
         "driver/tools/ml_type_helper.cc",
+        "driver/tools/offloading_util.cc",
         "driver/tools/pipeline_util.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
@@ -322,6 +324,7 @@ cc_library(
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
         "driver/passes/gather_simplifier.h",
+        "driver/passes/gradient_accumulation_buffers_offload.h",
         "driver/passes/gradient_accumulation_fuser.h",
         "driver/passes/gradient_accumulation_verifier.h",
         "driver/passes/hlo_computation_name_uniquify.h",
@@ -435,6 +438,7 @@ cc_library(
         "driver/tools/matmul_util.h",
         "driver/tools/meta_graph.h",
         "driver/tools/ml_type_helper.h",
+        "driver/tools/offloading_util.h",
         "driver/tools/pipeline_util.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/tensor_location.h",
@@ -2884,6 +2888,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "gradient_accumulation_buffers_offload_test",
+    size = "small",
+    srcs = ["tests/gradient_accumulation_buffers_offload_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4485,6 +4504,7 @@ test_suite(
         "fuse_wide_const_test",
         "fused_batch_norm_test",
         "gather_simplifier_embedding_lookup_test",
+        "gradient_accumulation_buffers_offload_test",
         "gradient_accumulation_fuser_test",
         "gradient_accumulation_optimization_pass_test",
         "graph_compile_io_map_test",

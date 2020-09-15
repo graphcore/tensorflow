@@ -576,6 +576,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status RegisterHostEmbedding(
       const std::string& embedding_id,
       std::unique_ptr<HostEmbeddingInterface_> embedding);
+  Status DeregisterHostEmbedding(const std::string& embedding_id);
 
   tensorflow::Rendezvous* GetRendezvous();
 
@@ -583,9 +584,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void SetHasCycleCounter() { has_cycle_counter_ = true; }
   static std::string GetCycleCounterStream();
-
-  void ClearCompilationFailure();
-  void NotifyCompilationFailure();
 
   void SetCurrentReplicationFactor(int64 executable_replication_factor);
 
@@ -911,8 +909,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       host_embeddings_;
 
   std::mutex host_embeddings_mutex_;
-  std::condition_variable host_embeddings_cv;
-  bool host_embedding_registration_is_open_ = true;
 
   SeedGenerator seed_generator_;
 

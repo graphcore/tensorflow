@@ -23,12 +23,26 @@ using shape_inference::DimensionHandle;
 using shape_inference::InferenceContext;
 using shape_inference::ShapeHandle;
 
-REGISTER_OP("IpuHostEmbedding")
+REGISTER_OP("IpuHostEmbeddingRegister")
     .Input("ref: Ref(T)")
     .Output("output_ref: Ref(T)")
     .Attr("device_ordinal: int = 0")
     .Attr("embedding_id: string")
-    .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
+    .Attr("T: numbertype")
+    .SetIsStateful()
+    .SetShapeFn([](InferenceContext* c) {
+      ShapeHandle embedding_shape = c->input(0);
+      ShapeHandle out;
+      TF_RETURN_IF_ERROR(c->WithRank(embedding_shape, 2, &out));
+
+      return shape_inference::UnchangedShape(c);
+    });
+
+REGISTER_OP("IpuHostEmbeddingDeregister")
+    .Input("ref: Ref(T)")
+    .Output("output_ref: Ref(T)")
+    .Attr("device_ordinal: int = 0")
+    .Attr("embedding_id: string")
     .Attr("T: numbertype")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {

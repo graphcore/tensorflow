@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -280,8 +281,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
     poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shapes[0]));
-    int64 element_count = absl::c_accumulate(shapes[0].dimensions(), int64{1},
-                                             std::multiplies<int64>{});
+    int64 element_count = ShapeUtil::ElementsIn(shapes[0]);
 
     const bool is_replica_partitioned = IsReplicaPartitioned(inst, resources_);
 
@@ -745,59 +745,93 @@ Status DeferredVisitor::HandleNonDeferredCustomCall(HloInstruction* inst) {
   return FullVisitor::HandleCustomCall(inst);
 }
 
+namespace {
+Status AddGradientAccumulationZeroingSequence(
+    CompilerResources& res, const poplar::program::Sequence& seq) {
+  if (res.gradient_accumulation_zeroing_sequences.empty()) {
+    return FailedPrecondition("Cannot zero gradient accumulation buffer.");
+  }
+
+  res.gradient_accumulation_zeroing_sequences.top().push_back(seq);
+  return Status::OK();
+}
+}  // namespace
+
 Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   CHECK(!inst->shape().IsTuple());
 
   TensorLocation output_location{inst, 0};
-  // If the this instruction has multiple uses, then allocate it now with the
-  // same layout as its input (the variable).
+  const HloGradientAccumulatorCreate* create =
+      Cast<HloGradientAccumulatorCreate>(inst);
 
-  // Whether to allocate now.
-  const bool allocate_now =
-      HasTensorAllocationTarget(output_location, resources_) ||
-      inst->user_count() > 1;
+  if (create->IsRemote()) {
+    CHECK(inst->shape().IsArray());
+
+    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+    // Create the buffer.
+    TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(inst->shape()));
+    const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
+    poplar::RemoteBuffer output =
+        graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
+    TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
+
+    // Add a zeroing sequence to reset the buffer.
+    poplar::program::Sequence zeroing_seq;
+    poplar::Tensor zero = graph.addConstant(type, {1}, 0);
+    MappingHelper::MapTensorLinearly(resources_.linear_mapping_state, graph,
+                                     zero);
+    zero = zero.broadcast(element_count, 0);
+    zeroing_seq.add(poplar::program::Copy(zero, output));
+    TF_RETURN_IF_ERROR(
+        AddGradientAccumulationZeroingSequence(resources_, zeroing_seq));
+    return Status::OK();
+  }
 
   // Function which is called when allocating this tensor.
-  DeferredAllocateFunction allocate_fn =
-      [this,
-       inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    poplar::Tensor tensor;
-    poplar::Graph& graph = GetGraph(resources_, inst);
+  DeferredAllocateFunction allocate_fn;
+  const bool allocate_now =
+      HasTensorAllocationTarget(output_location, resources_);
+  if (inst->operand_count() > 0) {
+    allocate_fn =
+        [this,
+         inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      poplar::Graph& graph = GetGraph(resources_, inst);
 
-    // GradientAccumulatorCreate also accepts shape
-    // as its ctor argument, maybe we don't have any operands here.
-    // In this case we expect this instruction to have exactly 1 user.
-
-    if (inst->operand_count() > 0) {
-      // Get the layout of the variable passed into the gradient accumulator.
+      // Get the layout of the variable passed into the gradient accumulator -
+      // if it is a tensor it can be used as a guide for how to allocate the
+      // gradient accumulator.
       TensorOrRemoteBufferVector outputs =
           FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
       CHECK_EQ(outputs.size(), 1);
-      poplar::Tensor variable_tensor = outputs[0];
+      const auto& variable_tensor = outputs[0];
+      absl::optional<poplar::Tensor> tensor_like;
+      if (variable_tensor.IsTensor()) {
+        tensor_like = variable_tensor.AsTensor();
+      }
 
-      if (inst->user_count() > 1) {
+      poplar::Tensor tensor;
+      if (tensor_like && inst->user_count() > 1) {
+        // Use the variable tensor layout as the layout for the accumulator.
         tensor = TensorCloneAndRebalanceAliasing(
             graph, resources_, variable_tensor, GetDebugName(inst));
       } else {
-        // Allocate the accumulator, and if there isn't a layout to use, use the
-        // variable layout.
-        TF_ASSIGN_OR_RETURN(
-            tensor,
-            AllocateInput(allocation_location, inst->shape(), variable_tensor));
+        // Allocate the accumulator, and if there isn't a layout to use, use
+        // the variable layout.
+        TF_ASSIGN_OR_RETURN(tensor, AllocateInput(allocation_location,
+                                                  inst->shape(), tensor_like));
       }
-    } else {
-      if (inst->user_count() > 1) {
-        return FailedPrecondition(
-            "Expected exactly one user if only shape was provided: ",
-            inst->ToString());
-      } else {
-        TF_ASSIGN_OR_RETURN(tensor,
-                            AllocateInput(allocation_location, inst->shape()));
-      }
-    }
-    return tensor;
-  };
+      return tensor;
+    };
+  } else {
+    allocate_fn =
+        [this,
+         inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                          AllocateInput(allocation_location, inst->shape()));
+      return tensor;
+    };
+  }
 
   // Function which is called after the tensor has been created.
   DeferredPostProcessFunction post_process_fn =
@@ -809,13 +843,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     popops::zero(graph, tensor, zeroing_seq,
                  GetDebugName(inst) + "/ZeroAccumulator");
 
-    // Add to the zeroing sequence.
-    if (resources_.gradient_accumulation_zeroing_sequences.empty()) {
-      return FailedPrecondition("Cannot zero gradient accumulation buffer.");
-    }
-
-    resources_.gradient_accumulation_zeroing_sequences.top().push_back(
-        zeroing_seq);
+    TF_RETURN_IF_ERROR(
+        AddGradientAccumulationZeroingSequence(resources_, zeroing_seq));
     return tensor;
   };
 

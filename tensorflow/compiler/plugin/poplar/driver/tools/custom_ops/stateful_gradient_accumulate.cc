@@ -181,17 +181,21 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
       operands, num_mini_batches);
 }
 
-HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(const Shape& shape)
-    : HloPoplarInstruction(shape, {}, PoplarOp::GradientAccumulatorCreate) {
+HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(const Shape& shape,
+                                                           bool is_remote)
+    : HloPoplarInstruction(shape, {}, PoplarOp::GradientAccumulatorCreate,
+                           is_remote),
+      is_remote_(is_remote) {
   // Mark the creator as stateful so that it does not get merged with other same
   // shaped accumulators.
   set_custom_call_has_side_effect(true);
 }
 
 HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(
-    HloInstruction* const variable)
+    HloInstruction* const variable, bool is_remote)
     : HloPoplarInstruction(variable->shape(), {variable},
-                           PoplarOp::GradientAccumulatorCreate) {
+                           PoplarOp::GradientAccumulatorCreate, is_remote),
+      is_remote_(is_remote) {
   // Mark the creator as stateful so that it does not get merged with other same
   // shaped accumulators.
   set_custom_call_has_side_effect(true);
@@ -226,17 +230,19 @@ HloGradientAccumulatorCreate::CloneWithNewOperandsImpl(
 std::vector<std::string>
 HloGradientAccumulatorCreate::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back("is_remote=" + std::to_string(is_remote_));
+  return attributes;
 }
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
-    HloInstruction* const variable) {
-  return absl::make_unique<HloGradientAccumulatorCreate>(variable);
+    HloInstruction* const variable, bool is_remote) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(variable, is_remote);
 }
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
-    const Shape& shape) {
-  return absl::make_unique<HloGradientAccumulatorCreate>(shape);
+    const Shape& shape, bool is_remote) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(shape, is_remote);
 }
 
 HloGradientAccumulatorAdd::HloGradientAccumulatorAdd(

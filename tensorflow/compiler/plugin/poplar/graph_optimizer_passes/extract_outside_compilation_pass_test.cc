@@ -264,18 +264,20 @@ TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
     to_apply.set_name(pipeline_function_name);
 
     Node* pipeline_node;
-    TF_CHECK_OK(NodeBuilder("pipeline", "Pipeline")
-                    .Input(std::vector<NodeBuilder::NodeOut>{})
-                    .Attr("repeat_count", pipeline_repeat_count)
-                    .Attr("output_shapes", std::vector<TensorShape>{})
-                    .Attr("pipeline_poplar_config", "")
-                    .Attr("Tout", std::vector<TensorShape>{})
-                    .Attr("pipeline_depth", 1)
-                    .Attr("batch_serialization_iterations", 1)
-                    .Attr("schedule", 0)
-                    .Attr("offload_activations", "THREESTATE_FALSE")
-                    .Attr("to_apply", to_apply)
-                    .Finalize(&g, &pipeline_node));
+    TF_CHECK_OK(
+        NodeBuilder("pipeline", "Pipeline")
+            .Input(std::vector<NodeBuilder::NodeOut>{})
+            .Attr("repeat_count", pipeline_repeat_count)
+            .Attr("output_shapes", std::vector<TensorShape>{})
+            .Attr("pipeline_poplar_config", "")
+            .Attr("Tout", std::vector<TensorShape>{})
+            .Attr("pipeline_depth", 1)
+            .Attr("batch_serialization_iterations", 1)
+            .Attr("schedule", 0)
+            .Attr("offload_activations", "THREESTATE_FALSE")
+            .Attr("offload_gradient_accumulation_buffers", "THREESTATE_FALSE")
+            .Attr("to_apply", to_apply)
+            .Finalize(&g, &pipeline_node));
 
     TF_CHECK_OK(GraphToFunctionDef(g, "cluster", fdef_lib.add_function()));
   }
