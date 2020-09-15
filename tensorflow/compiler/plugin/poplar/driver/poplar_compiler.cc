@@ -34,6 +34,7 @@ limitations under the License.
 #include <popops/codelets.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
+#include <popsparse/codelets.hpp>
 #include <poputil/exceptions.hpp>
 #include <random>
 #include <string>
@@ -604,6 +605,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
+  popsparse::addCodelets(main_graph);
   popfloat::experimental::addCodelets(main_graph);
 
   return Status::OK();

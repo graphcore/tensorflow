@@ -34,6 +34,7 @@ cc_library(
             "lib*/poplibs/libpopops*",
             "lib*/poplibs/libpoprand*",
             "lib*/poplibs/libpopfloat*",
+            "lib*/poplibs/libpopsparse*",
             "lib*/poplibs/libpopsys*",
             "lib*/poplibs/libpoputil*",
         ], [
@@ -46,6 +47,7 @@ cc_library(
             "lib*/**/libpopops*",
             "lib*/**/libpoprand*",
             "lib*/**/libpopfloat*",
+            "lib*/**/libpopsparse*",
             "lib*/**/libpopsys*",
             "lib*/**/libpoputil*",
         ]),
