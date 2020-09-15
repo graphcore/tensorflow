@@ -240,9 +240,9 @@ into the ``optimizer_function`` argument of the pipeline operation.
 
 When a pipeline is running it will accumulate the gradients from each step of
 the pipeline and only apply the updates to the graph parameters at the end of
-each pipeline run, given by the ``pipeline_depth`` parameter. Consequently it is
-important for the system to have more knowledge of the optimiser and so it
-must be given to the pipeline operator using this function.
+each pipeline run, given by the ``gradient_accumulation_count`` parameter.
+Consequently it is important for the system to have more knowledge of the
+optimiser and so it must be given to the pipeline operator using this function.
 
 Device mapping
 ______________
@@ -306,8 +306,8 @@ __________
 
 All pipelined training graphs automatically apply gradient accumulation to the
 model such that the weight update is only computed once all the mini-batches,
-where the number of mini-batches is the ``pipeline_depth``, have gone through
-the whole model pipeline.
+where the number of mini-batches is the ``gradient_accumulation_count``, have
+gone through the whole model pipeline.
 
 .. Note:: Since the pipelined models always implement gradient accumulation, no
   gradient accumulation optimizer should also be used in combination with

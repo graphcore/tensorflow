@@ -17,7 +17,7 @@ enum FrontendAttributeId {
   // Type to use to store the partials results.
   PARTIALS_TYPE = 2;
   // Used in pipelining to indicate how many times each stage is executed.
-  PIPELINE_DEPTH = 3;
+  GRADIENT_ACCUMULATION_COUNT = 3;
   // ID of a pipeline stage.
   PIPELINE_STAGE_ID = 4;
   // Used in pipelining to indicate how many times the pipeline should be
@@ -122,7 +122,7 @@ message PoplarBackendConfig {
         Sequential = 2;
       };
 
-      int64 pipeline_depth = 1;
+      int64 gradient_accumulation_count = 1;
       int64 batch_serialization_iterations = 2;
       int64 repeat_count = 3;
       Schedule schedule = 4;

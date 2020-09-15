@@ -128,7 +128,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def test_pipelining(self):
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
     local_batch_size = 2
 
     features = np.ones((1, 20), dtype=np.float32) * hvd.rank()
@@ -169,7 +169,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2],
             device_mapping=[0, 0],
-            pipeline_depth=pipeline_depth,
+            gradient_accumulation_count=gradient_accumulation_count,
             inputs=[lr],
             infeed_queue=infeed_queue,
             repeat_count=2,
@@ -189,7 +189,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
       _, per_worker_losses = outfeed_queue.dequeue()
 
-      # Mean across the local `pipeline_depth` batches:
+      # Mean across the local `gradient_accumulation_count` batches:
       per_worker_loss = math_ops.reduce_mean(per_worker_losses)
 
       # Global mean across the distributed workers (since it is already

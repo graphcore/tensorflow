@@ -69,10 +69,13 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
             case PoplarBackendConfig::CallConfig::Pipeline: {
               auto* pipeline_config = call_config->mutable_pipeline_config();
               // Get the pipeline depth.
-              TF_ASSIGN_OR_RETURN(std::string pipeline_depth_str,
-                                  GetAttribute(attributes, PIPELINE_DEPTH));
-              int64 pipeline_depth = std::stoll(pipeline_depth_str);
-              pipeline_config->set_pipeline_depth(pipeline_depth);
+              TF_ASSIGN_OR_RETURN(
+                  std::string gradient_accumulation_count_str,
+                  GetAttribute(attributes, GRADIENT_ACCUMULATION_COUNT));
+              int64 gradient_accumulation_count =
+                  std::stoll(gradient_accumulation_count_str);
+              pipeline_config->set_gradient_accumulation_count(
+                  gradient_accumulation_count);
 
               // Get the batch serialization iterations.
               TF_ASSIGN_OR_RETURN(

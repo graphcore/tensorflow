@@ -132,7 +132,7 @@ std::string GetPipelineTemplateHloString() {
     ENTRY %main (arg0: f32[$R,$E], arg1: f32[$R,$E]) -> f32[$R,$E] {
     %arg0 = f32[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = f32[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
-    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"pipelineDepth\":\"$BN\",\"repeatCount\":\"2\",\"schedule\":\"Interleaved\"}}}"
+    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"schedule\":\"Interleaved\"}}}"
     }
     )";
 }

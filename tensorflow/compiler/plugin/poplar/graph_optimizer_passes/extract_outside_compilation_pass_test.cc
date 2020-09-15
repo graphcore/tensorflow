@@ -271,7 +271,7 @@ TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
             .Attr("output_shapes", std::vector<TensorShape>{})
             .Attr("pipeline_poplar_config", "")
             .Attr("Tout", std::vector<TensorShape>{})
-            .Attr("pipeline_depth", 1)
+            .Attr("gradient_accumulation_count", 1)
             .Attr("batch_serialization_iterations", 1)
             .Attr("schedule", 0)
             .Attr("offload_activations", "THREESTATE_FALSE")

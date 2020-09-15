@@ -141,7 +141,7 @@ bool IsFunction(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
-int64 GetPipelineDepth(const HloInstruction*);
+int64 GetGradientAccumulationCount(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);
 ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);

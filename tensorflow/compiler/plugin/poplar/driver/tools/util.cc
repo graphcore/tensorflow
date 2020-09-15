@@ -403,9 +403,9 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().repeat_count();
 }
 
-int64 GetPipelineDepth(const HloInstruction* inst) {
+int64 GetGradientAccumulationCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().pipeline_config().pipeline_depth();
+  return cfg.call_config().pipeline_config().gradient_accumulation_count();
 }
 
 int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {

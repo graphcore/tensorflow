@@ -27,6 +27,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import function_utils
+from tensorflow.python.util.deprecation import deprecated_args
 
 _HOST_DEVICE = ipu_estimator._HOST_DEVICE  # pylint: disable=protected-access
 
@@ -35,7 +36,7 @@ class IPUPipelineEstimatorSpec(
     collections.namedtuple('IPUPipelineEstimatorSpec', [
         'mode',
         'computational_stages',
-        'pipeline_depth',
+        'gradient_accumulation_count',
         'eval_metrics_fn',
         'optimizer_function',
         'device_mapping',
@@ -45,10 +46,15 @@ class IPUPipelineEstimatorSpec(
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
+  @deprecated_args(
+      None,
+      "pipeline_depth is deprecated, use gradient_accumulation_count instead",
+      "pipeline_depth")
   def __new__(cls,
               mode,
               computational_stages,
-              pipeline_depth,
+              gradient_accumulation_count=None,
+              pipeline_depth=None,
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
@@ -71,7 +77,8 @@ class IPUPipelineEstimatorSpec(
       computational_stages: a list of Python functions, where each function
         represents a computational pipeline stage. The function takes the
         outputs of the previous pipeline state as its inputs.
-      pipeline_depth: the number of times each pipeline stage will be executed.
+      gradient_accumulation_count: the number of times each pipeline stage will
+        be executed.
       eval_metrics_fn: a Python function which takes the output of the
         last computational stage as parameters and returns a dict of evaluation
         metrics. The dict must contain a a loss tensor value with the key
@@ -114,12 +121,19 @@ class IPUPipelineEstimatorSpec(
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`eval_metrics_fn` when evaluating")
 
+    if pipeline_depth:
+      gradient_accumulation_count = pipeline_depth
+
+    if not gradient_accumulation_count:
+      raise ValueError("`IPUPipelineEstimatorSpec` must contain "
+                       "`gradient_accumulation_count`")
+
     return super().__new__(
         cls,
         mode=mode,
         computational_stages=computational_stages,
         eval_metrics_fn=eval_metrics_fn,
-        pipeline_depth=pipeline_depth,
+        gradient_accumulation_count=gradient_accumulation_count,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         pipeline_schedule=pipeline_schedule,
@@ -151,7 +165,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
-          pipeline_depth=spec.pipeline_depth,
+          gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
           inputs=spec.inputs,
           optimizer_function=spec.optimizer_function,
@@ -168,7 +182,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       with ops.control_dependencies([compiled_training_loop]):
         loss = self._outfeed_queue.dequeue()
 
-      # Reduce loss over all dimensions (i.e. batch_size, pipeline_depth)
+      # Reduce loss over all dimensions (i.e. batch_size, gradient_accumulation_count)
       loss = math_ops.reduce_mean(math_ops.cast(loss, dtypes.float32))
 
     train_op = compiled_training_loop
@@ -187,7 +201,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
-          pipeline_depth=spec.pipeline_depth,
+          gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
@@ -224,7 +238,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
-          pipeline_depth=spec.pipeline_depth,
+          gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
@@ -300,17 +314,17 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   that contains the information needed for pipelined execution.
 
   Data parallelism based on graph replication is supported. Each replica will
-  consume `pipeline_depth` batches from the dataset returned by the `input_fn`
-  and accumulate the gradients, giving an effective batch size of
-  `num_replicas * pipeline_depth * batch_size`. The optimizer in the `model_fn`
-  should be wrapped in an
+  consume `gradient_accumulation_count` batches from the dataset returned by
+  the `input_fn` and accumulate the gradients, giving an effective batch size
+  of `num_replicas * gradient_accumulation_count * batch_size`. The optimizer
+  in the `model_fn` should be wrapped in an
   :class:`~tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`
   in order to average the gradients across the replicas.
 
   This can further be combined with distributed multi-worker training using the
   :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
   giving a total effective batch size of
-  `num_workers * num_replicas * pipeline_depth * batch_size`.
+  `num_workers * num_replicas * gradient_accumulation_count * batch_size`.
 
   Refer to the :mod:`~tensorflow.python.ipu.pipelining_ops`
   documentation for more details about pipelining.

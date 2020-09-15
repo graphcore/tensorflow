@@ -841,7 +841,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     initial_w0 = 1.0
     initial_w1 = 2.0
     learning_rate = 0.5
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
     num_iterations = 4
     repeat_count = 2
 
@@ -851,8 +851,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     with strategy.scope():
 
       x = per_worker_x[task_id]
-      features = [x] * pipeline_depth * num_iterations
-      labels = [y] * pipeline_depth * num_iterations
+      features = [x] * gradient_accumulation_count * num_iterations
+      labels = [y] * gradient_accumulation_count * num_iterations
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
@@ -880,7 +880,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       def model():
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2],
-            pipeline_depth=pipeline_depth,
+            gradient_accumulation_count=gradient_accumulation_count,
             repeat_count=repeat_count,
             inputs=[],
             infeed_queue=infeed_queue,
@@ -924,12 +924,12 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
             # dL(x)/dw_0 = sum_i 2 (w_0 * x_i + w_1 - y) x_i
             grad_w0 = sum(2 * (expected_w0 * x_i + expected_w1 - y) * x_i
                           for x_i in per_worker_x)
-            accumulated_grad_w0 = pipeline_depth * grad_w0
+            accumulated_grad_w0 = gradient_accumulation_count * grad_w0
 
             # dL(x)/dw_1 = sum_i 2 (w_0 * x_i + w_1 - y)
             grad_w1 = sum(2 * (expected_w0 * x_i + expected_w1 - y)
                           for x_i in per_worker_x)
-            accumulated_grad_w1 = pipeline_depth * grad_w1
+            accumulated_grad_w1 = gradient_accumulation_count * grad_w1
 
             expected_w0 -= learning_rate * accumulated_grad_w0
             expected_w1 -= learning_rate * accumulated_grad_w1
@@ -957,7 +957,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   def _run_pipelining_example_with_keras_layers(self,
                                                 strategy,
                                                 dataset,
-                                                pipeline_depth,
+                                                gradient_accumulation_count,
                                                 sess_target=None,
                                                 sess_config=None):
     loss_vals = []
@@ -992,7 +992,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       def model(lr):
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2],
-            pipeline_depth=pipeline_depth,
+            gradient_accumulation_count=gradient_accumulation_count,
             inputs=[lr],
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
@@ -1011,7 +1011,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       _, per_worker_losses = outfeed_queue.dequeue()
 
-      # Mean across the local `pipeline_depth` batches:
+      # Mean across the local `gradient_accumulation_count` batches:
       per_worker_loss = math_ops.reduce_mean(per_worker_losses)
 
       # Global mean across the distributed workers (since it is already
@@ -1044,7 +1044,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     return loss_vals
 
   def _test_pipelining_example_with_keras_layers(self, task_id):
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
     local_batch_size = 2
     num_workers = 2
 
@@ -1072,7 +1072,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                                                        local_batch_size,
                                                        drop_remainder=True)
         losses_reference = self._run_pipelining_example_with_keras_layers(
-            default_strategy, concat_dataset, pipeline_depth)
+            default_strategy, concat_dataset, gradient_accumulation_count)
 
       # Test using the actual distribution strategy. Each worker gets its own batch.
       strategy, sess_target, sess_config = self._create_test_objects(
@@ -1084,7 +1084,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         local_dataset = local_dataset.repeat().batch(local_batch_size,
                                                      drop_remainder=True)
         losses_distributed = self._run_pipelining_example_with_keras_layers(
-            strategy, local_dataset, pipeline_depth, sess_target, sess_config)
+            strategy, local_dataset, gradient_accumulation_count, sess_target,
+            sess_config)
 
     # The resulting losses should be the same, as distributed training should in
     # general be equivalent to non-distributed training with concatenated batches.
@@ -1111,7 +1112,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     initial_w0 = 1.0
     initial_w1 = 2.0
     learning_rate = 0.5
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
 
     def my_model_fn(mode):
       def stage1(feature, label):
@@ -1138,15 +1139,15 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       return ipu_pipeline_estimator.IPUPipelineEstimatorSpec(
           mode=mode,
           computational_stages=[stage1, stage2],
-          pipeline_depth=pipeline_depth,
+          gradient_accumulation_count=gradient_accumulation_count,
           optimizer_function=optimizer_function)
 
     def my_input_fn(input_context):
       self.assertEqual(task_id, input_context.input_pipeline_id)
 
       x = per_worker_x[task_id]
-      features = [x] * pipeline_depth * num_iterations
-      labels = [y] * pipeline_depth * num_iterations
+      features = [x] * gradient_accumulation_count * num_iterations
+      labels = [y] * gradient_accumulation_count * num_iterations
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
       return dataset
@@ -1184,10 +1185,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       expected_losses.append(loss)
 
       grad_w0 = np.sum(2 * (expected_w0 * x + expected_w1 - y) * x)
-      accumulated_grad_w0 = pipeline_depth * grad_w0
+      accumulated_grad_w0 = gradient_accumulation_count * grad_w0
 
       grad_w1 = np.sum(2 * (expected_w0 * x + expected_w1 - y))
-      accumulated_grad_w1 = pipeline_depth * grad_w1
+      accumulated_grad_w1 = gradient_accumulation_count * grad_w1
 
       expected_w0 -= learning_rate * accumulated_grad_w0 / num_workers
       expected_w1 -= learning_rate * accumulated_grad_w1 / num_workers
