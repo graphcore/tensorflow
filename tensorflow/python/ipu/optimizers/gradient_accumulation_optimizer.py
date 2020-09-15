@@ -47,7 +47,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
                opt,
                num_mini_batches,
                offload_weight_update_variables=None,
-               replicated_optimizer_state_sharding=None,
+               replicated_optimizer_state_sharding=False,
                name="GradientAccumulationOptimizerV2"):
     """Construct a Gradient Accumulation Optimizer V2.
 
@@ -231,7 +231,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
                opt,
                num_mini_batches,
                offload_weight_update_variables=None,
-               replicated_optimizer_state_sharding=None,
+               replicated_optimizer_state_sharding=False,
                name="CrossReplicaGradientAccumulationOptimizerV2"):
     """Construct a Cross Replica Gradient Accumulation Optimizer V2.
 
