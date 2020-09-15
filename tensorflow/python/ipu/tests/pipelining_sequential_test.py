@@ -484,7 +484,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -526,7 +526,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -549,7 +549,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 18
+    gradient_accumulation_count = 18
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -633,7 +633,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3],
         lambda: [], [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -657,7 +657,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -692,7 +692,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         lambda: [], [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -713,7 +713,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
@@ -780,7 +780,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4, stage5],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -802,7 +802,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
@@ -848,7 +848,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4, stage5],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -870,7 +870,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
@@ -924,7 +924,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4, stage5],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,

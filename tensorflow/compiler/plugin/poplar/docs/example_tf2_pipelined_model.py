@@ -33,7 +33,7 @@ def get_model():
       [[Embedding(max_features, 128)],
        [LSTM(128, dropout=0.2),
         Dense(1, activation='sigmoid')]],
-      pipeline_depth=16)
+      gradient_accumulation_count=16)
 
 
 #

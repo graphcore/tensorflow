@@ -112,11 +112,11 @@ class PipelineTester(object):
 
   @staticmethod
   def run_on_cpu(test_wrapper, stages, inputs_fn, input_values, repeat_count,
-                 pipeline_depth, dataset_fn, optimizer):
+                 gradient_accumulation_count, dataset_fn, optimizer):
     return PipelineTester._cpu_with_grad_accum(test_wrapper, stages, inputs_fn,
                                                input_values, repeat_count,
-                                               pipeline_depth, dataset_fn,
-                                               optimizer)
+                                               gradient_accumulation_count,
+                                               dataset_fn, optimizer)
 
   @staticmethod
   def _sharded_on_ipu(stages, inputs_fn, input_values, repeat_count,
@@ -188,7 +188,7 @@ class PipelineTester(object):
                       inputs_fn,
                       input_values,
                       repeat_count,
-                      pipeline_depth,
+                      gradient_accumulation_count,
                       dataset_fn,
                       optimizer,
                       test_wrapper,
@@ -214,7 +214,7 @@ class PipelineTester(object):
         def my_net(*args):
           return pipelining_ops.pipeline(
               stages,
-              pipeline_depth,
+              gradient_accumulation_count,
               repeat_count=repeat_count,
               batch_serialization_iterations=batch_serialization_iterations,
               inputs=args,
@@ -267,7 +267,7 @@ class PipelineTester(object):
                               inputs_fn,
                               input_values,
                               repeat_count,
-                              pipeline_depth,
+                              gradient_accumulation_count,
                               dataset_fn,
                               optimizer,
                               test_wrapper,
@@ -285,11 +285,13 @@ class PipelineTester(object):
     # will initialize the IPU which might be needed by the CPU path
     # to run some instructions which only exist on the IPU.
     pipeline_losses = PipelineTester.pipeline_on_ipu(
-        stages, inputs_fn, input_values, repeat_count, pipeline_depth,
-        dataset_fn, optimizer, test_wrapper, expected_max_tile_memory, recomp,
-        schedule, device_mapping, batch_serialization_iterations)
+        stages, inputs_fn, input_values, repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
+        expected_max_tile_memory, recomp, schedule, device_mapping,
+        batch_serialization_iterations)
 
-    num_batches_to_accumulate = pipeline_depth * batch_serialization_iterations
+    num_batches_to_accumulate = (gradient_accumulation_count *
+                                 batch_serialization_iterations)
     cpu_losses = PipelineTester._cpu_with_grad_accum(
         test_wrapper, stages, inputs_fn, input_values, repeat_count,
         num_batches_to_accumulate, dataset_fn, optimizer)
@@ -301,7 +303,7 @@ class PipelineTester(object):
                                    inputs_fn,
                                    input_values,
                                    repeat_count,
-                                   pipeline_depth,
+                                   gradient_accumulation_count,
                                    dataset_fn,
                                    optimizer,
                                    test_wrapper,
@@ -315,11 +317,13 @@ class PipelineTester(object):
       device_mapping = [0] * len(stages)
 
     pipeline_losses = PipelineTester.pipeline_on_ipu(
-        stages, inputs_fn, input_values, repeat_count, pipeline_depth,
-        dataset_fn, optimizer, test_wrapper, expected_max_tile_memory, recomp,
-        schedule, device_mapping, batch_serialization_iterations)
+        stages, inputs_fn, input_values, repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
+        expected_max_tile_memory, recomp, schedule, device_mapping,
+        batch_serialization_iterations)
 
-    num_batches_to_accumulate = pipeline_depth * batch_serialization_iterations
+    num_batches_to_accumulate = (gradient_accumulation_count *
+                                 batch_serialization_iterations)
     sharded_losses = PipelineTester._sharded_on_ipu(stages, inputs_fn,
                                                     input_values, repeat_count,
                                                     num_batches_to_accumulate,

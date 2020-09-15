@@ -264,7 +264,8 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
+                                     &gradient_accumulation_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
                                      &batch_serialization_iterations_));
     OP_REQUIRES_OK(ctx,
@@ -362,9 +363,10 @@ class PipelineOp : public XlaOpKernel {
                             PoplarBackendConfig_CallConfig_Type_Name(
                                 PoplarBackendConfig::CallConfig::Pipeline)));
     // Set the pipeline depth.
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
-                            std::to_string(pipeline_depth_)));
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(GRADIENT_ACCUMULATION_COUNT),
+                 std::to_string(gradient_accumulation_count_)));
     // Set the batch serialization iterations.
     OP_REQUIRES_OK(
         ctx,
@@ -425,7 +427,7 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 pipeline_depth_;
+  int64 gradient_accumulation_count_;
   int64 batch_serialization_iterations_;
   int64 repeat_count_;
   int64 schedule_;

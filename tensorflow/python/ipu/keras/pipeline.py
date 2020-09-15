@@ -83,35 +83,43 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
         [
           keras.layers.Dense(8),
         ],
-      ], pipeline_depth=24)
+      ], gradient_accumulation_count=24)
 
       m.compile('sgd', loss='mse')
 
       m.fit(dataset, steps_per_epoch=144)
 
   """
-  def __init__(self, stages=None, pipeline_depth=None, **kwargs):
+  def __init__(self,
+               stages=None,
+               gradient_accumulation_count=None,
+               pipeline_depth=None,
+               **kwargs):
     """
     Creates a pipelined model.
 
     Args:
         stages: A python list of lists of Layers.
-        pipeline_depth: The number of mini-batches processed by the
-                        pipeline on each iteration.
+        gradient_accumulation_count: The number of mini-batches processed by
+            the pipeline on each iteration.
         name: Optional name for the pipeline operation.
 
     Other arguments are passed to the pipeline operator, for instance
     device_mapping or pipeline_schedule.
     """
 
-    if not pipeline_depth:
+    if pipeline_depth:
+      gradient_accumulation_count = pipeline_depth
+
+    if not gradient_accumulation_count:
       raise ValueError(
-          "The pipeline_depth parameter must be specified.  Choose a "
-          "pipeline_depth such that pipeline_depth * mini_batch_size is a "
-          "good total batch size.  One step of the model will run "
-          "pipeline_depth mini-batches through the model, accumulate the "
-          "gradients of the errors, and then apply the accumulated gradients "
-          "to the model weights once.")
+          "The gradient_accumulation_count parameter must be specified.  "
+          "Choose a gradient_accumulation_count such that "
+          "gradient_accumulation_count * mini_batch_size is a good total "
+          "batch size.  One step of the model will run "
+          "gradient_accumulation_count mini-batches through the model, "
+          "accumulate the gradients of the errors, and then apply the "
+          "accumulated gradients to the model weights once.")
 
     if not isinstance(stages, list) or not stages:
       raise ValueError("An IPU pipeline must take a non-empty list of stages, "
@@ -127,9 +135,10 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
                            "only Keras Layers.")
 
     shard_count = max(kwargs.get("device_mapping", range(len(stages)))) + 1
-    super(PipelinedModel, self).__init__(pipeline_depth, shard_count, **kwargs)
+    super(PipelinedModel, self).__init__(gradient_accumulation_count,
+                                         shard_count, **kwargs)
 
-    self.pipeline_depth = pipeline_depth
+    self.gradient_accumulation_count = gradient_accumulation_count
     self.stages = stages
 
   def build(self, input_shape):
@@ -220,15 +229,16 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
 
     opt = optimizer_function if training else None
 
-    pipeline = pipelining_ops.pipeline(stages,
-                                       pipeline_depth=self.pipeline_depth,
-                                       repeat_count=repeat_count,
-                                       inputs=[],
-                                       infeed_queue=infeed_queue,
-                                       outfeed_queue=outfeed_queue,
-                                       optimizer_function=opt,
-                                       name=self.name,
-                                       **self.args)
+    pipeline = pipelining_ops.pipeline(
+        stages,
+        gradient_accumulation_count=self.gradient_accumulation_count,
+        repeat_count=repeat_count,
+        inputs=[],
+        infeed_queue=infeed_queue,
+        outfeed_queue=outfeed_queue,
+        optimizer_function=opt,
+        name=self.name,
+        **self.args)
 
     return pipeline.outputs
 

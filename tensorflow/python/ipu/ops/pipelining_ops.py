@@ -38,6 +38,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
+from tensorflow.python.util.deprecation import deprecated_args
 
 
 class PipelineSchedule(IntEnum):
@@ -155,8 +156,13 @@ class PipelineStageOptions:
     return self._proto
 
 
+@deprecated_args(
+    None,
+    "pipeline_depth is deprecated, use gradient_accumulation_count instead",
+    "pipeline_depth")
 def pipeline(computational_stages,
-             pipeline_depth,
+             pipeline_depth=None,
+             gradient_accumulation_count=None,
              repeat_count=1,
              batch_serialization_iterations=1,
              inputs=None,
@@ -249,7 +255,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
-                          pipeline_depth=250,
+                          gradient_accumulation_count=250,
                           repeat_count=2,
                           inputs=[],
                           infeed_queue=infeed_queue,
@@ -273,8 +279,9 @@ def pipeline(computational_stages,
   will be executed on the fourth IPU and the third layer and the probabilities
   and classed on the second IPU.
 
-  This creates a pipeline of depth 250 (specified by the `pipeline_depth`),
-  which means each pipeline stage is executed 250 times.
+  This creates a pipeline of depth 250 (specified by the
+  `gradient_accumulation_count`), which means each pipeline stage is executed
+  250 times.
 
   This pipeline is then executed 2 times (specified by the `repeat_count`)
   The results of the pipeline (probabilities and classes) are returned to the
@@ -314,7 +321,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
-                          pipeline_depth=128,
+                          gradient_accumulation_count=128,
                           repeat_count=10,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
@@ -351,7 +358,8 @@ def pipeline(computational_stages,
     computational_stages: a list of python functions, where each function
       represents a computational pipeline stage. The function takes the
       outputs of the previous pipeline state as its inputs.
-    pipeline_depth: the number of times each pipeline stage will be executed.
+    gradient_accumulation_count: the number of times each pipeline stage will
+      be executed.
     repeat_count: the number of times the pipeline will be executed.
     batch_serialization_iterations: number of times a loop executes to compute a
       batch on each pipeline stage execution. Currently only supported with the
@@ -436,6 +444,12 @@ def pipeline(computational_stages,
 
   """
   name = name if name else "pipeline"
+
+  if pipeline_depth:
+    gradient_accumulation_count = pipeline_depth
+
+  if not gradient_accumulation_count:
+    raise ValueError("gradient_accumulation_count must be specified.")
 
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
@@ -656,7 +670,7 @@ def pipeline(computational_stages,
                 accumulator, grad)
             # Sink the accumulators.
             grad = gen_poputil_ops.gradient_accumulator_sink(
-                accumulator, num_mini_batches=pipeline_depth)
+                accumulator, num_mini_batches=gradient_accumulation_count)
         # Use the accumulated gradients.
         accumulated_grads_and_vars.append((grad, var))
 
@@ -682,7 +696,7 @@ def pipeline(computational_stages,
             offload_weight_update_variables=offload_weight_update_variables,
             replicated_optimizer_state_sharding=
             replicated_optimizer_state_sharding,
-            num_batches_to_accumulate=pipeline_depth)
+            num_batches_to_accumulate=gradient_accumulation_count)
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
@@ -717,7 +731,7 @@ def pipeline(computational_stages,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
-          pipeline_depth=pipeline_depth,
+          gradient_accumulation_count=gradient_accumulation_count,
           batch_serialization_iterations=batch_serialization_iterations,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),

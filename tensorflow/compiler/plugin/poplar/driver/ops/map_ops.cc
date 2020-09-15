@@ -511,7 +511,8 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   HloComputation* pipeline_computation = inst->to_apply();
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
-  int64 pipeline_depth = cfg.call_config().pipeline_config().pipeline_depth();
+  int64 gradient_accumulation_count =
+      cfg.call_config().pipeline_config().gradient_accumulation_count();
   int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   CHECK_EQ(inputs.size(), inst->operand_count());
@@ -521,7 +522,8 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
       auto visitor,
       GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
                          GetDebugName(inst)));
-  TF_RETURN_IF_ERROR(visitor->VerifyPipelineArguments(pipeline_depth));
+  TF_RETURN_IF_ERROR(
+      visitor->VerifyPipelineArguments(gradient_accumulation_count));
 
   auto order = pipeline_computation->parent()
                    ->schedule()
@@ -541,8 +543,9 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   seq.add(execution_counters.SetInitialValuesToZero());
 
   // Get the pipeline sequence.
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
-                      visitor->GetPipelineSequence(pipeline_depth));
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence pipeline_prog,
+      visitor->GetPipelineSequence(gradient_accumulation_count));
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 

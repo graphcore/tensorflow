@@ -50,7 +50,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -90,7 +90,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13936, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 13936, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -109,7 +109,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 18
+    gradient_accumulation_count = 18
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -190,8 +190,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 36502, True,
+        [stage1, stage2, stage3], lambda: [], [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 36502, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -211,7 +211,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -244,7 +244,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13681, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 13681, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -264,7 +264,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -305,7 +305,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 10760, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 10760, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -321,7 +321,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 8
+    gradient_accumulation_count = 8
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -354,7 +354,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 9096, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 9096, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
 

@@ -72,7 +72,7 @@ def model_fn(mode, params):
       computational_stages=[stage1, stage2],
       optimizer_function=optimizer_function,
       eval_metrics_fn=eval_metrics_fn,
-      pipeline_depth=params["pipeline_depth"])
+      gradient_accumulation_count=params["gradient_accumulation_count"])
 
 
 def parse_args():
@@ -89,7 +89,7 @@ def parse_args():
                       help="The batch size.")
 
   parser.add_argument(
-      "--pipeline-depth",
+      "--gradient-accumulation-count",
       type=int,
       default=4,
       help="The the number of batches that will be pipelined together.")
@@ -152,7 +152,7 @@ def create_ipu_estimator(args):
       model_fn=model_fn,
       params={
           "learning_rate": args.learning_rate,
-          "pipeline_depth": args.pipeline_depth,
+          "gradient_accumulation_count": args.gradient_accumulation_count,
       },
   )
 
@@ -187,7 +187,7 @@ def train(ipu_estimator, args, x_train, y_train):
   t1 = time.time()
 
   duration_seconds = t1 - t0
-  images_per_step = args.batch_size * args.pipeline_depth
+  images_per_step = args.batch_size * args.gradient_accumulation_count
   images_per_second = args.training_steps * images_per_step / duration_seconds
   print("Took {:.2f} minutes, i.e. {:.0f} images per second".format(
       duration_seconds / 60, images_per_second))
@@ -208,7 +208,7 @@ def test(ipu_estimator, args, x_test, y_test):
 
   num_test_examples = len(x_test)
 
-  batches_per_loop = args.pipeline_depth * args.iterations_per_loop
+  batches_per_loop = args.gradient_accumulation_count * args.iterations_per_loop
   test_batch_size = calc_batch_size(num_test_examples, batches_per_loop,
                                     args.batch_size)
 
@@ -220,7 +220,8 @@ def test(ipu_estimator, args, x_test, y_test):
     dataset = dataset.batch(test_batch_size, drop_remainder=True)
     return dataset
 
-  num_steps = num_test_examples // (test_batch_size * args.pipeline_depth)
+  num_steps = num_test_examples // (test_batch_size *
+                                    args.gradient_accumulation_count)
   metrics = ipu_estimator.evaluate(input_fn=input_fn, steps=num_steps)
   test_loss = metrics["loss"]
   test_accuracy = metrics["accuracy"]
@@ -234,12 +235,13 @@ def main():
   train_data, test_data = cifar10.load_data()
 
   num_test_examples = len(test_data[0])
-  batches_per_loop = args.pipeline_depth * args.iterations_per_loop
+  batches_per_loop = args.gradient_accumulation_count * args.iterations_per_loop
   if num_test_examples % batches_per_loop != 0:
-    raise ValueError(("pipeline_depth * iterations_per_loop ({} * {}) must " +
-                      "evenly divide the number of test examples ({})").format(
-                          args.pipeline_depth, args.iterations_per_loop,
-                          num_test_examples))
+    raise ValueError(
+        ("gradient_accumulation_count * iterations_per_loop "
+         "({} * {}) must evenly divide the number of test "
+         "examples ({})").format(args.gradient_accumulation_count,
+                                 args.iterations_per_loop, num_test_examples))
 
   ipu_estimator = create_ipu_estimator(args)
 
