@@ -426,6 +426,16 @@ ThreeState GetPipelineOffloadGradientAccumulationBuffers(
       .offload_gradient_accumulation_buffers();
 }
 
+ThreeState GetPipelinePartitionVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().partition_variables();
+}
+
+ThreeState GetPipelineOffloadVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().offload_variables();
+}
+
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();

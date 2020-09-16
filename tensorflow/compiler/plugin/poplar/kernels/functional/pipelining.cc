@@ -272,6 +272,9 @@ class PipelineOp : public XlaOpKernel {
                    ctx->GetAttr("offload_activations", &offload_activations_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_gradient_accumulation_buffers",
                                      &offload_gradient_accumulation_buffers_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_weight_sharding",
+                                     &replicated_weight_sharding_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
     OP_REQUIRES_OK(
@@ -401,6 +404,16 @@ class PipelineOp : public XlaOpKernel {
             outputs,
             FrontendAttributeId_Name(OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS),
             offload_gradient_accumulation_buffers_));
+    // Set the replicated_weight_sharding flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(PARTITION_VARIABLES),
+                       replicated_weight_sharding_));
+    // Set the offload_weights flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
+                       offload_weights_));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -434,6 +447,8 @@ class PipelineOp : public XlaOpKernel {
   std::string pipeline_poplar_config_;
   std::string offload_activations_;
   std::string offload_gradient_accumulation_buffers_;
+  std::string replicated_weight_sharding_;
+  std::string offload_weights_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };
