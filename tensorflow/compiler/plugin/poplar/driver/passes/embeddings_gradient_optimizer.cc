@@ -21,6 +21,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
@@ -500,13 +501,23 @@ struct PipelineCandidate {
 };
 
 absl::optional<PipelineCandidate> CheckPipelineEmbeddingsCandidate(
-    HloInstruction* grad_create) {
+    HloInstruction* grad_create, CallGraph* call_graph) {
   if (!IsGradientAccumulatorCreate(grad_create) ||
       grad_create->user_count() != 1) {
     return absl::nullopt;
   }
   auto pipeline_stage = grad_create->users()[0];
   if (!IsPipelineStageBackward(pipeline_stage)) {
+    return absl::nullopt;
+  }
+
+  // TODO(T26860): support batch serialization.
+  auto callsites =
+      call_graph->GetNode(grad_create->parent()).caller_callsites();
+  CHECK_EQ(callsites.size(), 1);
+  HloInstruction* pipeline = callsites[0].instruction();
+  CHECK(IsPipelineOp(pipeline));
+  if (GetPipelineBatchSerializationIterations(pipeline) > 1) {
     return absl::nullopt;
   }
 
@@ -631,7 +642,7 @@ StatusOr<bool> EmbeddingsGradientOptimizer::Run(HloModule* module) {
   VLOG(2) << "Before the EmbeddingsGradientOptimizer:";
   XLA_VLOG_LINES(2, module->ToString());
 
-  auto callGraph = CallGraph::Build(module);
+  auto call_graph = CallGraph::Build(module);
 
   std::list<Candidate> candidates;
   std::list<PipelineCandidate> pipeline_candidates;
@@ -647,7 +658,7 @@ StatusOr<bool> EmbeddingsGradientOptimizer::Run(HloModule* module) {
       auto candidate = CheckEmbeddingsCandidate(inst);
       if (candidate) {
         VLOG(2) << "Found gradient accumulation candidate " << inst->ToString();
-        for (auto& callsite : callGraph->GetNode(comp).caller_callsites()) {
+        for (auto& callsite : call_graph->GetNode(comp).caller_callsites()) {
           auto repeat_inst = callsite.instruction();
           VLOG(2) << "Found callsite " << repeat_inst->ToString();
           if (IsRepeatLoop(repeat_inst)) {
@@ -659,7 +670,8 @@ StatusOr<bool> EmbeddingsGradientOptimizer::Run(HloModule* module) {
         }
       }
 
-      auto pipeline_candidate = CheckPipelineEmbeddingsCandidate(inst);
+      auto pipeline_candidate =
+          CheckPipelineEmbeddingsCandidate(inst, call_graph.get());
       if (pipeline_candidate) {
         VLOG(2) << "Found pipeline gradient accumulation candidate "
                 << inst->ToString();
