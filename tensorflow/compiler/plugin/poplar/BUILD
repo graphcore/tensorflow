@@ -208,7 +208,7 @@ cc_library(
         "driver/passes/pipeline_tuple_remover.cc",
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/resource_update_fixer.cc",
-        "driver/passes/resource_update_variables_offload.cc",
+        "driver/passes/variables_offload_and_partition.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_instructions.cc",
@@ -369,7 +369,6 @@ cc_library(
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/resource_update_fixer.h",
         "driver/passes/resource_update_schedule_optimizer.h",
-        "driver/passes/resource_update_variables_offload.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/seed_hoisting.h",
@@ -377,6 +376,7 @@ cc_library(
         "driver/passes/sharding_pass.h",
         "driver/passes/slice_optimizer.h",
         "driver/passes/suggest_recompute.h",
+        "driver/passes/variables_offload_and_partition.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
@@ -2631,9 +2631,9 @@ xla_test(
 )
 
 xla_test(
-    name = "resource_update_variables_offload_test",
+    name = "variables_offload_and_partition_test",
     size = "small",
-    srcs = ["tests/resource_update_variables_offload_test.cc"],
+    srcs = ["tests/variables_offload_and_partition_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4576,7 +4576,6 @@ test_suite(
         "report_framework_info_test",
         "resource_update_fixer_test",
         "resource_update_schedule_optimizer_test",
-        "resource_update_variables_offload_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
@@ -4604,6 +4603,7 @@ test_suite(
         "topk_onehot_test",
         "update_op_dependencies_test",
         "variable_test",
+        "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",
         "while_loop_alias_copy_test",
         "while_loop_condition_simplify_test",

@@ -145,6 +145,8 @@ int64 GetGradientAccumulationCount(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);
 ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
+ThreeState GetPipelinePartitionVariables(const HloInstruction*);
+ThreeState GetPipelineOffloadVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
