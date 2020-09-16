@@ -1089,11 +1089,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
-    pipeline.AddPass<ResourceUpdateFixer>();
-    pipeline.AddPass<ResourceUpdateVariablesOffload>(
-        resources.annotations, resources.remote_memory_supported,
-        resources.information.minimum_remote_tensor_size,
-        resources.replication_factor);
     pipeline.AddPass<GradientAccumulationBuffersOffload>(
         resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size);
@@ -1110,8 +1105,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       batch_serialization_pass
           .AddPass<PipelineBatchSerializationLoopInserter>();
     }
+    pipeline.AddPass<ResourceUpdateFixer>();
+    pipeline.AddPass<ResourceUpdateVariablesOffload>(
+        resources.annotations, resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size,
+        resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(true);
 
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputeInstructions>(
