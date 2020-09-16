@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -36,6 +36,7 @@ struct EmbeddingsGradientOptimizerTestSpec {
   int num_batches;
 
   bool changed;
+  int64 batch_serialization_iterations;
 };
 
 class EmbeddingsGradientOptimizerTest
@@ -47,7 +48,7 @@ INSTANTIATE_TEST_SUITE_P(
     EmbeddingsGradientOptimizerTestCases, EmbeddingsGradientOptimizerTest,
     ::testing::Combine(
         ::testing::ValuesIn(std::vector<EmbeddingsGradientOptimizerTestSpec>{
-            {100, 10, 2, 10, true}, {10, 1000, 2, 10, false}}),
+            {100, 10, 2, 10, true, 1}, {10, 1000, 2, 10, false, 1}}),
         ::testing::Bool()));
 
 std::string GetTemplateHloString() {
@@ -132,7 +133,7 @@ std::string GetPipelineTemplateHloString() {
     ENTRY %main (arg0: f32[$R,$E], arg1: f32[$R,$E]) -> f32[$R,$E] {
     %arg0 = f32[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = f32[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
-    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"schedule\":\"Interleaved\"}}}"
+    ROOT %call.1 = f32[$R,$E] call(f32[$R,$E] %arg0, f32[$R,$E] %arg1), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"batchSerializationIterations\":\"$BI\",\"schedule\":\"Interleaved\"}}}"
     }
     )";
 }
@@ -147,6 +148,9 @@ std::string ReplaceTemplateValues(
       hlo_string, "$BS", std::to_string(spec.batch_size), true);
   hlo_string = tensorflow::str_util::StringReplace(
       hlo_string, "$BN", std::to_string(spec.num_batches), true);
+  hlo_string = tensorflow::str_util::StringReplace(
+      hlo_string, "$BI", std::to_string(spec.batch_serialization_iterations),
+      true);
   return hlo_string;
 }
 
@@ -171,6 +175,24 @@ TEST_P(EmbeddingsGradientOptimizerTest, DoTest) {
 
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo_string, config));
+
+  auto module0 = module.get();
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module0));
+  EXPECT_TRUE(custom_op_replaced);
+
+  EmbeddingsGradientOptimizer optimizer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  EXPECT_EQ(changed, spec.changed);
+}
+
+TEST_F(EmbeddingsGradientOptimizerTest, BatchSerializationIterations) {
+  EmbeddingsGradientOptimizerTestSpec spec{100, 10, 2, 10, false, 10};
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
+                                           GetPipelineHloString(spec), config));
 
   auto module0 = module.get();
   TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
