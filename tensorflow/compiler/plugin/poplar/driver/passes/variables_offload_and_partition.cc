@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 
 #include <algorithm>
 #include <set>
@@ -42,7 +42,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-ResourceUpdateVariablesOffload::ResourceUpdateVariablesOffload(
+VariablesOffloadAndPartition::VariablesOffloadAndPartition(
     CompilerAnnotations& annotations, bool remote_memory_supported,
     int64 minimum_remote_tensor_size, int64 replication_factor)
     : annotations_(annotations),
@@ -265,20 +265,50 @@ struct OffloadedResourceInfo {
 };
 }  // namespace
 
-StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
-    HloInstruction* call_op) {
-  // Find the resource update.
-  std::vector<HloInstruction*> resource_updates;
-  absl::c_copy_if(call_op->to_apply()->MakeInstructionPostOrder(),
-                  std::back_inserter(resource_updates), IsResourceUpdate);
-  if (resource_updates.empty()) {
+StatusOr<bool> VariablesOffloadAndPartition::ShouldPartitionInPipeline(
+    HloInstruction* const pipeline_op) {
+  switch (GetPipelinePartitionVariables(pipeline_op)) {
+    case THREESTATE_OFF: {
+      return false;
+    }
+    case THREESTATE_ON: {
+      return true;
+    }
+    case THREESTATE_UNDEFINED: {
+      // Don't try to partition if there is no remote memory.
+      if (!remote_memory_supported_) {
+        return false;
+      }
+
+      const int64 batch_serialization_iterations =
+          GetPipelineBatchSerializationIterations(pipeline_op);
+      TF_ASSIGN_OR_RETURN(const auto schedule,
+                          GetPipelineSchedule(pipeline_op));
+      if (batch_serialization_iterations > 1 &&
+          schedule ==
+              PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+        return true;
+      }
+      return false;
+    }
+    default: { return FailedPrecondition("Unknown state."); }
+  }
+}
+
+StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
+  // Find how many resource updates there are - for pipeliening there can be at
+  // most one, for loops there has to be one.
+  const int64 num_resource_updates =
+      absl::c_count_if(call_op->to_apply()->instructions(), IsResourceUpdate);
+
+  // For repeat loops there always needs to be a resource update to do
+  // offloading.
+  if (num_resource_updates == 0 && IsRepeatLoop(call_op)) {
     return false;
-  } else if (resource_updates.size() > 1) {
+  } else if (num_resource_updates > 1) {
     return FailedPrecondition(
         "Detected multiple resource update instructions.");
   }
-
-  HloInstruction* resource_update = resource_updates[0];
   bool changed = false;
 
   // Do not optimize if this is not a op inside an entry computation.
@@ -288,15 +318,11 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
 
   HloComputation* entry_comp = call_op->GetModule()->entry_computation();
   HloComputation* call_comp = call_op->to_apply();
-  HloComputation* resource_update_comp = resource_update->to_apply();
 
-  // Make sure that the root of resource update and the call op is a tuple
-  // instruction.
+  // Make sure that the root of the call op is a tuple instruction.
   {
-    TF_ASSIGN_OR_RETURN(bool changed_ru,
-                        FixRootInstruction(resource_update->to_apply()));
     TF_ASSIGN_OR_RETURN(bool changed_call, FixRootInstruction(call_comp));
-    changed |= changed_ru || changed_call;
+    changed |= changed_call;
   }
 
   if (call_op == entry_comp->root_instruction()) {
@@ -400,6 +426,22 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
       // update via a GTE (i.e. the value was updated inside the resource
       // update).
 
+      // Find a resource update amongst the users.
+      std::vector<HloInstruction*> resource_updates;
+      absl::c_copy_if(users, std::back_inserter(resource_updates),
+                      IsResourceUpdate);
+      if (resource_updates.size() != 1) {
+        continue;
+      }
+      HloInstruction* resource_update = resource_updates[0];
+
+      // Make sure that the root of the resource update is a tuple instruction.
+      {
+        TF_ASSIGN_OR_RETURN(bool changed_ru,
+                            FixRootInstruction(resource_update->to_apply()));
+        changed |= changed_ru;
+      }
+
       // Find and remove resource update from users being tracked.
       auto it = absl::c_find(users, resource_update);
       if (it == users.end()) {
@@ -442,7 +484,7 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
       if (output_info.GetInputIndex() != entry_param_number) {
         continue;
       }
-
+      HloComputation* resource_update_comp = resource_update->to_apply();
       HloInstruction* resource_update_root =
           resource_update_comp->root_instruction();
       CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
@@ -495,6 +537,30 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
         offload_info.replica_partition =
             GetResourceUpdatePartitionOffloadedVariables(user) !=
             THREESTATE_OFF;
+
+      } else if (IsAnyPipelineStageOp(user)) {
+        CHECK(IsPipelineOp(call_op));
+        OffloadedResourceUse resource_use;
+        resource_use.type = OffloadedResourceUse::Type::ReadOnly;
+        resource_use.user = user;
+        resource_use.user_parameter = user->to_apply()->parameter_instruction(
+            user->operand_index(call_parameter));
+        offload_info.users.push_back(resource_use);
+        offload_info.offload = GetPipelineOffloadVariables(call_op);
+        TF_ASSIGN_OR_RETURN(offload_info.replica_partition,
+                            ShouldPartitionInPipeline(call_op));
+        if (offload_info.replica_partition &&
+            offload_info.offload == THREESTATE_OFF) {
+          return UnimplementedStrCat(
+              "Requested replicated weight sharding for the pipeline ",
+              call_op->ToString(),
+              " without offloading variables. This is currently not "
+              "supported.");
+        }
+      } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+                     user)) {
+        // Nothing to do - gradient accumulator create might try and use the
+        // layout of a variable for allocation.
       } else {
         all_users_supported = false;
       }
@@ -553,6 +619,7 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
 
     if (offload_info.type == OffloadedResourceInfo::Type::Modified) {
       auto& modifying_user = offload_info.modifying_user;
+      HloComputation* resource_update_comp = modifying_user.user->to_apply();
       CHECK(modifying_user.type == OffloadedResourceUse::Type::ReadWrite);
       // Insert the load and stores inside of the resource update.
       TF_ASSIGN_OR_RETURN(
@@ -597,8 +664,8 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
   return changed;
 }
 
-StatusOr<bool> ResourceUpdateVariablesOffload::Run(HloModule* module) {
-  VLOG(2) << "Before ResourceUpdateVariablesOffload:";
+StatusOr<bool> VariablesOffloadAndPartition::Run(HloModule* module) {
+  VLOG(2) << "Before VariablesOffloadAndPartition:";
   XLA_VLOG_LINES(2, module->ToString());
   bool changed = false;
   std::vector<HloInstruction*> to_optimize;
@@ -620,7 +687,7 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Run(HloModule* module) {
   }
 
   if (changed) {
-    VLOG(2) << "After ResourceUpdateVariablesOffload:";
+    VLOG(2) << "After VariablesOffloadAndPartition:";
     XLA_VLOG_LINES(2, module->ToString());
   } else {
     VLOG(2) << "No changes were made.";

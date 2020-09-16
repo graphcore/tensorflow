@@ -178,6 +178,8 @@ def pipeline(computational_stages,
              replicated_optimizer_state_sharding=False,
              offload_activations=None,
              offload_gradient_accumulation_buffers=None,
+             replicated_weight_sharding=None,
+             offload_weights=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -430,6 +432,25 @@ def pipeline(computational_stages,
       When set to `None`, the `offload_gradient_accumulation_buffers` might be
       offloaded when beneficial.
       Note that this option has no effect for inference only pipelines.
+    replicated_weight_sharding: When enabled and running a replicated model, any
+      `tf.Variable`s used by the pipeline stage computations (excluding those
+      only used by the weight update), will be partitioned across the replicas.
+      Whenever the a partitioned `tf.Variable` is accessed, it will be first
+      all-gathered across replicas to make sure each replica has access to the
+      whole `tf.Variable`. This can exploit the additional bandwidth of the
+      IPU-Links to improve overall throughput.
+      When set to `None`, the activations might be offloaded when beneficial.
+      This feature is enabled by default when the pipeline schedule is
+      `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`,
+      where this option can reduce the memory usage at the cost of extra
+      communication.
+    offload_weights: When enabled and `replicated_weight_sharding` is enabled,
+      any `tf.Variable` which are partitioned across replicas will be stored in
+      `Poplar remote buffers`.  Offloading variables into remote memory can
+      further reduce maximum memory liveness, but can also increase the
+      computation time due to extra communication. When set to `None` the
+      variables will be placed in either in-processor or remote memory
+      automatically based on the current best placement strategy.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -554,6 +575,9 @@ def pipeline(computational_stages,
   offload_activations = bool_to_three_state(offload_activations)
   offload_gradient_accumulation_buffers = bool_to_three_state(
       offload_gradient_accumulation_buffers)
+  replicated_weight_sharding = bool_to_three_state(replicated_weight_sharding)
+  offload_weights = bool_to_three_state(offload_weights,
+                                        default=replicated_weight_sharding)
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -739,7 +763,9 @@ def pipeline(computational_stages,
               pipeline_poplar_config),
           offload_activations=offload_activations,
           offload_gradient_accumulation_buffers=
-          offload_gradient_accumulation_buffers)
+          offload_gradient_accumulation_buffers,
+          replicated_weight_sharding=replicated_weight_sharding,
+          offload_weights=offload_weights)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %
