@@ -111,7 +111,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/seed_hoisting.h"
@@ -119,6 +118,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
@@ -1107,7 +1107,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           .AddPass<PipelineBatchSerializationLoopInserter>();
     }
     pipeline.AddPass<ResourceUpdateFixer>();
-    pipeline.AddPass<ResourceUpdateVariablesOffload>(
+    pipeline.AddPass<VariablesOffloadAndPartition>(
         resources.annotations, resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size,
         resources.replication_factor);

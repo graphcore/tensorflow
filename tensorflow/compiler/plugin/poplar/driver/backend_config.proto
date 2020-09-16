@@ -48,6 +48,12 @@ enum FrontendAttributeId {
   // Used in pipelining to indicate whether the gradient accumulation buffers
   // should be offloaded.
   OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS = 15;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be partitioned between replicas.
+  PARTITION_VARIABLES = 16;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be offloaded.
+  OFFLOAD_VARIABLES = 17;
 };
 
 // An enum for helping with setting a state of something, where the state can be
@@ -128,6 +134,8 @@ message PoplarBackendConfig {
       Schedule schedule = 4;
       ThreeState offload_activations = 5;
       ThreeState offload_gradient_accumulation_buffers = 6;
+      ThreeState partition_variables = 7;
+      ThreeState offload_variables = 8;
     }
 
     message CallConfig {
