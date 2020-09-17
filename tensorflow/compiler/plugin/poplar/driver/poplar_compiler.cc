@@ -72,7 +72,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_schedule_optimizer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/host_embedding_notification.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
@@ -1115,7 +1114,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
-    pipeline.AddPass<HostEmbeddingNotification>();
 
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputeInstructions>(
@@ -1465,7 +1463,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.recv_infos),
       std::move(resources.annotations.host_embedding_lookup_infos),
       std::move(resources.annotations.host_embedding_update_infos),
-      std::move(resources.annotations.host_embedding_notify_infos),
       std::move(resources.annotations.remote_parameter_infos),
       resources.streams_indices.GetAssignedIds(),
       resources.streams_indices.CheckpointFeedsOrder());

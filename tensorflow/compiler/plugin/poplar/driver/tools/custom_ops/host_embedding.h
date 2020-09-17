@@ -109,35 +109,6 @@ std::unique_ptr<HloInstruction> CreateHloHostEmbeddingUpdate(
     const std::string& embedding_id, const xla::Shape& embedding_shape,
     HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
-class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
- public:
-  explicit HloHostEmbeddingNotifyInstruction(const std::string& embedding_id);
-
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-
-  uint64 NumberOfInplaceOperands() const override;
-
-  const std::string& EmbeddingId() const { return embedding_id_; }
-
-  bool IsPopOpsElementwise() const override;
-
- protected:
-  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-
-  std::string embedding_id_;
-};
-
-std::unique_ptr<HloInstruction> CreateHloHostEmbeddingNotify(
-    const std::string& embedding_id);
-
 }  // namespace poplarplugin
 }  // namespace xla
 

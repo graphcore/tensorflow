@@ -556,8 +556,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     virtual StatusOr<int> GetEncodingWidth() const = 0;
 
     virtual xla::StatusOr<int> GetElementSize() const = 0;
-
-    virtual Status Notify(int replica) = 0;
   };
 
   template <typename T>
@@ -785,18 +783,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ConnectHostEmbeddingUpdateToRendezvous(
       const HostEmbeddingInfo& update_info,
       HostEmbeddingInterface_* embedding_interface);
-  Status ConnectHostEmbeddingNotify(
-      const HostEmbeddingInfo& notify_info,
-      HostEmbeddingInterface_* embedding_interface);
 
   Status DisconnectHostEmbeddingLookup(
       const HostEmbeddingInfo& lookup_info,
       HostEmbeddingInterface_* embedding_interface);
   Status DisconnectHostEmbeddingUpdate(
       const HostEmbeddingInfo& update_info,
-      HostEmbeddingInterface_* embedding_interface);
-  Status DisconnectHostEmbeddingNotify(
-      const HostEmbeddingInfo& notify_info,
       HostEmbeddingInterface_* embedding_interface);
 
   // Connect buffers provided by infeed transfer manager to Poplar
