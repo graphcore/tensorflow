@@ -221,16 +221,71 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
           {remote_buffer, to_store}, replication_factor));
   return remote_store;
 }
+
+// Stores the information about a use of a resource variable within a pipeline
+// stage/resource update.
+struct OffloadedResourceUse {
+  enum class Type { ReadOnly, ReadWrite };
+  Type type;
+  // The actual use of a resource.
+  HloInstruction* user;
+  // Parameter instruction inside of the computation of the user which
+  // represents the read of the user.
+  HloInstruction* user_parameter;
+  // Only populated for ResourceUpdateReadWrite. Output instruction
+  // which represents the use updating the value.
+  HloInstruction* user_output;
+};
+
+// Stores information about a resource input and its uses.
+struct OffloadedResourceInfo {
+  enum class Type { NotModified, Modified };
+  Type type;
+  // Index of this resource in the entry computation.
+  int64 entry_param_number;
+  // Operand index of the parameter in call.
+  int64 call_operand_idx;
+  // Input to the call in the entry computation.
+  HloInstruction* input_to_call;
+  // Input inside of the call computation.
+  HloInstruction* input_in_call;
+  // Users inside of the call of the resource variable.
+  std::vector<OffloadedResourceUse> users;
+
+  // Only populated for Modified type. Output from the call in entry
+  // computation.
+  HloInstruction* output_from_call;
+  // Only populated for Modified type. The user which modifies the resource
+  // input.
+  OffloadedResourceUse modifying_user;
+  // Whether to offload this resource.
+  ThreeState offload;
+  // Whether to replica partition this resource.
+  bool replica_partition;
+};
 }  // namespace
 
 StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
-    HloInstruction* call_op, HloInstruction* resource_update) {
+    HloInstruction* call_op) {
+  // Find the resource update.
+  std::vector<HloInstruction*> resource_updates;
+  absl::c_copy_if(call_op->to_apply()->MakeInstructionPostOrder(),
+                  std::back_inserter(resource_updates), IsResourceUpdate);
+  if (resource_updates.empty()) {
+    return false;
+  } else if (resource_updates.size() > 1) {
+    return FailedPrecondition(
+        "Detected multiple resource update instructions.");
+  }
+
+  HloInstruction* resource_update = resource_updates[0];
   bool changed = false;
 
   // Do not optimize if this is not a op inside an entry computation.
   if (call_op->parent() != call_op->GetModule()->entry_computation()) {
     return changed;
   }
+
   HloComputation* entry_comp = call_op->GetModule()->entry_computation();
   HloComputation* call_comp = call_op->to_apply();
   HloComputation* resource_update_comp = resource_update->to_apply();
@@ -244,86 +299,57 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
     changed |= changed_ru || changed_call;
   }
 
-  // Do not optimize if there is no resource update or pipeline wu variable
-  // offloading is turned off.
-  // If the variable is undefined, then offload the variables if remote memory
-  // is available.
-  auto offload_variables = GetResourceUpdateOffloadVariables(resource_update);
-  if (offload_variables == THREESTATE_OFF) {
-    return changed;
-  }
-
-  const bool partition_offloaded_variables =
-      GetResourceUpdatePartitionOffloadedVariables(resource_update) !=
-      THREESTATE_OFF;
-
-  const std::size_t replication_factor =
-      partition_offloaded_variables ? replication_factor_ : 1;
-
   if (call_op == entry_comp->root_instruction()) {
     // Make sure this is not the root instruction.
     TF_RETURN_IF_ERROR(FixRootInstruction(entry_comp).status());
     changed = true;
   }
+  HloInstruction* entry_root = entry_comp->root_instruction();
+
+  // Make sure all call op users are unique GTEs.
+  absl::flat_hash_map<int64, HloInstruction*> call_gte_users;
+  for (HloInstruction* output : call_op->users()) {
+    if (output->opcode() != HloOpcode::kGetTupleElement) {
+      return changed;
+    }
+    // Make sure the GTE is unique.
+    const int64 tuple_index = output->tuple_index();
+    if (call_gte_users.contains(tuple_index)) {
+      return changed;
+    }
+    call_gte_users[tuple_index] = output;
+  }
 
   // We cannot optimize if the root of the entry computation is not a tuple.
-  if (entry_comp->root_instruction()->opcode() != HloOpcode::kTuple) {
+  if (entry_root->opcode() != HloOpcode::kTuple) {
     return changed;
   }
 
   // We cannot optimize if the output tuple has users - this implies that the
   // parameter has users other than the call.
-  if (entry_comp->root_instruction()->user_count()) {
+  if (entry_root->user_count()) {
     return changed;
   }
 
-  // Find any parameter instructions which can be offloaded.
-  // Helper struct for storing the information.
-  struct OffloadHelper {
-    // Instructions inside the call computation.
-    HloInstruction* input_to_resource_update;
-    HloInstruction* output_from_resource_update;
+  HloInstruction* call_root = call_comp->root_instruction();
+  CHECK_EQ(call_root->opcode(), HloOpcode::kTuple);
 
-    // Instructions inside the resource update computation.
-    HloInstruction* input_in_resource_update;
-    HloInstruction* output_in_resource_update;
-
-    // Instructions in entry computation.
-    HloInstruction* input_to_call;
-    HloInstruction* output_from_call;
-
-    // Entry computation indicies for the tensors.
-    int64 entry_param_number;
-    int64 entry_output_idx;
-    int64 call_operand_idx;
-  };
-
-  std::vector<OffloadHelper> offload_infos;
-  for (HloInstruction* operand : resource_update->operands()) {
-    if (operand->shape().IsTuple()) {
+  std::vector<OffloadedResourceInfo> offload_infos;
+  for (int64 call_operand_idx = 0; call_operand_idx != call_op->operand_count();
+       ++call_operand_idx) {
+    HloInstruction* call_input = call_op->mutable_operand(call_operand_idx);
+    HloInstruction* call_parameter =
+        call_comp->parameter_instruction(call_operand_idx);
+    if (call_parameter->shape().IsTuple()) {
       continue;
     }
 
-    // Has to be a parameter instruction inside the call computation to be
-    // considered.
-    if (operand->opcode() != HloOpcode::kParameter) {
-      continue;
-    }
-
-    // Do not proceed if this operand is used multiple times in the resource
-    // update or at multiple operands.
-    auto operand_indices = resource_update->OperandIndices(operand);
-    if (operand_indices.size() != 1 || operand->user_count() != 1) {
-      continue;
-    }
-
-    // Check whether the input to the call operations at this index is also
+    // Check whether the input to the call operations at this index is
     // a parameter - i.e. this is a parameter in the entry computation.
-    const int64 call_param_number = operand->parameter_number();
-    HloInstruction* call_input = call_op->mutable_operand(call_param_number);
     if (call_input->opcode() != HloOpcode::kParameter) {
       continue;
     }
+    const int64 entry_param_number = call_input->parameter_number();
 
     // Also expect the call input to be unique.
     if (call_input->user_count() != 1 ||
@@ -331,118 +357,184 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
       continue;
     }
 
-    // Check that the output tuple of the call operation at index
-    // `call_param_number` is an output from a resource update via a
-    // GTE (i.e. the value was updated inside the resource update).
-    HloInstruction* call_root = call_comp->root_instruction();
-    CHECK_EQ(call_root->opcode(), HloOpcode::kTuple);
-
-    HloInstruction* resource_update_output =
-        call_root->mutable_operand(call_param_number);
-    if (resource_update_output->opcode() != HloOpcode::kGetTupleElement) {
-      continue;
-    }
-    if (resource_update_output->operand(0) != resource_update) {
+    // Keep track of all the users.
+    std::vector<HloInstruction*> users = call_parameter->users();
+    // Do not proceed if this input is not unique in any of its users.
+    if (absl::c_any_of(users, [call_parameter](const HloInstruction* user) {
+          return user->OperandIndices(call_parameter).size() != 1;
+        })) {
       continue;
     }
 
-    // TODO(T17040) - extend this for read only resource variables.
-    // Check the aliasing map and only proceed if the call input is a
-    // resource variable which is also an output of the computation.
-    const int64 entry_param_number = call_input->parameter_number();
     const auto& input_info =
         annotations_.input_output_aliasing_map.GetEntryInputInfos().at(
             entry_param_number);
-    if (input_info.IsResourceNotModified()) {
-      continue;
-    }
-
-    // Check that the call output is only used by the root instruction.
-    std::vector<HloInstruction*> call_outputs;
-    bool all_users_gtes = true;
-    // First we need to make sure that all users of the call op are GTEs and
-    // that there is only one GTE for the current parameter.
-    for (HloInstruction* output : call_op->users()) {
-      if (output->opcode() != HloOpcode::kGetTupleElement) {
-        all_users_gtes = false;
-        break;
-      }
-      if (output->tuple_index() == call_param_number) {
-        call_outputs.push_back(output);
-      }
-    }
-    if (!all_users_gtes || call_outputs.size() != 1) {
-      continue;
-    }
-    // Check that it's only used by the root instruction.
-    HloInstruction* output_from_call = call_outputs[0];
-    if (output_from_call->user_count() != 1 ||
-        output_from_call->users()[0] != entry_comp->root_instruction()) {
-      continue;
-    }
-    // It is only used once.
-    auto output_indices =
-        entry_comp->root_instruction()->OperandIndices(output_from_call);
-    if (output_indices.size() != 1) {
-      continue;
-    }
-
-    // Only offload if the input is aliasing the output.
-    int64 entry_output_idx = output_indices[0];
-    const auto& output_info =
-        annotations_.input_output_aliasing_map.GetEntryOutputInfos().at(
-            entry_output_idx);
-    if (output_info.GetInputIndex() != entry_param_number) {
-      continue;
-    }
-
-    // Get the input/output inside the resource update.
-    HloInstruction* input_in_resource_update =
-        resource_update_comp->parameter_instruction(operand_indices[0]);
-    HloInstruction* resource_update_root =
-        resource_update_comp->root_instruction();
-    CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
-    HloInstruction* output_in_resource_update =
-        resource_update_root->mutable_operand(
-            resource_update_output->tuple_index());
-
-    OffloadHelper offload_info;
-    offload_info.input_to_resource_update = operand;
-    offload_info.output_from_resource_update = resource_update_output;
-    offload_info.input_in_resource_update = input_in_resource_update;
-    offload_info.output_in_resource_update = output_in_resource_update;
-    offload_info.input_to_call = call_input;
-    offload_info.output_from_call = output_from_call;
+    OffloadedResourceInfo offload_info;
     offload_info.entry_param_number = entry_param_number;
-    offload_info.entry_output_idx = entry_output_idx;
-    offload_info.call_operand_idx = call_param_number;
-    offload_infos.emplace_back(offload_info);
-  }
+    offload_info.call_operand_idx = call_operand_idx;
+    offload_info.input_to_call = call_input;
+    offload_info.input_in_call = call_parameter;
+    if (input_info.IsResourceNotModified()) {
+      // Needs to be used by the root tuple at the same index as the operand
+      // index (i.e. unmodified).
+      // Find and remove root tuple from users being tracked.
+      auto it = absl::c_find(users, call_root);
+      if (it == users.end()) {
+        continue;
+      }
+      users.erase(it);
+      if (call_root->mutable_operand(call_operand_idx) != call_parameter) {
+        continue;
+      }
+      // The output from the call cannot have any users.
+      if (call_gte_users.contains(call_operand_idx)) {
+        continue;
+      }
+      if (users.empty()) {
+        continue;
+      }
+      offload_info.type = OffloadedResourceInfo::Type::NotModified;
+    } else if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
+      // Needs to be used by the resource update with its value returned and the
+      // call output at index `call_operand_idx` is an output from a resource
+      // update via a GTE (i.e. the value was updated inside the resource
+      // update).
 
-  if (offload_infos.empty()) {
-    return changed;
-  }
+      // Find and remove resource update from users being tracked.
+      auto it = absl::c_find(users, resource_update);
+      if (it == users.end()) {
+        continue;
+      }
+      users.erase(it);
 
-  if (!remote_memory_supported_) {
-    const std::string message = absl::StrCat(
-        "Current configuration of the IPU devices does not support remote "
-        "memory and therefore weight update only variables cannot be "
-        "offloaded to remote memory. Set the `offload_weight_update_variables` "
-        "argument of ",
-        IsPipelineOp(call_op) ? "`pipelining_ops.pipeline`"
-                              : "`GradientAccumulationOptimizerV2`",
-        "to `False` to stop seeing this message.");
-    if (offload_variables == THREESTATE_UNDEFINED) {
-      VLOG(1) << message;
-      return changed;
+      const int64 resource_update_input_index =
+          resource_update->operand_index(call_parameter);
+      HloInstruction* resource_update_output =
+          call_root->mutable_operand(call_operand_idx);
+      if (resource_update_output->opcode() != HloOpcode::kGetTupleElement) {
+        continue;
+      }
+      if (resource_update_output->operand(0) != resource_update) {
+        continue;
+      }
+
+      // Check that the output from the call is only used by the root
+      // instruction.
+      if (!call_gte_users.contains(call_operand_idx)) {
+        continue;
+      }
+      HloInstruction* output_from_call = call_gte_users.at(call_operand_idx);
+      if (output_from_call->user_count() != 1 ||
+          output_from_call->users()[0] != entry_root) {
+        continue;
+      }
+      // It is only used once.
+      auto output_indices = entry_root->OperandIndices(output_from_call);
+      if (output_indices.size() != 1) {
+        continue;
+      }
+
+      // Only offload if the input is aliasing the output.
+      const int64 entry_output_idx = output_indices[0];
+      const auto& output_info =
+          annotations_.input_output_aliasing_map.GetEntryOutputInfos().at(
+              entry_output_idx);
+      if (output_info.GetInputIndex() != entry_param_number) {
+        continue;
+      }
+
+      HloInstruction* resource_update_root =
+          resource_update_comp->root_instruction();
+      CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
+      HloInstruction* output_in_resource_update =
+          resource_update_root->mutable_operand(
+              resource_update_output->tuple_index());
+
+      OffloadedResourceUse resource_use;
+      resource_use.type = OffloadedResourceUse::Type::ReadWrite;
+      resource_use.user = resource_update;
+      resource_use.user_parameter = resource_update_comp->parameter_instruction(
+          resource_update_input_index);
+      resource_use.user_output = output_in_resource_update;
+
+      offload_info.type = OffloadedResourceInfo::Type::Modified;
+      offload_info.output_from_call = output_from_call;
+      offload_info.modifying_user = resource_use;
+      offload_info.offload = GetResourceUpdateOffloadVariables(resource_update);
+      offload_info.replica_partition =
+          GetResourceUpdatePartitionOffloadedVariables(resource_update) !=
+          THREESTATE_OFF;
     } else {
-      CHECK(offload_variables == THREESTATE_ON);
-      return FailedPrecondition("%s", message.c_str());
+      continue;
     }
+
+    // Sort all the users so that (any) resource update is first - this is to
+    // make sure offloading and replication partioning information is applied in
+    // deterministic order to the offload info.
+    absl::c_sort(users, [](const HloInstruction* a, const HloInstruction* b) {
+      const bool a_resource_update = IsResourceUpdate(a);
+      const bool b_resource_update = IsResourceUpdate(b);
+      if (a_resource_update == b_resource_update) {
+        return HloPtrComparator()(a, b);
+      }
+      return a_resource_update;
+    });
+
+    // Go through remaining users - check whether they are all supported for
+    // offloading. They all need to be read only.
+    bool all_users_supported = true;
+    for (HloInstruction* user : users) {
+      if (IsResourceUpdate(user)) {
+        OffloadedResourceUse resource_use;
+        resource_use.type = OffloadedResourceUse::Type::ReadOnly;
+        resource_use.user = user;
+        resource_use.user_parameter = user->to_apply()->parameter_instruction(
+            user->operand_index(call_parameter));
+        offload_info.users.push_back(resource_use);
+        offload_info.offload = GetResourceUpdateOffloadVariables(user);
+        offload_info.replica_partition =
+            GetResourceUpdatePartitionOffloadedVariables(user) !=
+            THREESTATE_OFF;
+      } else {
+        all_users_supported = false;
+      }
+    }
+
+    if (!all_users_supported) {
+      continue;
+    }
+
+    offload_infos.push_back(offload_info);
   }
 
-  // For each parameter in offload_info, insert a load and store op.
+  // For each parameter in offload_info, insert any required load and store
+  // operations.
   for (auto& offload_info : offload_infos) {
+    if (offload_info.offload == THREESTATE_OFF) {
+      continue;
+    }
+
+    if (!remote_memory_supported_) {
+      const std::string message =
+          "Current configuration of the IPU devices does not support remote "
+          "memory and therefore weight update only variables cannot be "
+          "offloaded to remote memory.";
+      switch (offload_info.offload) {
+        case THREESTATE_OFF: {
+          break;
+        }
+        case THREESTATE_ON: {
+          return FailedPrecondition("%s", message.c_str());
+        }
+        case THREESTATE_UNDEFINED: {
+          VLOG(1) << message;
+          break;
+        }
+        default: { return FailedPrecondition("Unknown case"); }
+      }
+      continue;
+    }
+
     if (minimum_remote_tensor_size_ >
         ShapeUtil::ByteSizeOf(offload_info.input_to_call->shape())) {
       VLOG(1) << "Variable " << offload_info.entry_param_number << ": "
@@ -453,50 +545,63 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
       continue;
     }
 
+    const std::size_t replication_factor =
+        offload_info.replica_partition ? replication_factor_ : 1;
+
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
             << offload_info.input_to_call->ToString();
 
-    // Create a (replicated) load instruction inside the resource update and use
-    // that instead of the parameter.
-    TF_ASSIGN_OR_RETURN(
-        HloInstruction * remote_load,
-        InsertReplicatedLoadInstructions(resource_update_comp,
-                                         offload_info.input_in_resource_update,
-                                         replication_factor));
-
-    // If the input and output are the same instruction, then we use the remote
-    // resource but don't modify it. In this case we simply reconnect the input
-    // remote buffer to the original output position.
-    if (offload_info.input_in_resource_update ==
-        offload_info.output_in_resource_update) {
-      TF_RETURN_IF_ERROR(
-          remote_load->ReplaceUseWith(resource_update_comp->root_instruction(),
-                                      offload_info.input_in_resource_update));
-    } else {
-      // Add a remote store for the updated value inside the resource update.
+    if (offload_info.type == OffloadedResourceInfo::Type::Modified) {
+      auto& modifying_user = offload_info.modifying_user;
+      CHECK(modifying_user.type == OffloadedResourceUse::Type::ReadWrite);
+      // Insert the load and stores inside of the resource update.
       TF_ASSIGN_OR_RETURN(
-          HloInstruction * remote_store,
-          InsertReplicatedStoreInstructions(
-              resource_update_comp, offload_info.input_in_resource_update,
-              offload_info.output_in_resource_update, replication_factor));
+          HloInstruction * remote_load,
+          InsertReplicatedLoadInstructions(resource_update_comp,
+                                           modifying_user.user_parameter,
+                                           replication_factor));
 
-      TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
-          resource_update_comp->root_instruction(), remote_store));
+      // If the input and output are the same instruction, then we use the
+      // remote resource but don't modify it. In this case we simply reconnect
+      // the input remote buffer to the original output position.
+      if (modifying_user.user_parameter == modifying_user.user_output) {
+        TF_RETURN_IF_ERROR(remote_load->ReplaceUseWith(
+            resource_update_comp->root_instruction(),
+            modifying_user.user_parameter));
+      } else {
+        // Add a remote store for the updated value inside the resource update.
+        TF_ASSIGN_OR_RETURN(
+            HloInstruction * remote_store,
+            InsertReplicatedStoreInstructions(
+                resource_update_comp, modifying_user.user_parameter,
+                modifying_user.user_output, replication_factor));
+
+        TF_RETURN_IF_ERROR(modifying_user.user_output->ReplaceUseWith(
+            resource_update_comp->root_instruction(), remote_store));
+      }
     }
-
+    for (OffloadedResourceUse& user : offload_info.users) {
+      // All the other users are read-only.
+      CHECK(user.type == OffloadedResourceUse::Type::ReadOnly);
+      TF_RETURN_IF_ERROR(InsertReplicatedLoadInstructions(user.user->to_apply(),
+                                                          user.user_parameter,
+                                                          replication_factor)
+                             .status());
+    }
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(RemoteParameterInfo{
         offload_info.entry_param_number, replication_factor > 1});
+    changed = true;
   }
 
-  return true;
+  return changed;
 }
 
 StatusOr<bool> ResourceUpdateVariablesOffload::Run(HloModule* module) {
   VLOG(2) << "Before ResourceUpdateVariablesOffload:";
   XLA_VLOG_LINES(2, module->ToString());
   bool changed = false;
-  std::vector<std::pair<HloInstruction*, HloInstruction*>> to_optimize;
+  std::vector<HloInstruction*> to_optimize;
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
@@ -504,25 +609,14 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Run(HloModule* module) {
 
     for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (IsRepeatLoop(inst) || IsPipelineOp(inst)) {
-        std::vector<HloInstruction*> resource_updates;
-        absl::c_copy_if(inst->to_apply()->MakeInstructionPostOrder(),
-                        std::back_inserter(resource_updates),
-                        [](HloInstruction* i) { return IsResourceUpdate(i); });
-        if (resource_updates.empty()) {
-          continue;
-        } else if (resource_updates.size() > 1) {
-          return FailedPrecondition(
-              "Detected multiple resource update instructions.");
-        } else {
-          to_optimize.push_back({inst, resource_updates[0]});
-        }
+        to_optimize.push_back(inst);
       }
     }
   }
 
-  for (auto pair : to_optimize) {
-    TF_ASSIGN_OR_RETURN(bool changed_pair, Optimize(pair.first, pair.second));
-    changed |= changed_pair;
+  for (HloInstruction* inst : to_optimize) {
+    TF_ASSIGN_OR_RETURN(bool optimized, Optimize(inst));
+    changed |= optimized;
   }
 
   if (changed) {
