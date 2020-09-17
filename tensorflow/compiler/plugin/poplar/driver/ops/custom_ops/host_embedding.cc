@@ -300,10 +300,10 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
     // Exchange the columns from this replica back to their respective replicas.
     // We also recieve the columns we requested from the other replicas.
-    host_sliceable.tensor = popops::allToAllPersonalizedExchange(
-        graph, host_sliceable.tensor, seq,
-        GetDebugName(inst) + "/exchange_columns",
-        GetReplicatedCollectiveOptions(res));
+    host_sliceable.tensor =
+        gcl::allToAll(graph, host_sliceable.tensor, seq,
+                      GetDebugName(inst) + "/exchange_columns",
+                      GetReplicatedCollectiveOptions(res));
 
     // Dimshuffle and reshape back to the output shape.
     host_sliceable.tensor = host_sliceable.tensor.dimShuffle({1, 0, 2});
@@ -557,9 +557,9 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     grads = grads.dimShuffle({1, 0, 2});
 
     // All-To-All exchange the grad columns with their respective replicas.
-    grads = popops::allToAllPersonalizedExchange(
-        graph, grads, seq, GetDebugName(inst) + "/exchange_columns",
-        GetReplicatedCollectiveOptions(res));
+    grads = gcl::allToAll(graph, grads, seq,
+                          GetDebugName(inst) + "/exchange_columns",
+                          GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
