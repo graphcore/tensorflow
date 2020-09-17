@@ -28,6 +28,7 @@ REGISTER_OP("IpuHostEmbeddingRegister")
     .Output("output_ref: Ref(T)")
     .Attr("device_ordinal: int = 0")
     .Attr("embedding_id: string")
+    .Attr("optimizer: {'SGD', 'SGD+GA'} = 'SGD'")
     .Attr("T: numbertype")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
@@ -93,7 +94,7 @@ REGISTER_OP("IpuDeviceEmbeddingLookupTrainable")
     .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
     .Attr("dtype: type")
     .Attr("T: {int32}")
-    .Attr("optimizer: {'SGD'}")
+    .Attr("optimizer: {'SGD', 'SGD+GA'}")
     .Attr("learning_rate: float")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
@@ -205,5 +206,11 @@ REGISTER_OP("IpuDeviceEmbeddingUpdateAdd")
 
       return shape_inference::NoOutputs(c);
     });
+
+REGISTER_OP("IpuDeviceEmbeddingNotify")
+    .Attr("device_ordinal: int = 0")
+    .Attr("embedding_id: string")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
 
 }  // namespace tensorflow
