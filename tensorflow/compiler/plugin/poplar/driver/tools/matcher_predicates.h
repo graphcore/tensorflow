@@ -84,6 +84,10 @@ bool IsSerializedGradientAccumulation(const HloInstruction*);
  * @returns The unary predicate.
  */
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op);
+
+inline bool IsPoplarInstruction(PoplarOp op, const HloInstruction* inst) {
+  return IsPoplarInstruction(op)(inst);
+}
 }  // namespace poplarplugin
 }  // namespace xla
 
