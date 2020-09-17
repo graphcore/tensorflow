@@ -363,6 +363,13 @@ class IPUMultiWorkerExtended(
       assert len(value.values) == 1
       value = value.values[0]
 
+    # Make sure the first op to use the value_destination_pairs is not
+    # outside the compilation scope.
+    # If this function has its arguments captured by e.g. pipeline WU function
+    # building, placeholders for the arguments will be instantiated inside the
+    # graph. The graph must not already be inside an outside_compilation_scope
+    # when these placeholers are instantiated, or they will also be put outside.
+    value = _make_identity_op(value)
     with _outside_compilation_scope_if_needed("host_reduce"):
       # Make sure the reduction is done on the host device
       # by wrapping the inputs in an identity op on that device.
@@ -374,6 +381,14 @@ class IPUMultiWorkerExtended(
       return self._reduce_implementation(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
+    # Make sure the first op to use the value_destination_pairs is not
+    # outside the compilation scope.
+    # If this function has its arguments captured by e.g. pipeline WU function
+    # building, placeholders for the arguments will be instantiated inside the
+    # graph. The graph must not already be inside an outside_compilation_scope
+    # when these placeholers are instantiated, or they will also be put outside.
+    value_destination_pairs = [(_make_identity_op(v), d)
+                               for (v, d) in value_destination_pairs]
     with _outside_compilation_scope_if_needed("host_batch_reduce"):
       # Make sure the reduction is done on the host device
       # by wrapping the inputs in an identity op on that device.
