@@ -169,10 +169,8 @@ struct DecreasingSizeComparator {
     }
 
     // If the size is the same, order by parameter index.
-    const int64 a_index =
-        Cast<HloParameterInstruction>(a->operand(0))->parameter_number();
-    const int64 b_index =
-        Cast<HloParameterInstruction>(b->operand(0))->parameter_number();
+    const int64 a_index = a->operand(0)->parameter_number();
+    const int64 b_index = b->operand(0)->parameter_number();
     if (a_index != b_index) {
       return a_index > b_index;
     }
@@ -225,7 +223,27 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
     combined.push_back(combined_inst);
   }
 
+  // Return the instructions in order from smallest to largest. When trying to
+  // schedule them in this order later this can help liveness, since we load the
+  // largest parameters last when other tensors (like gradients for already
+  // updated weights) might not be alive anymore.
+  absl::c_reverse(combined);
+
   return combined;
+}
+
+Status ScheduleAllUsersBefore(HloInstruction* inst, HloInstruction* successor,
+                              HloReachabilityMap& reachability_map) {
+  for (auto* user : inst->users()) {
+    if (!reachability_map.IsReachable(successor, user)) {
+      TF_RETURN_IF_ERROR(user->AddControlDependencyTo(successor));
+      reachability_map.UpdateReachabilityThroughInstruction(successor);
+      TF_RETURN_IF_ERROR(
+          ScheduleAllUsersBefore(user, successor, reachability_map));
+    }
+  }
+
+  return Status::OK();
 }
 
 Status AddSchedulingConstraints(
@@ -238,14 +256,34 @@ Status AddSchedulingConstraints(
 
   auto reachability_map = HloReachabilityMap::Build(comp);
 
-  // Schedule load after previous store to reduce liveness if possible
-  // (if there are no conflicting data or control dependencies).
   for (std::size_t i = 1; i < combined_loads.size(); ++i) {
-    auto* prev_store = combined_stores[i - 1];
     auto* load = combined_loads[i];
-    if (!reachability_map->IsReachable(load, prev_store)) {
-      TF_RETURN_IF_ERROR(prev_store->AddControlDependencyTo(load));
-      reachability_map->UpdateReachabilityThroughInstruction(load);
+
+    // To minimize liveness we aim towards having the least amount of overlap.
+    // So first we try to schedule load[i] after store[i - 1], and if this is
+    // not possible, we try to schedule it after store[i - 2] and so forth. A
+    // typical reason why the first single-delay attempt might fail is when
+    // using optimizers that require two offloaded parameters for each weight
+    // update (like LAMB/ADAM that require both the first and second moments).
+    for (std::size_t delay = 1; delay <= i; ++delay) {
+      auto* prev_load = combined_loads[i - delay];
+
+      // To minimze liveness, we also try to schedule all users of the previous
+      // load before the current load. This attempts to ensure that the actual
+      // weight update is pushed as early as possible in the schedule.
+      TF_RETURN_IF_ERROR(
+          ScheduleAllUsersBefore(prev_load, load, *reachability_map));
+
+      auto* prev_store = combined_stores[i - delay];
+
+      // If we can successfully schedule the previous store before this load,
+      // we are satisifed with the scheduling constraints for this load and
+      // break out to the next one.
+      if (!reachability_map->IsReachable(load, prev_store)) {
+        TF_RETURN_IF_ERROR(prev_store->AddControlDependencyTo(load));
+        reachability_map->UpdateReachabilityThroughInstruction(load);
+        break;
+      }
     }
   }
 
