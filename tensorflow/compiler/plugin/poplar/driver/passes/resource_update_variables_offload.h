@@ -123,8 +123,7 @@ class ResourceUpdateVariablesOffload : public HloModulePass {
 
  private:
   // Optimize an instruction which contains a resource update.
-  StatusOr<bool> Optimize(HloInstruction* call_op,
-                          HloInstruction* resource_update);
+  StatusOr<bool> Optimize(HloInstruction* call_op);
 
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
