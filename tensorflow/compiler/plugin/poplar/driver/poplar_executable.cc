@@ -45,6 +45,7 @@ PoplarExecutable::PoplarExecutable(
     SendRecvInfos&& recv_infos,
     HostEmbeddingInfos&& host_embedding_lookup_infos,
     HostEmbeddingInfos&& host_embedding_update_infos,
+    HostEmbeddingInfos&& host_embedding_notify_infos,
     RemoteParameterInfos&& remote_parameter_infos,
     const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
     const std::vector<string>& checkpoint_feeds_order)
@@ -67,6 +68,7 @@ PoplarExecutable::PoplarExecutable(
       recv_infos_(std::move(recv_infos)),
       host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
       host_embedding_update_infos_(std::move(host_embedding_update_infos)),
+      host_embedding_notify_infos_(std::move(host_embedding_notify_infos)),
       remote_parameter_infos_(std::move(remote_parameter_infos)),
       loaded_from_cache_(false),
       key_id_mappings_(key_id_mappings),
@@ -232,6 +234,14 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
                          Shape(update.activations_shape()));
   }
 
+  HostEmbeddingInfos notifications;
+  for (const auto& notification : proto.notifications()) {
+    notifications.emplace_back(notification.stream_handle(),
+                               notification.embedding_id(),
+                               Shape(notification.indices_shape()),
+                               Shape(notification.activations_shape()));
+  }
+
   RemoteParameterInfos remote_parameter_infos;
   for (const auto& remote_parameter : proto.remote_parameters()) {
     remote_parameter_infos.emplace(
@@ -284,8 +294,9 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, false, {}, replication_factor, std::move(infeeds),
       std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
-      std::move(lookups), std::move(updates), std::move(remote_parameter_infos),
-      key_id_mappings, checkpoint_feeds_order);
+      std::move(lookups), std::move(updates), std::move(notifications),
+      std::move(remote_parameter_infos), key_id_mappings,
+      checkpoint_feeds_order);
 
   executable->loaded_from_cache_ = true;
 
@@ -464,6 +475,12 @@ Status ExportInternal(
     *update_proto->mutable_indices_shape() = update.indices_shape.ToProto();
     *update_proto->mutable_activations_shape() =
         update.activations_shape.ToProto();
+  }
+
+  for (const auto notification : annotations.host_embedding_notify_infos) {
+    auto* update_proto = proto.add_notifications();
+    update_proto->set_stream_handle(notification.stream_handle);
+    update_proto->set_embedding_id(notification.embedding_id);
   }
 
   for (const auto remote_parameter_info : annotations.remote_parameter_infos) {

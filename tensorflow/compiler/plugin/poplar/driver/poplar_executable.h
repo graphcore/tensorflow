@@ -59,6 +59,7 @@ class PoplarExecutable : public Executable {
                    SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos,
                    HostEmbeddingInfos&& host_embedding_lookup_infos,
                    HostEmbeddingInfos&& host_embedding_update_infos,
+                   HostEmbeddingInfos&& host_embedding_notify_infos,
                    RemoteParameterInfos&& remote_parameter_infos,
                    const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
                    const std::vector<string>& checkpoint_feeds_order);
@@ -96,6 +97,10 @@ class PoplarExecutable : public Executable {
 
   const HostEmbeddingInfos& GetHostEmbeddingUpdateInfos() const {
     return host_embedding_update_infos_;
+  }
+
+  const HostEmbeddingInfos& GetHostEmbeddingNotifyInfos() const {
+    return host_embedding_notify_infos_;
   }
 
   const RemoteParameterInfos& GeRemoteParameterInfos() const {
@@ -185,6 +190,7 @@ class PoplarExecutable : public Executable {
   SendRecvInfos recv_infos_;
   HostEmbeddingInfos host_embedding_lookup_infos_;
   HostEmbeddingInfos host_embedding_update_infos_;
+  HostEmbeddingInfos host_embedding_notify_infos_;
   RemoteParameterInfos remote_parameter_infos_;
   bool loaded_from_cache_;
   const bool is_scalar_elementwise_graph_;
