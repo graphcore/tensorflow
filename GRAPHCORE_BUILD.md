@@ -50,8 +50,9 @@ You can now build TensorFlow by following the instructions here:
 The default compilation option `-march=native` optimizes the generated code for
 your machine's CPU type. However, if building TensorFlow for a different CPU
 type, you can use a more specific optimization option. For example, the
-Graphcore TensorFlow distributed in the Poplar SDK is built with
-`-march=skylake-avx512`.
+Graphcore TensorFlow packages distributed in the Poplar SDK are built with:
+* `-march=skylake-avx512` for the Intel package,
+* `-march=znver1` for the AMD package.
 See the GCC manual for more information.
 
 ### Building against custom PopLibs
