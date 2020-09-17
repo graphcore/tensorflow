@@ -585,8 +585,8 @@ class IPUModelModelTest(test.TestCase):
       # Fit the weights to the dataset
       result = m.predict(input_x, batch_size=1)
 
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 96)
+      self.assertEqual(type(result), np.ndarray)
+      self.assertEqual(result.shape[0], 96)
       for i, r in enumerate(result):
         self.assertAllEqual(r, result[i - 1])
 
@@ -1013,8 +1013,6 @@ class IPUModelModelTest(test.TestCase):
       ipu.utils.configure_ipu_system(cfg)
 
       ipu_out = m.predict(xs, batch_size=2)
-      # TODO(T26613): Should not have to do a reshape here.
-      ipu_out = np.reshape(ipu_out, [48])
 
     # CPU
     xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
@@ -1025,6 +1023,86 @@ class IPUModelModelTest(test.TestCase):
     cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
 
     self.assertAllClose(ipu_out, cpu_out)
+
+  @test_util.run_v2_only
+  def testPredictNumpyDataTwoOutput(self):
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 1], w=1)
+      m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      ipu_out = m.predict(xs, batch_size=2)
+
+    # CPU
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [32, 32, 1], w=1)
+    m = keras.Model(inputs=input_layer, outputs=[x, x])
+    cpu_out = m.predict(xs, batch_size=2)
+    for t_cpu, t_ipu in zip(cpu_out, ipu_out):
+      t_cpu = aggregate_cpu_out(training_utils.OutputsAggregator, t_cpu)
+      self.assertAllClose(t_ipu, t_cpu)
+
+  @test_util.run_v2_only
+  def testPredictNumpyData3D(self):
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 48], w=1)
+      x = keras.layers.Reshape((4, 4, 3))(x)
+      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      ipu_out = m.predict(xs, batch_size=2)
+
+    # CPU
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [32, 32, 48], w=1)
+    x = keras.layers.Reshape((4, 4, 3))(x)
+    m = keras.Model(inputs=input_layer, outputs=x)
+    cpu_out = m.predict(xs, batch_size=2)
+
+    self.assertAllClose(ipu_out, cpu_out)
+
+  @test_util.run_v2_only
+  def testPredictNumpyDataTwoOutput3D(self):
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 48], w=1)
+      x = keras.layers.Reshape((4, 4, 3))(x)
+      m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      ipu_out = m.predict(xs, batch_size=2)
+
+    # CPU
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [32, 32, 48], w=1)
+    x = keras.layers.Reshape((4, 4, 3))(x)
+    m = keras.Model(inputs=input_layer, outputs=[x, x])
+    cpu_out = m.predict(xs, batch_size=2)
+    for t_cpu, t_ipu in zip(cpu_out, ipu_out):
+      self.assertAllClose(t_ipu, t_cpu)
 
 
 if __name__ == '__main__':

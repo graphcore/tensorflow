@@ -21,6 +21,8 @@ from functools import partial
 import math
 import weakref
 
+import numpy as np
+
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
@@ -1148,6 +1150,52 @@ class IPUModel(_IpuModelBase):
                                            output_tensors)
     return output_tensors
 
+  def _format_output(self, outputs):
+    def reshape_multi_output(x):
+      # Input Dims: (dataset_length / batch_size, batch_size, output_dim)
+      ds_len = x.shape[0] * x.shape[1]
+      return np.reshape(x, (ds_len, *x.shape[2:]))
+
+    def reshape_single_output(x):
+      # Input Dims: (batch_size * output_dim0, output_dim1...)
+      a = x.shape[0]
+      b = self.outputs[0].shape[1]  # shape[0] is None (unknown batch size)
+      assert a % b == 0
+
+      split_factor = a / b
+
+      x_split = np.split(x, split_factor)
+      x_split = map(lambda x: np.expand_dims(x, 0), x_split)
+      return np.vstack(x_split)
+
+    def squeeze(x):
+      # If each output is a single value, reduce to single rank tensor.
+      if x.ndim == 2 and x.shape[1] == 1:
+        return np.squeeze(x, 1)
+      return x
+
+    assert isinstance(outputs, tuple)
+
+    # Multi output model.
+    if len(outputs) == len(self.outputs) and len(self.outputs) > 1:
+      shapes_ok = True
+      for t, o in zip(outputs, self.outputs):
+        shapes_ok &= t.shape[1:] == o.shape[1:]
+
+      if shapes_ok:
+        return tuple(map(squeeze, outputs))
+
+      # Each tuple element is a per output tensor of dimensions:
+      # (dataset_length / batch_size, batch_size, output_dim)
+      return tuple(map(reshape_multi_output, outputs))
+
+    # Each input tuple element is a batch of outputs of dimensions:
+    # (batch_size * output_dim0, output_dim1...)
+    # Output is a tensor of dimensions:
+    # (dataset_length, output_dim0, output_dim1...)
+    stacked = np.vstack(list(map(reshape_single_output, outputs)))
+    return squeeze(stacked)
+
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
     training = mode == ModeKeys.TRAIN
@@ -1345,13 +1393,13 @@ class IPUModel(_IpuModelBase):
     infinite, because it has been repeated indefinitely, then this condition is
     satisfied.
     """
-    return super().predict(x,
-                           batch_size=batch_size,
-                           verbose=verbose,
-                           steps=steps,
-                           callbacks=callbacks,
-                           steps_per_run=steps_per_run,
-                           **kwargs)
+    return self._format_output(super().predict(x,
+                                               batch_size=batch_size,
+                                               verbose=verbose,
+                                               steps=steps,
+                                               callbacks=callbacks,
+                                               steps_per_run=steps_per_run,
+                                               **kwargs))
 
   def save(self,
            filepath,
