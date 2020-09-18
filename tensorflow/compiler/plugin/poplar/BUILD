@@ -159,6 +159,7 @@ cc_library(
         "driver/passes/host_compute_barrier_inserter.cc",
         "driver/passes/host_compute_schedule_optimizer.cc",
         "driver/passes/host_compute_util.cc",
+        "driver/passes/host_embedding_notification.cc",
         "driver/passes/inplace_finder.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
         "driver/passes/inter_tileset_copy_inserter.cc",
@@ -315,6 +316,7 @@ cc_library(
         "driver/passes/host_compute_barrier_inserter.h",
         "driver/passes/host_compute_schedule_optimizer.h",
         "driver/passes/host_compute_util.h",
+        "driver/passes/host_embedding_notification.h",
         "driver/passes/inplace_finder.h",
         "driver/passes/inter_ipu_copy_inserter.h",
         "driver/passes/inter_tileset_copy_inserter.h",
@@ -1779,6 +1781,19 @@ xla_test(
     name = "host_compute_schedule_optimizer_test",
     size = "small",
     srcs = ["tests/host_compute_schedule_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "host_embedding_notify_pass_test",
+    size = "small",
+    srcs = ["tests/host_embedding_notify_pass_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [

@@ -42,5 +42,10 @@ def _ipu_host_embedding_lookup_grad(op, grads):
       embedding_id=op.get_attr("embedding_id"),
       embedding_shape=op.get_attr("embedding_shape"),
       partition_strategy=op.get_attr("partition_strategy"))
+
+  if op.get_attr("optimizer") == 'SGD+GA':
+    with ops.control_dependencies([update_op]):
+      update_op = gen_pop_datastream_ops.ipu_device_embedding_notify(
+          embedding_id=op.get_attr("embedding_id"))
   with ops.control_dependencies([update_op]):
     return [array_ops.zeros_like(op.inputs[0]), None]
