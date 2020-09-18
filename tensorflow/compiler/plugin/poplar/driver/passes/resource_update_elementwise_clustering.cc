@@ -42,19 +42,19 @@ bool IsAllReduce(const HloInstruction* inst) {
 }
 
 bool IsReplicationIndex(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::ReplicationIndex, inst);
+  return IsPoplarInstruction(PoplarOp::ReplicationIndex)(inst);
 }
 
 bool IsReplicationNormalise(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::ReplicationNormalise, inst);
+  return IsPoplarInstruction(PoplarOp::ReplicationNormalise)(inst);
 }
 
 bool IsRemoteParameterLoad(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::RemoteParameterLoad, inst);
+  return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
 }
 
 bool IsRemoteParameterStore(const HloInstruction* inst) {
-  return IsPoplarInstruction(PoplarOp::RemoteParameterStore, inst);
+  return IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst);
 }
 
 bool IsAllGather(const HloInstruction* inst) {
