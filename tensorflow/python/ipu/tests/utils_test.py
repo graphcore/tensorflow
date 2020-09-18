@@ -163,6 +163,11 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertEqual(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
     self.assertEqual(cfg.ipu_version, 1)
     self.assertTrue(cfg.has_ipu_version)
+    self.assertFalse(cfg.enable_remote_buffers_without_device)
+
+    cfg = ipu.utils.create_ipu_config()
+    cfg = ipu.utils.set_ipu_connection_type(cfg, enable_remote_buffers=True)
+    self.assertTrue(cfg.enable_remote_buffers_without_device)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()
