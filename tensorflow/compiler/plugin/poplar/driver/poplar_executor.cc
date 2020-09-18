@@ -568,30 +568,6 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
   return Status::OK();
 }
 
-Status PoplarExecutor::ConnectHostEmbeddingNotify(
-    const HostEmbeddingInfo& notify_info,
-    HostEmbeddingInterface_* embedding_interface) {
-  if (UseSyntheticData()) {
-    return Status::OK();
-  }
-
-  if (EnableExperimentalRemoteBufferEmbedding()) {
-    return Status::OK();
-  }
-
-  for (int replica = 0;
-       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
-    // Connect the notify callback.
-    current_engine_->connectStreamToCallback(
-        notify_info.stream_handle + notify_info.embedding_id + "_notify",
-        replica, [replica, embedding_interface](void* ptr) {
-          embedding_interface->Notify(replica);
-        });
-  }
-
-  return Status::OK();
-}
-
 Status PoplarExecutor::DisconnectHostEmbeddingLookup(
     const HostEmbeddingInfo& lookup_info,
     HostEmbeddingInterface_* embedding_interface) {
@@ -650,12 +626,6 @@ Status PoplarExecutor::DisconnectHostEmbeddingLookup(
 
 Status PoplarExecutor::DisconnectHostEmbeddingUpdate(
     const HostEmbeddingInfo& update_info,
-    HostEmbeddingInterface_* embedding_interface) {
-  return Status::OK();
-}
-
-Status PoplarExecutor::DisconnectHostEmbeddingNotify(
-    const HostEmbeddingInfo& notify_info,
     HostEmbeddingInterface_* embedding_interface) {
   return Status::OK();
 }
@@ -3079,14 +3049,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
                 .get()));
       }
 
-      for (auto& host_embedding_notify_info :
-           executable.GetHostEmbeddingNotifyInfos()) {
-        TF_RETURN_IF_ERROR(ConnectHostEmbeddingNotify(
-            host_embedding_notify_info,
-            host_embeddings_.at(host_embedding_notify_info.embedding_id)
-                .get()));
-      }
-
       const auto& outfeed_infos = executable.GetOutfeedInfos();
       if (!outfeed_infos.empty()) {
         ConnectOutfeedToStreamCallback(outfeed_infos);
@@ -3186,14 +3148,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         TF_RETURN_IF_ERROR(DisconnectHostEmbeddingUpdate(
             host_embedding_update_info,
             host_embeddings_.at(host_embedding_update_info.embedding_id)
-                .get()));
-      }
-
-      for (auto& host_embedding_notify_info :
-           executable.GetHostEmbeddingNotifyInfos()) {
-        TF_RETURN_IF_ERROR(DisconnectHostEmbeddingNotify(
-            host_embedding_notify_info,
-            host_embeddings_.at(host_embedding_notify_info.embedding_id)
                 .get()));
       }
 

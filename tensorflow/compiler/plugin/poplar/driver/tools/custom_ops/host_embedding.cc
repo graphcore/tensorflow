@@ -145,55 +145,6 @@ HloHostEmbeddingUpdateInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-HloHostEmbeddingNotifyInstruction::HloHostEmbeddingNotifyInstruction(
-
-    const std::string& embedding_id)
-    : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {},
-                           PoplarOp::HostEmbeddingNotify, embedding_id),
-      embedding_id_(embedding_id) {
-  set_custom_call_has_side_effect(true);
-}
-
-absl::flat_hash_set<int64>
-HloHostEmbeddingNotifyInstruction::AllocatingIndices() const {
-  return {};
-}
-
-absl::flat_hash_map<int64, int64>
-HloHostEmbeddingNotifyInstruction::LayoutDependencies() const {
-  return {};
-}
-
-uint64 HloHostEmbeddingNotifyInstruction::NumberOfInplaceOperands() const {
-  return 0;
-}
-
-bool HloHostEmbeddingNotifyInstruction::IsPopOpsElementwise() const {
-  return false;
-}
-
-std::unique_ptr<HloInstruction> CreateHloHostEmbeddingNotify(
-    const std::string& embedding_id) {
-  return absl::make_unique<HloHostEmbeddingNotifyInstruction>(embedding_id);
-}
-
-std::unique_ptr<HloInstruction>
-HloHostEmbeddingNotifyInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    HloCloneContext*) const {
-  return CreateHloHostEmbeddingNotify(embedding_id_);
-}
-
-std::vector<std::string>
-HloHostEmbeddingNotifyInstruction::ExtraPoplarAttributesToStringImpl(
-    const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-
-  attributes.push_back(absl::StrCat("embedding_id=", embedding_id_));
-
-  return attributes;
-}
-
 namespace {
 
 static HloPoplarInstructionFactory host_embedding_lookup_factory(
@@ -253,18 +204,6 @@ static HloPoplarInstructionFactory host_embedding_update_factory(
           call->mutable_operand(0), call->mutable_operand(1),
           call->mutable_operand(2), embedding_id, embedding_shape,
           splitting_strategy, call->shape());
-    });
-
-static HloPoplarInstructionFactory host_embedding_notify_factory(
-    PoplarOp::HostEmbeddingNotify,
-    [](HloCustomCallInstruction* call)
-        -> StatusOr<std::unique_ptr<HloInstruction>> {
-      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-
-      TF_ASSIGN_OR_RETURN(std::string embedding_id,
-                          attribute_map.GetAttributeAsString("embedding_id"));
-
-      return CreateHloHostEmbeddingNotify(embedding_id);
     });
 
 }  // namespace

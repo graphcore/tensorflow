@@ -57,7 +57,7 @@ enum PoplarOp {
   Seed = 53;
   BufferLoadSlice = 54;
   BufferStoreSlice = 55;
-  HostEmbeddingNotify = 56;
+  // retired = 56;
   HostEmbeddingLookup = 57;
   HostEmbeddingUpdate = 58;
   StatefulGradientAccumulateWithMomentum = 59;
