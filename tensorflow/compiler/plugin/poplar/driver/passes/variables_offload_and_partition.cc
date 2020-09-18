@@ -84,7 +84,7 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
     HloComputation* computation, HloInstruction* parameter,
     int64 replication_factor) {
   HloInstruction* load = computation->AddInstruction(
-      CreateHloRemoteParameterLoad({parameter}, replication_factor));
+      CreateHloRemoteParameterLoad({parameter}, {replication_factor}));
 
   HloInstruction* replicated_load = load;
   if (replication_factor > 1) {
@@ -218,7 +218,7 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
 
   HloInstruction* remote_store =
       computation->AddInstruction(CreateHloRemoteParameterStore(
-          {remote_buffer, to_store}, replication_factor));
+          {remote_buffer, to_store}, {replication_factor}));
   return remote_store;
 }
 

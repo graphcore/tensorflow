@@ -69,10 +69,44 @@ std::vector<HloInstruction*> CombineOperands(
     operands.insert(operands.end(), values_to_store.cbegin(),
                     values_to_store.cend());
   } else {
-    LOG(FATAL) << "Unexpected instruction: " << to_combine.front()->ToString();
+    LOG(FATAL) << "Unexpected instruction: " << first_inst->ToString();
   }
 
   return operands;
+}
+
+std::vector<uint64> CombineReplicationFactors(
+    const std::vector<HloInstruction*>& to_combine) {
+  std::vector<uint64> replication_factors(to_combine.size());
+  absl::c_transform(
+      to_combine, replication_factors.begin(), [](const HloInstruction* inst) {
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst)) {
+          return Cast<HloRemoteParameterLoad>(inst)->GetReplicationFactor(0);
+        } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst)) {
+          return Cast<HloRemoteParameterStore>(inst)->GetReplicationFactor(0);
+        } else {
+          LOG(FATAL) << "Unexpected instruction: " << inst->ToString();
+        }
+      });
+  return replication_factors;
+}
+
+HloInstruction* Combine(const std::vector<HloInstruction*>& to_combine) {
+  const auto operands = CombineOperands(to_combine);
+  const auto replication_factors = CombineReplicationFactors(to_combine);
+
+  auto* first_inst = to_combine.front();
+  HloComputation* comp = first_inst->parent();
+
+  if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(first_inst)) {
+    return comp->AddInstruction(
+        CreateHloRemoteParameterLoad(operands, replication_factors));
+  } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(first_inst)) {
+    return comp->AddInstruction(
+        CreateHloRemoteParameterStore(operands, replication_factors));
+  } else {
+    LOG(FATAL) << "Unexpected instruction: " << first_inst->ToString();
+  }
 }
 
 StatusOr<HloInstruction*> CombineAndReplace(
@@ -87,11 +121,8 @@ StatusOr<HloInstruction*> CombineAndReplace(
                     [](HloInstruction* inst) { return inst->shape(); });
   const auto shape = ShapeUtil::MakeTupleShape(shapes);
 
-  const auto operands = CombineOperands(to_combine);
-
   // Add the new instruction.
-  auto* new_inst = comp->AddInstruction(
-      to_combine.front()->CloneWithNewOperands(shape, operands));
+  auto* new_inst = Combine(to_combine);
 
   // Combine the sharding information into a tuple.
   std::vector<HloSharding> shardings;

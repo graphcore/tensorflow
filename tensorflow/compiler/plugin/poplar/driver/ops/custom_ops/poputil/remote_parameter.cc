@@ -47,16 +47,16 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                             : std::vector<xla::Shape>{output_shape};
     CHECK_EQ(shapes.size(), num_inputs);
 
-    if (load_inst->GetReplicationFactor() != res.replication_factor &&
-        load_inst->GetReplicationFactor() != 1) {
-      return xla::FailedPrecondition(
-          "RemoteBuffer load instruction replication factor doesn't match "
-          "graph replication factor.");
-    }
-
     poplar::program::Sequence seq;
 
     for (int64 i = 0; i < num_inputs; ++i) {
+      if (load_inst->GetReplicationFactor(i) != res.replication_factor &&
+          load_inst->GetReplicationFactor(i) != 1) {
+        return xla::FailedPrecondition(
+            "RemoteBuffer load instruction replication factor doesn't match "
+            "graph replication factor.");
+      }
+
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       const Shape& shape = shapes[i];
       TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
@@ -112,19 +112,19 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
 
-    if (store_inst->GetReplicationFactor() != res.replication_factor &&
-        store_inst->GetReplicationFactor() != 1) {
-      return xla::FailedPrecondition(
-          "RemoteBuffer store instruction replication factor doesn't match "
-          "graph replication factor.");
-    }
-
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
                         FindInplaceOutputs(tensor_map, res, inst, seq));
     CHECK_EQ(outputs.size(), num_outputs);
 
     for (int64 i = 0; i < num_outputs; ++i) {
+      if (store_inst->GetReplicationFactor(i) != res.replication_factor &&
+          store_inst->GetReplicationFactor(i) != 1) {
+        return xla::FailedPrecondition(
+            "RemoteBuffer store instruction replication factor doesn't match "
+            "graph replication factor.");
+      }
+
       CHECK_EQ(outputs[i].size(), 1);
 
       if (!outputs[i][0].IsRemoteBuffer()) {
