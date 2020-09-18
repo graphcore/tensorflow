@@ -173,6 +173,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
   TensorAllocationMap allocation_map;
   ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
@@ -190,6 +191,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   EXPECT_EQ(store_inst->operand_count(), 4);
   EXPECT_EQ(store_inst->GetReplicationFactor(0), 1);
   EXPECT_EQ(store_inst->GetReplicationFactor(1), 2);
+  EXPECT_TRUE(IsLoweredInplace(store_inst));
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
@@ -269,6 +271,7 @@ ENTRY top {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
   TensorAllocationMap allocation_map;
   ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)

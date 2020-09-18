@@ -91,22 +91,30 @@ std::vector<uint64> CombineReplicationFactors(
   return replication_factors;
 }
 
-HloInstruction* Combine(const std::vector<HloInstruction*>& to_combine) {
+StatusOr<HloInstruction*> Combine(
+    const std::vector<HloInstruction*>& to_combine) {
   const auto operands = CombineOperands(to_combine);
   const auto replication_factors = CombineReplicationFactors(to_combine);
 
   auto* first_inst = to_combine.front();
   HloComputation* comp = first_inst->parent();
 
+  HloInstruction* new_inst = nullptr;
   if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(first_inst)) {
-    return comp->AddInstruction(
+    new_inst = comp->AddInstruction(
         CreateHloRemoteParameterLoad(operands, replication_factors));
   } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(first_inst)) {
-    return comp->AddInstruction(
+    new_inst = comp->AddInstruction(
         CreateHloRemoteParameterStore(operands, replication_factors));
+    CHECK(absl::c_all_of(to_combine, IsLoweredInplace));
   } else {
-    LOG(FATAL) << "Unexpected instruction: " << first_inst->ToString();
+    return FailedPrecondition("Unexpected instruction: %s",
+                              first_inst->ToString().c_str());
   }
+  first_inst->SetupDerivedInstruction(new_inst);
+  new_inst->set_raw_backend_config_string(
+      first_inst->raw_backend_config_string());
+  return new_inst;
 }
 
 StatusOr<HloInstruction*> CombineAndReplace(
@@ -122,7 +130,7 @@ StatusOr<HloInstruction*> CombineAndReplace(
   const auto shape = ShapeUtil::MakeTupleShape(shapes);
 
   // Add the new instruction.
-  auto* new_inst = Combine(to_combine);
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_inst, Combine(to_combine));
 
   // Combine the sharding information into a tuple.
   std::vector<HloSharding> shardings;
