@@ -46,12 +46,12 @@ TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoLoads) {
   const auto hlo_string = R"(
 HloModule top
 
-ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
+ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[1]) {
   %arg1 = f32[] parameter(0)
   %arg2 = f32[2] parameter(1)
-  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  ROOT %tuple = (f32[], f32[2]) tuple(%load1, %load2)
+  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %load2 = f32[1] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[1]) tuple(%load1, %load2)
 }
   )";
 
@@ -79,6 +79,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   // Check that they were merged.
   EXPECT_EQ(load_inst->operand_count(), 2);
+  EXPECT_EQ(load_inst->GetReplicationFactor(0), 1);
+  EXPECT_EQ(load_inst->GetReplicationFactor(1), 2);
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
@@ -115,8 +117,8 @@ HloModule top
 ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   %arg1 = f32[] parameter(0)
   %arg2 = f32[2] parameter(1)
-  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   ROOT %tuple = (f32[], f32[2]) tuple(%load1, %load2)
 }
   )";
@@ -150,14 +152,14 @@ TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoStores) {
   const auto hlo_string = R"(
 HloModule top
 
-ENTRY %top (arg1: f32[], arg2: f32[]) -> (f32[], f32[]) {
+ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   %arg1 = f32[] parameter(0)
-  %arg2 = f32[] parameter(1)
+  %arg2 = f32[2] parameter(1)
   %c1 = f32[] constant(1)
-  %c2 = f32[] constant(2)
-  %store1 = f32[] custom-call(f32[] %arg1, f32[] %c1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  %store2 = f32[] custom-call(f32[] %arg2, f32[] %c2), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  ROOT %tuple = (f32[], f32[]) tuple(%store1, %store2)
+  %c2 = f32[1] constant({2})
+  %store1 = f32[] custom-call(f32[] %arg1, f32[] %c1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %store2 = f32[2] custom-call(f32[2] %arg2, f32[1] %c2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[2]) tuple(%store1, %store2)
 }
   )";
 
@@ -186,6 +188,8 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> (f32[], f32[]) {
 
   // Check that they were merged.
   EXPECT_EQ(store_inst->operand_count(), 4);
+  EXPECT_EQ(store_inst->GetReplicationFactor(0), 1);
+  EXPECT_EQ(store_inst->GetReplicationFactor(1), 2);
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
@@ -236,20 +240,20 @@ ENTRY top {
   const1 = f32[] constant(1)
   const2 = f32[2] constant(1)
 
-  load1 = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load2 = f32[] custom-call(arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  load3 = f32[2] custom-call(arg3), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load4 = f32[2] custom-call(arg4), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  load1 = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load2 = f32[] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  load3 = f32[2] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load4 = f32[2] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
   add1 = f32[] add(load1, const1), sharding={maximal device=0}
   add2 = f32[] add(load2, const1), sharding={maximal device=1}
   add3 = f32[2] add(load3, const2), sharding={maximal device=0}
   add4 = f32[2] add(load4, const2), sharding={maximal device=1}
 
-  store1 = f32[] custom-call(arg1, add1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  store2 = f32[] custom-call(arg2, add1), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  store3 = f32[2] custom-call(arg3, add1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  store4 = f32[2] custom-call(arg4, add1), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
+  store1 = f32[] custom-call(arg1, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  store2 = f32[] custom-call(arg2, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  store3 = f32[2] custom-call(arg3, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  store4 = f32[2] custom-call(arg4, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
   ROOT %tuple = (f32[], f32[], f32[2], f32[2]) tuple(store1, store2, store3, store4)
 }
@@ -312,45 +316,45 @@ ENTRY top {
   m3 = f32[] parameter(14)
   v3 = f32[] parameter(15)
 
-  m0_loaded = f32[] custom-call(m0), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  m0_loaded = f32[] custom-call(m0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   m0_updated = f32[] add(m0_loaded, g0), sharding={maximal device=0}
   g0_squared = f32[] multiply(g0, g0), sharding={maximal device=0}
-  v0_loaded = f32[] custom-call(v0), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  v0_loaded = f32[] custom-call(v0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   v0_updated = f32[] add(v0_loaded, g0_squared), sharding={maximal device=0}
   p0_delta = f32[] divide(m0_loaded, v0_loaded), sharding={maximal device=0}
   p0_updated = f32[] add(p0_delta, p0), sharding={maximal device=0}
-  m0_stored = f32[] custom-call(m0, m0_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  v0_stored = f32[] custom-call(v0, v0_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
+  m0_stored = f32[] custom-call(m0, m0_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v0_stored = f32[] custom-call(v0, v0_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
 
-  m1_loaded = f32[] custom-call(m1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  m1_loaded = f32[] custom-call(m1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   m1_updated = f32[] add(m1_loaded, g1), sharding={maximal device=0}
   g1_squared = f32[] multiply(g1, g1), sharding={maximal device=0}
-  v1_loaded = f32[] custom-call(v1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
+  v1_loaded = f32[] custom-call(v1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   v1_updated = f32[] add(v1_loaded, g1_squared), sharding={maximal device=0}
   p1_delta = f32[] divide(m1_loaded, v1_loaded), sharding={maximal device=0}
   p1_updated = f32[] add(p1_delta, p1), sharding={maximal device=0}
-  m1_stored = f32[] custom-call(m1, m1_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  v1_stored = f32[] custom-call(v1, v1_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
+  m1_stored = f32[] custom-call(m1, m1_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v1_stored = f32[] custom-call(v1, v1_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
 
-  m2_loaded = f32[] custom-call(m2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  m2_loaded = f32[] custom-call(m2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   m2_updated = f32[] add(m2_loaded, g2), sharding={maximal device=1}
   g2_squared = f32[] multiply(g2, g2), sharding={maximal device=1}
-  v2_loaded = f32[] custom-call(v2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  v2_loaded = f32[] custom-call(v2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   v2_updated = f32[] add(v2_loaded, g2_squared), sharding={maximal device=1}
   p2_delta = f32[] divide(m2_loaded, v2_loaded), sharding={maximal device=1}
   p2_updated = f32[] add(p2_delta, p2), sharding={maximal device=1}
-  m2_stored = f32[] custom-call(m2, m2_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  v2_stored = f32[] custom-call(v2, v2_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
+  m2_stored = f32[] custom-call(m2, m2_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v2_stored = f32[] custom-call(v2, v2_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
-  m3_loaded = f32[] custom-call(m3), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  m3_loaded = f32[] custom-call(m3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   m3_updated = f32[] add(m3_loaded, g3), sharding={maximal device=1}
   g3_squared = f32[] multiply(g3, g3), sharding={maximal device=1}
-  v3_loaded = f32[] custom-call(v3), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  v3_loaded = f32[] custom-call(v3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   v3_updated = f32[] add(v3_loaded, g3_squared), sharding={maximal device=1}
   p3_delta = f32[] divide(m3_loaded, v3_loaded), sharding={maximal device=1}
   p3_updated = f32[] add(p3_delta, p3), sharding={maximal device=1}
-  m3_stored = f32[] custom-call(m3, m3_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  v3_stored = f32[] custom-call(v3, v3_updated), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
+  m3_stored = f32[] custom-call(m3, m3_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v3_stored = f32[] custom-call(v3, v3_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
   ROOT tuple = (f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[]) tuple(p0_updated, m0_stored, v0_stored, p1_updated, m1_stored, v1_stored, p2_updated, m2_stored, v2_stored, p3_updated, m3_stored, v3_stored)
 }
@@ -430,9 +434,9 @@ resource_update {
   bcast2 = f32[1,4,4,2] broadcast(arg3), dimensions={}
   bcast3 = f32[1,4,2,4] broadcast(arg3), dimensions={}
 
-  load0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0), custom_call_target="RemoteParameterLoad"
-  load1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1), custom_call_target="RemoteParameterLoad"
-  load2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2), custom_call_target="RemoteParameterLoad"
+  load0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
 
   load0_t = f32[1,4,2,4] transpose(load0), dimensions={0, 1, 3, 2}
 
@@ -442,9 +446,9 @@ resource_update {
 
   new_arg0_t = f32[1,4,4,2] transpose(new_arg0), dimensions={0, 1, 3, 2}
 
-  store0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0, new_arg0_t), custom_call_target="RemoteParameterStore"
-  store1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1, new_arg1), custom_call_target="RemoteParameterStore"
-  store2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2, new_arg2), custom_call_target="RemoteParameterStore"
+  store0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0, new_arg0_t), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  store1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1, new_arg1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  store2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2, new_arg2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
 
   ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,1]) tuple(store0, store1, store2)
 }
@@ -571,10 +575,10 @@ ENTRY top {
   arg2 = f32[2] parameter(1)
   arg3 = f32[1] parameter(2)
   arg4 = f32[1] parameter(3)
-  load1 = f32[2] custom-call(arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  load1 = f32[2] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   ROOT tuple = (f32[2], f32[2]) tuple(load1, load2, load3, load4)
 }
   )";

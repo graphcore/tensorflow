@@ -41,7 +41,7 @@ HloModule top
 ENTRY top {
   arg1 = f32[] parameter(0)
   arg2 = f32[] parameter(1)
-  load = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad"
+  load = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
   ROOT mul = f32[] multiply(load, arg2)
 }
   )";
