@@ -1245,7 +1245,10 @@ def select_ipus(opts, indices):
   return opts
 
 
-def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
+def set_ipu_connection_type(opts,
+                            connection_type=None,
+                            ipu_version=None,
+                            enable_remote_buffers=False):
   """ Configure when to attach to the device. For example, you can use
       this to compile and cache a program without attaching to an IPU,
       and then later run on a real IPU device without recompiling.
@@ -1266,10 +1269,14 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
     opts: An IpuOptions session control protobuf.
     connection_type: One of `DeviceConnectionType`.
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
-
     ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
                  and 2 for Mk2. Required if the `connection_type`
                  provided is `DeviceConnectionType.NEVER`.
+    enable_remote_buffers: When `connection_type` is
+      `DeviceConnectionType.NEVER` or `DeviceConnectionType.ON_DEMAND`, this
+      argument is used to indicate whether remote buffers are enabled and
+      supported in the system which will eventually be used to execute the
+      compiled programs.
   Returns:
     The IpuOptions configuration protobuf.
   """
@@ -1284,6 +1291,8 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
   if ipu_version is not None:
     opts.ipu_version = ipu_version
     opts.has_ipu_version = True
+
+  opts.enable_remote_buffers_without_device = enable_remote_buffers
 
   return opts
 

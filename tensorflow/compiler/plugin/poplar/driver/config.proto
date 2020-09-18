@@ -40,7 +40,6 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 38
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -261,4 +260,8 @@ message IpuOptions {
 
   // Whether to place TensorFlow operations on IO tiles.
   bool place_ops_on_io_tiles = 38;
+
+  // Whether to enable remote buffers for the compilations without devices
+  // attached.
+  bool enable_remote_buffers_without_device = 39;
 };
