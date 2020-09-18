@@ -19,7 +19,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -281,7 +281,7 @@ TEST_P(ResourceUpdateElementwiseClusteringTest, DoTest) {
                           CustomOpReplacer().Run(module.get()));
   TF_ASSERT_OK_AND_ASSIGN(
       bool offloaded,
-      ResourceUpdateVariablesOffload(annotations, true, 0, replication_factor)
+      VariablesOffloadAndPartition(annotations, true, 0, replication_factor)
           .Run(module.get()));
   EXPECT_TRUE(offloaded);
 
