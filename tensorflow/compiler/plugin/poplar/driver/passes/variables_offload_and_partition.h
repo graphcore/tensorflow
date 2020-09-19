@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -124,6 +125,8 @@ class VariablesOffloadAndPartition : public HloModulePass {
  private:
   // Optimize an instruction which contains a resource update.
   StatusOr<bool> Optimize(HloInstruction* call_op);
+  StatusOr<ThreeState> ShouldOffloadInPipeline(
+      HloInstruction* const pipeline_op);
   StatusOr<bool> ShouldPartitionInPipeline(HloInstruction* const pipeline_op);
 
   CompilerAnnotations& annotations_;
