@@ -265,6 +265,33 @@ struct OffloadedResourceInfo {
 };
 }  // namespace
 
+StatusOr<ThreeState> VariablesOffloadAndPartition::ShouldOffloadInPipeline(
+    HloInstruction* const pipeline_op) {
+  switch (GetPipelineOffloadVariables(pipeline_op)) {
+    case THREESTATE_OFF: {
+      return THREESTATE_OFF;
+    }
+    case THREESTATE_ON: {
+      return THREESTATE_ON;
+    }
+    case THREESTATE_UNDEFINED: {
+      // Only offload by default when using batch serialization with sequential
+      // schedule.
+      const int64 batch_serialization_iterations =
+          GetPipelineBatchSerializationIterations(pipeline_op);
+      TF_ASSIGN_OR_RETURN(const auto schedule,
+                          GetPipelineSchedule(pipeline_op));
+      if (batch_serialization_iterations > 1 &&
+          schedule ==
+              PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+        return THREESTATE_UNDEFINED;
+      }
+      return THREESTATE_OFF;
+    }
+    default: { return FailedPrecondition("Unknown state."); }
+  }
+}
+
 StatusOr<bool> VariablesOffloadAndPartition::ShouldPartitionInPipeline(
     HloInstruction* const pipeline_op) {
   switch (GetPipelinePartitionVariables(pipeline_op)) {
@@ -400,6 +427,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     offload_info.call_operand_idx = call_operand_idx;
     offload_info.input_to_call = call_input;
     offload_info.input_in_call = call_parameter;
+
     if (input_info.IsResourceNotModified()) {
       // Needs to be used by the root tuple at the same index as the operand
       // index (i.e. unmodified).
@@ -546,17 +574,10 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
         resource_use.user_parameter = user->to_apply()->parameter_instruction(
             user->operand_index(call_parameter));
         offload_info.users.push_back(resource_use);
-        offload_info.offload = GetPipelineOffloadVariables(call_op);
+        TF_ASSIGN_OR_RETURN(offload_info.offload,
+                            ShouldOffloadInPipeline(call_op));
         TF_ASSIGN_OR_RETURN(offload_info.replica_partition,
                             ShouldPartitionInPipeline(call_op));
-        if (offload_info.replica_partition &&
-            offload_info.offload == THREESTATE_OFF) {
-          return UnimplementedStrCat(
-              "Requested replicated weight sharding for the pipeline ",
-              call_op->ToString(),
-              " without offloading variables. This is currently not "
-              "supported.");
-        }
       } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
                      user)) {
         // Nothing to do - gradient accumulator create might try and use the
@@ -576,6 +597,14 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
   // For each parameter in offload_info, insert any required load and store
   // operations.
   for (auto& offload_info : offload_infos) {
+    if (offload_info.replica_partition &&
+        offload_info.offload == THREESTATE_OFF) {
+      return UnimplementedStrCat("Requested replicated weight sharding for ",
+                                 call_op->ToString(),
+                                 " without offloading. This is currently not "
+                                 "supported.");
+    }
+
     if (offload_info.offload == THREESTATE_OFF) {
       continue;
     }
