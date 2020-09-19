@@ -46,6 +46,9 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
     CHECK_LT(index, replication_factors_.size());
     return replication_factors_[index];
   }
+  std::size_t GetReplicationFactorCount() const {
+    return replication_factors_.size();
+  }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

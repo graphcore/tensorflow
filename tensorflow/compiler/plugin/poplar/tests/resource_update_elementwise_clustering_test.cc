@@ -217,6 +217,31 @@ std::string GetSimpleHloString(int n, int m) {
   return GetTemplateHloString(wu, n, m);
 }
 
+std::string GetFullRemoteLoadHloString(int n, int m) {
+  const std::string wu = R"(
+    buffer.1 = f32[$N,$M] custom-call(arg0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}"
+    buffer.2 = f32[$N,$M] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}"
+
+    add.1 = f32[$N,$M] add(arg2, buffer.1)
+    add.2 = f32[$N,$M] add(arg3, buffer.2)
+
+    mul.1 = f32[$N,$M] multiply(add.1, buffer.1)
+    mul.2 = f32[$N,$M] multiply(add.2, buffer.2)
+
+    rate.1 = f32[] constant(0.1)
+    rate.2 = f32[1] reshape(rate.1)
+    rate.3 = f32[] reshape(rate.2)
+    fusion.1 = f32[$N,$M] fusion(mul.1, mul.2, rate.1), kind=kCustom, calls=scale_xya.1
+    fusion.2 = f32[$N,$M] fusion(mul.1, mul.2, rate.3), kind=kCustom, calls=scale_xya.2
+
+    store.1 = f32[$N,$M] custom-call(arg0, fusion.1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}"
+    store.2 = f32[$N,$M] custom-call(arg1, fusion.2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}"
+
+    ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(store.1, store.2, fusion.1, fusion.2)
+  )";
+  return GetTemplateHloString(wu, n, m);
+}
+
 struct ResourceUpdateElementwiseClusteringTestSpec {
   std::string hlo;
   std::string short_name;
@@ -246,9 +271,12 @@ INSTANTIATE_TEST_SUITE_P(
     ResourceUpdateElementwiseClusteringTest,
     ::testing::ValuesIn(std::vector<
                         ResourceUpdateElementwiseClusteringTestSpec>{
-        // Simple HLO with all inputs
+        // Simple HLO with all types of the inputs
         {GetSimpleHloString(20, 100), "simple", false, 2, 2, 2},
         {GetSimpleHloString(20, 100), "simple", true, 2, 0, 0},
+        // Edge case
+        {GetSimpleHloString(1, 1), "1x1", false, 2, 2, 2},
+        {GetSimpleHloString(1, 1), "1x1", true, 2, 0, 0},
         // Check padded offloading:
         {GetSimpleHloString(11, 13), "simple-padded", false, 2, 2, 2},
         {GetSimpleHloString(11, 13), "simple-padded", true, 2, 0, 0},
@@ -263,6 +291,14 @@ INSTANTIATE_TEST_SUITE_P(
         // SGD-like resource update
         {GetSGDHloString(1000, 20), "sgd", false, 2, 2, 2},
         {GetSGDHloString(1000, 20), "sgd", true, 2, 0, 0},
+        // Test with one of the arguments be non-replicated remote buffer.
+        {GetFullRemoteLoadHloString(100, 20), "full-remote-load", false, 4, 2,
+         2},
+        {GetFullRemoteLoadHloString(100, 20), "full-remote-load", true, 4, 2,
+         2},
+        // And unaligned
+        {GetFullRemoteLoadHloString(19, 7), "full-remote-load", false, 4, 2, 2},
+        {GetFullRemoteLoadHloString(19, 7), "full-remote-load", true, 4, 2, 2},
     }));
 
 TEST_P(ResourceUpdateElementwiseClusteringTest, DoTest) {
