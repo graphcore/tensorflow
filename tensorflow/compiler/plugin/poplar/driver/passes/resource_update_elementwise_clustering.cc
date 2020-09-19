@@ -246,8 +246,8 @@ Status ChangeFusionShape(HloInstruction* fusion, const Shape& old_shape,
 struct Cluster {
   HloInstruction* top;
   Shape shape;
-  absl::flat_hash_set<HloInstruction*> insts;
-  absl::flat_hash_set<HloInstruction*> inputs;
+  HloInstructionSet insts;
+  HloInstructionSet inputs;
   std::vector<std::pair<HloInstruction*, std::vector<HloInstruction*>>> outputs;
 
   explicit Cluster(HloInstruction* top) noexcept
@@ -255,11 +255,11 @@ struct Cluster {
     Add(top);
   }
 
-  bool In(HloInstruction* inst) const { return insts.contains(inst); }
+  bool In(HloInstruction* inst) const { return ContainsKey(insts, inst); }
 
   bool AnyUserIn(HloInstruction* inst) const {
     for (auto user : inst->users()) {
-      if (insts.contains(user)) {
+      if (ContainsKey(insts, user)) {
         return true;
       }
     }
@@ -270,7 +270,7 @@ struct Cluster {
     inputs.erase(inst);
     insts.insert(inst);
     for (auto op : inst->operands()) {
-      if (!insts.contains(op)) {
+      if (!ContainsKey(insts, op)) {
         inputs.insert(op);
       }
     }
@@ -311,7 +311,7 @@ struct Cluster {
     auto users = inst->users();
     absl::c_copy_if(
         users, std::back_inserter(inst_outputs),
-        [this](HloInstruction* user) { return !insts.contains(user); });
+        [this](HloInstruction* user) { return !ContainsKey(insts, user); });
 
     for (auto output : inst_outputs) {
       VLOG(2) << "Cluster " << top->name() << " output: " << output->ToString();
@@ -358,7 +358,7 @@ Status RewriteClusterInput(const Cluster& cluster, int64 aligned_cluster_size,
   if (remote_load && remote_load->shape() == shard_shape) {
     VLOG(2) << "Rewriting remote cluster input " << remote_load->ToString();
     for (auto user : cluster_input->users()) {
-      if (cluster.insts.contains(user)) {
+      if (ContainsKey(cluster.insts, user)) {
         VLOG(2) << "Removing all-gather, use remote-parameter-load directly.";
         TF_RETURN_IF_ERROR(
             cluster_input->ReplaceUseWithDifferentShape(user, remote_load));
@@ -684,7 +684,6 @@ StatusOr<bool> RewriteResourceUpdate(
     // For each input:
     // Replace all-gather(remote-parameter-load)) with remote-parameter-load()
     // Replace other inputs with dynamic-slice(input, replication-index)
-
     for (auto cluster_input : cluster.inputs) {
       if (IsScalar(cluster_input)) {
         VLOG(2) << "Ignoring scalar: " << cluster_input->ToString();
