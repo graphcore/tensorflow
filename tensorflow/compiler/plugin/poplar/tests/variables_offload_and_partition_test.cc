@@ -35,10 +35,14 @@ namespace {
 
 using VariablesOffloadAndPartitionTest = HloTestBase;
 
-std::string GetHlo(ThreeState offload_resource_variables,
-                   ThreeState partition_resource_variables = THREESTATE_OFF,
-                   ThreeState offload_variables = THREESTATE_OFF,
-                   ThreeState partition_variables = THREESTATE_OFF) {
+std::string GetHlo(
+    ThreeState offload_resource_variables,
+    ThreeState partition_resource_variables = THREESTATE_OFF,
+    ThreeState offload_variables = THREESTATE_OFF,
+    ThreeState partition_variables = THREESTATE_OFF,
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule =
+        PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved,
+    int64 batch_serialization_iterations = 1) {
   constexpr absl::string_view hlo_format = R"(
 HloModule top
 
@@ -113,7 +117,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offloadVariables\":\"%s\",\"partitionVariables\":\"%s\"}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offloadVariables\":\"%s\",\"partitionVariables\":\"%s\",\"schedule\":\"%s\",\"batchSerializationIterations\":\"%d\"}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
@@ -124,7 +128,9 @@ ENTRY e {
   return absl::StrFormat(
       hlo_format, ThreeState_Name(offload_resource_variables),
       ThreeState_Name(partition_resource_variables),
-      ThreeState_Name(offload_variables), ThreeState_Name(partition_variables));
+      ThreeState_Name(offload_variables), ThreeState_Name(partition_variables),
+      PoplarBackendConfig::CallConfig::PipelineConfig::Schedule_Name(schedule),
+      batch_serialization_iterations);
 }
 
 TEST_F(VariablesOffloadAndPartitionTest, ReplaceRoot) {
@@ -243,9 +249,104 @@ TEST_F(VariablesOffloadAndPartitionTest, OffloadVariable) {
   }
 }
 
+TEST_F(VariablesOffloadAndPartitionTest,
+       DontOffloadPipelineVariablesNoPartition) {
+  std::string hlo = GetHlo(THREESTATE_ON, THREESTATE_OFF, THREESTATE_UNDEFINED,
+                           THREESTATE_OFF);
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  VariablesOffloadAndPartition prvo(annotations, true, 0, 1);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
+  EXPECT_TRUE(changed);
+  auto root = module->entry_computation()->root_instruction();
+  HloComputation* pipeline_computation =
+      root->operand(0)->operand(0)->to_apply();
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  HloComputation* resource_update = (*stages.resource_update)->to_apply();
+  EXPECT_EQ(resource_update->num_parameters(), 6);
+  EXPECT_EQ(ShapeUtil::TupleElementCount(
+                resource_update->root_instruction()->shape()),
+            4);
+
+  // Check load and stores.
+  for (int64 i : {4, 5}) {
+    HloInstruction* param = resource_update->parameter_instruction(i);
+    EXPECT_EQ(param->user_count(), 2);
+    HloInstruction *load, *store;
+    TF_ASSERT_OK(GetRemoteLoadStoreUsers(param, &load, &store));
+  }
+
+  auto is_not_offloaded = [](const HloInstruction* inst) {
+    return !absl::c_any_of(inst->users(),
+                           IsPoplarInstruction(PoplarOp::RemoteParameterLoad));
+  };
+  // Check parameters used in other pipeline stages have not been offloaded.
+  for (int64 i : {0, 1}) {
+    HloInstruction* param = resource_update->parameter_instruction(i);
+    EXPECT_TRUE(is_not_offloaded(param));
+  }
+  // Check loads inside of pipeline stages.
+  for (auto& stages : {stages.forward, stages.backward}) {
+    for (auto& stage : stages) {
+      HloInstruction* param = stage->to_apply()->parameter_instruction(1);
+      EXPECT_TRUE(is_not_offloaded(param));
+    }
+  }
+}
+
 TEST_F(VariablesOffloadAndPartitionTest, OffloadPipelineVariablesNoPartition) {
   std::string hlo =
       GetHlo(THREESTATE_ON, THREESTATE_OFF, THREESTATE_ON, THREESTATE_OFF);
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  VariablesOffloadAndPartition prvo(annotations, true, 0, 1);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
+  EXPECT_TRUE(changed);
+  auto root = module->entry_computation()->root_instruction();
+  HloComputation* pipeline_computation =
+      root->operand(0)->operand(0)->to_apply();
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  HloComputation* resource_update = (*stages.resource_update)->to_apply();
+  EXPECT_EQ(resource_update->num_parameters(), 6);
+  EXPECT_EQ(ShapeUtil::TupleElementCount(
+                resource_update->root_instruction()->shape()),
+            4);
+
+  // Check load and stores.
+  for (int64 i : {0, 1, 4, 5}) {
+    HloInstruction* param = resource_update->parameter_instruction(i);
+    EXPECT_EQ(param->user_count(), 2);
+    HloInstruction *load, *store;
+    TF_ASSERT_OK(GetRemoteLoadStoreUsers(param, &load, &store));
+  }
+  // Check loads inside of pipeline stages.
+  for (auto& stages : {stages.forward, stages.backward}) {
+    for (auto& stage : stages) {
+      HloInstruction* param = stage->to_apply()->parameter_instruction(1);
+      EXPECT_EQ(param->user_count(), 1);
+      EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(
+          param->users()[0]));
+    }
+  }
+}
+
+TEST_F(VariablesOffloadAndPartitionTest,
+       OffloadPipelineVariablesByDefaultNoPartition) {
+  std::string hlo = GetHlo(
+      THREESTATE_ON, THREESTATE_OFF, THREESTATE_UNDEFINED, THREESTATE_OFF,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, 4);
   auto config = GetModuleConfigForTest();
   config.set_resource_input_count(4);
   config.set_input_mapping({0, 1, 2, 3});
