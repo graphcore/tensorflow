@@ -471,7 +471,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/add*/Op/Add',
           'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
-          'gradients/MatMul_grad/MatMul/dot',
+          'gradients/MatMul_1_grad/MatMul/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1275872)
