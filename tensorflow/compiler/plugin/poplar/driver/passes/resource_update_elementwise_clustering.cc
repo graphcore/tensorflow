@@ -346,9 +346,11 @@ struct Cluster {
   }
 };
 
-Status RewriteClusterInput(const Cluster& cluster, int64 aligned_cluster_size,
-                           const Shape& shard_shape, int64 replication_factor,
-                           HloInstruction* cluster_input) {
+Status RewriteClusterInput(
+    const Cluster& cluster, int64 aligned_cluster_size,
+    const Shape& shard_shape, int64 replication_factor,
+    HloInstruction* cluster_input,
+    absl::flat_hash_map<HloInstruction*, HloInstruction*>& input_slices) {
   HloComputation* cluster_comp = cluster.top->parent();
   int64 cluster_size = ShapeUtil::ElementsIn(cluster.shape);
   int64 shard_size = ShapeUtil::ElementsIn(shard_shape);
@@ -373,7 +375,7 @@ Status RewriteClusterInput(const Cluster& cluster, int64 aligned_cluster_size,
   VLOG(2) << "Rewriting cluster input " << cluster_input->ToString();
 
   auto cluster_input_shape = cluster_input->shape();
-  HloInstruction* cluster_input_slice = nullptr;
+  HloInstruction*& cluster_input_slice = input_slices[cluster_input];
   for (auto inst : cluster.insts) {
     if (inst->IsUserOf(cluster_input)) {
       if (!cluster_input_slice) {
@@ -438,6 +440,8 @@ Status RewriteClusterInput(const Cluster& cluster, int64 aligned_cluster_size,
         cluster_input_slice = cluster_comp->AddInstruction(
             HloInstruction::CreateReshape(squeeze_shape, slice));
         VLOG(2) << "Input slice: " << cluster_input_slice->ToString();
+      } else {
+        VLOG(2) << "Reusing input slice: " << cluster_input_slice->ToString();
       }
       TF_RETURN_IF_ERROR(cluster_input->ReplaceUseWithDifferentShape(
           inst, cluster_input_slice));
@@ -624,7 +628,7 @@ StatusOr<bool> RewriteResourceUpdate(
     return false;
   }
 
-  absl::flat_hash_set<HloInstruction*> processed_inputs;
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> input_slices;
   bool changed;
 
   VLOG(2) << "Clustering with factor " << replication_factor;
@@ -690,15 +694,9 @@ StatusOr<bool> RewriteResourceUpdate(
         continue;
       }
 
-      if (processed_inputs.contains(cluster_input)) {
-        VLOG(2) << "This input (" << cluster_input->name()
-                << ") has already been processed, skipping.";
-        continue;
-      }
       TF_RETURN_IF_ERROR(RewriteClusterInput(cluster, aligned_cluster_size,
                                              shard_shape, replication_factor,
-                                             cluster_input));
-      processed_inputs.insert(cluster_input);
+                                             cluster_input, input_slices));
     }
 
     // Replacing outputs:

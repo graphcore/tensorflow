@@ -217,6 +217,25 @@ std::string GetSimpleHloString(int n, int m) {
   return GetTemplateHloString(wu, n, m);
 }
 
+std::string GetTwoClustersShareInputHloString(int n, int m) {
+  const std::string wu = R"(
+    all-reduce.1 = f32[$N,$M] all-reduce(arg0), to_apply=sum
+    all-reduce.2 = f32[$N,$M] all-reduce(arg1), to_apply=sum
+
+    add.1 = f32[$N,$M] add(arg2, all-reduce.1)
+    add.2 = f32[$N,$M] add(arg3, all-reduce.1)
+
+    rate.1 = f32[] constant(0.1)
+    rate.2 = f32[1] reshape(rate.1)
+    rate.3 = f32[] reshape(rate.2)
+    fusion.1 = f32[$N,$M] fusion(add.1, all-reduce.2, rate.1), kind=kCustom, calls=scale_xya.1
+    fusion.2 = f32[$N,$M] fusion(add.2, all-reduce.2, rate.3), kind=kCustom, calls=scale_xya.2
+
+    ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(arg0, arg1, fusion.1, fusion.2)
+  )";
+  return GetTemplateHloString(wu, n, m);
+}
+
 std::string GetFullRemoteLoadHloString(int n, int m) {
   const std::string wu = R"(
     buffer.1 = f32[$N,$M] custom-call(arg0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}"
@@ -280,6 +299,11 @@ INSTANTIATE_TEST_SUITE_P(
         // Check padded offloading:
         {GetSimpleHloString(11, 13), "simple-padded", false, 2, 2, 2},
         {GetSimpleHloString(11, 13), "simple-padded", true, 2, 0, 0},
+        // Two cluster share the same inputs
+        {GetTwoClustersShareInputHloString(20, 100), "2-clusters", false, 2, 2,
+         2},
+        {GetTwoClustersShareInputHloString(20, 100), "2-clusters", true, 2, 0,
+         0},
         // Adam-like resource update
         {GetAdamLikeHloString(20, 100), "adam", false, 2, 2, 2},
         // We still have to do all-gathers, but they all are operands to root
