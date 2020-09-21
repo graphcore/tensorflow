@@ -27,6 +27,7 @@ cc_library(
             "lib*/poplar/libpoplar*",
         ] + if_custom_poplibs([
             "lib*/poplar/libgcl_ct*",
+            "lib*/poplar/libpvti.so",
             "lib*/poplar/libtbb.*",
             "lib*/poplar/libtbbmalloc.*",
             "lib*/poplibs/libpoplin*",
@@ -39,7 +40,7 @@ cc_library(
             "lib*/poplibs/libpoputil*",
         ], [
             "lib*/**/libgcl_ct*",
-            "lib*/**/liblibpvti*",
+            "lib*/**/libpvti.so",
             "lib*/**/libtbb.*",
             "lib*/**/libtbbmalloc.*",
             "lib*/**/libpoplin*",
