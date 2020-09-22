@@ -6,7 +6,8 @@ Targeting the IPU from TensorFlow
     :public:
 
 .. toctree::
-    :maxdepth: 3
+    :maxdepth: 4
+    :numbered: 3
 
     intro
     tutorial
