@@ -1960,6 +1960,10 @@ StatusOr<int64> PipelinePath::GetFifoDepth() {
       case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
         multiplier = 0;
         break;
+      case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+        CHECK(type_ == Type::kForwardToBackward);
+        multiplier = 1;
+        break;
       default:
         return FailedPrecondition("Unsupported pipeline schedule.");
     }
