@@ -474,7 +474,7 @@ Status RewriteClusterOutput(const Cluster& cluster, int64 aligned_cluster_size,
         auto all_gather_shape = ShapeUtil::MakeShape(
             cluster.shape.element_type(), {replication_factor, shard_size});
         auto all_gather = cluster_comp->AddInstruction(
-            CreateAllGather(inst, all_gather_shape));
+            CreateAllGather({inst}, all_gather_shape));
         if (all_gather_shape != cluster.shape) {
           if (cluster_size != aligned_cluster_size) {
             Shape flat_cluster_shape = ShapeUtil::MakeShape(
