@@ -26,9 +26,9 @@ namespace xla {
 namespace poplarplugin {
 
 // Constructor.
-HloAllGatherInstruction::HloAllGatherInstruction(HloInstruction* input,
-                                                 const Shape shape)
-    : HloPoplarInstruction(shape, {input}, PoplarOp::AllGather) {}
+HloAllGatherInstruction::HloAllGatherInstruction(
+    std::vector<HloInstruction*> inputs, const Shape& output_shape)
+    : HloPoplarInstruction(output_shape, inputs, PoplarOp::AllGather) {}
 
 absl::flat_hash_set<int64> HloAllGatherInstruction::AllocatingIndices() const {
   return {};
@@ -44,16 +44,16 @@ uint64 HloAllGatherInstruction::NumberOfInplaceOperands() const { return 0; }
 bool HloAllGatherInstruction::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloAllGatherInstruction
-std::unique_ptr<HloInstruction> CreateAllGather(HloInstruction* input,
-                                                const Shape& shape) {
-  return absl::make_unique<HloAllGatherInstruction>(input, shape);
+std::unique_ptr<HloInstruction> CreateAllGather(
+    std::vector<HloInstruction*> inputs, const Shape& output_shape) {
+  return absl::make_unique<HloAllGatherInstruction>(inputs, output_shape);
 }
 
 std::unique_ptr<HloInstruction>
 HloAllGatherInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateAllGather(operands[0], shape);
+  return CreateAllGather({operands.begin(), operands.end()}, shape);
 }
 
 std::vector<std::string>
@@ -68,7 +68,8 @@ static HloPoplarInstructionFactory allgather_factory(
     PoplarOp::AllGather,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
-      return CreateAllGather(call->mutable_operand(0), call->shape());
+      CHECK_EQ(call->operand_count(), 1);
+      return CreateAllGather({call->mutable_operand(0)}, call->shape());
     });
 
 }  // namespace
