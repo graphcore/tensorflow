@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
@@ -118,35 +119,18 @@ bool CanCluster(
   }
 }
 
-StatusOr<bool> ReplaceRemoteStoreArgumentWith(const ElementwiseCluster& cluster,
-                                              HloInstruction* cluster_user,
-                                              HloInstruction* inst) {
-  if (!IsReplicatedParameterStore(cluster_user)) {
-    return false;
-  }
-  HloInstruction* store = cluster_user->users()[0];
-  HloInstruction* store_input = store->mutable_operand(1);
-  if (store_input->shape().dimensions() != cluster.GetShardDimensions()) {
-    VLOG(2) << "RemoteParameterStore does not match shard shape, ignoring";
-    return false;
-  }
-
-  TF_RETURN_IF_ERROR(store_input->ReplaceUseWithDifferentShape(store, inst));
-  VLOG(2) << "RemoteParameterStore instruction: " << store->ToString();
-  return true;
-}
-
-Status ChangeInstructionShape(const ElementwiseCluster& cluster,
-                              HloInstruction* inst) {
+StatusOr<Shape> GetNewShape(const ElementwiseCluster& cluster,
+                            HloInstruction* inst) {
   if (IsScalar(inst) ||
       inst->shape().dimensions() == cluster.GetShardDimensions()) {
-    VLOG(2) << "Do not set shape for " << inst->ToString();
-    return Status::OK();
+    VLOG(2) << "Instruction " << inst->ToString() << " preserves shapes.";
+    return inst->shape();
   } else if (inst->shape().dimensions() == cluster.GetClusterDimensions()) {
-    VLOG(2) << "Reshaped instruction: " << inst->ToString();
-    *inst->mutable_shape() = ShapeUtil::MakeShape(inst->shape().element_type(),
-                                                  cluster.GetShardDimensions());
-    return Status::OK();
+    Shape new_shape = ShapeUtil::MakeShape(inst->shape().element_type(),
+                                           cluster.GetShardDimensions());
+    VLOG(2) << "Instruction " << inst->ToString() << " will be reshaped to "
+            << new_shape;
+    return new_shape;
   } else {
     return InternalErrorStrCat(
         "Unexpected shape (",
@@ -154,184 +138,218 @@ Status ChangeInstructionShape(const ElementwiseCluster& cluster,
   }
 }
 
-Status ChangeFusionShape(const ElementwiseCluster& cluster,
-                         HloInstruction* fusion) {
-  VLOG(2) << "Changing fusion shape: " << fusion->ToString();
-  CHECK(fusion->opcode() == HloOpcode::kFusion);
-  HloComputation* fusion_comp = fusion->fused_instructions_computation();
-  for (auto inst : fusion_comp->MakeInstructionPostOrder()) {
-    TF_RETURN_IF_ERROR(ChangeInstructionShape(cluster, inst));
+StatusOr<HloComputation*> CloneAndReshapeComputation(
+    const ElementwiseCluster& cluster, HloComputation* comp) {
+  VLOG(2) << "Clone and reshape computation: " << comp->name();
+  HloComputation* cloned_comp =
+      comp->parent()->AddEmbeddedComputation(comp->Clone());
+  for (auto inst : cloned_comp->instructions()) {
+    TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
+    *inst->mutable_shape() = new_shape;
   }
-  VLOG(2) << "new fusion computation: "
-          << fusion->fused_instructions_computation()->ToString();
+  return cloned_comp;
+}
 
-  TF_RETURN_IF_ERROR(ChangeInstructionShape(cluster, fusion));
-  VLOG(2) << "new fusion: " << fusion->ToString();
+Status AddClusterInstruction(const ElementwiseCluster& cluster,
+                             HloInstruction* inst,
+                             HloComputation::Builder* builder,
+                             HloCloneContext* context) {
+  if (inst->opcode() == HloOpcode::kFusion) {
+    HloComputation* fusion_comp = inst->fused_instructions_computation();
+    TF_ASSIGN_OR_RETURN(HloComputation * reshaped_comp,
+                        CloneAndReshapeComputation(cluster, fusion_comp));
+    context->MapComputation(fusion_comp, reshaped_comp);
+  }
+
+  std::vector<HloInstruction*> new_operands(inst->operand_count());
+  absl::c_transform(inst->operands(), new_operands.begin(),
+                    [context](HloInstruction* old_operand) {
+                      return context->GetInstruction(old_operand);
+                    });
+  TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
+  HloInstruction* new_inst = builder->AddInstruction(
+      inst->CloneWithNewOperands(new_shape, new_operands, context));
+  context->MapInstruction(inst, new_inst);
   return Status::OK();
 }
 
-Status RewriteClusterInput(const ElementwiseCluster& cluster,
-                           int64 replication_factor,
-                           HloInstruction* cluster_input) {
-  HloComputation* cluster_comp = cluster.GetComputation();
+// For each input:
+// * pass scalar inputs as normal inputs.
+// * reshape(all-gather(reshape(remote-parameter-load))) pass
+// remote-parameter-load() as input.
+// * for other inputs add dynamic-slice(input, replication-index) inside of the
+// computation.
+// Returns the instruction which should be the input to the outlined
+// computation.
+StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
+                                          const ElementwiseCluster& cluster,
+                                          int64 replication_factor,
+                                          HloInstruction* cluster_input,
+                                          HloComputation::Builder* builder,
+                                          HloCloneContext* context) {
+  if (IsScalar(cluster_input)) {
+    VLOG(2) << "Scalar input does not need rewriting: "
+            << cluster_input->ToString();
+    HloInstruction* parameter = builder->AddInstruction(
+        HloInstruction::CreateParameter(param_idx, cluster_input->shape(),
+                                        "parameter-" + cluster_input->name()));
+    context->MapInstruction(cluster_input, parameter);
+    return cluster_input;
+  }
+  const Shape& cluster_input_shape = cluster_input->shape();
+  auto cluster_input_type = cluster_input_shape.element_type();
+
+  const Shape in_comp_shape =
+      ShapeUtil::MakeShape(cluster_input_type, cluster.GetShardDimensions());
+
   // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
   // all-gather.
   if (IsReplicatedParameterLoad(cluster_input)) {
     HloInstruction* remote_load = cluster_input->mutable_operand(0);
     if (remote_load->shape().dimensions() == cluster.GetShardDimensions()) {
-      VLOG(2) << "Rewriting remote cluster input " << remote_load->ToString();
-      const std::vector<HloInstruction*> insts = cluster.GetPostOrder();
-      for (auto user : cluster_input->users()) {
-        if (absl::c_find(insts, user) != insts.end()) {
-          VLOG(2) << "Removing all-gather, use remote-parameter-load directly.";
-          TF_RETURN_IF_ERROR(
-              cluster_input->ReplaceUseWithDifferentShape(user, remote_load));
-        }
-      }
-      return Status::OK();
+      VLOG(2) << "Adding remote cluster input " << remote_load->ToString();
+      HloInstruction* parameter = builder->AddInstruction(
+          HloInstruction::CreateParameter(param_idx, remote_load->shape(),
+                                          "parameter-" + remote_load->name()));
+
+      HloInstruction* reshape = builder->AddInstruction(
+          HloInstruction::CreateReshape(in_comp_shape, parameter));
+      context->MapInstruction(cluster_input, reshape);
+      return remote_load;
     }
   }
 
   // All other inputs have to be sliced with dynamic-slice(input,
-  // replication-index()) Reuse dynamic-slice for input in case of multiple
-  // users
-  VLOG(2) << "Rewriting cluster input " << cluster_input->ToString();
+  // replication-index()).
+  const Shape all_shards_shape = ShapeUtil::MakeShape(
+      cluster_input_type, {replication_factor, cluster.GetShardSize()});
 
-  auto cluster_input_shape = cluster_input->shape();
-  HloInstruction* cluster_input_slice = nullptr;
-  for (auto inst : cluster.GetPostOrder()) {
-    if (inst->IsUserOf(cluster_input)) {
-      if (!cluster_input_slice) {
-        Shape all_shards_shape =
-            ShapeUtil::MakeShape(cluster_input_shape.element_type(),
-                                 {replication_factor, cluster.GetShardSize()});
+  VLOG(2) << "Adding cluster input " << cluster_input->ToString();
+  HloInstruction* parameter = builder->AddInstruction(
+      HloInstruction::CreateParameter(param_idx, cluster_input_shape,
+                                      "parameter-" + cluster_input->name()));
 
-        HloInstruction* reshaped;
-        if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
-          HloInstruction* zero_f =
-              cluster_comp->AddInstruction(HloInstruction::CreateConstant(
-                  LiteralUtil::Zero(cluster_input_shape.element_type())));
+  // Reshaped the parameter so that it can be sliced.
+  HloInstruction* reshaped;
+  if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+    HloInstruction* zero_f = builder->AddInstruction(
+        HloInstruction::CreateConstant(LiteralUtil::Zero(cluster_input_type)));
 
-          // Flatten the incoming tensor
-          Shape flat_shape = ShapeUtil::MakeShape(
-              cluster_input_shape.element_type(),
-              {ShapeUtil::ElementsIn(cluster_input_shape)});
-          HloInstruction* flat = cluster_comp->AddInstruction(
-              HloInstruction::CreateReshape(flat_shape, cluster_input));
-          VLOG(2) << "reshape: " << flat->ToString();
+    // Flatten the incoming tensor.
+    Shape flat_shape = ShapeUtil::MakeShape(
+        cluster_input_type, {ShapeUtil::ElementsIn(cluster_input_shape)});
+    HloInstruction* flat = builder->AddInstruction(
+        HloInstruction::CreateReshape(flat_shape, parameter));
+    VLOG(2) << "reshape: " << flat->ToString();
 
-          // Pad the tensor to be a multiple of `replication_factor`.
-          Shape pad_shape =
-              ShapeUtil::MakeShape(cluster_input_shape.element_type(),
-                                   {cluster.GetAlignedClusterSize()});
+    // Pad the tensor to be a multiple of `replication_factor`.
+    Shape pad_shape = ShapeUtil::MakeShape(cluster_input_type,
+                                           {cluster.GetAlignedClusterSize()});
 
-          PaddingConfig padding_config;
-          std::size_t difference = ShapeUtil::ElementsIn(pad_shape) -
-                                   ShapeUtil::ElementsIn(flat->shape());
-          auto padding_config_dim = padding_config.add_dimensions();
-          padding_config_dim->set_edge_padding_high(difference);
-          padding_config_dim->set_edge_padding_low(0);
-          padding_config_dim->set_interior_padding(0);
+    PaddingConfig padding_config;
+    std::size_t difference =
+        ShapeUtil::ElementsIn(pad_shape) - ShapeUtil::ElementsIn(flat->shape());
+    auto padding_config_dim = padding_config.add_dimensions();
+    padding_config_dim->set_edge_padding_high(difference);
+    padding_config_dim->set_edge_padding_low(0);
+    padding_config_dim->set_interior_padding(0);
 
-          HloInstruction* pad =
-              cluster_comp->AddInstruction(HloInstruction::CreatePad(
-                  pad_shape, flat, zero_f, padding_config));
-          VLOG(2) << "pad: " << pad->ToString();
-          reshaped = cluster_comp->AddInstruction(
-              HloInstruction::CreateReshape(all_shards_shape, pad));
-        } else {
-          reshaped = cluster_comp->AddInstruction(
-              HloInstruction::CreateReshape(all_shards_shape, cluster_input));
-        }
-
-        HloInstruction* replica_id =
-            cluster_comp->AddInstruction(CreateReplicationIndex());
-
-        HloInstruction* zero_i =
-            cluster_comp->AddInstruction(HloInstruction::CreateConstant(
-                LiteralUtil::Zero(replica_id->shape().element_type())));
-
-        // Slice off this replica's storage elements.
-        Shape slice_shape = ShapeUtil::MakeShape(
-            cluster_input_shape.element_type(), {1, cluster.GetShardSize()});
-        HloInstruction* slice =
-            cluster_comp->AddInstruction(HloInstruction::CreateDynamicSlice(
-                slice_shape, reshaped, {replica_id, zero_i},
-                {1, cluster.GetShardSize()}));
-
-        // Squeeze off the outermost dimension.
-        Shape squeeze_shape = ShapeUtil::MakeShape(
-            cluster_input_shape.element_type(), {cluster.GetShardSize()});
-        cluster_input_slice = cluster_comp->AddInstruction(
-            HloInstruction::CreateReshape(squeeze_shape, slice));
-        VLOG(2) << "Input slice: " << cluster_input_slice->ToString();
-      } else {
-        VLOG(2) << "Reusing input slice: " << cluster_input_slice->ToString();
-      }
-      TF_RETURN_IF_ERROR(cluster_input->ReplaceUseWithDifferentShape(
-          inst, cluster_input_slice));
-    }
+    HloInstruction* pad = builder->AddInstruction(
+        HloInstruction::CreatePad(pad_shape, flat, zero_f, padding_config));
+    VLOG(2) << "pad: " << pad->ToString();
+    reshaped = builder->AddInstruction(
+        HloInstruction::CreateReshape(all_shards_shape, pad));
+  } else {
+    reshaped = builder->AddInstruction(
+        HloInstruction::CreateReshape(all_shards_shape, parameter));
   }
-  return Status::OK();
+
+  HloInstruction* replica_id =
+      builder->AddInstruction(CreateReplicationIndex());
+
+  HloInstruction* zero_i =
+      builder->AddInstruction(HloInstruction::CreateConstant(
+          LiteralUtil::Zero(replica_id->shape().element_type())));
+
+  // Slice off this replica's storage elements.
+  const Shape slice_shape =
+      ShapeUtil::MakeShape(cluster_input_type, {1, cluster.GetShardSize()});
+  HloInstruction* slice =
+      builder->AddInstruction(HloInstruction::CreateDynamicSlice(
+          slice_shape, reshaped, {replica_id, zero_i},
+          {1, cluster.GetShardSize()}));
+
+  HloInstruction* input_slice = builder->AddInstruction(
+      HloInstruction::CreateReshape(in_comp_shape, slice));
+
+  VLOG(2) << "Input slice: " << input_slice->ToString();
+  context->MapInstruction(cluster_input, input_slice);
+  return cluster_input;
 }
 
-Status RewriteClusterOutput(const ElementwiseCluster& cluster,
-                            int64 replication_factor, HloInstruction* inst,
-                            const std::vector<HloInstruction*>& outputs) {
-  HloComputation* cluster_comp = cluster.GetComputation();
+// For each output of the cluster, check its users.
+// If its user is store(shape(slice(shape(cluster)))), remove reshape and slice.
+// If its user is outside of cluster, do all-gather and reshape.
+// Returns the instruction which should be passed to the output tuple.
+StatusOr<HloInstruction*> AddClusterOutput(
+    const ElementwiseCluster& cluster, int64 replication_factor,
+    HloInstruction* cluster_output, std::vector<UserPositions>& inst_users,
+    HloComputation::Builder* builder, HloCloneContext* context) {
+  HloInstruction* in_cluster_output = context->GetInstruction(cluster_output);
+  if (IsScalar(cluster_output)) {
+    VLOG(2) << "Scalar output does not need rewriting: "
+            << cluster_output->ToString();
+    return in_cluster_output;
+  }
 
-  // Replace all users outside the cluster with the result of all-gather
-  HloInstruction* all_gather_reshaped = nullptr;
-  for (auto user : outputs) {
-    VLOG(2) << "Replace use of cluster instruction " << inst->ToString()
-            << " in " << user->ToString();
-    TF_ASSIGN_OR_RETURN(auto replaced_in_remote_store,
-                        ReplaceRemoteStoreArgumentWith(cluster, user, inst));
-    if (replaced_in_remote_store) {
-      VLOG(2) << "Replaced argument to RemoteParameterStore";
-    } else {
-      if (!all_gather_reshaped) {
-        auto inst_element_type = inst->shape().element_type();
-        auto output_shape = ShapeUtil::MakeShape(
-            inst_element_type, cluster.GetClusterDimensions());
-
-        // Create all gather and replace usage.
-        auto all_gather_shape = ShapeUtil::MakeShape(
-            inst_element_type, {replication_factor, cluster.GetShardSize()});
-        auto all_gather = cluster_comp->AddInstruction(
-            CreateAllGather({inst}, all_gather_shape));
-        if (all_gather_shape != output_shape) {
-          if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
-            Shape flat_cluster_shape = ShapeUtil::MakeShape(
-                inst_element_type, {cluster.GetClusterSize()});
-            Shape aligned_cluster_shape = ShapeUtil::MakeShape(
-                inst_element_type, {cluster.GetAlignedClusterSize()});
-            HloInstruction* flat_all_gather =
-                cluster_comp->AddInstruction(HloInstruction::CreateReshape(
-                    aligned_cluster_shape, all_gather));
-            HloInstruction* slice =
-                cluster_comp->AddInstruction(HloInstruction::CreateSlice(
-                    flat_cluster_shape, flat_all_gather, {0},
-                    {cluster.GetClusterSize()}, {1}));
-            VLOG(2) << "Slicing padding, slice: " << slice->ToString();
-            all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(output_shape, slice));
-          } else {
-            all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(output_shape, all_gather));
-          }
-        } else {
-          all_gather_reshaped = all_gather;
-        }
-        VLOG(2) << "All gather instuction: " << all_gather->name()
-                << ", reshaped: " << all_gather_reshaped->name();
-      }
-      TF_RETURN_IF_ERROR(
-          inst->ReplaceUseWithDifferentShape(user, all_gather_reshaped));
-      VLOG(2) << "Replacement result " << user->ToString();
+  // Check whether the cluster is just being stored.
+  if (inst_users.size() == 1 &&
+      IsReplicatedParameterStore(inst_users[0].instruction)) {
+    HloInstruction* store_input = inst_users[0].instruction;
+    HloInstruction* store = store_input->users()[0];
+    if (store_input->shape().dimensions() == cluster.GetShardDimensions()) {
+      VLOG(2) << "Skipping the extra remote store fusion for "
+              << store->ToString();
+      // Reshape it so that it can be stored.
+      HloInstruction* reshape =
+          builder->AddInstruction(HloInstruction::CreateReshape(
+              store_input->shape(), in_cluster_output));
+      // Override the inst_users to be the parameter store instruction.
+      inst_users = {UserPositions{store, {1}}};
+      return reshape;
     }
   }
-  return Status::OK();
+
+  // Create all gather.
+  auto inst_element_type = cluster_output->shape().element_type();
+  const Shape all_gather_shape = ShapeUtil::MakeShape(
+      inst_element_type, {replication_factor, cluster.GetShardSize()});
+  HloInstruction* all_gather = builder->AddInstruction(
+      CreateAllGather({in_cluster_output}, all_gather_shape));
+
+  HloInstruction* output;
+  if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+    const Shape flat_cluster_shape =
+        ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
+    const Shape aligned_cluster_shape = ShapeUtil::MakeShape(
+        inst_element_type, {cluster.GetAlignedClusterSize()});
+
+    HloInstruction* flat_all_gather = builder->AddInstruction(
+        HloInstruction::CreateReshape(aligned_cluster_shape, all_gather));
+    HloInstruction* slice = builder->AddInstruction(
+        HloInstruction::CreateSlice(flat_cluster_shape, flat_all_gather, {0},
+                                    {cluster.GetClusterSize()}, {1}));
+    VLOG(2) << "Slicing padding, slice: " << slice->ToString();
+    output = builder->AddInstruction(
+        HloInstruction::CreateReshape(cluster_output->shape(), slice));
+  } else {
+    output = builder->AddInstruction(
+        HloInstruction::CreateReshape(cluster_output->shape(), all_gather));
+  }
+
+  VLOG(2) << "All gather instuction: " << all_gather->name()
+          << ", reshaped: " << output->name();
+  return output;
 }
 
 StatusOr<bool> RewriteCall(
@@ -470,7 +488,8 @@ bool ElementwiseCluster::Finalize(
   auto add_outputs = [this](HloInstruction* inst) {
     for (auto user : inst->users()) {
       if (!ContainsKey(insts_, user)) {
-        outputs_to_users_[inst].push_back(user);
+        outputs_to_users_[inst].push_back(
+            UserPositions{user, user->OperandIndices(inst)});
       }
     }
   };
@@ -559,7 +578,7 @@ const std::vector<HloInstruction*>& ElementwiseCluster::GetOutputs() const {
   return outputs_;
 }
 
-const std::vector<HloInstruction*>& ElementwiseCluster::GetUsersForOutput(
+const std::vector<UserPositions>& ElementwiseCluster::GetUsersForOutput(
     HloInstruction* inst) const {
   CHECK(finalized_);
   return outputs_to_users_.at(inst);
@@ -627,7 +646,7 @@ std::string ElementwiseCluster::ToString() const {
   for (auto inst : outputs_) {
     ss << "* " << inst->ToString() << " used by:\n";
     for (auto user : outputs_to_users_.at(inst)) {
-      ss << "  * " << user->ToString() << "\n";
+      ss << "  * " << user.ToString() << "\n";
     }
   }
   return ss.str();
@@ -868,44 +887,76 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
     return false;
   }
 
-  // For each input:
-  // Replace all-gather(remote-parameter-load)) with remote-parameter-load()
-  // Replace other inputs with dynamic-slice(input, replication-index)
+  HloComputation* cluster_comp = cluster.GetComputation();
+  HloModule* module = cluster_comp->parent();
+  HloCloneContext context(module);
+  HloComputation::Builder builder("elementwise_cluster");
+
+  // Add all the inputs to the computation and get the caller inputs.
+  std::vector<HloInstruction*> caller_inputs;
+  caller_inputs.reserve(cluster.GetInputs().size());
   for (auto cluster_input : cluster.GetInputs()) {
-    if (IsScalar(cluster_input)) {
-      VLOG(2) << "Scalar input does not need rewriting: "
-              << cluster_input->ToString();
-      continue;
-    }
-
-    TF_RETURN_IF_ERROR(
-        RewriteClusterInput(cluster, replication_factor, cluster_input));
+    TF_ASSIGN_OR_RETURN(
+        HloInstruction * comp_input,
+        AddClusterInput(caller_inputs.size(), cluster, replication_factor,
+                        cluster_input, &builder, &context));
+    caller_inputs.push_back(comp_input);
   }
 
-  // Change the shape of the cluster.
+  // Add all the instructions to the cluster.
   for (auto inst : cluster.GetPostOrder()) {
-    if (inst->opcode() == HloOpcode::kFusion) {
-      TF_RETURN_IF_ERROR(ChangeFusionShape(cluster, inst));
-    } else {
-      TF_RETURN_IF_ERROR(ChangeInstructionShape(cluster, inst));
-    }
+    TF_RETURN_IF_ERROR(
+        AddClusterInstruction(cluster, inst, &builder, &context));
   }
 
-  // Replacing outputs:
-  // For each instruction of the cluster, check its users.
-  // If its user is outside of cluster, do all-gather/reshape
-  // If its user is store(shape(slice(shape(cluster)))), remove reshape
-  // and slice.
-  for (auto cluster_output : cluster.GetOutputs()) {
-    if (IsScalar(cluster_output)) {
-      VLOG(2) << "Scalar output does not need rewriting: "
-              << cluster_output->ToString();
-      continue;
-    }
+  // Process all the outputs and get all the operands for the computation tuple
+  // output.
+  std::vector<HloInstruction*> computation_outputs;
 
-    TF_RETURN_IF_ERROR(
-        RewriteClusterOutput(cluster, replication_factor, cluster_output,
-                             cluster.GetUsersForOutput(cluster_output)));
+  // When rewriting outputs the computation output users can change - for
+  // example all-gathers can be elided.
+  HloInstructionMap<std::vector<UserPositions>> computation_output_users;
+  computation_outputs.reserve(cluster.GetOutputs().size());
+  for (auto cluster_output : cluster.GetOutputs()) {
+    std::vector<UserPositions> output_users =
+        cluster.GetUsersForOutput(cluster_output);
+
+    TF_ASSIGN_OR_RETURN(
+        HloInstruction * in_cluster_output,
+        AddClusterOutput(cluster, replication_factor, cluster_output,
+                         output_users, &builder, &context));
+
+    computation_outputs.push_back(in_cluster_output);
+    computation_output_users[cluster_output] = output_users;
+  }
+
+  // Create the root tuple with all the outputs and build the computation.
+  HloInstruction* cluster_output =
+      builder.AddInstruction(HloInstruction::CreateTuple(computation_outputs));
+  HloComputation* outlined_comp =
+      module->AddEmbeddedComputation(builder.Build(cluster_output));
+  HloInstruction* call =
+      cluster_comp->AddInstruction(HloInstruction::CreateCall(
+          cluster_output->shape(), caller_inputs, outlined_comp));
+
+  // Set call to be a function.
+  auto backend_config =
+      call->backend_config<PoplarBackendConfig>().ValueOrDie();
+  auto* call_config = backend_config.mutable_call_config();
+  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
+  TF_RETURN_IF_ERROR(call->set_backend_config(backend_config));
+
+  // Connect up all the users of the cluster output.
+  int64 output_idx = 0;
+  for (auto cluster_output : cluster.GetOutputs()) {
+    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                        MakeGetTupleElementHlo(call, output_idx++));
+    for (auto user : computation_output_users.at(cluster_output)) {
+      VLOG(2) << "Replacing " << user.ToString();
+      for (int64 index : user.indices) {
+        TF_RETURN_IF_ERROR(user.instruction->ReplaceOperandWith(index, gte));
+      }
+    }
   }
 
   return true;

@@ -28,6 +28,16 @@ class HloModule;
 
 namespace poplarplugin {
 
+struct UserPositions {
+  HloInstruction* instruction;
+  std::vector<int64> indices;
+
+  std::string ToString() const {
+    return absl::StrCat("UserPositions: ", instruction->name(), ":",
+                        absl::StrJoin(indices, ","));
+  }
+};
+
 class ElementwiseCluster {
  public:
   explicit ElementwiseCluster(HloInstruction* top) noexcept;
@@ -51,7 +61,7 @@ class ElementwiseCluster {
   const std::vector<HloInstruction*>& GetInputs() const;
   const std::vector<HloInstruction*>& GetPostOrder() const;
   const std::vector<HloInstruction*>& GetOutputs() const;
-  const std::vector<HloInstruction*>& GetUsersForOutput(
+  const std::vector<UserPositions>& GetUsersForOutput(
       HloInstruction* inst) const;
 
   // The dimensions of the operations in the cluster before it is partitioned.
@@ -76,7 +86,7 @@ class ElementwiseCluster {
   std::vector<HloInstruction*> inputs_vec_;
   std::vector<HloInstruction*> post_order_;
   std::vector<HloInstruction*> outputs_;
-  HloInstructionMap<std::vector<HloInstruction*>> outputs_to_users_;
+  HloInstructionMap<std::vector<UserPositions>> outputs_to_users_;
   std::vector<int64> cluster_dimensions_;
   std::vector<int64> shard_dimensions_;
   int64 cluster_size_;
