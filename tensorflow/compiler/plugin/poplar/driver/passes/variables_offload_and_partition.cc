@@ -95,7 +95,7 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
         element_type,
         {replication_factor, ShapeUtil::ElementsIn(load->shape())});
     HloInstruction* all_gather =
-        computation->AddInstruction(CreateAllGather(load, all_gather_shape));
+        computation->AddInstruction(CreateAllGather({load}, all_gather_shape));
 
     // If there's no padding, just reshape the tensor.
     if (ShapeUtil::ElementsIn(all_gather_shape) ==

@@ -27,8 +27,8 @@ namespace poplarplugin {
 
 class HloAllGatherInstruction : public HloPoplarInstruction {
  public:
-  explicit HloAllGatherInstruction(HloInstruction* input,
-                                   const Shape outputShape);
+  explicit HloAllGatherInstruction(std::vector<HloInstruction*> inputs,
+                                   const Shape& output_shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -48,8 +48,8 @@ class HloAllGatherInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateAllGather(HloInstruction* input,
-                                                const Shape& shape);
+std::unique_ptr<HloInstruction> CreateAllGather(
+    std::vector<HloInstruction*> inputs, const Shape& output_shape);
 
 }  // namespace poplarplugin
 }  // namespace xla
