@@ -39,8 +39,9 @@ class EntryVisitor : public DeferredVisitor {
   const poplar::program::Sequence GetSequenceAndInitializeCounters();
 
  protected:
-  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
-      const HloInstruction* inst) override;
+  Status AddSequenceForInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
   StatusOr<poplar::Tensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,

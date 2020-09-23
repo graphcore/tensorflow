@@ -91,24 +91,37 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   return Status::OK();
 }
 
-StatusOr<poplar::program::Sequence*>
-RepeatLoopVisitor::GetSequenceForInstruction(const HloInstruction* inst) {
+Status RepeatLoopVisitor::AddSequenceForInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
   switch (inst->opcode()) {
     case HloOpcode::kGetTupleElement: {
-      return IsResourceUpdate(inst->operand(0)) ? &resource_update_sequence_
-                                                : &sequence;
+      if (IsResourceUpdate(inst->operand(0))) {
+        resource_update_sequence_.add(seq);
+        return Status::OK();
+      }
+      break;
     }
     case HloOpcode::kTuple: {
-      return has_resource_update_ && inst->parent()->root_instruction() == inst
-                 ? &resource_update_sequence_
-                 : &sequence;
+      if (has_resource_update_ && inst->parent()->root_instruction() == inst) {
+        resource_update_sequence_.add(seq);
+        return Status::OK();
+      }
+      break;
     }
-    default: { return InplaceDeferredVisitor::GetSequenceForInstruction(inst); }
+    default:
+      break;
   }
+
+  return InplaceDeferredVisitor::AddSequenceForInstruction(inst, seq);
 }
 
-poplar::program::Sequence& RepeatLoopVisitor::GetSequenceForAliasingCopy() {
-  return has_resource_update_ ? resource_update_sequence_ : sequence;
+void RepeatLoopVisitor::AddSequenceForAliasingCopy(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  if (has_resource_update_) {
+    resource_update_sequence_.add(seq);
+  } else {
+    InplaceDeferredVisitor::AddSequenceForAliasingCopy(inst, seq);
+  }
 }
 
 poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(

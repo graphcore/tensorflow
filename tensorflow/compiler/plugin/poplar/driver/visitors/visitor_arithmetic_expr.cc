@@ -170,16 +170,19 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::Graph& graph = GetGraph(resources_, inst);
+  poplar::program::Sequence seq;
 
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
-  poplar::Tensor out = popops::map(graph, *expr, ts_, sequence,
-                                   GetDebugName(inst) + "_expression");
+  poplar::Tensor out =
+      popops::map(graph, *expr, ts_, seq, GetDebugName(inst) + "_expression");
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),
                                                     std::move(tensor_map));
+
+  TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
 
   return Status::OK();
 }
