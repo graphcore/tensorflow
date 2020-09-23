@@ -1158,47 +1158,57 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
   return program;
 }
 
-StatusOr<poplar::program::Sequence*> PipelineVisitor::GetSequenceForInstruction(
-    const HloInstruction* hlo) {
+Status PipelineVisitor::AddSequenceForInstruction(
+    const HloInstruction* hlo, const poplar::program::Sequence& seq) {
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   switch (hlo->opcode()) {
     case HloOpcode::kCall: {
       if (IsResourceUpdate(hlo)) {
-        return &resource_update_;
+        resource_update_.add(seq);
       } else {
-        return IsPipelineStageRecomputation(hlo)
-                   ? &recomputation_sequences_[stage]
-                   : &program_sequences_[stage];
+        if (IsPipelineStageRecomputation(hlo)) {
+          recomputation_sequences_[stage].add(seq);
+        } else {
+          program_sequences_[stage].add(seq);
+        }
       }
+      return Status::OK();
     }
     case HloOpcode::kGetTupleElement: {
       const HloInstruction* gte_input = hlo->operand(0);
       if (IsResourceUpdate(gte_input)) {
-        return &resource_update_;
+        resource_update_.add(seq);
       } else {
-        return IsPipelineStageRecomputation(gte_input)
-                   ? &recomputation_sequences_[stage]
-                   : &program_sequences_[stage];
+        if (IsPipelineStageRecomputation(gte_input)) {
+          recomputation_sequences_[stage].add(seq);
+        } else {
+          program_sequences_[stage].add(seq);
+        }
       }
+      return Status::OK();
     }
     case HloOpcode::kInfeed: {
-      return &infeed_sequences_[stage];
+      infeed_sequences_[stage].add(seq);
+      return Status::OK();
     }
     case HloOpcode::kParameter: {
-      return &program_sequences_[stage];
+      program_sequences_[stage].add(seq);
+      return Status::OK();
     }
     case HloOpcode::kTuple: {
       CHECK_EQ(hlo->parent()->root_instruction(), hlo);
-      return &resource_update_;
+      resource_update_.add(seq);
+      return Status::OK();
     }
     case HloOpcode::kCustomCall: {
       if (IsCreateBuffer()(hlo)) {
-        return &pipeline_write_undef_sequence_;
+        pipeline_write_undef_sequence_.add(seq);
+        return Status::OK();
       }
       TF_FALLTHROUGH_INTENDED;
     }
     default: {
-      return InternalErrorStrCat("Trying to get a sequence for ",
+      return InternalErrorStrCat("Trying to add a sequence for ",
                                  hlo->ToString(), " which is not supported.");
     }
   }
@@ -1613,8 +1623,9 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   return Status::OK();
 }
 
-poplar::program::Sequence& PipelineVisitor::GetSequenceForAliasingCopy() {
-  return resource_update_;
+void PipelineVisitor::AddSequenceForAliasingCopy(
+    const HloInstruction*, const poplar::program::Sequence& seq) {
+  resource_update_.add(seq);
 }
 
 std::unique_ptr<PipelineVisitor> ParallelPipelineVisitor::Create(

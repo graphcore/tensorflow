@@ -274,9 +274,9 @@ class DeferredVisitor : public FullVisitor {
   poplar::program::Sequence GetFunctionCall();
 
  protected:
-  // Returns the sequence to be used by the given instruction.
-  virtual StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
-      const HloInstruction* inst);
+  Status AddSequenceForInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
   // Get the inputs for a deferred instruction.
   StatusOr<DeferredArgRBVectors> GetInputsForDeferredInplaceRBInstruction(
@@ -430,9 +430,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   StatusOr<poplar::program::Sequence> GetPreambleCopies();
 
  protected:
-  // Given the flat tensor index, get the sequence the copy should be inserted
-  // into.
-  virtual poplar::program::Sequence& GetSequenceForAliasingCopy();
+  // Add the given sequence to the correct sequence for aliasing copies.
+  virtual void AddSequenceForAliasingCopy(const HloInstruction* inst,
+                                          const poplar::program::Sequence& seq);
 
   // Given an output flat index get the corresponding parameter number and flat
   // index.
