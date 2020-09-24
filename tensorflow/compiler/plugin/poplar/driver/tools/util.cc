@@ -323,6 +323,12 @@ bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
          IsPopOpsFusion(inst->fused_instructions_computation(), postfix);
 }
 
+bool IsFusion(const HloInstruction* inst, const std::string& name) {
+  return inst->opcode() == HloOpcode::kFusion &&
+         IsFusionComputationWithPrefix(inst->fused_instructions_computation(),
+                                       name);
+}
+
 bool IsArithmeticExpressionFusion(const HloComputation* comp) {
   return IsFusionComputationWithPrefix(comp, "_arithmetic_expression");
 }

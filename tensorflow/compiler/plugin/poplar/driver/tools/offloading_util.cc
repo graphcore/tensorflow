@@ -14,12 +14,60 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+constexpr char kReplicatedParameterLoadFusionName[] =
+    "_pop_replicated_parameter_load_fusion";
+constexpr char kReplicatedParameterStoreFusionName[] =
+    "_pop_replicated_parameter_store_fusion";
+}  // namespace
+
+std::string GetReplicatedParameterLoadFusionName() {
+  return kReplicatedParameterLoadFusionName;
+}
+
+std::string GetReplicatedParameterStoreFusionName() {
+  return kReplicatedParameterStoreFusionName;
+}
+
+bool IsReplicatedParameterLoadFusion(const HloInstruction* inst) {
+  return IsFusion(inst, kReplicatedParameterLoadFusionName);
+}
+
+bool IsReplicatedParameterStoreFusion(const HloInstruction* inst) {
+  return IsFusion(inst, kReplicatedParameterStoreFusionName);
+}
+
+bool IsReplicatedParameterLoad(const HloInstruction* inst) {
+  return IsReplicatedParameterLoadFusion(inst) &&
+         IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst->operand(0));
+}
+
+bool IsReplicatedParameterStore(const HloInstruction* inst) {
+  return IsReplicatedParameterStoreFusion(inst) && inst->user_count() == 1 &&
+         IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst->users()[0]);
+}
+
+const Shape GetReplicatedParameterLoadFusionAllGatherShape(
+    const HloInstruction* inst) {
+  CHECK(IsReplicatedParameterLoadFusion(inst));
+  const HloComputation* comp = inst->fused_instructions_computation();
+  const HloInstruction* parameter = comp->parameter_instruction(0);
+  CHECK_EQ(parameter->user_count(), 1);
+  const HloInstruction* user = parameter->users()[0];
+  CHECK(IsPoplarInstruction(PoplarOp::AllGather)(user));
+  return user->shape();
+}
+
 Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
                                HloInstruction** store) {
   if (inst->user_count() != 2) {

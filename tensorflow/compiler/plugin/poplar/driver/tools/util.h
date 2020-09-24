@@ -128,6 +128,7 @@ StatusOr<std::vector<NativeT>> WideConstToNativeType(
 bool IsInstructionInEntryComputation(const HloInstruction*);
 bool IsPopOpsFusion(const HloComputation*, const std::string& postfix = "");
 bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
+bool IsFusion(const HloInstruction*, const std::string& name);
 bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
