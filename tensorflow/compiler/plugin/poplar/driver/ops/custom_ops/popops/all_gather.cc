@@ -122,7 +122,7 @@ class AllGatherOp : public PoplarOpDef {
 
       // all gather the concatenated tensor.
       poplar::Tensor output =
-          gcl::allGather(graph, input, seq, GetDebugName(inst),
+          gcl::allGather(GetMasterGraph(res), input, seq, GetDebugName(inst),
                          GetReplicatedCollectiveOptions(res));
 
       // Work out what each sub-tensor's element count is.
