@@ -65,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_buffers_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
@@ -140,6 +141,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -1157,6 +1159,13 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();
+    {
+      auto inline_fusion = [](const HloInstruction* inst) {
+        return IsReplicatedParameterLoadFusion(inst) ||
+               IsReplicatedParameterStoreFusion(inst);
+      };
+      pipeline.AddPass<FusionInliner>(inline_fusion);
+    }
     pipeline.AddPass<ResourceUpdateElementwiseClustering>(
         resources.replication_factor);
     pipeline.AddPass<HloDCE>();

@@ -15,6 +15,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_OFFLOADING_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_OFFLOADING_UTIL_H_
 
+#include <string>
+
+#include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/core/lib/core/status.h"
@@ -22,7 +25,14 @@ limitations under the License.
 namespace xla {
 class HloInstruction;
 namespace poplarplugin {
-
+std::string GetReplicatedParameterLoadFusionName();
+std::string GetReplicatedParameterStoreFusionName();
+const Shape GetReplicatedParameterLoadFusionAllGatherShape(
+    const HloInstruction*);
+bool IsReplicatedParameterLoadFusion(const HloInstruction*);
+bool IsReplicatedParameterStoreFusion(const HloInstruction*);
+bool IsReplicatedParameterLoad(const HloInstruction*);
+bool IsReplicatedParameterStore(const HloInstruction*);
 // Given an instruction, get its load and store users.
 Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
                                HloInstruction** store);

@@ -19,9 +19,11 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -344,6 +346,13 @@ TEST_P(ResourceUpdateElementwiseClusteringTest, DoTest) {
       VariablesOffloadAndPartition(annotations, true, 0, replication_factor)
           .Run(module.get()));
   EXPECT_TRUE(offloaded);
+  TF_ASSERT_OK_AND_ASSIGN(bool inlined,
+                          FusionInliner([](const HloInstruction* inst) {
+                            return IsReplicatedParameterLoadFusion(inst) ||
+                                   IsReplicatedParameterStoreFusion(inst);
+                          })
+                              .Run(module.get()));
+  EXPECT_TRUE(inlined);
 
   if (param.cluster) {
     TF_ASSERT_OK_AND_ASSIGN(

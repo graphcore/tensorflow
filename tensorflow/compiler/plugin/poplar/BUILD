@@ -171,6 +171,7 @@ cc_library(
         "driver/passes/fuse_ops_early.cc",
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
+        "driver/passes/fusion_inliner.cc",
         "driver/passes/gather_simplifier.cc",
         "driver/passes/gradient_accumulation_buffers_offload.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
@@ -328,6 +329,7 @@ cc_library(
         "driver/passes/fuse_ops_early.h",
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
+        "driver/passes/fusion_inliner.h",
         "driver/passes/gather_simplifier.h",
         "driver/passes/gradient_accumulation_buffers_offload.h",
         "driver/passes/gradient_accumulation_fuser.h",
@@ -2953,6 +2955,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "fusion_inliner_test",
+    srcs = ["tests/fusion_inliner_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4566,6 +4581,7 @@ test_suite(
         "fuse_ops_test",
         "fuse_wide_const_test",
         "fused_batch_norm_test",
+        "fusion_inliner_test",
         "gather_simplifier_embedding_lookup_test",
         "gradient_accumulation_buffers_offload_test",
         "gradient_accumulation_fuser_test",

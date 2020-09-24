@@ -55,7 +55,7 @@ namespace {
  * Insert instruction sequence to load gather all the elements of the remote
  * tensor from all replicas.
  *
- * We expect the resulting program to look like this:
+ * We expect the resulting program to insert a fusion which looks like this:
  * // pretend this is the "true" shape ignoring partitioning
  * remote_buffer = param(0) : f32[3, 5, 7]
  *
@@ -71,6 +71,8 @@ namespace {
  *
  * // reshape back to the "true" shape
  * e = reshape(d), shape=[3, 5, 7] : f32[3, 5, 7]
+ *
+ * This fusion will be either elided or inlined by other passes.
  *
  * @param computation The computation to add the instructions to.
  * @param parameter The parameter instruction to be loaded and gathered.
@@ -88,39 +90,53 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
 
   HloInstruction* replicated_load = load;
   if (replication_factor > 1) {
-    PrimitiveType element_type = load->shape().element_type();
+    HloModule* module = computation->parent();
+    HloComputation::Builder builder(GetReplicatedParameterLoadFusionName());
 
+    HloInstruction* load_parameter =
+        builder.AddInstruction(HloInstruction::CreateParameter(
+            0, load->shape(), "parameter_" + load->name()));
+
+    PrimitiveType element_type = load->shape().element_type();
     // All-gather from the replicas.
     Shape all_gather_shape = ShapeUtil::MakeShape(
         element_type,
         {replication_factor, ShapeUtil::ElementsIn(load->shape())});
-    HloInstruction* all_gather =
-        computation->AddInstruction(CreateAllGather({load}, all_gather_shape));
+    HloInstruction* all_gather = builder.AddInstruction(
+        CreateAllGather({load_parameter}, all_gather_shape));
 
+    HloInstruction* output;
     // If there's no padding, just reshape the tensor.
     if (ShapeUtil::ElementsIn(all_gather_shape) ==
         ShapeUtil::ElementsIn(load->operand(0)->shape())) {
       // Reshape back to the user shape.
-      replicated_load = computation->AddInstruction(
+      output = builder.AddInstruction(
           HloInstruction::CreateReshape(load->operand(0)->shape(), all_gather));
     } else {
       // Flatten the tensor.
       Shape flat_shape = ShapeUtil::MakeShape(
           element_type, {ShapeUtil::ElementsIn(all_gather->shape())});
-      HloInstruction* reshape = computation->AddInstruction(
+      HloInstruction* reshape = builder.AddInstruction(
           HloInstruction::CreateReshape(flat_shape, all_gather));
 
       // Slice off the padding.
       Shape slice_shape = ShapeUtil::MakeShape(
           element_type, {ShapeUtil::ElementsIn(load->operand(0)->shape())});
       HloInstruction* slice =
-          computation->AddInstruction(HloInstruction::CreateSlice(
+          builder.AddInstruction(HloInstruction::CreateSlice(
               slice_shape, reshape, {0},
               {ShapeUtil::ElementsIn(load->operand(0)->shape())}, {1}));
       // Reshape back to the user shape.
-      replicated_load = computation->AddInstruction(
+      output = builder.AddInstruction(
           HloInstruction::CreateReshape(load->operand(0)->shape(), slice));
     }
+
+    // Build the fusion.
+    HloComputation* fusion_comp =
+        module->AddEmbeddedComputation(builder.Build(output));
+    replicated_load = computation->AddInstruction(HloInstruction::CreateFusion(
+        output->shape(), HloInstruction::FusionKind::kCustom, {load},
+        fusion_comp));
   }
 
   // Replace all users of the input, except load instructions.
@@ -153,6 +169,13 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
     HloComputation* computation, HloInstruction* remote_buffer,
     HloInstruction* to_store, int64 replication_factor) {
   if (replication_factor > 1) {
+    HloModule* module = computation->parent();
+    HloComputation::Builder builder(GetReplicatedParameterStoreFusionName());
+
+    HloInstruction* to_store_parameter =
+        builder.AddInstruction(HloInstruction::CreateParameter(
+            0, to_store->shape(), "parameter_" + to_store->name()));
+
     PrimitiveType element_type = to_store->shape().element_type();
     const int64 grain_size =
         4 / ShapeUtil::ByteSizeOfPrimitiveType(element_type);
@@ -165,16 +188,17 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
                 ShapeUtil::ElementsIn(to_store->shape()), grain_size),
             replication_factor);
 
+    HloInstruction* output = to_store_parameter;
     // Add padding, if it is needed
     if ((ShapeUtil::ElementsIn(to_store->shape()) % replication_factor) != 0) {
-      HloInstruction* zero_f = computation->AddInstruction(
+      HloInstruction* zero_f = builder.AddInstruction(
           HloInstruction::CreateConstant(LiteralUtil::Zero(element_type)));
 
       // Flatten the incoming tensor
       Shape flat_shape = ShapeUtil::MakeShape(
           element_type, {ShapeUtil::ElementsIn(to_store->shape())});
-      HloInstruction* flat = computation->AddInstruction(
-          HloInstruction::CreateReshape(flat_shape, to_store));
+      HloInstruction* flat = builder.AddInstruction(
+          HloInstruction::CreateReshape(flat_shape, to_store_parameter));
 
       // Pad the tensor to be a multiple of `replication_factor`.
       Shape pad_shape = ShapeUtil::MakeShape(
@@ -188,32 +212,39 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
       padding_config_dim->set_edge_padding_low(0);
       padding_config_dim->set_interior_padding(0);
 
-      to_store = computation->AddInstruction(
+      output = builder.AddInstruction(
           HloInstruction::CreatePad(pad_shape, flat, zero_f, padding_config));
     }
 
     // Reshape to the storage shape.
     Shape store_shape =
         ShapeUtil::MakeShape(element_type, {replication_factor, element_count});
-    HloInstruction* reshaped = computation->AddInstruction(
-        HloInstruction::CreateReshape(store_shape, to_store));
+    HloInstruction* reshaped = builder.AddInstruction(
+        HloInstruction::CreateReshape(store_shape, output));
 
     HloInstruction* replica_id =
-        computation->AddInstruction(CreateReplicationIndex());
+        builder.AddInstruction(CreateReplicationIndex());
     HloInstruction* zero_i =
-        computation->AddInstruction(HloInstruction::CreateConstant(
+        builder.AddInstruction(HloInstruction::CreateConstant(
             LiteralUtil::Zero(replica_id->shape().element_type())));
 
     // Slice off this replica's storage elements.
     Shape slice_shape = ShapeUtil::MakeShape(element_type, {1, element_count});
     HloInstruction* slice =
-        computation->AddInstruction(HloInstruction::CreateDynamicSlice(
+        builder.AddInstruction(HloInstruction::CreateDynamicSlice(
             slice_shape, reshaped, {replica_id, zero_i}, {1, element_count}));
 
     // Squeeze off the outermost dimension.
     Shape squeeze_shape = ShapeUtil::MakeShape(element_type, {element_count});
-    to_store = computation->AddInstruction(
+    output = builder.AddInstruction(
         HloInstruction::CreateReshape(squeeze_shape, slice));
+
+    // Build the fusion.
+    HloComputation* fusion_comp =
+        module->AddEmbeddedComputation(builder.Build(output));
+    to_store = computation->AddInstruction(HloInstruction::CreateFusion(
+        output->shape(), HloInstruction::FusionKind::kCustom, {to_store},
+        fusion_comp));
   }
 
   HloInstruction* remote_store =
