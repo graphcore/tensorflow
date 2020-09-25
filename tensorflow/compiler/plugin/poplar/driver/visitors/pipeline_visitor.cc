@@ -1214,6 +1214,13 @@ Status PipelineVisitor::AddSequenceForInstruction(
   }
 }
 
+Status PipelineVisitor::AddSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence&) {
+  return UnimplementedStrCat(
+      "Sequence grouping not implemented in the PipelineVisitor: ",
+      inst->ToString());
+}
+
 Status PipelineVisitor::HandleNotImplemented(HloInstruction* hlo) {
   return xla::Unimplemented(
       "%s (%s) is not a valid pipeline stage Hlo instruction",

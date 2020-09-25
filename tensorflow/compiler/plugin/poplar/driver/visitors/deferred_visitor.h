@@ -388,7 +388,6 @@ class DeferredVisitor : public FullVisitor {
   absl::optional<poplar::Function> function_;
 
   const bool allocate_all_input_tensors_;
-  poplar::program::Sequence merged_infeed_sequence;
 };
 
 using ReallocateInputsInfo = std::vector<std::vector<bool>>;
