@@ -387,9 +387,40 @@ ExecutionCounters& BaseVisitor::GetExecutionCounters() {
 }
 
 Status BaseVisitor::AddSequenceForInstruction(
-    const HloInstruction*, const poplar::program::Sequence& seq) {
-  sequence_.add(seq);
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  if (grouped_sequence_indices_.find(inst) != grouped_sequence_indices_.end()) {
+    return FailedPrecondition("Already started grouping sequences for %s",
+                              inst->ToString().c_str());
+  }
+
+  sequences_.push_back(seq);
   return Status::OK();
+}
+
+Status BaseVisitor::AddSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  // If we have seen this instruction before, add to its existing sequence.
+  auto found = grouped_sequence_indices_.find(inst);
+  if (found != grouped_sequence_indices_.end()) {
+    const auto index = found->second;
+    CHECK_LT(index, sequences_.size());
+    sequences_[index].add(seq);
+    return Status::OK();
+  }
+
+  // Otherwise add a new one and record its index.
+  const auto new_index = sequences_.size();
+  sequences_.push_back(seq);
+  CHECK(grouped_sequence_indices_.emplace(inst, new_index).second);
+  return Status::OK();
+}
+
+poplar::program::Sequence BaseVisitor::GetRawSequence() const {
+  poplar::program::Sequence result;
+  for (const auto& s : sequences_) {
+    result.add(s);
+  }
+  return result;
 }
 
 poplar::program::Sequence BaseVisitor::GetSequence(
@@ -398,12 +429,13 @@ poplar::program::Sequence BaseVisitor::GetSequence(
     poplar::program::Sequence seq;
     TF_CHECK_OK(
         CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
-    seq.add(sequence_);
+    seq.add(GetRawSequence());
     return seq;
   } else {
     CHECK(execution_counters_.Initialized());
-    return sequence_;
+    return GetRawSequence();
   }
 }
+
 }  // namespace poplarplugin
 }  // namespace xla

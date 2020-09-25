@@ -88,6 +88,20 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   return pipeline;
 }
 
+void GetProgramNamesFlattened(const Json::Value& json,
+                              std::vector<std::string>* out) {
+  for (const auto& program : json["programs"]) {
+    for (const auto& name : program.getMemberNames()) {
+      if (name == "Sequence") {
+        // Recurse.
+        GetProgramNamesFlattened(program[name], out);
+      } else {
+        out->push_back(name);
+      }
+    }
+  }
+}
+
 TEST_F(DeferredVisitorTest, TestDeferredAllocation) {
   const string& hlo_string = R"(
 
@@ -124,9 +138,9 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto arg = gte1->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -174,9 +188,9 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -229,9 +243,9 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
@@ -305,9 +319,10 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor fusion_0_input_one_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1, seq,
+                           false)
           .ValueOrDie();
   poplar::Tensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
@@ -329,8 +344,8 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   EXPECT_EQ(gte1, gte1_2->operand(0));
 
   poplar::Tensor fusion_1_input_one_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1, seq,
+                           false)
           .ValueOrDie();
   poplar::Tensor gte1_2_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_2)[0];
@@ -385,9 +400,9 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto infeed = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -688,6 +703,53 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   auto result_tuple = result.DecomposeTuple();
   // Expect correct value for the biases.
   EXPECT_EQ(result_tuple[4], LiteralUtil::CreateR1<float>({-103.2, 96.8}));
+}
+
+TEST_F(DeferredVisitorTest, TestGroupingOfStreamCopiesFromInfeed) {
+  const string& hlo_string = R"(
+
+HloModule module
+_pop_op_conv_biasadd (arg_0: f32[1,4,4,2], arg_1: f32[2]) -> f32[1,4,4,2] {
+  arg_0 = f32[1,4,4,2] parameter(0)
+  arg_1 = f32[2] parameter(1)
+  broadcast.6.clone = f32[1,4,4,2] broadcast(arg_1), dimensions={3}
+  ROOT add.7.clone = f32[1,4,4,2] add(arg_0, broadcast.6.clone)
+}
+
+ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
+  arg = f32[1,1,2,2] parameter(0)
+  after-all = token[] after-all()
+  infeed = ((f32[1,4,4,2], f32[2]), token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed5\"\002\001\001"
+  gte = (f32[1,4,4,2], f32[2]) get-tuple-element(((f32[1,4,4,2], f32[2]), token[]) infeed), index=0
+  gte0 = f32[1,4,4,2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=0
+  convolution.5 = f32[1,4,4,2] convolution(gte0, arg), window={size=1x1}, dim_labels=b01f_01io->b01f
+  gte1 = f32[2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=1
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+}
+)";
+  auto module = ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), /*merge_infeeds=*/true);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  const auto* entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  // Get and flatten the resulting sequence.
+  const auto seq = visitor.GetRawSequence();
+  std::ostringstream oss;
+  poplar::program::dumpProgram(GetMasterGraph(*resources.get()), seq, oss);
+  Json::Value json;
+  EXPECT_TRUE(Json::Reader().parse(oss.str().c_str(), json));
+  std::vector<std::string> program_names;
+  GetProgramNamesFlattened(json, &program_names);
+
+  // Check that the stream copies are grouped at the beginning, ready to be
+  // merged by Poplar.
+  ASSERT_GE(program_names.size(), 3);
+  EXPECT_EQ(program_names[0], "StreamCopy");
+  EXPECT_EQ(program_names[1], "StreamCopy");
+  EXPECT_EQ(program_names[2], "StreamCopy");
 }
 
 }  // namespace

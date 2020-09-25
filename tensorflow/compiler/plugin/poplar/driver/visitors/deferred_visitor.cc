@@ -260,8 +260,8 @@ Status DeferredVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const poplar::program::Sequence& seq) {
   if (inst->opcode() == HloOpcode::kInfeed &&
       resources_.merge_infeed_io_copies) {
-    merged_infeed_sequence.add(seq);
-    return Status::OK();
+    // Group all the copies for the infeed together in one sequence.
+    return BaseVisitor::AddSequenceGroupedByInstruction(inst, seq);
   } else {
     return FullVisitor::AddSequenceForInstruction(inst, seq);
   }
@@ -1140,7 +1140,6 @@ poplar::program::Sequence DeferredVisitor::GetSequence(
     TF_CHECK_OK(
         CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
   }
-  seq.add(merged_infeed_sequence);
   seq.add(FullVisitor::GetRawSequence());
   return seq;
 }

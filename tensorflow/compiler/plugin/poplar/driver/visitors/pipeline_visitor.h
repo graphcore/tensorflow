@@ -113,6 +113,10 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
 
+  Status AddSequenceGroupedByInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
+
   void AddSequenceForAliasingCopy(
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
