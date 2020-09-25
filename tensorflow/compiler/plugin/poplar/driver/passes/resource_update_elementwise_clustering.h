@@ -16,6 +16,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 
+#include <string>
+#include <vector>
+
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -24,6 +27,46 @@ namespace xla {
 class HloModule;
 
 namespace poplarplugin {
+
+class ElementwiseCluster {
+ public:
+  explicit ElementwiseCluster(HloInstruction* top) noexcept;
+  bool In(HloInstruction* inst) const;
+  bool AnyUserIn(HloInstruction* inst) const;
+  void Add(HloInstruction* inst);
+  bool MaybeAdd(HloInstruction* inst);
+  bool CanMerge(const ElementwiseCluster& other);
+  void Merge(const ElementwiseCluster& other);
+  const HloInstruction* GetTop() const;
+  HloComputation* GetComputation() const;
+  const Shape& GetShape() const;
+  std::string Dump() const;
+
+  // Finalize the cluster - no more instructions will be added. Returns whether
+  // this is a cluster which should be processed further.
+  bool Finalize();
+
+  // Following functions can be called once finalized.
+  std::string ToString() const;
+  const std::vector<HloInstruction*>& GetInputs() const;
+  const std::vector<HloInstruction*>& GetPostOrder() const;
+  const std::vector<HloInstruction*>& GetOutputs() const;
+  const std::vector<HloInstruction*>& GetUsersForOutput(
+      HloInstruction* inst) const;
+
+ private:
+  HloInstruction* top_;
+  Shape shape_;
+  HloInstructionSet insts_;
+  HloInstructionSet inputs_;
+  bool finalized_ = false;
+
+  // Populated once finalized.
+  std::vector<HloInstruction*> inputs_vec_;
+  std::vector<HloInstruction*> post_order_;
+  std::vector<HloInstruction*> outputs_;
+  HloInstructionMap<std::vector<HloInstruction*>> outputs_to_users_;
+};
 
 // Find and replace clusters of elementwise instructions, sharding resource
 // update computation across replicas. For each cluster, remove
