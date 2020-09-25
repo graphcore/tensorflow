@@ -73,10 +73,13 @@ bool IsAllGather(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::AllGather)(inst);
 }
 
-HloInstruction* GetReshapeAllGatherLoad(HloInstruction* inst,
-                                        int64* aligned_size = nullptr) {
+std::pair<HloInstruction*, int64> GetReshapeAllGatherLoadAndAlignedSize(
+    HloInstruction* inst) {
+  HloInstruction* remote_load = nullptr;
+  int64 aligned_size = -1;
+
   if (inst->opcode() != HloOpcode::kReshape) {
-    return nullptr;
+    return std::make_pair(remote_load, aligned_size);
   }
 
   auto all_gather = inst->mutable_operand(0);
@@ -90,25 +93,20 @@ HloInstruction* GetReshapeAllGatherLoad(HloInstruction* inst,
   }
 
   if (!IsAllGather(all_gather)) {
-    return nullptr;
+    return std::make_pair(remote_load, aligned_size);
   }
 
-  HloInstruction* remote_load;
-  auto gte = all_gather->mutable_operand(0);
-  if (gte->opcode() == HloOpcode::kGetTupleElement) {
-    remote_load = gte->mutable_operand(0);
-  } else {
-    remote_load = gte;
-  }
-
-  if (IsRemoteParameterLoad(remote_load)) {
-    if (aligned_size && reshape) {
-      *aligned_size = ShapeUtil::ElementsIn(reshape->shape());
+  if (IsRemoteParameterLoad(all_gather->mutable_operand(0))) {
+    remote_load = all_gather->mutable_operand(0);
+    if (reshape) {
+      aligned_size = ShapeUtil::ElementsIn(reshape->shape());
     }
-    return remote_load;
-  } else {
-    return nullptr;
   }
+  return std::make_pair(remote_load, aligned_size);
+}
+
+HloInstruction* GetReshapeAllGatherLoad(HloInstruction* inst) {
+  return GetReshapeAllGatherLoadAndAlignedSize(inst).first;
 }
 
 // Extract remote-parameter-store(reshape(dynamic-slice(reshape(inst),
@@ -168,19 +166,24 @@ StatusOr<bool> ReplaceRemoteStoreArgumentWith(HloInstruction* cluster_user,
   return true;
 }
 
-bool IsReshapeAllGatherLoad(HloInstruction* inst) {
-  return GetReshapeAllGatherLoad(inst);
+bool IsReshapeAllGatherLoad(const HloInstruction* inst) {
+  // TODO(T26769): Remove const cast here.
+  return GetReshapeAllGatherLoad(const_cast<HloInstruction*>(inst));
 }
 
-bool ValidClusterInput(HloInstruction* inst) {
+bool ValidClusterInput(const HloInstruction* inst) {
   return inst->IsConstant() || IsScalar(inst) || IsParameter(inst) ||
          IsAllReduce(inst) || IsReshapeAllGatherLoad(inst) ||
          IsReplicationNormalise(inst) || IsNonReplicatedParameterLoad(inst);
 }
 
-bool CanCluster(HloInstruction* inst, bool allow_inputs) {
+bool CanCluster(const HloInstruction* inst, bool allow_inputs) {
   if (allow_inputs && ValidClusterInput(inst)) {
     return true;
+  }
+
+  if (inst->HasSideEffect()) {
+    return false;
   }
 
   // This is explicit because scalars are reported as elementwise.
@@ -195,12 +198,13 @@ bool CanCluster(HloInstruction* inst, bool allow_inputs) {
     case HloOpcode::kCustomCall:
       return IsPopOpsElementwise(inst);
     default:
-      return inst->IsElementwise() && !inst->HasSideEffect();
+      return inst->IsElementwise();
   }
 }
 
-bool CanCluster(HloInstruction* inst, bool allow_inputs,
-                const absl::flat_hash_set<HloComputation*>& elementwise_comps) {
+bool CanCluster(
+    const HloInstruction* inst, bool allow_inputs,
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
   if (CanCluster(inst, allow_inputs)) {
     return true;
   }
@@ -244,18 +248,14 @@ Status ChangeFusionShape(HloInstruction* fusion, const Shape& old_shape,
   return Status::OK();
 }
 
-Status RewriteClusterInput(
-    const ElementwiseCluster& cluster, int64 aligned_cluster_size,
-    const Shape& shard_shape, int64 replication_factor,
-    HloInstruction* cluster_input,
-    absl::flat_hash_map<HloInstruction*, HloInstruction*>& input_slices) {
+Status RewriteClusterInput(const ElementwiseCluster& cluster,
+                           int64 replication_factor,
+                           HloInstruction* cluster_input) {
   HloComputation* cluster_comp = cluster.GetComputation();
-  int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
-  int64 shard_size = ShapeUtil::ElementsIn(shard_shape);
   // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
   // all-gather.
   HloInstruction* remote_load = GetReshapeAllGatherLoad(cluster_input);
-  if (remote_load && remote_load->shape() == shard_shape) {
+  if (remote_load && remote_load->shape() == cluster.GetShardShape()) {
     VLOG(2) << "Rewriting remote cluster input " << remote_load->ToString();
     const std::vector<HloInstruction*> insts = cluster.GetPostOrder();
     for (auto user : cluster_input->users()) {
@@ -274,16 +274,16 @@ Status RewriteClusterInput(
   VLOG(2) << "Rewriting cluster input " << cluster_input->ToString();
 
   auto cluster_input_shape = cluster_input->shape();
-  HloInstruction*& cluster_input_slice = input_slices[cluster_input];
+  HloInstruction* cluster_input_slice = nullptr;
   for (auto inst : cluster.GetPostOrder()) {
     if (inst->IsUserOf(cluster_input)) {
       if (!cluster_input_slice) {
         Shape all_shards_shape =
             ShapeUtil::MakeShape(cluster_input_shape.element_type(),
-                                 {replication_factor, shard_size});
+                                 {replication_factor, cluster.GetShardSize()});
 
         HloInstruction* reshaped;
-        if (cluster_size != aligned_cluster_size) {
+        if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
           HloInstruction* zero_f =
               cluster_comp->AddInstruction(HloInstruction::CreateConstant(
                   LiteralUtil::Zero(cluster_input_shape.element_type())));
@@ -297,8 +297,9 @@ Status RewriteClusterInput(
           VLOG(2) << "reshape: " << flat->ToString();
 
           // Pad the tensor to be a multiple of `replication_factor`.
-          Shape pad_shape = ShapeUtil::MakeShape(
-              cluster_input_shape.element_type(), {aligned_cluster_size});
+          Shape pad_shape =
+              ShapeUtil::MakeShape(cluster_input_shape.element_type(),
+                                   {cluster.GetAlignedClusterSize()});
 
           PaddingConfig padding_config;
           std::size_t difference = ShapeUtil::ElementsIn(pad_shape) -
@@ -328,14 +329,15 @@ Status RewriteClusterInput(
 
         // Slice off this replica's storage elements.
         Shape slice_shape = ShapeUtil::MakeShape(
-            cluster_input_shape.element_type(), {1, shard_size});
+            cluster_input_shape.element_type(), {1, cluster.GetShardSize()});
         HloInstruction* slice =
             cluster_comp->AddInstruction(HloInstruction::CreateDynamicSlice(
-                slice_shape, reshaped, {replica_id, zero_i}, {1, shard_size}));
+                slice_shape, reshaped, {replica_id, zero_i},
+                {1, cluster.GetShardSize()}));
 
         // Squeeze off the outermost dimension.
         Shape squeeze_shape = ShapeUtil::MakeShape(
-            cluster_input_shape.element_type(), {shard_size});
+            cluster_input_shape.element_type(), {cluster.GetShardSize()});
         cluster_input_slice = cluster_comp->AddInstruction(
             HloInstruction::CreateReshape(squeeze_shape, slice));
         VLOG(2) << "Input slice: " << cluster_input_slice->ToString();
@@ -350,14 +352,9 @@ Status RewriteClusterInput(
 }
 
 Status RewriteClusterOutput(const ElementwiseCluster& cluster,
-                            int64 aligned_cluster_size,
-                            const Shape& shard_shape, int64 replication_factor,
-                            HloInstruction* inst,
+                            int64 replication_factor, HloInstruction* inst,
                             const std::vector<HloInstruction*>& outputs) {
   HloComputation* cluster_comp = cluster.GetComputation();
-  int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
-  int64 shard_size = ShapeUtil::ElementsIn(shard_shape);
-
   HloInstruction* all_gather_reshaped = nullptr;
   // Replace all users outside the cluster with the result of all-gather
   for (auto user : outputs) {
@@ -365,35 +362,40 @@ Status RewriteClusterOutput(const ElementwiseCluster& cluster,
             << " in " << user->ToString();
     TF_ASSIGN_OR_RETURN(
         auto replaced_in_remote_store,
-        ReplaceRemoteStoreArgumentWith(user, inst, shard_shape));
+        ReplaceRemoteStoreArgumentWith(user, inst, cluster.GetShardShape()));
     if (replaced_in_remote_store) {
       VLOG(2) << "Replaced argument to RemoteParameterStore";
-    } else if (user->shape() != shard_shape) {
+    } else if (user->shape() != cluster.GetShardShape()) {
       if (!all_gather_reshaped) {
         // Create all gather and replace usage
         auto all_gather_shape =
-            ShapeUtil::MakeShape(cluster.GetShape().element_type(),
-                                 {replication_factor, shard_size});
+            ShapeUtil::MakeShape(cluster.GetClusterShape().element_type(),
+                                 {replication_factor, cluster.GetShardSize()});
         auto all_gather = cluster_comp->AddInstruction(
             CreateAllGather({inst}, all_gather_shape));
-        if (all_gather_shape != cluster.GetShape()) {
-          if (cluster_size != aligned_cluster_size) {
-            Shape flat_cluster_shape = ShapeUtil::MakeShape(
-                cluster.GetShape().element_type(), {cluster_size});
-            Shape aligned_cluster_shape = ShapeUtil::MakeShape(
-                cluster.GetShape().element_type(), {aligned_cluster_size});
+        if (all_gather_shape != cluster.GetClusterShape()) {
+          if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+            Shape flat_cluster_shape =
+                ShapeUtil::MakeShape(cluster.GetClusterShape().element_type(),
+                                     {cluster.GetClusterSize()});
+            Shape aligned_cluster_shape =
+                ShapeUtil::MakeShape(cluster.GetClusterShape().element_type(),
+                                     {cluster.GetAlignedClusterSize()});
             HloInstruction* flat_all_gather =
                 cluster_comp->AddInstruction(HloInstruction::CreateReshape(
                     aligned_cluster_shape, all_gather));
-            HloInstruction* slice = cluster_comp->AddInstruction(
-                HloInstruction::CreateSlice(flat_cluster_shape, flat_all_gather,
-                                            {0}, {cluster_size}, {1}));
+            HloInstruction* slice =
+                cluster_comp->AddInstruction(HloInstruction::CreateSlice(
+                    flat_cluster_shape, flat_all_gather, {0},
+                    {cluster.GetClusterSize()}, {1}));
             VLOG(2) << "Slicing padding, slice: " << slice->ToString();
-            all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(cluster.GetShape(), slice));
+            all_gather_reshaped =
+                cluster_comp->AddInstruction(HloInstruction::CreateReshape(
+                    cluster.GetClusterShape(), slice));
           } else {
-            all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(cluster.GetShape(), all_gather));
+            all_gather_reshaped =
+                cluster_comp->AddInstruction(HloInstruction::CreateReshape(
+                    cluster.GetClusterShape(), all_gather));
           }
         } else {
           all_gather_reshaped = all_gather;
@@ -411,8 +413,8 @@ Status RewriteClusterOutput(const ElementwiseCluster& cluster,
 
 StatusOr<bool> RewriteResourceUpdate(
     HloModule* module, HloInstruction* resource_update_inst,
-    const absl::flat_hash_set<HloComputation*>& elementwise_comps,
-    int64 replication_factor) {
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
+    uint32 replication_factor) {
   HloComputation* resource_update = resource_update_inst->to_apply();
   auto offload_variables =
       GetResourceUpdatePartitionOffloadedVariables(resource_update_inst);
@@ -421,195 +423,28 @@ StatusOr<bool> RewriteResourceUpdate(
     return false;
   }
 
-  std::list<ElementwiseCluster> clusters;
-
-  // Going back post-order growing a tree of elementwise instruction.
-  // For each new elementwise instruction, check if any of its users are already
-  // in the cluster. If it's true, add it to the cluster.
-  //
-  // Example:
-  //
-  // ROOT r = tuple(fusion.1, fusion.2)
-  // Ignoring, not elementwise
-  //
-  // fusion.1 = fusion(add.1, const.1)
-  // Check that fused computation is elementwise, creating cluster #1 with top
-  // at fusion.1. Add inputs [add.1, const.1]
-  //
-  // add.1 = add(arg0, arg1)
-  // add.1 is among cluster #1 inputs, adding to the cluster, removing input of
-  // add.1, inputs are [arg0, arg1], result inputs: [arg0, arg1, const.1]
-  //
-  // fusion.2 = fusion(add.2, const.1)
-  // Not a use of existing cluster, create cluster #2, adding inputs [add.2,
-  // const.1]
-  //
-  // add.2 = add(arg0, broadcast.1)
-  // Used in cluster #2, adding to cluster, removing add.2 from inputs, inputs
-  // are [arg0, const.1, broadcast.1]
-  //
-  // broadcast.1 = broadcast(const.2)
-  // Used in cluster #2, removing from inputs, inputs are [arg0, const.1]
-
-  auto resource_update_insts = resource_update->MakeInstructionPostOrder();
-  absl::c_reverse(resource_update_insts);
-  for (auto inst : resource_update_insts) {
-    bool can_cluster =
-        CanCluster(inst, /*allow_inputs=*/false, elementwise_comps);
-    if (can_cluster) {
-      VLOG(2) << "Found elementwise instruction: " << inst->ToString();
-      bool added = false;
-      for (auto& cluster : clusters) {
-        if (cluster.MaybeAdd(inst)) {
-          VLOG(2) << "Added to cluster with top "
-                  << cluster.GetTop()->ToString();
-          added = true;
-          break;
-        }
-      }
-      if (!added) {
-        VLOG(2) << "Creating cluster with top " << inst->ToString();
-        clusters.emplace_back(inst);
-      }
-    }
-  }
-
-  bool clusters_merged;
-  do {
-    VLOG(2) << "Merging clusters...";
-    clusters_merged = false;
-    for (auto i = clusters.begin(); !clusters_merged && i != clusters.end();
-         ++i) {
-      ElementwiseCluster& a = *i;
-      for (auto j = std::next(i); j != clusters.end(); ++j) {
-        ElementwiseCluster& b = *j;
-        if (a.CanMerge(b)) {
-          VLOG(2) << "Cluster " << b.GetTop()->name()
-                  << " could be merged in cluster " << a.GetTop()->name();
-          a.Merge(b);
-          clusters.erase(j);
-          clusters_merged = true;
-          break;
-        } else if (b.CanMerge(a)) {
-          VLOG(2) << "Cluster " << a.GetTop()->name()
-                  << " could be merged in cluster " << b.GetTop()->name();
-          b.Merge(a);
-          clusters.erase(i);
-          clusters_merged = true;
-          break;
-        }
-      }
-    }
-  } while (clusters_merged);
-
-  for (auto it = clusters.begin(); it != clusters.end();) {
-    auto& cluster = *it;
-    if (cluster.Finalize()) {
-      VLOG(2) << "Found cluster suitable for replication (all inputs valid):";
-      XLA_VLOG_LINES(2, cluster.ToString());
-      ++it;
-    } else {
-      VLOG(2) << "Invalid cluster:";
-      XLA_VLOG_LINES(2, cluster.Dump());
-      it = clusters.erase(it);
-    }
-  }
+  std::list<ElementwiseCluster> clusters =
+      ResourceUpdateElementwiseClustering::GetClustersIn(resource_update,
+                                                         elementwise_comps);
 
   if (clusters.empty()) {
     VLOG(2) << "No clusters found.";
     return false;
   }
 
-  absl::flat_hash_map<HloInstruction*, HloInstruction*> input_slices;
-  bool changed;
-
-  VLOG(2) << "Clustering with factor " << replication_factor;
+  bool changed = false;
   for (auto& cluster : clusters) {
-    VLOG(2) << "Rewriting cluster with top in " << cluster.GetTop()->ToString()
-            << ", " << cluster.GetPostOrder().size() << " instructions...";
-    HloComputation* cluster_comp = cluster.GetComputation();
-    int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
-    int64 aligned_cluster_size = cluster_size;
-
-    // Going through remote inputs and determine shard size from
-    // remote-parameter-load instruction. Also check that all shapes match.
-    absl::optional<Shape> shard_shape_opt;
-    for (auto cluster_input : cluster.GetInputs()) {
-      auto remote_load =
-          GetReshapeAllGatherLoad(cluster_input, &aligned_cluster_size);
-      if (!remote_load) {
-        continue;
-      }
-      auto shard_size = ShapeUtil::ElementsIn(remote_load->shape());
-      if (!shard_shape_opt) {
-        shard_shape_opt = remote_load->shape();
-      } else if (remote_load->shape() != *shard_shape_opt) {
-        return InternalErrorStrCat(
-            "Cluster input shapes mismatch: ", remote_load->shape().ToString(),
-            " vs ", shard_shape_opt->ToString());
-      }
-    }
-
-    if (!shard_shape_opt) {
-      VLOG(2) << "No remote buffers in cluster.";
-      continue;
-    }
-
-    const Shape& shard_shape = *shard_shape_opt;
-    auto shard_size = ShapeUtil::ElementsIn(shard_shape);
-
-    VLOG(2) << "Cluster shard shape is " << shard_shape.ToString()
-            << ", cluster shape is " << cluster.GetShape().ToString();
-
-    if (shard_size * replication_factor != aligned_cluster_size) {
-      VLOG(2) << "Cluster shape and replica shape don't match " << shard_size
-              << " vs " << cluster_size << "(" << aligned_cluster_size << ")";
-      continue;
-    }
-
-    // Change the shape of the cluster.
-    for (auto inst : cluster.GetPostOrder()) {
-      if (inst->opcode() == HloOpcode::kFusion) {
-        TF_RETURN_IF_ERROR(
-            ChangeFusionShape(inst, cluster.GetShape(), shard_shape));
-      } else {
-        TF_RETURN_IF_ERROR(
-            ChangeInstructionShape(inst, cluster.GetShape(), shard_shape));
-      }
-    }
-
-    // For each input:
-    // Replace all-gather(remote-parameter-load)) with remote-parameter-load()
-    // Replace other inputs with dynamic-slice(input, replication-index)
-    for (auto cluster_input : cluster.GetInputs()) {
-      if (IsScalar(cluster_input)) {
-        VLOG(2) << "Ignoring scalar: " << cluster_input->ToString();
-        continue;
-      }
-
-      TF_RETURN_IF_ERROR(RewriteClusterInput(cluster, aligned_cluster_size,
-                                             shard_shape, replication_factor,
-                                             cluster_input, input_slices));
-    }
-
-    // Replacing outputs:
-    // For each instruction of the cluster, check its users.
-    // If its user is outside of cluster, do all-gather/reshape
-    // If its user is store(shape(slice(shape(cluster)))), remove reshape
-    // and slice.
-    for (auto cluster_output : cluster.GetOutputs()) {
-      TF_RETURN_IF_ERROR(RewriteClusterOutput(
-          cluster, aligned_cluster_size, shard_shape, replication_factor,
-          cluster_output, cluster.GetUsersForOutput(cluster_output)));
-    }
-    changed = true;
+    TF_ASSIGN_OR_RETURN(bool outlined,
+                        ResourceUpdateElementwiseClustering::OutlineCluster(
+                            cluster, replication_factor));
+    changed |= outlined;
   }
   return changed;
 }
 }  // namespace
 
 ElementwiseCluster::ElementwiseCluster(HloInstruction* top) noexcept
-    : top_(top), shape_(top->shape()) {
+    : top_(top), cluster_shape_(top->shape()) {
   Add(top);
 }
 
@@ -668,7 +503,9 @@ HloComputation* ElementwiseCluster::GetComputation() const {
   return top_->parent();
 }
 
-const Shape& ElementwiseCluster::GetShape() const { return shape_; }
+const Shape& ElementwiseCluster::GetClusterShape() const {
+  return cluster_shape_;
+}
 
 bool ElementwiseCluster::Finalize() {
   CHECK(!finalized_);
@@ -748,6 +585,44 @@ bool ElementwiseCluster::Finalize() {
     outputs_.push_back(pair.first);
   }
 
+  absl::optional<Shape> shard_shape_opt;
+  int64 aligned_cluster_size = -1;
+
+  for (HloInstruction* input : inputs_vec_) {
+    int64 input_aligned_cluster_size = 0;
+    HloInstruction* remote_load;
+    std::tie(remote_load, input_aligned_cluster_size) =
+        GetReshapeAllGatherLoadAndAlignedSize(input);
+
+    if (!remote_load) {
+      continue;
+    }
+
+    if (input_aligned_cluster_size != -1) {
+      if (aligned_cluster_size == -1) {
+        aligned_cluster_size = input_aligned_cluster_size;
+      } else if (aligned_cluster_size != input_aligned_cluster_size) {
+        VLOG(2) << "Aligned cluster size mismatch: ", aligned_cluster_size,
+            " vs ", input_aligned_cluster_size;
+        return false;
+      }
+    }
+
+    if (!shard_shape_opt) {
+      shard_shape_opt = remote_load->shape();
+    } else if (remote_load->shape() != *shard_shape_opt) {
+      VLOG(2) << "Cluster input shapes mismatch: ",
+          remote_load->shape().ToString(), " vs ", shard_shape_opt->ToString();
+      return false;
+    }
+  }
+  CHECK(shard_shape_opt);
+  shard_shape_ = *shard_shape_opt;
+  cluster_size_ = ShapeUtil::ElementsIn(cluster_shape_);
+  shard_size_ = ShapeUtil::ElementsIn(shard_shape_);
+  aligned_cluster_size_ =
+      aligned_cluster_size == -1 ? cluster_size_ : aligned_cluster_size;
+
   finalized_ = true;
   return true;
 }
@@ -773,6 +648,26 @@ const std::vector<HloInstruction*>& ElementwiseCluster::GetUsersForOutput(
   return outputs_to_users_.at(inst);
 }
 
+const Shape& ElementwiseCluster::GetShardShape() const {
+  CHECK(finalized_);
+  return shard_shape_;
+}
+
+int64 ElementwiseCluster::GetClusterSize() const {
+  CHECK(finalized_);
+  return cluster_size_;
+}
+
+int64 ElementwiseCluster::GetAlignedClusterSize() const {
+  CHECK(finalized_);
+  return aligned_cluster_size_;
+}
+
+int64 ElementwiseCluster::GetShardSize() const {
+  CHECK(finalized_);
+  return shard_size_;
+}
+
 std::string ElementwiseCluster::Dump() const {
   std::stringstream ss;
   ss << "Cluster dump:\n";
@@ -791,6 +686,11 @@ std::string ElementwiseCluster::ToString() const {
   CHECK(finalized_);
   std::stringstream ss;
   ss << "Cluster:\n";
+  ss << "Cluster shape: " << GetClusterShape() << ", total elements "
+     << GetClusterSize()
+     << ", aligned cluster size: " << GetAlignedClusterSize() << "\n";
+  ss << "Shard shape: " << GetShardShape() << ", total elements "
+     << GetShardSize() << "\n";
   ss << "Inputs:\n";
   for (auto inst : inputs_vec_) {
     ss << "* " << inst->ToString() << "\n";
@@ -800,6 +700,7 @@ std::string ElementwiseCluster::ToString() const {
   for (auto inst : post_order_) {
     ss << "* " << inst->ToString() << "\n";
   }
+  ss << "\n";
   ss << "Outputs:\n";
   for (auto inst : outputs_) {
     ss << "* " << inst->ToString() << " used by:\n";
@@ -810,14 +711,9 @@ std::string ElementwiseCluster::ToString() const {
   return ss.str();
 }
 
-StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
-  if (replication_factor_ <= 1) {
-    VLOG(2) << "Skipping clustering, no replicas.";
-    return false;
-  }
-  VLOG(2) << "Before the ElementwiseClustering:";
-  XLA_VLOG_LINES(2, module->ToString());
-
+absl::flat_hash_set<const HloComputation*>
+ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
+    const HloModule* module) {
   // This is primarily for the fusions, but could be useful for other
   // computations as well. Go through all computations and populate the
   // elementwise set. Elementwise computation defined as a set of instructions
@@ -825,26 +721,186 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   // - valid cluster input (constant, parameter, reduce-all, etc)
   // - elementwise instruction
   // - fusion uses elementwise computation from this set.
-  // Also collect resource update computations.
+  absl::flat_hash_set<const HloComputation*> elementwise_comps;
+  for (auto comp : module->computations()) {
+    if (absl::c_all_of(comp->instructions(), [&elementwise_comps](
+                                                 const HloInstruction* inst) {
+          return CanCluster(inst, /*allow_inputs=*/true, elementwise_comps);
+        })) {
+      VLOG(2) << "Found elementwise computation " << comp->name();
+      elementwise_comps.insert(comp);
+    }
+  }
+  return elementwise_comps;
+}
 
+std::list<ElementwiseCluster>
+ResourceUpdateElementwiseClustering::GetClustersIn(
+    const HloComputation* comp,
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
+  std::list<ElementwiseCluster> clusters;
+
+  // Going back post-order growing a tree of elementwise instruction.
+  // For each new elementwise instruction, check if any of its users are already
+  // in the cluster. If it's true, add it to the cluster.
+  //
+  // Example:
+  //
+  // ROOT r = tuple(fusion.1, fusion.2)
+  // Ignoring, not elementwise
+  //
+  // fusion.1 = fusion(add.1, const.1)
+  // Check that fused computation is elementwise, creating cluster #1 with top
+  // at fusion.1. Add inputs [add.1, const.1]
+  //
+  // add.1 = add(arg0, arg1)
+  // add.1 is among cluster #1 inputs, adding to the cluster, removing input of
+  // add.1, inputs are [arg0, arg1], result inputs: [arg0, arg1, const.1]
+  //
+  // fusion.2 = fusion(add.2, const.1)
+  // Not a use of existing cluster, create cluster #2, adding inputs [add.2,
+  // const.1]
+  //
+  // add.2 = add(arg0, broadcast.1)
+  // Used in cluster #2, adding to cluster, removing add.2 from inputs, inputs
+  // are [arg0, const.1, broadcast.1]
+  //
+  // broadcast.1 = broadcast(const.2)
+  // Used in cluster #2, removing from inputs, inputs are [arg0, const.1]
+
+  auto comp_insts = comp->MakeInstructionPostOrder();
+  absl::c_reverse(comp_insts);
+  for (auto inst : comp_insts) {
+    bool can_cluster =
+        CanCluster(inst, /*allow_inputs=*/false, elementwise_comps);
+    if (can_cluster) {
+      VLOG(2) << "Found elementwise instruction: " << inst->ToString();
+      bool added = false;
+      for (auto& cluster : clusters) {
+        if (cluster.MaybeAdd(inst)) {
+          VLOG(2) << "Added to cluster with top "
+                  << cluster.GetTop()->ToString();
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
+        VLOG(2) << "Creating cluster with top " << inst->ToString();
+        clusters.emplace_back(inst);
+      }
+    }
+  }
+
+  bool clusters_merged;
+  do {
+    VLOG(2) << "Merging clusters...";
+    clusters_merged = false;
+    for (auto i = clusters.begin(); !clusters_merged && i != clusters.end();
+         ++i) {
+      ElementwiseCluster& a = *i;
+      for (auto j = std::next(i); j != clusters.end(); ++j) {
+        ElementwiseCluster& b = *j;
+        if (a.CanMerge(b)) {
+          VLOG(2) << "Cluster " << b.GetTop()->name()
+                  << " could be merged in cluster " << a.GetTop()->name();
+          a.Merge(b);
+          clusters.erase(j);
+          clusters_merged = true;
+          break;
+        } else if (b.CanMerge(a)) {
+          VLOG(2) << "Cluster " << a.GetTop()->name()
+                  << " could be merged in cluster " << b.GetTop()->name();
+          b.Merge(a);
+          clusters.erase(i);
+          clusters_merged = true;
+          break;
+        }
+      }
+    }
+  } while (clusters_merged);
+
+  for (auto it = clusters.begin(); it != clusters.end();) {
+    auto& cluster = *it;
+    if (cluster.Finalize()) {
+      VLOG(2) << "Found cluster suitable for replication (all inputs valid):";
+      XLA_VLOG_LINES(2, cluster.ToString());
+      ++it;
+    } else {
+      VLOG(2) << "Invalid cluster:";
+      XLA_VLOG_LINES(2, cluster.Dump());
+      it = clusters.erase(it);
+    }
+  }
+
+  return clusters;
+}
+
+StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
+    ElementwiseCluster& cluster, uint32 replication_factor) {
+  VLOG(2) << "Rewriting cluster with top in " << cluster.GetTop()->ToString()
+          << ", " << cluster.GetPostOrder().size()
+          << " instructions and replication factor " << replication_factor;
+  if (cluster.GetShardSize() * replication_factor !=
+      cluster.GetAlignedClusterSize()) {
+    VLOG(2) << "Cluster shape and replica shape don't match "
+            << cluster.GetShardSize() << " vs " << cluster.GetClusterSize()
+            << "(" << cluster.GetAlignedClusterSize() << ")";
+    return false;
+  }
+
+  // For each input:
+  // Replace all-gather(remote-parameter-load)) with remote-parameter-load()
+  // Replace other inputs with dynamic-slice(input, replication-index)
+  for (auto cluster_input : cluster.GetInputs()) {
+    if (IsScalar(cluster_input)) {
+      VLOG(2) << "Ignoring scalar: " << cluster_input->ToString();
+      continue;
+    }
+
+    TF_RETURN_IF_ERROR(
+        RewriteClusterInput(cluster, replication_factor, cluster_input));
+  }
+
+  // Change the shape of the cluster.
+  for (auto inst : cluster.GetPostOrder()) {
+    if (inst->opcode() == HloOpcode::kFusion) {
+      TF_RETURN_IF_ERROR(ChangeFusionShape(inst, cluster.GetClusterShape(),
+                                           cluster.GetShardShape()));
+    } else {
+      TF_RETURN_IF_ERROR(ChangeInstructionShape(inst, cluster.GetClusterShape(),
+                                                cluster.GetShardShape()));
+    }
+  }
+
+  // Replacing outputs:
+  // For each instruction of the cluster, check its users.
+  // If its user is outside of cluster, do all-gather/reshape
+  // If its user is store(shape(slice(shape(cluster)))), remove reshape
+  // and slice.
+  for (auto cluster_output : cluster.GetOutputs()) {
+    TF_RETURN_IF_ERROR(
+        RewriteClusterOutput(cluster, replication_factor, cluster_output,
+                             cluster.GetUsersForOutput(cluster_output)));
+  }
+
+  return true;
+}
+
+StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
+  if (replication_factor_ <= 1) {
+    VLOG(2) << "Skipping clustering, no replicas.";
+    return false;
+  }
+  VLOG(2) << "Before the ResourceUpdateElementwiseClustering:";
+  XLA_VLOG_LINES(2, module->ToString());
+  // Also collect resource update computations.
   std::list<HloInstruction*> resource_updates;
-  absl::flat_hash_set<HloComputation*> elementwise_comps;
 
   for (auto comp : module->MakeComputationPostOrder()) {
-    bool elementwise = true;
     for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (IsResourceUpdate(inst)) {
         resource_updates.push_back(inst);
       }
-      if (!CanCluster(inst, /*allow_inputs=*/true, elementwise_comps)) {
-        VLOG(2) << "Computation contains instruction we can't replicate: "
-                << inst->ToString();
-        elementwise = false;
-      }
-    }
-    if (elementwise) {
-      VLOG(2) << "Found elementwise computation " << comp->name();
-      elementwise_comps.insert(comp);
     }
   }
 
@@ -852,6 +908,9 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
     VLOG(2) << "No resource updates found, exiting.";
     return false;
   }
+
+  const absl::flat_hash_set<const HloComputation*> elementwise_comps =
+      GetElementwiseClusterableComputations(module);
 
   bool module_changed = false;
   for (auto resource_update : resource_updates) {

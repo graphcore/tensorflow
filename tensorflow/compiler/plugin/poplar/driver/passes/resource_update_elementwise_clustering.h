@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 
+#include <list>
 #include <string>
 #include <vector>
 
@@ -39,8 +40,10 @@ class ElementwiseCluster {
   void Merge(const ElementwiseCluster& other);
   const HloInstruction* GetTop() const;
   HloComputation* GetComputation() const;
-  const Shape& GetShape() const;
   std::string Dump() const;
+
+  // The shape of the operations in the cluster before it is partitioned.
+  const Shape& GetClusterShape() const;
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
@@ -53,10 +56,18 @@ class ElementwiseCluster {
   const std::vector<HloInstruction*>& GetOutputs() const;
   const std::vector<HloInstruction*>& GetUsersForOutput(
       HloInstruction* inst) const;
+  // The shape of the operations in the cluster after it is partitioned.
+  const Shape& GetShardShape() const;
+  // The size of the cluster before it is partitioned.
+  int64 GetClusterSize() const;
+  // The size of the cluster taking the padding on all-gathers into account.
+  int64 GetAlignedClusterSize() const;
+  // The size of the partitioned shape.
+  int64 GetShardSize() const;
 
  private:
   HloInstruction* top_;
-  Shape shape_;
+  Shape cluster_shape_;
   HloInstructionSet insts_;
   HloInstructionSet inputs_;
   bool finalized_ = false;
@@ -66,14 +77,16 @@ class ElementwiseCluster {
   std::vector<HloInstruction*> post_order_;
   std::vector<HloInstruction*> outputs_;
   HloInstructionMap<std::vector<HloInstruction*>> outputs_to_users_;
+  Shape shard_shape_;
+  int64 cluster_size_;
+  int64 shard_size_;
+  int64 aligned_cluster_size_;
 };
 
 // Find and replace clusters of elementwise instructions, sharding resource
 // update computation across replicas. For each cluster, remove
 // all-gather(remote-parameter-load) and store result in remote buffer shard.
 class ResourceUpdateElementwiseClustering : public HloModulePass {
-  uint32 replication_factor_;
-
  public:
   explicit ResourceUpdateElementwiseClustering(uint32 replication_factor)
       : replication_factor_(replication_factor) {}
@@ -83,6 +96,23 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   }
 
   StatusOr<bool> Run(HloModule* module);
+
+  // Returns all computations in the module which are elementwise and can be
+  // clustered.
+  static absl::flat_hash_set<const HloComputation*>
+  GetElementwiseClusterableComputations(const HloModule* module);
+
+  static std::list<ElementwiseCluster> GetClustersIn(
+      const HloComputation* comp,
+      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
+
+  // Outline the provided cluster - returns whether it was successfully
+  // outlined.
+  static StatusOr<bool> OutlineCluster(ElementwiseCluster& cluster,
+                                       uint32 replication_factor);
+
+ private:
+  uint32 replication_factor_;
 };
 
 }  // namespace poplarplugin

@@ -263,6 +263,155 @@ std::string GetFullRemoteLoadHloString(int n, int m) {
   return GetTemplateHloString(wu, n, m);
 }
 
+using ResourceUpdateElementwiseClusteringBasicTest = HloTestBase;
+
+TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
+       TestElementwiseComputations) {
+  const string& hlo_string = R"(
+HloModule main
+
+_comp0 {
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  a0 = f32[10] add(p0, p1)
+  p2 = f32[10] parameter(2)
+  a1 = f32[10] add(a0, p2)
+  p3 = f32[10] parameter(3)
+  ROOT a2 = f32[10] add(a1, p3)
+}
+
+_comp1 {
+  arg_0.1 = f16[1024,3000] parameter(0)
+  arg_1.1 = f16[3000] parameter(1)
+  broadcast.18.clone = f16[1024,3000] broadcast(arg_1.1), dimensions={1}
+  ROOT add.19.clone = f16[1024,3000] add(arg_0.1, broadcast.18.clone)
+}
+
+_comp2 {
+  arg_0.2 = f32[128,3000] parameter(0)
+  arg_1.2 = f32[128,3000] parameter(1)
+  constant.103.clone = f32[] constant(0.001)
+  broadcast.138.clone = f32[128,3000] broadcast(constant.103.clone), dimensions={}
+  multiply.175.clone = f32[128,3000] multiply(arg_1.2, broadcast.138.clone)
+  ROOT subtract.176.clone = f32[128,3000] subtract(arg_0.2, multiply.175.clone)
+}
+
+ENTRY main {
+  ROOT t = () tuple()
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+  auto elementwise_comps = ResourceUpdateElementwiseClustering::
+      GetElementwiseClusterableComputations(module.get());
+  CHECK_EQ(elementwise_comps.size(), 2);
+  absl::flat_hash_set<std::string> elementwise_comp_names = {"_comp0",
+                                                             "_comp2"};
+  for (auto comp : elementwise_comps) {
+    EXPECT_TRUE(elementwise_comp_names.contains(comp->name()));
+  }
+}
+
+std::string GetHlo(const std::string& shape,
+                   const std::string& remote_buffer_shape) {
+  const std::string hlo = R"(
+  HloModule main
+
+  resource_update {
+    arg0 = $shape parameter(0)
+    arg1 = $shape parameter(1)
+    arg2 = $remote_buffer_shape parameter(2)
+    arg2_c = $shape convert(arg2)
+    arg2_new = $shape add(arg0, arg2_c)
+    arg1_new = $shape add(arg1, arg2_new)
+    arg2_new_c = $remote_buffer_shape convert(arg2_new)
+    ROOT t = ($shape,$remote_buffer_shape) tuple(arg1_new, arg2_new_c)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = ($shape, token[]) infeed(after-all), infeed_config="140121807314576"
+    input = $shape get-tuple-element(infeed), index=0
+
+    arg0 = $shape parameter(0)
+    arg1 = $remote_buffer_shape parameter(1)
+
+    add.1 = $shape add(input, arg0)
+    call = ($shape,$remote_buffer_shape) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = $shape get-tuple-element(call), index=0
+    gte1 = $remote_buffer_shape get-tuple-element(call), index=1
+    ROOT r = ($shape,$remote_buffer_shape) tuple(gte0, gte1)
+  }
+
+  ENTRY e {
+    e.in0 = $shape parameter(0)
+    e.in1 = $remote_buffer_shape parameter(1)
+    call = ($shape,$remote_buffer_shape) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = $shape get-tuple-element(call), index=0
+    gte1 = $remote_buffer_shape get-tuple-element(call), index=1
+    ROOT r = ($shape,$remote_buffer_shape) tuple(gte0, gte1)
+  }
+  )";
+  std::string hlo_string =
+      tensorflow::str_util::StringReplace(hlo, "$shape", shape, true);
+  return tensorflow::str_util::StringReplace(hlo_string, "$remote_buffer_shape",
+                                             remote_buffer_shape, true);
+}
+
+TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestGetClustersSameType) {
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module,
+      ParseAndReturnVerifiedModule(GetHlo("f32[2,2]", "f32[2,2]"), config));
+
+  HloComputation* resource_update =
+      FindComputation(module.get(), "resource_update");
+
+  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
+  HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
+  HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
+  HloInstruction* arg2_c = FindInstruction(module.get(), "arg2_c");
+  HloInstruction* arg2_new = FindInstruction(module.get(), "arg2_new");
+  HloInstruction* arg1_new = FindInstruction(module.get(), "arg1_new");
+  HloInstruction* arg2_new_c = FindInstruction(module.get(), "arg2_new_c");
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 0, 2).Run(module.get()));
+  EXPECT_TRUE(offloaded);
+  TF_ASSERT_OK_AND_ASSIGN(bool inlined,
+                          FusionInliner([](const HloInstruction* inst) {
+                            return IsReplicatedParameterLoadFusion(inst) ||
+                                   IsReplicatedParameterStoreFusion(inst);
+                          })
+                              .Run(module.get()));
+  EXPECT_TRUE(inlined);
+
+  auto elementwise_comps = ResourceUpdateElementwiseClustering::
+      GetElementwiseClusterableComputations(module.get());
+  auto clusters = ResourceUpdateElementwiseClustering::GetClustersIn(
+      resource_update, elementwise_comps);
+  EXPECT_THAT(clusters.size(), 1);
+  auto& cluster = *std::begin(clusters);
+  EXPECT_THAT(cluster.GetClusterSize(), 4);
+  EXPECT_THAT(cluster.GetAlignedClusterSize(), 4);
+  EXPECT_THAT(cluster.GetShardSize(), 2);
+  HloInstruction* arg2_c_reshape = arg2_c->mutable_operand(0);
+  EXPECT_THAT(cluster.GetInputs(),
+              ::testing::UnorderedElementsAre(arg0, arg1, arg2_c_reshape));
+  EXPECT_THAT(
+      cluster.GetPostOrder(),
+      ::testing::UnorderedElementsAre(arg2_c, arg2_new, arg1_new, arg2_new_c));
+  EXPECT_THAT(cluster.GetOutputs(),
+              ::testing::UnorderedElementsAre(arg1_new, arg2_new_c));
+}
+
 struct ResourceUpdateElementwiseClusteringTestSpec {
   std::string hlo;
   std::string short_name;
