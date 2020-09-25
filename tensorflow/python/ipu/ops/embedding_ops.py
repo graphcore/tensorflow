@@ -401,7 +401,7 @@ class HostEmbedding:
     # Keeping the old function just so an exception can be used to inform
     # users of the API change.
     raise NotImplementedError(
-        "HostEmbedding.__call__ is not supported."
+        "HostEmbedding.__call__ is not supported. "
         "Please use the context manager created with HostEmbedding.register.")
 
   @deprecation.deprecated_args(None, "This argument no longer has any effect.",
