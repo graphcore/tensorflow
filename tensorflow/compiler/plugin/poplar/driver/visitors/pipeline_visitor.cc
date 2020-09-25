@@ -1096,10 +1096,7 @@ PipelineVisitor::PipelineVisitor(
       inst_stage_mapping_(inst_stage_mapping),
       stages_with_recomputation_(stages_with_recomputation),
       num_backward_stages_(num_backward_stages) {
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.gradient_accumulation_zeroing_sequences.push({});
-  // Push a new vector for the write undef sequences onto the stack.
-  res.pipelining_write_undef_sequences.push({});
+  EnterVariableScope();
 }
 
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
@@ -1113,7 +1110,9 @@ PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
                       GetNumberOfBackwardPipelineStages(pipeline), res, inputs,
-                      description, name) {}
+                      description, name) {
+  EnterVariableScope();
+}
 
 Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   const int64 overlap_length =
@@ -1596,26 +1595,29 @@ Status PipelineVisitor::HandleDeferredAllocationWhile(HloInstruction* hlo) {
 }
 
 Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
-  // Create a sequence for all the zeroing of pipeline tensors (gradient
-  // accumulation).
-  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
-  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
-    pipeline_tensors_zeroing_sequence_.add(zeroing_seq);
-  }
-  resources_.gradient_accumulation_zeroing_sequences.pop();
+  poplar::Graph& graph = GetMasterGraph(resources_);
+
+  // Create a sequence for all the zeroing gradient accumulation buffers.
+  auto& zeroing_tensors =
+      resources_.gradient_accumulation_zeroing_tensors.top();
+  ZeroTensors(resources_, graph, zeroing_tensors,
+              pipeline_tensors_zeroing_sequence_, name_ + "/ZeroAccumulators");
+
+  auto& zeroing_remote_buffers =
+      resources_.gradient_accumulation_zeroing_remote_buffers.top();
+  ZeroRemoteBuffers(resources_, graph, zeroing_remote_buffers,
+                    pipeline_tensors_zeroing_sequence_);
 
   // Create a sequence for all the write undefs of pipeline tensors (FIFOs).
   auto& write_undefs = resources_.pipelining_write_undef_sequences.top();
   for (poplar::program::Sequence& write_undef : write_undefs) {
     pipeline_write_undef_sequence_.add(write_undef);
   }
-  resources_.pipelining_write_undef_sequences.pop();
+
+  ExitVariableScope();
 
   // Wrap each of the poplar sequences in a poplar function to maximise code
-  // reuse.
-  poplar::Graph& graph = GetMasterGraph(resources_);
-
-  // Transform a given sequence into a poplar function call sequence.
+  // reuse. Transform a given sequence into a poplar function call sequence.
   auto to_function = [&graph](const poplar::program::Sequence& seq) mutable
       -> poplar::program::Sequence {
     auto f = graph.addFunction(seq);

@@ -260,6 +260,41 @@ bool DeferredVisitor::InputIsUsed(int64 param, unsigned int index) const {
   return used_tensors_[param][index];
 }
 
+void DeferredVisitor::EnterVariableScope() {
+  // Push a new vector for tracking zeroing tensors onto the stack.
+  resources_.gradient_accumulation_zeroing_tensors.push({});
+  // Push a new vector for tracking zeroing remote buffers onto the stack.
+  resources_.gradient_accumulation_zeroing_remote_buffers.push({});
+  // Push a new vector for the write undef sequences onto the stack.
+  resources_.pipelining_write_undef_sequences.push({});
+}
+
+Status DeferredVisitor::ExitVariableScope() {
+  // Pop the vector for tracking zeroing tensors off the stack.
+  if (resources_.gradient_accumulation_zeroing_tensors.empty()) {
+    return xla::FailedPrecondition(
+        "Trying to pop from gradient_accumulation_zeroing_tensors, but it is "
+        "empty. Was there a matching call to EnterVariableScope?");
+  }
+  resources_.gradient_accumulation_zeroing_tensors.pop();
+
+  // Pop the vector for tracking zeroing remote buffers off the stack.
+  if (resources_.gradient_accumulation_zeroing_remote_buffers.empty()) {
+    return xla::FailedPrecondition(
+        "Trying to pop from gradient_accumulation_zeroing_remote_buffers, but "
+        "it is empty. Was there a matching call to EnterVariableScope?");
+  }
+  resources_.gradient_accumulation_zeroing_remote_buffers.pop();
+
+  // Pop the vector for tracking write undef sequences off the stack.
+  if (resources_.pipelining_write_undef_sequences.empty()) {
+    return xla::FailedPrecondition(
+        "Trying to pop from pipelining_write_undef_sequences, but it is "
+        "empty. Was there a matching call to EnterVariableScope?");
+  }
+  resources_.pipelining_write_undef_sequences.pop();
+}
+
 Status DeferredVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const poplar::program::Sequence& seq) {
   if (inst->opcode() == HloOpcode::kInfeed &&
@@ -754,13 +789,24 @@ Status DeferredVisitor::HandleNonDeferredCustomCall(HloInstruction* inst) {
 }
 
 namespace {
-Status AddGradientAccumulationZeroingSequence(
-    CompilerResources& res, const poplar::program::Sequence& seq) {
-  if (res.gradient_accumulation_zeroing_sequences.empty()) {
+Status AddGradientAccumulationZeroing(CompilerResources& res,
+                                      const poplar::Tensor& tensor) {
+  if (res.gradient_accumulation_zeroing_tensors.empty()) {
     return FailedPrecondition("Cannot zero gradient accumulation buffer.");
   }
 
-  res.gradient_accumulation_zeroing_sequences.top().push_back(seq);
+  res.gradient_accumulation_zeroing_tensors.top().push_back(tensor);
+  return Status::OK();
+}
+
+Status AddGradientAccumulationZeroing(
+    CompilerResources& res, const poplar::RemoteBuffer& remote_buffer) {
+  if (res.gradient_accumulation_zeroing_remote_buffers.empty()) {
+    return FailedPrecondition("Cannot zero gradient accumulation buffer.");
+  }
+
+  res.gradient_accumulation_zeroing_remote_buffers.top().push_back(
+      remote_buffer);
   return Status::OK();
 }
 }  // namespace
@@ -784,15 +830,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
         graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
     TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
 
-    // Add a zeroing sequence to reset the buffer.
-    poplar::program::Sequence zeroing_seq;
-    poplar::Tensor zero = graph.addConstant(type, {1}, 0);
-    MappingHelper::MapTensorLinearly(resources_.linear_mapping_state, graph,
-                                     zero);
-    zero = zero.broadcast(element_count, 0);
-    zeroing_seq.add(poplar::program::Copy(zero, output));
-    TF_RETURN_IF_ERROR(
-        AddGradientAccumulationZeroingSequence(resources_, zeroing_seq));
+    // Add the remote buffer to the zeroing stack.
+    TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, output));
     return Status::OK();
   }
 
@@ -844,15 +883,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   // Function which is called after the tensor has been created.
   DeferredPostProcessFunction post_process_fn =
       [this, inst](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-    // Create a sequence for zeroing the accumulator before the accumulation is
-    // performed.
-    poplar::Graph& graph = GetGraph(resources_, inst);
-    poplar::program::Sequence zeroing_seq;
-    popops::zero(graph, tensor, zeroing_seq,
-                 GetDebugName(inst) + "/ZeroAccumulator");
-
-    TF_RETURN_IF_ERROR(
-        AddGradientAccumulationZeroingSequence(resources_, zeroing_seq));
+    // Add the tensor to the zeroing stack.
+    TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, tensor));
     return tensor;
   };
 
