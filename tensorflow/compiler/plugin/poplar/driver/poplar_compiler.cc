@@ -1230,11 +1230,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
+    pipeline.AddPass<RemoteParameterParallelCombiner>();
     pipeline.AddPass<AllocationFinder>(
         resources.annotations, resources.always_rearrange_copies_on_host);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
-    pipeline.AddPass<RemoteParameterParallelCombiner>(
-        resources.annotations.tensor_allocation_map);
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
 

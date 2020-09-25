@@ -153,10 +153,7 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     const auto layout_output_idx = *tensor_target.layout_output_idx;
 
     const Shape allocation_shape = inst->operand(input_index)->shape();
-    const Shape layout_shape =
-        layout->shape().IsTuple()
-            ? layout->shape().tuple_shapes(layout_output_idx)
-            : layout->shape();
+    const Shape layout_shape = layout->shape();
 
     TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(allocation_shape));
 

@@ -66,8 +66,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[1]) {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -142,8 +141,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   TF_CHECK_OK(load1->AddControlDependencyTo(load2));
 
   // Expect that we do nothing.
-  TensorAllocationMap allocation_map;
-  ASSERT_FALSE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_FALSE(RemoteParameterParallelCombiner()
                    .RunOnComputation(module->entry_computation())
                    .ValueOrDie());
 }
@@ -175,8 +173,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
   EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -240,7 +237,7 @@ ENTRY top {
   arg4 = f32[2] parameter(3)
 
   const1 = f32[] constant(1)
-  const2 = f32[2] constant(1)
+  const2 = f32[2] constant({1, 1})
 
   load1 = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   load2 = f32[] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
@@ -273,8 +270,7 @@ ENTRY top {
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
   EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -374,8 +370,7 @@ ENTRY top {
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
   EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -509,11 +504,9 @@ ENTRY e {
   CompilerAnnotations annotations(module);
 
   EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  ASSERT_TRUE(RemoteParameterParallelCombiner().Run(module).ValueOrDie());
   EXPECT_TRUE(AllocationFinder(annotations).Run(module).ValueOrDie());
   EXPECT_TRUE(ForwardAllocation(annotations).Run(module).ValueOrDie());
-
-  RemoteParameterParallelCombiner combiner(annotations.tensor_allocation_map);
-  ASSERT_TRUE(combiner.Run(module).ValueOrDie());
 
   const auto pipeline_comp = FindComputation(module, "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
@@ -537,15 +530,27 @@ ENTRY e {
     if (is_load(inst) && inst->operand_count() == 2) {
       found_combined_load = true;
       EXPECT_EQ(inst->shape(), combined_shape);
+      for (auto user : inst->users()) {
+        EXPECT_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+        if (user->tuple_index() == 0) {
+          const auto& target0 =
+              annotations.tensor_allocation_map.at(TensorLocation(user, 0));
+          EXPECT_EQ(target0.tgt->name(), "new_arg0");
+          EXPECT_EQ(target0.backward_path.size(), 1);
+          EXPECT_EQ(target0.backward_path[0]->opcode(), HloOpcode::kTranspose);
 
-      // Check that the allocation map was updated.
-      const auto& target0 =
-          annotations.tensor_allocation_map.at(TensorLocation(inst, 0));
-      EXPECT_EQ(target0.tgt->name(), "new_arg0");
-      EXPECT_EQ(target0.backward_path.size(), 2);
-      EXPECT_EQ(target0.backward_path[0]->opcode(),
-                HloOpcode::kGetTupleElement);
-      EXPECT_EQ(target0.backward_path[1]->opcode(), HloOpcode::kTranspose);
+        } else {
+          EXPECT_EQ(user->tuple_index(), 1);
+          // arg4 should have its layout from arg1 from the new combined load.
+          const auto* arg4 = resource_update_comp->parameter_instruction(4);
+          const auto& target =
+              annotations.tensor_allocation_map.at(TensorLocation(arg4, 0));
+          EXPECT_EQ(target.tgt->name(), "new_arg1");
+          EXPECT_EQ(*target.layout, user);
+          EXPECT_EQ(*target.layout_output_idx, 0);
+        }
+      }
+
     } else if (is_store(inst) && inst->operand_count() == 4) {
       found_combined_store = true;
       EXPECT_EQ(inst->shape(), combined_shape);
@@ -554,19 +559,6 @@ ENTRY e {
 
   EXPECT_TRUE(found_combined_load);
   EXPECT_TRUE(found_combined_store);
-
-  // arg4 should have its layout from arg1 from the new combined load.
-  const auto* arg4 = resource_update_comp->parameter_instruction(4);
-  const auto& target =
-      annotations.tensor_allocation_map.at(TensorLocation(arg4, 0));
-  EXPECT_EQ(target.tgt->name(), "new_arg1");
-  EXPECT_TRUE(target.layout.has_value());
-  EXPECT_TRUE(target.layout_output_idx.has_value());
-  EXPECT_TRUE(is_load(target.layout.value()));
-  EXPECT_EQ(target.layout.value()->shape().tuple_shapes_size(), 2);
-  EXPECT_EQ(
-      (*target.layout)->operand(*target.layout_output_idx)->parameter_number(),
-      1);
 }
 
 TEST_F(RemoteParameterParallelCombinerTest, TestInterControlDependencies) {
@@ -612,8 +604,7 @@ ENTRY top {
   module->VerifyOrAddFailure("module should be valid before pass");
 
   // When: Running the pass.
-  TensorAllocationMap allocation_map;
-  EXPECT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  EXPECT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
