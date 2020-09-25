@@ -38,57 +38,8 @@ class RemoteParameterLoadOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    VLOG(1) << "Processing " << GetDebugName(inst);
-    const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
-    const int64 num_inputs = inst->operand_count();
-
-    const auto shapes = output_shape.IsTuple()
-                            ? output_shape.tuple_shapes()
-                            : std::vector<xla::Shape>{output_shape};
-    CHECK_EQ(shapes.size(), num_inputs);
-
-    poplar::program::Sequence seq;
-
-    for (int64 i = 0; i < num_inputs; ++i) {
-      if (load_inst->GetReplicationFactor(i) != res.replication_factor &&
-          load_inst->GetReplicationFactor(i) != 1) {
-        return xla::FailedPrecondition(
-            "RemoteBuffer load instruction replication factor doesn't match "
-            "graph replication factor.");
-      }
-
-      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
-      const Shape& shape = shapes[i];
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AddTensor(shard_graph, TensorLocation{inst, i}, shape,
-                                    res, tensor_map));
-
-      if (!UseSyntheticData()) {
-        TensorOrRemoteBufferVector inputs =
-            FindInstructionInputs(tensor_map, res, inst, i, seq, true);
-
-        CHECK_EQ(inputs.size(), 1);
-
-        if (!inputs[0].IsRemoteBuffer()) {
-          return xla::FailedPrecondition(
-              "Expected a Poplar RemoteBuffer as operand %d to %s", i,
-              GetDebugName(inst));
-        }
-
-        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
-
-        seq.add(poplar::program::Copy(remote_buffer, tensor));
-      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-        // Initialize the tensor to a constant value.
-        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
-      }
-
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
-    }
-
-    return seq;
+    // Should have been handled by the deferred visitor.
+    return FailedPrecondition("Remote parameter loads cannot be generated.");
   }
 };
 REGISTER_POPLAR_OP(RemoteParameterLoad, RemoteParameterLoadOp);

@@ -118,8 +118,7 @@ StatusOr<HloInstruction*> Combine(
 }
 
 StatusOr<HloInstruction*> CombineAndReplace(
-    const std::vector<HloInstruction*>& to_combine,
-    TensorAllocationMap& allocation_map) {
+    const std::vector<HloInstruction*>& to_combine) {
   CHECK_GE(to_combine.size(), 2);
   HloComputation* comp = to_combine.front()->parent();
 
@@ -146,34 +145,7 @@ StatusOr<HloInstruction*> CombineAndReplace(
     auto* gte = comp->AddInstruction(
         HloInstruction::CreateGetTupleElement(inst->shape(), new_inst, i));
     MakeUsedInplace(gte);
-
-    // Update tensor allocation info. Need to handle two cases:
-    // 1) If this instruction was the source of an allocation target.
-    auto itr = allocation_map.find(TensorLocation(inst, 0));
-    if (itr != allocation_map.end()) {
-      auto inserted = allocation_map.emplace(TensorLocation(new_inst, i),
-                                             std::move(itr->second));
-      // The new instruction should not be in the map already.
-      CHECK(inserted.second);
-
-      // Prepend the GTE to the backward tensor transformation path.
-      auto& new_backward_path = inserted.first->second.backward_path;
-      new_backward_path.insert(new_backward_path.begin(), gte);
-
-      // Erase the old entry (with a now moved-from value).
-      allocation_map.erase(itr);
-    }
-
-    // 2) If this instruction was the layout of an allocation target.
-    for (auto& e : allocation_map) {
-      TensorTarget& target = e.second;
-      if (target.layout == inst) {
-        target.layout = new_inst;
-        CHECK(target.layout_output_idx.has_value());
-        CHECK_EQ(*target.layout_output_idx, 0);
-        target.layout_output_idx = i;
-      }
-    }
+    gte->set_sharding(shardings[i]);
 
     // Replace the old inst.
     TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(inst));
@@ -224,8 +196,7 @@ using DecreasingSizeQueue =
                         DecreasingSizeComparator>;
 
 StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
-    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues,
-    TensorAllocationMap& allocation_map) {
+    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues) {
   std::vector<HloInstruction*> combined;
 
   while (true) {
@@ -256,8 +227,7 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
       continue;
     }
 
-    TF_ASSIGN_OR_RETURN(auto* combined_inst,
-                        CombineAndReplace(to_combine, allocation_map));
+    TF_ASSIGN_OR_RETURN(auto* combined_inst, CombineAndReplace(to_combine));
 
     combined.push_back(combined_inst);
   }
@@ -347,12 +317,11 @@ StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
   }
 
   TF_ASSIGN_OR_RETURN(const auto combined_loads,
-                      CombineFromDifferentShards(comp, std::move(shard_loads),
-                                                 allocation_map_));
+                      CombineFromDifferentShards(comp, std::move(shard_loads)));
 
-  TF_ASSIGN_OR_RETURN(const auto combined_stores,
-                      CombineFromDifferentShards(comp, std::move(shard_stores),
-                                                 allocation_map_));
+  TF_ASSIGN_OR_RETURN(
+      const auto combined_stores,
+      CombineFromDifferentShards(comp, std::move(shard_stores)));
 
   // Try to help the scheduler a bit by adding some constraints.
   TF_RETURN_IF_ERROR(

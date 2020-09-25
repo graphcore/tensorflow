@@ -51,9 +51,13 @@ Status DeferredAllocations::AddDeferredAllocation(
       break;
     }
     case HloOpcode::kCustomCall: {
-      if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+      const bool supports_deferred_allocation =
+          IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
               location.instruction) ||
-          IsPoplarInstruction(PoplarOp::CreateBuffer)(location.instruction)) {
+          IsPoplarInstruction(PoplarOp::CreateBuffer)(location.instruction) ||
+          IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(
+              location.instruction);
+      if (supports_deferred_allocation) {
         break;
       }
       // Fall through.
@@ -739,6 +743,9 @@ Status DeferredVisitor::HandleCustomCall(HloInstruction* inst) {
   if (IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)) {
     return HandleCreateBuffer(inst);
   }
+  if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst)) {
+    return HandleRemoteParameterLoad(inst);
+  }
   return HandleNonDeferredCustomCall(inst);
 }
 
@@ -905,6 +912,84 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
     TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
     TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
         allocate_now, output_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
+  }
+
+  return Status::OK();
+}
+
+Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+
+  const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
+  const int64 num_inputs = inst->operand_count();
+
+  const auto shapes = FlattenedXlaShape(inst->shape());
+  CHECK_EQ(shapes.size(), num_inputs);
+
+  for (size_t i = 0; i < shapes.size(); i++) {
+    if (load_inst->GetReplicationFactor(i) != resources_.replication_factor &&
+        load_inst->GetReplicationFactor(i) != 1) {
+      return xla::FailedPrecondition(
+          "RemoteBuffer load instruction replication factor doesn't match "
+          "graph replication factor.");
+    }
+
+    const Shape shape = shapes[i];
+    TensorLocation input_location(inst, i);
+
+    // Function which is called when allocating this tensor.
+    DeferredAllocateFunction allocate_fn =
+        [this, shape](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                          AllocateInput(allocation_location, shape));
+      return tensor;
+    };
+
+    // Function which is called after the tensor has been created - this
+    // function copies the values from the buffer into the tensor.
+    DeferredPostProcessFunction post_process_fn =
+        [this, inst, i,
+         shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
+
+      if (!UseSyntheticData()) {
+        poplar::program::Sequence seq;
+
+        TensorOrRemoteBufferVector inputs =
+            FindInstructionInputs(tensor_map, resources_, inst, i, seq, true);
+
+        CHECK_EQ(inputs.size(), 1);
+
+        if (!inputs[0].IsRemoteBuffer()) {
+          return xla::FailedPrecondition(
+              "Expected a Poplar RemoteBuffer as operand %d to %s", i,
+              GetDebugName(inst));
+        }
+
+        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
+
+        seq.add(poplar::program::Copy(remote_buffer, tensor));
+
+        // Add grouped such that all copies from the same instruction are
+        // grouped together in the sequence, allowing Poplar to merge them.
+        TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
+      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+        // Initialize the tensor to a constant value.
+        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
+        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
+      }
+
+      return tensor;
+    };
+    const bool allocate_now =
+        HasTensorAllocationTarget(input_location, resources_);
+
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        allocate_now, input_location, std::move(allocate_fn),
         std::move(post_process_fn)));
   }
 
