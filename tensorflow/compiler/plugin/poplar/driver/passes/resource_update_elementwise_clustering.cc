@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
 
 #include <list>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -243,124 +244,22 @@ Status ChangeFusionShape(HloInstruction* fusion, const Shape& old_shape,
   return Status::OK();
 }
 
-struct Cluster {
-  HloInstruction* top;
-  Shape shape;
-  HloInstructionSet insts;
-  HloInstructionSet inputs;
-  std::vector<std::pair<HloInstruction*, std::vector<HloInstruction*>>> outputs;
-
-  explicit Cluster(HloInstruction* top) noexcept
-      : top(top), shape(top->shape()) {
-    Add(top);
-  }
-
-  bool In(HloInstruction* inst) const { return ContainsKey(insts, inst); }
-
-  bool AnyUserIn(HloInstruction* inst) const {
-    for (auto user : inst->users()) {
-      if (ContainsKey(insts, user)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  void Add(HloInstruction* inst) {
-    inputs.erase(inst);
-    insts.insert(inst);
-    for (auto op : inst->operands()) {
-      if (!ContainsKey(insts, op)) {
-        inputs.insert(op);
-      }
-    }
-  }
-
-  bool MaybeAdd(HloInstruction* inst) {
-    if (!AnyUserIn(inst)) {
-      return false;
-    }
-    Add(inst);
-    return true;
-  }
-
-  bool CanMerge(const Cluster& other) {
-    // Allow to merge clusters if we use any of other cluster instruction
-    bool can_merge = false;
-    for (auto inst : insts) {
-      for (auto user : inst->users()) {
-        if (other.In(user)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  void Merge(const Cluster& other) {
-    for (auto inst : other.insts) {
-      Add(inst);
-    }
-  }
-
-  std::vector<HloInstruction*> GetOutputs(HloInstruction* inst) {
-    // Check each instruction in cluster if it has any users outside the
-    // cluster. For each output, replace it with
-    // reshape(all-gather(reshape(inst)))
-    std::vector<HloInstruction*> inst_outputs;
-    auto users = inst->users();
-    absl::c_copy_if(
-        users, std::back_inserter(inst_outputs),
-        [this](HloInstruction* user) { return !ContainsKey(insts, user); });
-
-    for (auto output : inst_outputs) {
-      VLOG(2) << "Cluster " << top->name() << " output: " << output->ToString();
-    }
-    return inst_outputs;
-  }
-
-  void UpdateOutputs() {
-    outputs.clear();
-    for (auto inst : insts) {
-      outputs.emplace_back(inst, GetOutputs(inst));
-    }
-  }
-
-  bool Validate() {
-    if (IsScalar(top)) {
-      return false;
-    }
-
-    return
-        // All inputs are valid inputs.
-        absl::c_all_of(inputs, ValidClusterInput) &&
-        // At least one input is remote.
-        absl::c_any_of(inputs, IsReshapeAllGatherLoad);
-  }
-
-  void LogInputs() {
-    for (auto input : inputs) {
-      VLOG(2) << "input: " << input->name() << " " << ValidClusterInput(input)
-              << " " << IsReshapeAllGatherLoad(input);
-    }
-  }
-};
-
 Status RewriteClusterInput(
-    const Cluster& cluster, int64 aligned_cluster_size,
+    const ElementwiseCluster& cluster, int64 aligned_cluster_size,
     const Shape& shard_shape, int64 replication_factor,
     HloInstruction* cluster_input,
     absl::flat_hash_map<HloInstruction*, HloInstruction*>& input_slices) {
-  HloComputation* cluster_comp = cluster.top->parent();
-  int64 cluster_size = ShapeUtil::ElementsIn(cluster.shape);
+  HloComputation* cluster_comp = cluster.GetComputation();
+  int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
   int64 shard_size = ShapeUtil::ElementsIn(shard_shape);
   // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
   // all-gather.
   HloInstruction* remote_load = GetReshapeAllGatherLoad(cluster_input);
   if (remote_load && remote_load->shape() == shard_shape) {
     VLOG(2) << "Rewriting remote cluster input " << remote_load->ToString();
+    const std::vector<HloInstruction*> insts = cluster.GetPostOrder();
     for (auto user : cluster_input->users()) {
-      if (ContainsKey(cluster.insts, user)) {
+      if (absl::c_find(insts, user) != insts.end()) {
         VLOG(2) << "Removing all-gather, use remote-parameter-load directly.";
         TF_RETURN_IF_ERROR(
             cluster_input->ReplaceUseWithDifferentShape(user, remote_load));
@@ -376,7 +275,7 @@ Status RewriteClusterInput(
 
   auto cluster_input_shape = cluster_input->shape();
   HloInstruction*& cluster_input_slice = input_slices[cluster_input];
-  for (auto inst : cluster.insts) {
+  for (auto inst : cluster.GetPostOrder()) {
     if (inst->IsUserOf(cluster_input)) {
       if (!cluster_input_slice) {
         Shape all_shards_shape =
@@ -450,12 +349,13 @@ Status RewriteClusterInput(
   return Status::OK();
 }
 
-Status RewriteClusterOutput(const Cluster& cluster, int64 aligned_cluster_size,
+Status RewriteClusterOutput(const ElementwiseCluster& cluster,
+                            int64 aligned_cluster_size,
                             const Shape& shard_shape, int64 replication_factor,
                             HloInstruction* inst,
                             const std::vector<HloInstruction*>& outputs) {
-  HloComputation* cluster_comp = cluster.top->parent();
-  int64 cluster_size = ShapeUtil::ElementsIn(cluster.shape);
+  HloComputation* cluster_comp = cluster.GetComputation();
+  int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
   int64 shard_size = ShapeUtil::ElementsIn(shard_shape);
 
   HloInstruction* all_gather_reshaped = nullptr;
@@ -471,16 +371,17 @@ Status RewriteClusterOutput(const Cluster& cluster, int64 aligned_cluster_size,
     } else if (user->shape() != shard_shape) {
       if (!all_gather_reshaped) {
         // Create all gather and replace usage
-        auto all_gather_shape = ShapeUtil::MakeShape(
-            cluster.shape.element_type(), {replication_factor, shard_size});
+        auto all_gather_shape =
+            ShapeUtil::MakeShape(cluster.GetShape().element_type(),
+                                 {replication_factor, shard_size});
         auto all_gather = cluster_comp->AddInstruction(
             CreateAllGather({inst}, all_gather_shape));
-        if (all_gather_shape != cluster.shape) {
+        if (all_gather_shape != cluster.GetShape()) {
           if (cluster_size != aligned_cluster_size) {
             Shape flat_cluster_shape = ShapeUtil::MakeShape(
-                cluster.shape.element_type(), {cluster_size});
+                cluster.GetShape().element_type(), {cluster_size});
             Shape aligned_cluster_shape = ShapeUtil::MakeShape(
-                cluster.shape.element_type(), {aligned_cluster_size});
+                cluster.GetShape().element_type(), {aligned_cluster_size});
             HloInstruction* flat_all_gather =
                 cluster_comp->AddInstruction(HloInstruction::CreateReshape(
                     aligned_cluster_shape, all_gather));
@@ -489,10 +390,10 @@ Status RewriteClusterOutput(const Cluster& cluster, int64 aligned_cluster_size,
                                             {0}, {cluster_size}, {1}));
             VLOG(2) << "Slicing padding, slice: " << slice->ToString();
             all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(cluster.shape, slice));
+                HloInstruction::CreateReshape(cluster.GetShape(), slice));
           } else {
             all_gather_reshaped = cluster_comp->AddInstruction(
-                HloInstruction::CreateReshape(cluster.shape, all_gather));
+                HloInstruction::CreateReshape(cluster.GetShape(), all_gather));
           }
         } else {
           all_gather_reshaped = all_gather;
@@ -520,7 +421,7 @@ StatusOr<bool> RewriteResourceUpdate(
     return false;
   }
 
-  std::list<Cluster> clusters;
+  std::list<ElementwiseCluster> clusters;
 
   // Going back post-order growing a tree of elementwise instruction.
   // For each new elementwise instruction, check if any of its users are already
@@ -560,7 +461,8 @@ StatusOr<bool> RewriteResourceUpdate(
       bool added = false;
       for (auto& cluster : clusters) {
         if (cluster.MaybeAdd(inst)) {
-          VLOG(2) << "Added to cluster with top " << cluster.top->ToString();
+          VLOG(2) << "Added to cluster with top "
+                  << cluster.GetTop()->ToString();
           added = true;
           break;
         }
@@ -578,19 +480,19 @@ StatusOr<bool> RewriteResourceUpdate(
     clusters_merged = false;
     for (auto i = clusters.begin(); !clusters_merged && i != clusters.end();
          ++i) {
-      Cluster& a = *i;
+      ElementwiseCluster& a = *i;
       for (auto j = std::next(i); j != clusters.end(); ++j) {
-        Cluster& b = *j;
+        ElementwiseCluster& b = *j;
         if (a.CanMerge(b)) {
-          VLOG(2) << "Cluster " << b.top->name()
-                  << " could be merged in cluster " << a.top->name();
+          VLOG(2) << "Cluster " << b.GetTop()->name()
+                  << " could be merged in cluster " << a.GetTop()->name();
           a.Merge(b);
           clusters.erase(j);
           clusters_merged = true;
           break;
         } else if (b.CanMerge(a)) {
-          VLOG(2) << "Cluster " << a.top->name()
-                  << " could be merged in cluster " << b.top->name();
+          VLOG(2) << "Cluster " << a.GetTop()->name()
+                  << " could be merged in cluster " << b.GetTop()->name();
           b.Merge(a);
           clusters.erase(i);
           clusters_merged = true;
@@ -602,24 +504,14 @@ StatusOr<bool> RewriteResourceUpdate(
 
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    VLOG(2) << "Found cluster, top: " << cluster.top->ToString() << ", "
-            << cluster.inputs.size() << " input(s).";
-    for (auto inst : cluster.insts) {
-      VLOG(2) << "Cluster instruction: " << inst->ToString();
-    }
-    for (auto inst : cluster.inputs) {
-      VLOG(2) << "Cluster input: " << inst->ToString();
-    }
-    if (!cluster.Validate()) {
-      VLOG(2) << "Invalid cluster, find input table below:";
-      cluster.LogInputs();
-      it = clusters.erase(it);
-    } else {
-      VLOG(2) << "Found cluster suitable for replication (all inputs valid).";
-      // Before replacing inputs, we collect outputs, because we're going to add
-      // more users.
-      cluster.UpdateOutputs();
+    if (cluster.Finalize()) {
+      VLOG(2) << "Found cluster suitable for replication (all inputs valid):";
+      XLA_VLOG_LINES(2, cluster.ToString());
       ++it;
+    } else {
+      VLOG(2) << "Invalid cluster:";
+      XLA_VLOG_LINES(2, cluster.Dump());
+      it = clusters.erase(it);
     }
   }
 
@@ -633,16 +525,16 @@ StatusOr<bool> RewriteResourceUpdate(
 
   VLOG(2) << "Clustering with factor " << replication_factor;
   for (auto& cluster : clusters) {
-    VLOG(2) << "Rewriting cluster with top in " << cluster.top->ToString()
-            << ", " << cluster.insts.size() << " instructions...";
-    HloComputation* cluster_comp = cluster.top->parent();
-    int64 cluster_size = ShapeUtil::ElementsIn(cluster.shape);
+    VLOG(2) << "Rewriting cluster with top in " << cluster.GetTop()->ToString()
+            << ", " << cluster.GetPostOrder().size() << " instructions...";
+    HloComputation* cluster_comp = cluster.GetComputation();
+    int64 cluster_size = ShapeUtil::ElementsIn(cluster.GetShape());
     int64 aligned_cluster_size = cluster_size;
 
     // Going through remote inputs and determine shard size from
     // remote-parameter-load instruction. Also check that all shapes match.
     absl::optional<Shape> shard_shape_opt;
-    for (auto cluster_input : cluster.inputs) {
+    for (auto cluster_input : cluster.GetInputs()) {
       auto remote_load =
           GetReshapeAllGatherLoad(cluster_input, &aligned_cluster_size);
       if (!remote_load) {
@@ -667,7 +559,7 @@ StatusOr<bool> RewriteResourceUpdate(
     auto shard_size = ShapeUtil::ElementsIn(shard_shape);
 
     VLOG(2) << "Cluster shard shape is " << shard_shape.ToString()
-            << ", cluster shape is " << cluster.shape.ToString();
+            << ", cluster shape is " << cluster.GetShape().ToString();
 
     if (shard_size * replication_factor != aligned_cluster_size) {
       VLOG(2) << "Cluster shape and replica shape don't match " << shard_size
@@ -676,19 +568,20 @@ StatusOr<bool> RewriteResourceUpdate(
     }
 
     // Change the shape of the cluster.
-    for (auto inst : cluster.insts) {
+    for (auto inst : cluster.GetPostOrder()) {
       if (inst->opcode() == HloOpcode::kFusion) {
-        TF_RETURN_IF_ERROR(ChangeFusionShape(inst, cluster.shape, shard_shape));
+        TF_RETURN_IF_ERROR(
+            ChangeFusionShape(inst, cluster.GetShape(), shard_shape));
       } else {
         TF_RETURN_IF_ERROR(
-            ChangeInstructionShape(inst, cluster.shape, shard_shape));
+            ChangeInstructionShape(inst, cluster.GetShape(), shard_shape));
       }
     }
 
     // For each input:
     // Replace all-gather(remote-parameter-load)) with remote-parameter-load()
     // Replace other inputs with dynamic-slice(input, replication-index)
-    for (auto cluster_input : cluster.inputs) {
+    for (auto cluster_input : cluster.GetInputs()) {
       if (IsScalar(cluster_input)) {
         VLOG(2) << "Ignoring scalar: " << cluster_input->ToString();
         continue;
@@ -704,19 +597,218 @@ StatusOr<bool> RewriteResourceUpdate(
     // If its user is outside of cluster, do all-gather/reshape
     // If its user is store(shape(slice(shape(cluster)))), remove reshape
     // and slice.
-    for (auto& output_pair : cluster.outputs) {
+    for (auto cluster_output : cluster.GetOutputs()) {
       TF_RETURN_IF_ERROR(RewriteClusterOutput(
           cluster, aligned_cluster_size, shard_shape, replication_factor,
-          output_pair.first, output_pair.second));
+          cluster_output, cluster.GetUsersForOutput(cluster_output)));
     }
     changed = true;
-    VLOG(2) << "After the ElementwiseClustering:";
-    XLA_VLOG_LINES(2, module->ToString());
   }
   return changed;
 }
-
 }  // namespace
+
+ElementwiseCluster::ElementwiseCluster(HloInstruction* top) noexcept
+    : top_(top), shape_(top->shape()) {
+  Add(top);
+}
+
+bool ElementwiseCluster::In(HloInstruction* inst) const {
+  return ContainsKey(insts_, inst);
+}
+
+bool ElementwiseCluster::AnyUserIn(HloInstruction* inst) const {
+  for (auto user : inst->users()) {
+    if (ContainsKey(insts_, user)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ElementwiseCluster::Add(HloInstruction* inst) {
+  inputs_.erase(inst);
+  insts_.insert(inst);
+  for (auto op : inst->operands()) {
+    if (!ContainsKey(insts_, op)) {
+      inputs_.insert(op);
+    }
+  }
+}
+
+bool ElementwiseCluster::MaybeAdd(HloInstruction* inst) {
+  if (!AnyUserIn(inst)) {
+    return false;
+  }
+  Add(inst);
+  return true;
+}
+
+bool ElementwiseCluster::CanMerge(const ElementwiseCluster& other) {
+  // Allow to merge clusters if we use any of other cluster instruction
+  bool can_merge = false;
+  for (auto inst : insts_) {
+    for (auto user : inst->users()) {
+      if (other.In(user)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void ElementwiseCluster::Merge(const ElementwiseCluster& other) {
+  for (auto inst : other.insts_) {
+    Add(inst);
+  }
+}
+const HloInstruction* ElementwiseCluster::GetTop() const { return top_; }
+
+HloComputation* ElementwiseCluster::GetComputation() const {
+  return top_->parent();
+}
+
+const Shape& ElementwiseCluster::GetShape() const { return shape_; }
+
+bool ElementwiseCluster::Finalize() {
+  CHECK(!finalized_);
+
+  if (IsScalar(top_)) {
+    return false;
+  }
+
+  // Check all inputs are valid.
+  if (!absl::c_all_of(inputs_, ValidClusterInput)) {
+    return false;
+  }
+
+  // Check at least one input is remote.
+  if (!absl::c_any_of(inputs_, IsReshapeAllGatherLoad)) {
+    return false;
+  }
+
+  // Populate all the remaining fields and create a post order traversal.
+  inputs_vec_.reserve(inputs_.size());
+  absl::c_copy(inputs_, std::back_inserter(inputs_vec_));
+
+  std::vector<HloInstruction*> to_visit;
+  absl::flat_hash_set<HloInstruction*> visited;
+
+  auto was_visited = [&visited](const HloInstruction* inst) -> bool {
+    return visited.contains(inst);
+  };
+
+  auto add_users_for_processing = [&to_visit, &was_visited,
+                                   this](HloInstruction* inst) {
+    // Find any users in the cluster ready for processing.
+    for (auto user : inst->users()) {
+      if (!ContainsKey(insts_, user)) {
+        continue;
+      }
+      // Instruction is ready to process when all operands have been
+      // visited.
+      const bool ready_to_process =
+          absl::c_all_of(user->operands(), was_visited);
+      if (ready_to_process) {
+        to_visit.push_back(user);
+      }
+    }
+  };
+
+  auto add_outputs = [this](HloInstruction* inst) {
+    for (auto user : inst->users()) {
+      if (!ContainsKey(insts_, user)) {
+        outputs_to_users_[inst].push_back(user);
+      }
+    }
+  };
+
+  for (HloInstruction* input : inputs_vec_) {
+    visited.insert(input);
+    add_users_for_processing(input);
+  }
+
+  while (!to_visit.empty()) {
+    HloInstruction* inst = to_visit.back();
+    to_visit.pop_back();
+    if (was_visited(inst)) {
+      continue;
+    }
+    post_order_.push_back(inst);
+    visited.insert(inst);
+    add_users_for_processing(inst);
+    add_outputs(inst);
+  }
+  CHECK(absl::c_all_of(insts_, was_visited))
+      << "Invalid elementwise cluster produced.";
+  CHECK_EQ(insts_.size(), post_order_.size());
+
+  outputs_.reserve(outputs_to_users_.size());
+  for (auto& pair : outputs_to_users_) {
+    outputs_.push_back(pair.first);
+  }
+
+  finalized_ = true;
+  return true;
+}
+
+const std::vector<HloInstruction*>& ElementwiseCluster::GetInputs() const {
+  CHECK(finalized_);
+  return inputs_vec_;
+}
+
+const std::vector<HloInstruction*>& ElementwiseCluster::GetPostOrder() const {
+  CHECK(finalized_);
+  return post_order_;
+}
+
+const std::vector<HloInstruction*>& ElementwiseCluster::GetOutputs() const {
+  CHECK(finalized_);
+  return outputs_;
+}
+
+const std::vector<HloInstruction*>& ElementwiseCluster::GetUsersForOutput(
+    HloInstruction* inst) const {
+  CHECK(finalized_);
+  return outputs_to_users_.at(inst);
+}
+
+std::string ElementwiseCluster::Dump() const {
+  std::stringstream ss;
+  ss << "Cluster dump:\n";
+  ss << "top: " << top_->ToString() << ", " << inputs_.size() << " input(s).";
+  for (auto inst : inputs_) {
+    ss << "Input: " << inst->ToString() << "\n";
+  }
+  ss << "\n";
+  for (auto inst : insts_) {
+    ss << "Instruction: " << inst->ToString() << "\n";
+  }
+  return ss.str();
+}
+
+std::string ElementwiseCluster::ToString() const {
+  CHECK(finalized_);
+  std::stringstream ss;
+  ss << "Cluster:\n";
+  ss << "Inputs:\n";
+  for (auto inst : inputs_vec_) {
+    ss << "* " << inst->ToString() << "\n";
+  }
+  ss << "\n";
+  ss << "Post order:\n";
+  for (auto inst : post_order_) {
+    ss << "* " << inst->ToString() << "\n";
+  }
+  ss << "Outputs:\n";
+  for (auto inst : outputs_) {
+    ss << "* " << inst->ToString() << " used by:\n";
+    for (auto user : outputs_to_users_.at(inst)) {
+      ss << "  * " << user->ToString() << "\n";
+    }
+  }
+  return ss.str();
+}
 
 StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   if (replication_factor_ <= 1) {
@@ -774,6 +866,8 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
 
   if (module_changed) {
     TF_RETURN_IF_ERROR(module->RemoveUnusedComputations());
+    VLOG(2) << "After the ElementwiseClustering:";
+    XLA_VLOG_LINES(2, module->ToString());
   }
 
   return module_changed;
