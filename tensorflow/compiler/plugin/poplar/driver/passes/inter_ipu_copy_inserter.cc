@@ -70,8 +70,7 @@ StatusOr<HloInstruction*> InsertInterIpuCopy(
   }
 
   HloInstruction* new_inst;
-  if (inst->opcode() == HloOpcode::kConstant ||
-      IsPopOpsFusion(inst, "wide_const") ||
+  if (inst->opcode() == HloOpcode::kConstant || IsWideConstant(inst) ||
       IsPoplarInstruction(PoplarOp::ExecutionCounter)(inst)) {
     new_inst = comp->AddInstruction(inst->Clone());
   } else {

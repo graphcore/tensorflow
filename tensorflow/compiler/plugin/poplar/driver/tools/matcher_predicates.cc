@@ -458,8 +458,12 @@ bool IsAnySliceApply(const HloInstruction* inst) {
   return false;
 }
 
+bool IsWideConstant(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "wide_const");
+}
+
 bool IsWideConstantZero(const HloInstruction* inst) {
-  if (IsPopOpsFusion(inst, "wide_const")) {
+  if (IsWideConstant(inst)) {
     const HloInstruction* fusion_root = inst->fused_expression_root();
     return IsConstantZero(fusion_root->operand(0));
   }
