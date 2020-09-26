@@ -42,9 +42,6 @@ class ElementwiseCluster {
   HloComputation* GetComputation() const;
   std::string Dump() const;
 
-  // The shape of the operations in the cluster before it is partitioned.
-  const Shape& GetClusterShape() const;
-
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
   bool Finalize();
@@ -56,8 +53,11 @@ class ElementwiseCluster {
   const std::vector<HloInstruction*>& GetOutputs() const;
   const std::vector<HloInstruction*>& GetUsersForOutput(
       HloInstruction* inst) const;
-  // The shape of the operations in the cluster after it is partitioned.
-  const Shape& GetShardShape() const;
+
+  // The dimensions of the operations in the cluster before it is partitioned.
+  const std::vector<int64>& GetClusterDimensions() const;
+  // The dimensions of the operations in the cluster after it is partitioned.
+  const std::vector<int64>& GetShardDimensions() const;
   // The size of the cluster before it is partitioned.
   int64 GetClusterSize() const;
   // The size of the cluster taking the padding on all-gathers into account.
@@ -77,7 +77,8 @@ class ElementwiseCluster {
   std::vector<HloInstruction*> post_order_;
   std::vector<HloInstruction*> outputs_;
   HloInstructionMap<std::vector<HloInstruction*>> outputs_to_users_;
-  Shape shard_shape_;
+  std::vector<int64> cluster_dimensions_;
+  std::vector<int64> shard_dimensions_;
   int64 cluster_size_;
   int64 shard_size_;
   int64 aligned_cluster_size_;

@@ -1158,6 +1158,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();
+    pipeline.AddPass<ResourceUpdateElementwiseClustering>(
+        resources.replication_factor);
     {
       auto inline_fusion = [](const HloInstruction* inst) {
         return IsReplicatedParameterLoadFusion(inst) ||
@@ -1165,8 +1167,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       };
       pipeline.AddPass<FusionInliner>(inline_fusion);
     }
-    pipeline.AddPass<ResourceUpdateElementwiseClustering>(
-        resources.replication_factor);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<HostEmbeddingNotification>();

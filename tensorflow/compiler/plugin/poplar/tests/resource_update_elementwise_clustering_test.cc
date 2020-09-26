@@ -25,11 +25,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+#include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
 namespace m = match;
@@ -213,8 +215,11 @@ std::string GetSimpleHloString(int n, int m) {
     rate.3 = f32[] reshape(rate.2)
     fusion.1 = f32[$N,$M] fusion(add.1, add.2, rate.1), kind=kCustom, calls=scale_xya.1
     fusion.2 = f32[$N,$M] fusion(add.1, add.2, rate.3), kind=kCustom, calls=scale_xya.2
+    
+    convert.1 = f16[$N,$M] convert(fusion.1)
+    convert.2 = f32[$N,$M] convert(convert.1)
 
-    ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(arg0, arg1, fusion.1, fusion.2)
+    ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(arg0, arg1, convert.2, fusion.2)
   )";
   return GetTemplateHloString(wu, n, m);
 }
@@ -314,65 +319,165 @@ ENTRY main {
   }
 }
 
-std::string GetHlo(const std::string& shape,
-                   const std::string& remote_buffer_shape) {
+std::string GetHlo(const std::vector<int64>& dimensions,
+                   const PrimitiveType& element_type,
+                   const PrimitiveType& remote_buffer_element_type) {
   const std::string hlo = R"(
   HloModule main
 
+  sum {
+    y = $element_type[] parameter(1)
+    x = $element_type[] parameter(0), control-predecessors={y}
+    ROOT add = $element_type[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
   resource_update {
-    arg0 = $shape parameter(0)
-    arg1 = $shape parameter(1)
-    arg2 = $remote_buffer_shape parameter(2)
-    arg2_c = $shape convert(arg2)
-    arg2_new = $shape add(arg0, arg2_c)
-    arg1_new = $shape add(arg1, arg2_new)
-    arg2_new_c = $remote_buffer_shape convert(arg2_new)
-    ROOT t = ($shape,$remote_buffer_shape) tuple(arg1_new, arg2_new_c)
+    arg0 = $element_type$shape parameter(0)
+    arg1 = $element_type$shape parameter(1)
+    arg0_r = $element_type$shape all-reduce(arg0), to_apply=sum
+    arg2 = $remote_buffer_element_type$shape parameter(2)
+    arg2_c = $element_type$shape convert(arg2)
+    arg2_new = $element_type$shape add(arg0_r, arg2_c)
+    arg1_new = $element_type$shape add(arg1, arg2_new)
+    arg2_new_c = $remote_buffer_element_type$shape convert(arg2_new)
+    ROOT t = ($element_type$shape,$remote_buffer_element_type$shape) tuple(arg1_new, arg2_new_c)
   }
 
   loop {
     after-all = token[] after-all()
-    infeed = ($shape, token[]) infeed(after-all), infeed_config="140121807314576"
-    input = $shape get-tuple-element(infeed), index=0
+    infeed = ($element_type$shape, token[]) infeed(after-all), infeed_config="140121807314576"
+    input = $element_type$shape get-tuple-element(infeed), index=0
 
-    arg0 = $shape parameter(0)
-    arg1 = $remote_buffer_shape parameter(1)
+    arg0 = $element_type$shape parameter(0)
+    arg1 = $remote_buffer_element_type$shape parameter(1)
 
-    add.1 = $shape add(input, arg0)
-    call = ($shape,$remote_buffer_shape) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
-    gte0 = $shape get-tuple-element(call), index=0
-    gte1 = $remote_buffer_shape get-tuple-element(call), index=1
-    ROOT r = ($shape,$remote_buffer_shape) tuple(gte0, gte1)
+    add.1 = $element_type$shape add(input, arg0)
+    call = ($element_type$shape,$remote_buffer_element_type$shape) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = $element_type$shape get-tuple-element(call), index=0
+    gte1 = $remote_buffer_element_type$shape get-tuple-element(call), index=1
+    ROOT r = ($element_type$shape,$remote_buffer_element_type$shape) tuple(gte0, gte1)
   }
 
   ENTRY e {
-    e.in0 = $shape parameter(0)
-    e.in1 = $remote_buffer_shape parameter(1)
-    call = ($shape,$remote_buffer_shape) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
-    gte0 = $shape get-tuple-element(call), index=0
-    gte1 = $remote_buffer_shape get-tuple-element(call), index=1
-    ROOT r = ($shape,$remote_buffer_shape) tuple(gte0, gte1)
+    e.in0 = $element_type$shape parameter(0)
+    e.in1 = $remote_buffer_element_type$shape parameter(1)
+    call = ($element_type$shape,$remote_buffer_element_type$shape) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = $element_type$shape get-tuple-element(call), index=0
+    gte1 = $remote_buffer_element_type$shape get-tuple-element(call), index=1
+    ROOT r = ($element_type$shape,$remote_buffer_element_type$shape) tuple(gte0, gte1)
   }
   )";
-  std::string hlo_string =
-      tensorflow::str_util::StringReplace(hlo, "$shape", shape, true);
-  return tensorflow::str_util::StringReplace(hlo_string, "$remote_buffer_shape",
-                                             remote_buffer_shape, true);
+  std::string hlo_string = tensorflow::str_util::StringReplace(
+      hlo, "$shape", absl::StrCat("[", absl::StrJoin(dimensions, ","), "]"),
+      true);
+  hlo_string = tensorflow::str_util::StringReplace(
+      hlo_string, "$element_type",
+      primitive_util::LowercasePrimitiveTypeName(element_type), true);
+  hlo_string = tensorflow::str_util::StringReplace(
+      hlo_string, "$remote_buffer_element_type",
+      primitive_util::LowercasePrimitiveTypeName(remote_buffer_element_type),
+      true);
+  return hlo_string;
 }
 
-TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestGetClustersSameType) {
+StatusOr<HloInstruction*> GetNextUser(HloInstruction* inst) {
+  if (inst->user_count() != 1) {
+    return FailedPrecondition("Expected single user.");
+  }
+  return inst->users()[0];
+}
+
+StatusOr<HloInstruction*> GetRewrittenInput(HloInstruction* inst, bool padded) {
+  if (padded) {
+    TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+    EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+    TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+    EXPECT_THAT(inst->opcode(), HloOpcode::kPad);
+  }
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_THAT(inst->opcode(), HloOpcode::kDynamicSlice);
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+  return inst;
+}
+
+StatusOr<HloInstruction*> GetRewrittenOutput(HloInstruction* inst,
+                                             bool sliced) {
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::AllGather)(inst));
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+  if (sliced) {
+    TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+    EXPECT_THAT(inst->opcode(), HloOpcode::kSlice);
+    TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+    EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+  }
+  return inst;
+}
+
+struct ResourceUpdateElementwiseClusteringShapeTestSpec {
+  std::vector<int64> dimensions;
+  int64 cluster_size;
+  int64 aligned_cluster_size;
+  int64 shard_size;
+  PrimitiveType element_type;
+  PrimitiveType remote_buffer_element_type;
+  bool padded_and_sliced;
+};
+
+std::ostream& operator<<(
+    std::ostream& os,
+    const ResourceUpdateElementwiseClusteringShapeTestSpec& spec) {
+  return os << "{ dimensions: [" << absl::StrJoin(spec.dimensions, "],")
+            << ", cluster_size; " << spec.cluster_size
+            << ", aligned_cluster_size; " << spec.aligned_cluster_size
+            << ", shard_size; " << spec.shard_size
+            << ", element_type: " << spec.element_type
+            << ", remote_buffer_element_type: "
+            << spec.remote_buffer_element_type
+            << ", padded_and_sliced: " << spec.padded_and_sliced << "}";
+}
+
+class ResourceUpdateElementwiseClusteringShapeTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<
+          ResourceUpdateElementwiseClusteringShapeTestSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    ResourceUpdateElementwiseClusteringShapeTestCases,
+    ResourceUpdateElementwiseClusteringShapeTest,
+    ::testing::ValuesIn(
+        std::vector<ResourceUpdateElementwiseClusteringShapeTestSpec>{
+            {{128, 2, 2}, 512, 512, 256, F32, F32, false},
+            {{128}, 128, 128, 64, F32, F32, false},
+            {{128, 2, 2}, 512, 512, 256, F16, F32, false},
+            {{128, 2, 2}, 512, 512, 256, F32, F16, false},
+            {{129, 3}, 387, 388, 194, F32, F32, true},
+            {{1}, 1, 2, 1, F32, F32, true},
+            {{127, 5}, 635, 636, 318, F16, F32, true},
+            {{127, 5}, 635, 636, 318, F32, F16, true},
+        }));
+
+TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
+  auto param = GetParam();
+
   auto config = GetModuleConfigForTest();
   config.set_resource_input_count(2);
   config.set_input_mapping({0, 1});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(
       auto module,
-      ParseAndReturnVerifiedModule(GetHlo("f32[2,2]", "f32[2,2]"), config));
+      ParseAndReturnVerifiedModule(GetHlo(param.dimensions, param.element_type,
+                                          param.remote_buffer_element_type),
+                                   config));
 
   HloComputation* resource_update =
       FindComputation(module.get(), "resource_update");
 
-  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
+  HloInstruction* arg0_r = FindInstruction(module.get(), "arg0_r");
   HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
   HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
   HloInstruction* arg2_c = FindInstruction(module.get(), "arg2_c");
@@ -385,13 +490,6 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestGetClustersSameType) {
       bool offloaded,
       VariablesOffloadAndPartition(annotations, true, 0, 2).Run(module.get()));
   EXPECT_TRUE(offloaded);
-  TF_ASSERT_OK_AND_ASSIGN(bool inlined,
-                          FusionInliner([](const HloInstruction* inst) {
-                            return IsReplicatedParameterLoadFusion(inst) ||
-                                   IsReplicatedParameterStoreFusion(inst);
-                          })
-                              .Run(module.get()));
-  EXPECT_TRUE(inlined);
 
   auto elementwise_comps = ResourceUpdateElementwiseClustering::
       GetElementwiseClusterableComputations(module.get());
@@ -399,17 +497,67 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestGetClustersSameType) {
       resource_update, elementwise_comps);
   EXPECT_THAT(clusters.size(), 1);
   auto& cluster = *std::begin(clusters);
-  EXPECT_THAT(cluster.GetClusterSize(), 4);
-  EXPECT_THAT(cluster.GetAlignedClusterSize(), 4);
-  EXPECT_THAT(cluster.GetShardSize(), 2);
+  EXPECT_THAT(cluster.GetClusterSize(), param.cluster_size);
+  EXPECT_THAT(cluster.GetAlignedClusterSize(), param.aligned_cluster_size);
+  EXPECT_THAT(cluster.GetShardSize(), param.shard_size);
   HloInstruction* arg2_c_reshape = arg2_c->mutable_operand(0);
   EXPECT_THAT(cluster.GetInputs(),
-              ::testing::UnorderedElementsAre(arg0, arg1, arg2_c_reshape));
+              ::testing::UnorderedElementsAre(arg0_r, arg1, arg2_c_reshape));
   EXPECT_THAT(
       cluster.GetPostOrder(),
       ::testing::UnorderedElementsAre(arg2_c, arg2_new, arg1_new, arg2_new_c));
   EXPECT_THAT(cluster.GetOutputs(),
               ::testing::UnorderedElementsAre(arg1_new, arg2_new_c));
+
+  // Convert the cluster.
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool converted,
+      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2));
+  EXPECT_TRUE(converted);
+
+  TF_ASSERT_OK_AND_ASSIGN(arg0_r,
+                          GetRewrittenInput(arg0_r, param.padded_and_sliced));
+  EXPECT_THAT(arg0_r->shape(),
+              ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
+
+  TF_ASSERT_OK_AND_ASSIGN(arg1,
+                          GetRewrittenInput(arg1, param.padded_and_sliced));
+  EXPECT_THAT(arg1->shape(),
+              ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
+
+  HloInstruction *arg2_load, *arg2_store;
+  TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
+  EXPECT_THAT(arg2_load->shape(),
+              ShapeUtil::MakeShape(param.remote_buffer_element_type,
+                                   {param.shard_size}));
+
+  EXPECT_THAT(arg2_c->operands(), ::testing::ElementsAre(arg2_load));
+  EXPECT_THAT(arg2_c->shape(),
+              ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
+
+  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_c));
+  EXPECT_THAT(arg2_new->shape(),
+              ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
+
+  EXPECT_THAT(arg1_new->operands(), ::testing::ElementsAre(arg1, arg2_new));
+  EXPECT_THAT(arg1_new->shape(),
+              ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
+
+  EXPECT_THAT(arg2_new_c->operands(), ::testing::ElementsAre(arg2_new));
+  EXPECT_THAT(arg2_new_c->shape(),
+              ShapeUtil::MakeShape(param.remote_buffer_element_type,
+                                   {param.shard_size}));
+
+  EXPECT_THAT(arg2_store->operands(), ::testing::ElementsAre(arg2, arg2_new_c));
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      arg1_new, GetRewrittenOutput(arg1_new, param.padded_and_sliced));
+  EXPECT_THAT(arg1_new->shape(),
+              ShapeUtil::MakeShape(param.element_type, param.dimensions));
+
+  EXPECT_THAT(resource_update->root_instruction()->operands(),
+              ::testing::ElementsAre(arg1_new, arg2_store));
+  TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 }
 
 struct ResourceUpdateElementwiseClusteringTestSpec {
@@ -495,13 +643,6 @@ TEST_P(ResourceUpdateElementwiseClusteringTest, DoTest) {
       VariablesOffloadAndPartition(annotations, true, 0, replication_factor)
           .Run(module.get()));
   EXPECT_TRUE(offloaded);
-  TF_ASSERT_OK_AND_ASSIGN(bool inlined,
-                          FusionInliner([](const HloInstruction* inst) {
-                            return IsReplicatedParameterLoadFusion(inst) ||
-                                   IsReplicatedParameterStoreFusion(inst);
-                          })
-                              .Run(module.get()));
-  EXPECT_TRUE(inlined);
 
   if (param.cluster) {
     TF_ASSERT_OK_AND_ASSIGN(
@@ -509,6 +650,13 @@ TEST_P(ResourceUpdateElementwiseClusteringTest, DoTest) {
                           .Run(module.get()));
     EXPECT_TRUE(changed);
   }
+  TF_ASSERT_OK_AND_ASSIGN(bool inlined,
+                          FusionInliner([](const HloInstruction* inst) {
+                            return IsReplicatedParameterLoadFusion(inst) ||
+                                   IsReplicatedParameterStoreFusion(inst);
+                          })
+                              .Run(module.get()));
+  EXPECT_TRUE(inlined);
   TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 
   auto root = module->entry_computation()->root_instruction();
