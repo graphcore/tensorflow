@@ -845,7 +845,7 @@ bool HloMatcher::MatchPattern(HloInstruction* root,
               (inst->opcode() == HloOpcode::kConstant) ||
               (inst->opcode() == HloOpcode::kBroadcast &&
                inst->operand(0)->opcode() == HloOpcode::kConstant) ||
-              IsPopOpsFusion(inst, "wide_const");
+              IsWideConstant(inst);
           if (!ignore_sharding) {
             sharding_devices.insert(*sharding.UniqueDevice());
           }

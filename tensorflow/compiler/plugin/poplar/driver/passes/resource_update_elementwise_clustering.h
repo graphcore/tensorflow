@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 
-#include <list>
 #include <string>
 #include <vector>
 
@@ -44,7 +43,8 @@ class ElementwiseCluster {
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
-  bool Finalize();
+  bool Finalize(
+      const absl::flat_hash_set<int64>& allowed_parameter_indices_inputs);
 
   // Following functions can be called once finalized.
   std::string ToString() const;
@@ -103,8 +103,10 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   static absl::flat_hash_set<const HloComputation*>
   GetElementwiseClusterableComputations(const HloModule* module);
 
-  static std::list<ElementwiseCluster> GetClustersIn(
-      const HloComputation* comp,
+  // Get clusters inside of the call, where the call has to be a repeat loop or
+  // a pipeline.
+  static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
+      HloInstruction* const call,
       const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
 
   // Outline the provided cluster - returns whether it was successfully
