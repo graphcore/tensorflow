@@ -42,11 +42,8 @@ bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
 }
 
-bool IsValidParameterInput(
-    const HloInstruction* inst,
-    const absl::flat_hash_set<int64>& allowed_parameter_indices) {
-  return IsParameter(inst) &&
-         allowed_parameter_indices.contains(inst->parameter_number());
+bool IsBroadcast(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kBroadcast;
 }
 
 bool IsAllReduce(const HloInstruction* inst) {
@@ -80,11 +77,10 @@ bool IsAllGather(const HloInstruction* inst) {
 
 bool ValidClusterInput(
     const HloInstruction* inst,
-    const absl::flat_hash_set<int64>& allowed_parameter_indices) {
+    const CrossReplicaValidInputs& cross_replica_valid_inputs) {
   // A valid cluster input is one which is guaranteed to be identical across all
   // replicas.
-  return IsScalarConstant(inst) || IsWideConstant(inst) ||
-         IsValidParameterInput(inst, allowed_parameter_indices) ||
+  return cross_replica_valid_inputs.contains(inst) || IsWideConstant(inst) ||
          IsAllReduce(inst) || IsReplicatedParameterLoad(inst) ||
          IsNonReplicatedParameterLoad(inst);
 }
@@ -92,12 +88,16 @@ bool ValidClusterInput(
 bool CanCluster(
     const HloInstruction* inst, bool allow_inputs,
     const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-    const absl::flat_hash_set<int64>& allowed_parameter_indices) {
-  if (allow_inputs && ValidClusterInput(inst, allowed_parameter_indices)) {
+    const CrossReplicaValidInputs& cross_replica_valid_inputs) {
+  if (allow_inputs && ValidClusterInput(inst, cross_replica_valid_inputs)) {
     return true;
   }
 
   if (inst->HasSideEffect()) {
+    return false;
+  }
+
+  if (IsScalar(inst)) {
     return false;
   }
 
@@ -108,8 +108,6 @@ bool CanCluster(
   }
 
   switch (inst->opcode()) {
-    case HloOpcode::kBroadcast:
-      return IsScalar(inst->operand(0));
     case HloOpcode::kCustomCall:
       return IsPopOpsElementwise(inst);
     case HloOpcode::kFusion:
@@ -162,12 +160,12 @@ Status AddClusterInstruction(const ElementwiseCluster& cluster,
     context->MapComputation(fusion_comp, reshaped_comp);
   }
 
+  TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
   std::vector<HloInstruction*> new_operands(inst->operand_count());
   absl::c_transform(inst->operands(), new_operands.begin(),
                     [context](HloInstruction* old_operand) {
                       return context->GetInstruction(old_operand);
                     });
-  TF_ASSIGN_OR_RETURN(Shape new_shape, GetNewShape(cluster, inst));
   HloInstruction* new_inst = builder->AddInstruction(
       inst->CloneWithNewOperands(new_shape, new_operands, context));
   context->MapInstruction(inst, new_inst);
@@ -188,6 +186,8 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
                                           HloInstruction* cluster_input,
                                           HloComputation::Builder* builder,
                                           HloCloneContext* context) {
+  HloComputation* input_comp = cluster_input->parent();
+
   if (IsScalar(cluster_input)) {
     VLOG(2) << "Scalar input does not need rewriting: "
             << cluster_input->ToString();
@@ -209,8 +209,6 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
     // constant as the input and broadcasting it inside of the computation.
     HloInstruction* fusion_bcast = cluster_input->fused_expression_root();
     HloInstruction* fusion_const = fusion_bcast->mutable_operand(0);
-
-    HloComputation* input_comp = cluster_input->parent();
     HloInstruction* new_input =
         input_comp->AddInstruction(fusion_const->Clone());
 
@@ -223,6 +221,21 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
 
     context->MapInstruction(cluster_input, bcast);
     return new_input;
+  }
+
+  if (IsBroadcast(cluster_input)) {
+    HloInstruction* bcast_input = cluster_input->mutable_operand(0);
+    CHECK(IsScalar(bcast_input));
+
+    HloInstruction* parameter = builder->AddInstruction(
+        HloInstruction::CreateParameter(param_idx, bcast_input->shape(),
+                                        "parameter-" + bcast_input->name()));
+
+    HloInstruction* bcast = builder->AddInstruction(
+        HloInstruction::CreateBroadcast(in_comp_shape, parameter, {}));
+
+    context->MapInstruction(cluster_input, bcast);
+    return bcast_input;
   }
 
   // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
@@ -241,7 +254,6 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
       return remote_load;
     }
   }
-
   // All other inputs have to be sliced with dynamic-slice(input,
   // replication-index()).
   const Shape all_shards_shape = ShapeUtil::MakeShape(
@@ -460,7 +472,7 @@ HloComputation* ElementwiseCluster::GetComputation() const {
 }
 
 bool ElementwiseCluster::Finalize(
-    const absl::flat_hash_set<int64>& allowed_parameter_indices_inputs) {
+    const CrossReplicaValidInputs& cross_replica_valid_inputs) {
   CHECK(!finalized_);
 
   if (IsScalar(top_)) {
@@ -468,15 +480,16 @@ bool ElementwiseCluster::Finalize(
   }
 
   // Check all inputs are valid.
-  if (!absl::c_all_of(inputs_, [&allowed_parameter_indices_inputs](
-                                   const HloInstruction* inst) {
-        return ValidClusterInput(inst, allowed_parameter_indices_inputs);
-      })) {
-    return false;
+  for (auto input : inputs_) {
+    if (!ValidClusterInput(input, cross_replica_valid_inputs)) {
+      VLOG(2) << "Invalid cluster input: " << input->ToString();
+      return false;
+    }
   }
 
   // Check at least one input is remote.
   if (!absl::c_any_of(inputs_, IsReplicatedParameterLoad)) {
+    VLOG(2) << "No replicated parameter loads found.";
     return false;
   }
 
@@ -635,7 +648,7 @@ int64 ElementwiseCluster::GetShardSize() const {
 std::string ElementwiseCluster::Dump() const {
   std::stringstream ss;
   ss << "Cluster dump:\n";
-  ss << "top: " << top_->ToString() << ", " << inputs_.size() << " input(s).";
+  ss << "top: " << top_->ToString() << ", " << inputs_.size() << " input(s).\n";
   for (auto inst : inputs_) {
     ss << "Input: " << inst->ToString() << "\n";
   }
@@ -675,6 +688,88 @@ std::string ElementwiseCluster::ToString() const {
   return ss.str();
 }
 
+namespace {
+absl::flat_hash_set<int64> GetPartitionableResourceUpdateInputs(
+    const HloInstruction* call, const HloInstruction* resource_update) {
+  const HloComputation* call_comp = call->to_apply();
+  const HloInstruction* call_root = call_comp->root_instruction();
+
+  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
+  for (int64 i = 0; i != call->operand_count(); ++i) {
+    const HloInstruction* call_operand = call->operand(i);
+    if (!IsParameter(call_operand) && !call_operand->IsConstant() &&
+        !IsWideConstant(call_operand)) {
+      continue;
+    }
+
+    // Can only be used by call at a single index.
+    if (call_operand->user_count() != 1) {
+      continue;
+    }
+    auto input_indices = call->OperandIndices(call_operand);
+    if (input_indices.size() != 1) {
+      continue;
+    }
+
+    const int64 input_index = input_indices[0];
+    HloInstruction* call_parameter =
+        call_comp->parameter_instruction(input_index);
+
+    auto resource_update_indices =
+        resource_update->OperandIndices(call_parameter);
+    const HloInstruction* call_root_operand = call_root->operand(input_index);
+    if (call_root_operand == call_parameter) {
+      // This value is not modified inside of the loop - any uses within the
+      // resource update will be identical across replicas.
+    } else {
+      // This value is modified within the resource update.
+      if (resource_update_indices.size() != 1) {
+        continue;
+      }
+      if (call_root_operand->opcode() != HloOpcode::kGetTupleElement) {
+        continue;
+      }
+      if (call_root_operand->operand(0) != resource_update) {
+        continue;
+      }
+    }
+    absl::c_copy(
+        resource_update_indices,
+        std::inserter(allowed_resource_update_parameter_indices,
+                      allowed_resource_update_parameter_indices.begin()));
+  }
+  return allowed_resource_update_parameter_indices;
+}
+
+CrossReplicaValidInputs GetCrossReplicaValidInputs(
+    const absl::flat_hash_set<int64>& allowed_resource_update_parameter_indices,
+    const HloComputation* comp) {
+  CrossReplicaValidInputs cross_replica_valid_inputs;
+  for (const HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+    bool valid_input = false;
+    if (IsParameter(inst) && allowed_resource_update_parameter_indices.contains(
+                                 inst->parameter_number())) {
+      valid_input = true;
+    } else if (IsScalar(inst) && inst->IsElementwise()) {
+      // Note that this also captures constants.
+      valid_input = absl::c_all_of(
+          inst->operands(),
+          [&cross_replica_valid_inputs](const HloInstruction* operand) {
+            return cross_replica_valid_inputs.contains(operand);
+          });
+    } else if (IsBroadcast(inst)) {
+      valid_input = IsScalar(inst->operand(0)) &&
+                    cross_replica_valid_inputs.contains(inst->operand(0));
+    }
+
+    if (valid_input) {
+      cross_replica_valid_inputs.insert(inst);
+    }
+  }
+  return cross_replica_valid_inputs;
+}
+}  // namespace
+
 absl::flat_hash_set<const HloComputation*>
 ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
     const HloModule* module) {
@@ -692,12 +787,14 @@ ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
     for (int64 i = 0; i != comp->num_parameters(); ++i) {
       allowed_parameter_indices.insert(i);
     }
+    CrossReplicaValidInputs cross_replica_valid_inputs =
+        GetCrossReplicaValidInputs(allowed_parameter_indices, comp);
 
     if (absl::c_all_of(comp->instructions(), [&elementwise_comps,
-                                              &allowed_parameter_indices](
+                                              &cross_replica_valid_inputs](
                                                  const HloInstruction* inst) {
           return CanCluster(inst, /*allow_inputs=*/true, elementwise_comps,
-                            allowed_parameter_indices);
+                            cross_replica_valid_inputs);
         })) {
       VLOG(2) << "Found elementwise computation " << comp->name();
       elementwise_comps.insert(comp);
@@ -754,52 +851,15 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
     return clusters;
   }
 
-  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
-  for (int64 i = 0; i != call->operand_count(); ++i) {
-    HloInstruction* call_operand = call->mutable_operand(i);
-    if (!IsParameter(call_operand) && !call_operand->IsConstant() &&
-        !IsWideConstant(call_operand)) {
-      continue;
-    }
-
-    // Can only be used by call at a single index.
-    if (call_operand->user_count() != 1) {
-      continue;
-    }
-    auto input_indices = call->OperandIndices(call_operand);
-    if (input_indices.size() != 1) {
-      continue;
-    }
-
-    const int64 input_index = input_indices[0];
-    HloInstruction* call_parameter =
-        call_comp->parameter_instruction(input_index);
-
-    auto resource_update_indices =
-        resource_update->OperandIndices(call_parameter);
-    const HloInstruction* call_root_operand = call_root->operand(input_index);
-    if (call_root_operand == call_parameter) {
-      // This value is not modified inside of the loop - any uses within the
-      // resource update will be identical across replicas.
-    } else {
-      // This value is modified within the resource update.
-      if (resource_update_indices.size() != 1) {
-        continue;
-      }
-      if (call_root_operand->opcode() != HloOpcode::kGetTupleElement) {
-        continue;
-      }
-      if (call_root_operand->operand(0) != resource_update) {
-        continue;
-      }
-    }
-    absl::c_copy(
-        resource_update_indices,
-        std::inserter(allowed_resource_update_parameter_indices,
-                      allowed_resource_update_parameter_indices.begin()));
-  }
+  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices =
+      GetPartitionableResourceUpdateInputs(call, resource_update);
   VLOG(2) << "Allowed resource update parameters are: "
           << absl::StrJoin(allowed_resource_update_parameter_indices, ", ");
+  // Given the valid input indicies, find all the instructions which are valid
+  // cluster inputs.
+  CrossReplicaValidInputs cross_replica_valid_inputs =
+      GetCrossReplicaValidInputs(allowed_resource_update_parameter_indices,
+                                 resource_update_comp);
 
   // Going back post-order growing a tree of elementwise instruction.
   // For each new elementwise instruction, check if any of its users are already
@@ -834,7 +894,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   for (auto inst : comp_insts) {
     bool can_cluster =
         CanCluster(inst, /*allow_inputs=*/false, elementwise_comps,
-                   allowed_resource_update_parameter_indices);
+                   cross_replica_valid_inputs);
     if (can_cluster) {
       VLOG(2) << "Found elementwise instruction: " << inst->ToString();
       bool added = false;
@@ -862,6 +922,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
       ElementwiseCluster& a = *i;
       for (auto j = std::next(i); j != clusters.end(); ++j) {
         ElementwiseCluster& b = *j;
+
         if (a.CanMerge(b)) {
           VLOG(2) << "Cluster " << b.GetTop()->name()
                   << " could be merged in cluster " << a.GetTop()->name();
@@ -884,7 +945,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   absl::flat_hash_set<HloInstruction*> seen_insts;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    bool valid = cluster.Finalize(allowed_resource_update_parameter_indices);
+    bool valid = cluster.Finalize(cross_replica_valid_inputs);
 
     if (valid) {
       // Make sure that non of the outputs overlap with previously seen
@@ -908,7 +969,6 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
       it = clusters.erase(it);
     }
   }
-
   return clusters;
 }
 

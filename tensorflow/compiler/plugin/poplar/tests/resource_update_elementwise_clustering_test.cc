@@ -351,6 +351,141 @@ ENTRY main {
   }
 }
 
+TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
+       TestMultipleClustersSharedScalar) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
+    arg1_r = f16[128] all-reduce(arg1), to_apply=sum
+
+    arg2 = f16[128] parameter(2)
+    arg3 = f16[128] parameter(3)
+
+    arg4 = f16[128] parameter(4)
+    arg5 = f16[128] parameter(5)
+
+    arg6 = f16[] parameter(6)
+
+    arg4_new = f16[128] add(arg0_r, arg4)
+    arg5_new = f16[128] add(arg1_r, arg5)
+
+    bcast = f16[128] broadcast(arg6), dimensions={}
+
+    arg4_mul = f16[128] multiply(bcast, arg4_new)
+    arg5_mul = f16[128] multiply(bcast, arg5_new)
+
+    arg2_new = f16[128] add(arg2, arg4_mul)
+    arg3_new = f16[128] add(arg3, arg5_mul)
+
+    ROOT t = (f16[128],f16[128],f16[128],f16[128]) tuple(arg2_new, arg3_new, arg4_new, arg5_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    l.arg0 = f16[128] parameter(0)
+    l.arg1 = f16[128] parameter(1)
+    l.arg2 = f16[128] parameter(2)
+    l.arg3 = f16[128] parameter(3)
+    l.arg4 = f16[] parameter(4)
+
+    add.1 = f16[128] add(input, l.arg0)
+    add.2 = f16[128] add(add.1, l.arg1)
+
+    call = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = f16[128] get-tuple-element(call), index=0
+    gte1 = f16[128] get-tuple-element(call), index=1
+    gte2 = f16[128] get-tuple-element(call), index=2
+    gte3 = f16[128] get-tuple-element(call), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128],f16[]) tuple(gte0, gte1, gte2, gte3, l.arg4)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    e.in2 = f16[128] parameter(2)
+    e.in3 = f16[128] parameter(3)
+    e.in4 = f16[] parameter(4)
+    loop_call = (f16[128],f16[128],f16[128],f16[128],f16[]) call(e.in0, e.in1, e.in2, e.in3, e.in4), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    gte2 = f16[128] get-tuple-element(loop_call), index=2
+    gte3 = f16[128] get-tuple-element(loop_call), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128]) tuple(gte0, gte1, gte2, gte3)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloInstruction* loop = FindInstruction(module.get(), "loop_call");
+
+  HloInstruction* bcast = FindInstruction(module.get(), "bcast");
+
+  std::vector<HloInstruction*> all_reduces = {
+      FindInstruction(module.get(), "arg0_r"),
+      FindInstruction(module.get(), "arg1_r")};
+  std::vector<HloInstruction*> inputs = {FindInstruction(module.get(), "arg2"),
+                                         FindInstruction(module.get(), "arg3")};
+  std::vector<HloInstruction*> offloaded_inputs = {
+      FindInstruction(module.get(), "arg4"),
+      FindInstruction(module.get(), "arg5")};
+  std::vector<HloInstruction*> offloaded_inputs_new = {
+      FindInstruction(module.get(), "arg4_new"),
+      FindInstruction(module.get(), "arg5_new")};
+  std::vector<HloInstruction*> offloaded_inputs_mul = {
+      FindInstruction(module.get(), "arg4_mul"),
+      FindInstruction(module.get(), "arg5_mul")};
+  std::vector<HloInstruction*> inputs_new = {
+      FindInstruction(module.get(), "arg2_new"),
+      FindInstruction(module.get(), "arg3_new")};
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 4, 2).Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  auto elementwise_comps = ResourceUpdateElementwiseClustering::
+      GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
+                          ResourceUpdateElementwiseClustering::GetClustersIn(
+                              loop, elementwise_comps));
+  ASSERT_THAT(clusters.size(), 2);
+
+  for (int64 i = 0; i != 2; i++) {
+    auto& cluster = clusters[1 - i];
+    HloInstruction* offloaded_reshape =
+        offloaded_inputs_new[i]->mutable_operand(1);
+    EXPECT_THAT(cluster.GetInputs(),
+                ::testing::UnorderedElementsAre(all_reduces[i], inputs[i],
+                                                bcast, offloaded_reshape));
+    EXPECT_THAT(
+        cluster.GetPostOrder(),
+        ::testing::UnorderedElementsAre(
+            offloaded_inputs_new[i], offloaded_inputs_mul[i], inputs_new[i]));
+    EXPECT_THAT(cluster.GetOutputs(),
+                ::testing::UnorderedElementsAre(offloaded_inputs_new[i],
+                                                inputs_new[i]));
+  }
+}
+
 TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
   const std::string hlo = R"(
   HloModule main
@@ -439,10 +574,9 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
   EXPECT_THAT(cluster.GetShardSize(), 64);
   HloInstruction* arg2_new_reshape = arg2_new->mutable_operand(1);
   EXPECT_THAT(cluster.GetInputs(), ::testing::UnorderedElementsAre(
-                                       arg0_r, arg1, arg2_new_reshape, arg3));
-  EXPECT_THAT(cluster.GetPostOrder(),
-              ::testing::UnorderedElementsAre(arg2_new, bcast, arg3_arg2_mul,
-                                              arg1_new));
+                                       arg0_r, arg1, arg2_new_reshape, bcast));
+  EXPECT_THAT(cluster.GetPostOrder(), ::testing::UnorderedElementsAre(
+                                          arg2_new, arg3_arg2_mul, arg1_new));
   EXPECT_THAT(cluster.GetOutputs(),
               ::testing::UnorderedElementsAre(arg1_new, arg2_new));
 
@@ -620,14 +754,12 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
   EXPECT_THAT(cluster.GetShardSize(), 64);
   HloInstruction* arg2_new_reshape = arg2_new->mutable_operand(1);
-  EXPECT_THAT(cluster.GetInputs(),
-              ::testing::UnorderedElementsAre(arg0_r, arg1, arg2_new_reshape,
-                                              arg3, constant));
-  EXPECT_THAT(cluster.GetPostOrder(),
-              ::testing::UnorderedElementsAre(arg2_new, bcast, arg3_arg2_mul,
-                                              arg1_new, arg3_new));
+  EXPECT_THAT(cluster.GetInputs(), ::testing::UnorderedElementsAre(
+                                       arg0_r, arg1, arg2_new_reshape, bcast));
+  EXPECT_THAT(cluster.GetPostOrder(), ::testing::UnorderedElementsAre(
+                                          arg2_new, arg3_arg2_mul, arg1_new));
   EXPECT_THAT(cluster.GetOutputs(),
-              ::testing::UnorderedElementsAre(arg1_new, arg2_new, arg3_new));
+              ::testing::UnorderedElementsAre(arg1_new, arg2_new));
 
   // Convert the cluster.
   TF_ASSERT_OK_AND_ASSIGN(
@@ -645,7 +777,7 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   HloComputation* cluster_comp = cluster_call->to_apply();
 
   EXPECT_THAT(cluster_call->operands(),
-              ::testing::ElementsAre(arg1, arg0_r, arg3, constant, arg2_load));
+              ::testing::ElementsAre(arg1, arg0_r, arg3_new, arg2_load));
 
   TF_ASSERT_OK_AND_ASSIGN(
       arg1, GetRewrittenInput(cluster_comp->parameter_instruction(0), false));
@@ -655,13 +787,14 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
       arg0_r, GetRewrittenInput(cluster_comp->parameter_instruction(1), false));
   EXPECT_THAT(arg0_r->shape(), ShapeUtil::MakeShape(F16, {64}));
 
-  arg3 = cluster_comp->parameter_instruction(2);
-  EXPECT_THAT(arg3->shape(), ShapeUtil::MakeShape(F16, {}));
+  HloInstruction* param_arg3_new = cluster_comp->parameter_instruction(2);
+  EXPECT_THAT(param_arg3_new->shape(), ShapeUtil::MakeShape(F16, {}));
+  EXPECT_THAT(param_arg3_new->user_count(), 1);
+  bcast = param_arg3_new->users()[0];
+  EXPECT_THAT(bcast->operands(), ::testing::ElementsAre(param_arg3_new));
+  EXPECT_THAT(bcast->shape(), ShapeUtil::MakeShape(F16, {64}));
 
-  constant = cluster_comp->parameter_instruction(3);
-  EXPECT_THAT(constant->shape(), ShapeUtil::MakeShape(F16, {}));
-
-  arg2_load = cluster_comp->parameter_instruction(4);
+  arg2_load = cluster_comp->parameter_instruction(3);
   EXPECT_THAT(arg2_load->user_count(), 1);
   arg2_load = arg2_load->users()[0];
   EXPECT_THAT(arg2_load->shape(), ShapeUtil::MakeShape(F16, {64}));
@@ -670,18 +803,6 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   arg2_new = arg2_load->users()[0];
   EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_load));
   EXPECT_THAT(arg2_new->shape(), ShapeUtil::MakeShape(F16, {64}));
-
-  EXPECT_THAT(arg3->user_count(), 1);
-  arg3_new = arg3->users()[0];
-  EXPECT_THAT(arg3_new->operands(), ::testing::ElementsAre(arg3, constant));
-  EXPECT_THAT(arg3_new->shape(), ShapeUtil::MakeShape(F16, {}));
-
-  EXPECT_THAT(arg3_new->user_count(), 2);
-  bcast = *absl::c_find_if(arg3_new->users(), [](const HloInstruction* i) {
-    return i->opcode() == HloOpcode::kBroadcast;
-  });
-  EXPECT_THAT(bcast->operands(), ::testing::ElementsAre(arg3_new));
-  EXPECT_THAT(bcast->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   EXPECT_THAT(bcast->user_count(), 1);
   arg3_arg2_mul = bcast->users()[0];
@@ -698,9 +819,9 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   TF_ASSERT_OK_AND_ASSIGN(arg1_new, GetRewrittenOutput(arg1_new, false));
   EXPECT_THAT(arg1_new->shape(), ShapeUtil::MakeShape(F16, {128}));
 
-  EXPECT_TRUE(Match(cluster_comp->root_instruction(),
-                    m::Tuple(m::Reshape(m::Op().Is(arg2_new)),
-                             m::Op().Is(arg3_new), m::Op().Is(arg1_new))));
+  EXPECT_TRUE(
+      Match(cluster_comp->root_instruction(),
+            m::Tuple(m::Reshape(m::Op().Is(arg2_new)), m::Op().Is(arg1_new))));
 
   EXPECT_TRUE(
       Match(arg2_store,
@@ -710,9 +831,8 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   HloComputation* resource_update =
       FindComputation(module.get(), "resource_update");
   EXPECT_TRUE(Match(resource_update->root_instruction(),
-                    m::Tuple(m::GetTupleElement(m::Op().Is(cluster_call), 2),
-                             m::Op().Is(arg2_store),
-                             m::GetTupleElement(m::Op().Is(cluster_call), 1))));
+                    m::Tuple(m::GetTupleElement(m::Op().Is(cluster_call), 1),
+                             m::Op().Is(arg2_store), m::Op().Is(arg3_new))));
 }
 
 TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {

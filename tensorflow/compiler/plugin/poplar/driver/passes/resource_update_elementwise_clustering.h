@@ -38,6 +38,8 @@ struct UserPositions {
   }
 };
 
+using CrossReplicaValidInputs = absl::flat_hash_set<const HloInstruction*>;
+
 class ElementwiseCluster {
  public:
   explicit ElementwiseCluster(HloInstruction* top) noexcept;
@@ -53,8 +55,7 @@ class ElementwiseCluster {
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
-  bool Finalize(
-      const absl::flat_hash_set<int64>& allowed_parameter_indices_inputs);
+  bool Finalize(const CrossReplicaValidInputs& cross_replica_valid_inputs);
 
   // Following functions can be called once finalized.
   std::string ToString() const;
