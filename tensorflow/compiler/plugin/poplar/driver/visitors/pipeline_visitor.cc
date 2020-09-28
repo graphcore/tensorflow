@@ -1447,10 +1447,10 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
     TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
                         GetInputsForDeferredInplaceRBInstruction(
                             hlo, /*preserve_aliasing*/ true));
-
-    TF_ASSIGN_OR_RETURN(resource_update_,
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
                         CreateResourceUpdateOp(resources_, hlo, inputs,
                                                hlo->shape(), tensor_map));
+    resource_update_.add(seq);
   } else {
     TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
 
