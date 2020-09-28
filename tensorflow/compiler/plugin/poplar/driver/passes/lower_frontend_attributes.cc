@@ -46,7 +46,7 @@ Status LowerPipelineFrontendAttributesIntoStage(
           stage_config.convolution_options());
       poplar_backend_config.mutable_matmul_options()->CopyFrom(
           stage_config.matmul_options());
-      inst->set_backend_config(poplar_backend_config);
+      TF_RETURN_IF_ERROR(inst->set_backend_config(poplar_backend_config));
     }
   }
   return Status::OK();
@@ -167,7 +167,7 @@ StatusOr<bool> LowerFrontendAttributes::Run(HloModule* module) {
       }
       poplar_backend_config.set_partials_type(partials_type);
       poplar_backend_config.set_stochastic_rounding(stochastic_rounding);
-      instr->set_backend_config(poplar_backend_config);
+      TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_backend_config));
     }
   }
   return changed;

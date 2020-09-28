@@ -491,7 +491,7 @@ StatusOr<HloInstruction*> CreatePipelineStage(
   auto empty_call = pipeline->AddInstruction(HloInstruction::CreateCall(
       stage_comp->root_instruction()->shape(), operands, stage_comp));
   empty_call->set_frontend_attributes(attributes);
-  empty_call->set_backend_config(cfg);
+  TF_RETURN_IF_ERROR(empty_call->set_backend_config(cfg));
   empty_call->set_metadata(metadata);
   return empty_call;
 }
