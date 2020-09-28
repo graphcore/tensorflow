@@ -1614,7 +1614,7 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
     pipeline_write_undef_sequence_.add(write_undef);
   }
 
-  ExitVariableScope();
+  TF_RETURN_IF_ERROR(ExitVariableScope());
 
   // Wrap each of the poplar sequences in a poplar function to maximise code
   // reuse. Transform a given sequence into a poplar function call sequence.

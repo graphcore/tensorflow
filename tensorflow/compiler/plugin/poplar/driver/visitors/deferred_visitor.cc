@@ -293,6 +293,8 @@ Status DeferredVisitor::ExitVariableScope() {
         "empty. Was there a matching call to EnterVariableScope?");
   }
   resources_.pipelining_write_undef_sequences.pop();
+
+  return Status::OK();
 }
 
 Status DeferredVisitor::AddSequenceForInstruction(
