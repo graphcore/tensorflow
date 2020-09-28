@@ -488,8 +488,9 @@ bool ElementwiseCluster::Finalize(
   auto add_outputs = [this](HloInstruction* inst) {
     for (auto user : inst->users()) {
       if (!ContainsKey(insts_, user)) {
+        auto indices = user->OperandIndices(inst);
         outputs_to_users_[inst].push_back(
-            UserPositions{user, user->OperandIndices(inst)});
+            UserPositions{user, {indices.begin(), indices.end()}});
       }
     }
   };
@@ -520,7 +521,8 @@ bool ElementwiseCluster::Finalize(
   }
 
   cluster_size_ = ShapeUtil::ElementsIn(cluster_shape_);
-  cluster_dimensions_ = cluster_shape_.dimensions();
+  cluster_dimensions_ = {cluster_shape_.dimensions().begin(),
+                         cluster_shape_.dimensions().end()};
 
   // Get all parameter loads.
   std::vector<HloInstruction*> parameter_loads;
@@ -532,8 +534,9 @@ bool ElementwiseCluster::Finalize(
   absl::c_transform(
       parameter_loads,
       std::inserter(all_shard_dimensions, all_shard_dimensions.begin()),
-      [](const HloInstruction* inst) {
-        return inst->operand(0)->shape().dimensions();
+      [](const HloInstruction* inst) -> std::vector<int64> {
+        auto dimensions = inst->operand(0)->shape().dimensions();
+        return {dimensions.begin(), dimensions.end()};
       });
 
   if (all_shard_dimensions.size() != 1) {
