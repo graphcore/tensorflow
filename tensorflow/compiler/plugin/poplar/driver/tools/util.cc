@@ -509,7 +509,7 @@ void SetInplaceBackendField(HloInstruction* inst, bool inplace) {
   auto backend_config =
       inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   backend_config.set_is_inplace(inplace);
-  inst->set_backend_config(backend_config);
+  TF_CHECK_OK(inst->set_backend_config(backend_config));
 }
 }  // namespace
 

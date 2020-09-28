@@ -173,7 +173,7 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           changed = true;
         }
       }
-      instr->set_backend_config(poplar_config);
+      TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_config));
     }
   }
   return changed;

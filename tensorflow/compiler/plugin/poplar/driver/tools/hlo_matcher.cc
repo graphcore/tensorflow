@@ -1120,7 +1120,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
   *(cfg->mutable_inplace_operands()) = {inplace_indices.begin(),
                                         inplace_indices.end()};
 
-  fusion->set_backend_config(backend_config);
+  TF_CHECK_OK(fusion->set_backend_config(backend_config));
 
   fusion->set_metadata(old->metadata());
   if (sharding_device) {

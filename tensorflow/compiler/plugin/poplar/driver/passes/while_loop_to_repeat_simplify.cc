@@ -396,7 +396,7 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
   call_config->set_type(PoplarBackendConfig::CallConfig::RepeatLoop);
   auto* repeat_cfg = call_config->mutable_repeat_config();
   repeat_cfg->set_repeat_count(number_of_iterations);
-  repeat_call->set_backend_config(backend_config);
+  TF_CHECK_OK(repeat_call->set_backend_config(backend_config));
 
   // Copy sharding info from the while_inst to the repeat.
   if (while_inst->has_sharding()) {

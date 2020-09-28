@@ -250,7 +250,7 @@ Status PipelineBatchSerializationLoopInserter::InsertIntoPipeline(
     auto* repeat_cfg = call_config->mutable_repeat_config();
     repeat_cfg->set_repeat_count(batch_serialization_iterations);
     repeat_cfg->set_allow_finer_alias_analysis(true);
-    repeat_loop->set_backend_config(backend_config);
+    TF_RETURN_IF_ERROR(repeat_loop->set_backend_config(backend_config));
 
     // Set up all the loop outputs.
     for (int64 i = 0; i != root->operand_count(); ++i) {

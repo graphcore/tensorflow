@@ -1020,7 +1020,7 @@ void EnableLoopAliasAnalysis(HloInstruction* repeat_loop) {
   call_config->set_type(PoplarBackendConfig::CallConfig::RepeatLoop);
   auto* repeat_cfg = call_config->mutable_repeat_config();
   repeat_cfg->set_allow_finer_alias_analysis(true);
-  repeat_loop->set_backend_config(backend_config);
+  TF_CHECK_OK(repeat_loop->set_backend_config(backend_config));
 }
 
 TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop) {
