@@ -858,9 +858,24 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
     }
   } while (clusters_merged);
 
+  absl::flat_hash_set<HloInstruction*> seen_insts;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    if (cluster.Finalize(allowed_resource_update_parameter_indices)) {
+    bool valid = cluster.Finalize(allowed_resource_update_parameter_indices);
+
+    if (valid) {
+      // Make sure that non of the outputs overlap with previously seen
+      // instructions.
+      valid &= absl::c_all_of(cluster.GetOutputs(),
+                              [&seen_insts](const HloInstruction* inst) {
+                                return !seen_insts.contains(inst);
+                              });
+    }
+
+    if (valid) {
+      absl::c_copy(cluster.GetPostOrder(),
+                   std::inserter(seen_insts, seen_insts.begin()));
+
       VLOG(2) << "Found cluster suitable for replication (all inputs valid):";
       XLA_VLOG_LINES(2, cluster.ToString());
       ++it;
