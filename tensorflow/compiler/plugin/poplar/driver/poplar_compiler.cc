@@ -102,6 +102,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_input_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_stage_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_tuple_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
@@ -1110,6 +1111,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<PipelineResourceUpdateInputOptimizer>();
+    pipeline.AddPass<CommutativeInstructionReorderOperands>();
     pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                      resources.replication_factor);
     {
