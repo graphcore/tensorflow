@@ -87,7 +87,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   ZeroRemoteBuffers(resources_, graph, zeroing_remote_buffers,
                     tensors_zeroing_sequence_);
 
-  ExitVariableScope();
+  TF_RETURN_IF_ERROR(ExitVariableScope());
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
