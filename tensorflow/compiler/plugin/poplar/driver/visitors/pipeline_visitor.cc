@@ -334,7 +334,12 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   auto copies_end = std::stable_partition(gtes_end, instructions.end(),
                                           HasHloOpcode(HloOpcode::kCopy));
   for (auto itr = gtes_end; itr != copies_end; ++itr) {
-    result[*itr] = get_stage_from_operands(*itr);
+    HloInstruction* copy = *itr;
+    if (copy->user_count() == 1 && IsResourceUpdate(copy->users()[0])) {
+      result[*itr] = get_stage_from_users(*itr);
+    } else {
+      result[*itr] = get_stage_from_operands(*itr);
+    }
   }
 
   // Partition out FIFOs - if the FIFO is an input to a recomputation stage,
@@ -1475,12 +1480,15 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
 
 Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
-
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       CreateCopy(resources_, hlo, GetOutputShape(hlo), tensor_map));
-  copy_sequences_[stage].add(prog);
+  if (hlo->user_count() == 1 && IsResourceUpdate(hlo->users()[0])) {
+    resource_update_.add(prog);
+  } else {
+    TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+    copy_sequences_[stage].add(prog);
+  }
 
   return Status::OK();
 }
