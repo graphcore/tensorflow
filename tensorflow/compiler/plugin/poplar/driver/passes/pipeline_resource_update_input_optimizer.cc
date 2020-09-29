@@ -78,7 +78,10 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
       // Check whether it is used in the root of the stage.
       int64 output_idx = -1;
       if (state_root->OperandIndices(parameter).size() != 1) {
-        CHECK(!elementwise_modifier);
+        if (elementwise_modifier) {
+          // Only single elementwise modifier is allowed.
+          break;
+        }
 
         // Check whether there is an elementwise user - if there is then this
         // can be lowered directly into the resource update iff any other inputs
@@ -131,7 +134,7 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
         break;
       }
 
-      if (stage_idx + 1 < stages.forward.size() && !elementwise_modifier) {
+      if (stage_idx + 1 < stages.forward.size()) {
         // Check whether the value is passed to the next stage.
         HloInstruction* next_stage = stages.forward[stage_idx + 1];
         if (next_stage->OperandIndices(gte).size() != 1) {
