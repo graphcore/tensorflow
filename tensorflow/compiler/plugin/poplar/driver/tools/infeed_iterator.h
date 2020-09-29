@@ -92,8 +92,8 @@ class InfeedQueue {
 
   // Non-blocking pop with sentinel checking. Returns false if no items
   // are available or the end is reached.
-  bool TryPop(T& item) {
-    if (!queue_.TryPop(item)) {
+  bool TryPop(T& item, std::size_t look_ahead = 0) {
+    if (!queue_.TryPop(item, look_ahead)) {
       return false;
     }
     if (item == kEndOfQueueSentinel) {
@@ -104,8 +104,8 @@ class InfeedQueue {
 
   // Blocking pop with sentinel checking. Returns false if and only if the end
   // is reached.
-  bool BlockPop(T& item) {
-    queue_.BlockPop(item);
+  bool BlockPop(T& item, std::size_t look_ahead = 0) {
+    queue_.BlockPop(item, look_ahead);
     return item != kEndOfQueueSentinel;
   }
 

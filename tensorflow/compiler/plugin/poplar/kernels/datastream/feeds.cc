@@ -80,14 +80,25 @@ void GetFeedConfig(OpKernelConstruction* ctx,
   std::string feed_id;
   int64 replication_factor;
   int64 io_batch_size;
+  int64 prefetch_depth;
   std::vector<tensorflow::DataType> types;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("replication_factor", &replication_factor));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("io_batch_size", &io_batch_size));
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("prefetch_depth", &prefetch_depth));
   config.set_feed_id(feed_id);
   config.set_replication_factor(replication_factor);
   config.set_io_batch_size(io_batch_size);
+  config.set_prefetch_depth(prefetch_depth);
+
+  OP_REQUIRES(
+      ctx, 0 < prefetch_depth,
+      errors::InvalidArgument("Need 0 < prefetch_depth, got ", prefetch_depth));
+
+  OP_REQUIRES(ctx, prefetch_depth < 256,
+              errors::InvalidArgument("Need prefetch_depth < 256, got ",
+                                      prefetch_depth));
 
   *(config.mutable_tf_data_types()) = {types.begin(), types.end()};
 

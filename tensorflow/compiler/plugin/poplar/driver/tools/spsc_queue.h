@@ -149,10 +149,11 @@ class SPSCQueue {
    * element (i.e. IsEmpty() == false) and it does not advance the read
    * position.
    */
-  inline void Pop(T& item) {
+  inline void Pop(T& item, std::size_t look_ahead = 0) {
     assert(!IsEmpty());
+    assert(std::atomic_load(&size_) > look_ahead);
 
-    item = buffer_[read_position_];
+    item = buffer_[(read_position_ + look_ahead) % Capacity];
   }
 
   /**
@@ -160,11 +161,11 @@ class SPSCQueue {
    *
    * \param item The element to pop into.
    */
-  inline void BlockPop(T& item) {
-    while (IsEmpty()) {
+  inline void BlockPop(T& item, std::size_t look_ahead = 0) {
+    while (std::atomic_load(&size_) <= look_ahead) {
     }
 
-    Pop(item);
+    Pop(item, look_ahead);
   }
 
   /**
@@ -175,12 +176,12 @@ class SPSCQueue {
    *
    * \return true if the element was successfully poped, otherwise false.
    */
-  inline bool TryPop(T& item) {
-    if (IsEmpty()) {
+  inline bool TryPop(T& item, std::size_t look_ahead = 0) {
+    if (std::atomic_load(&size_) <= look_ahead) {
       return false;
     }
 
-    Pop(item);
+    Pop(item, look_ahead);
     return true;
   }
 

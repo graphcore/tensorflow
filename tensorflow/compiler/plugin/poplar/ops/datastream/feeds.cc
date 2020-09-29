@@ -27,6 +27,7 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("io_batch_size: int = 1")
+    .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
@@ -42,6 +43,14 @@ replication_factor: the number of replica graphs that this operation will
 io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
+prefetch_depth: the number of elements poplar will prefetch.
+  The depth of the poplar datastream buffer size which may be prefetched
+  before being read by the device. By default the prefetch_depth size is
+  1, so prefetches a single entry after it has been read to refill the
+  buffer. Increasing the size of the prefetch_depth allows for prefetching
+  of multiple entries, increasing the probability there will be a valid
+  entry in the buffer for the device to read before falling back to
+  synchronously fetching the next entry.
 )doc");
 
 REGISTER_OP("IPUCreateDatasetIterator")
@@ -50,6 +59,7 @@ REGISTER_OP("IPUCreateDatasetIterator")
     .Attr("feed_id: string")
     .Attr("replication_factor: int = 1")
     .Attr("io_batch_size: int = 1")
+    .Attr("prefetch_depth: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .SetIsStateful()
@@ -69,6 +79,7 @@ REGISTER_OP("PopDatastreamOutfeedEnqueue")
     .Attr("feed_id: string")
     .Attr("replication_factor: int")
     .Attr("io_batch_size: int")
+    .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs)
     .Doc(R"doc(
@@ -96,6 +107,7 @@ REGISTER_OP("PopDatastreamOutfeedDequeue")
     .Attr("outfeed_mode: string='all'")
     .Attr("replication_factor: int = 1")
     .Attr("io_batch_size: int = 1")
+    .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
