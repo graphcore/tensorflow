@@ -111,7 +111,7 @@ class CombinedWeightsTest(xla_test.XLATestCase):
           "(because the copies will have been merged)")
 
       # Also check the overall size
-      report.assert_total_tile_memory(8592650)
+      report.assert_total_tile_memory(8725954)
 
 
 if __name__ == "__main__":
