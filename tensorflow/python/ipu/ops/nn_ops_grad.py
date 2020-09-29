@@ -41,5 +41,5 @@ def _multi_conv_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes,
       option_flags=op.get_attr("option_flags"))
 
-  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
-                                            outputs)
+  return functional_ops_grad._pack_sequence_as(  # pylint: disable=protected-access
+      func_grad_graph.structured_outputs, outputs)
