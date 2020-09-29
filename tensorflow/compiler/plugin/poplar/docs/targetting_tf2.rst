@@ -96,7 +96,7 @@ available. It is called ``Model``, and found at
 
 It is a substitute for the Keras Model class, when only a single IPU
 is used for training. For a high performance multi-IPU solution use the
-``PipelinedModel`` described below.
+``PipelineModel`` described below.
 
 Unlike the standard Keras model classes, it must be trained, evaluated and
 operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
@@ -117,27 +117,34 @@ available. It is called ``Sequential``, and found at
 
 It is a substitute for the Keras Sequential class, when only a single IPU
 is used for training. For a high performance multi-IPU solution use the
-``PipelinedModel`` described below.
+``SequentialPipelineModel`` described below.
 
 Unlike the standard Keras model classes, it must be trained, evaluated and
 operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
 called directly. For a similar reason, you cannot get the list of trainable
 variables before you have executed it.
 
-PipelinedModel class
+PipelineModel and SequentialPipelineModel classes
 ____________________
 
-``PipelinedModel`` is a substitute for the Keras Sequential model class, with
-support for multi-device IPU pipelines. Using pipelined execution allows the
-IPU to achieve high compute efficiency while utilising multiple devices.
+``PipelineModel`` and ``SequentialPipelineModel`` are substitutes for the Keras
+Model and Sequential model classes (respectively), with support for multi-device
+IPU pipelines. Using pipelined execution allows the IPU to achieve high compute
+efficiency while utilising multiple devices.
 
-The PipelinedModel has the same API as the standard Keras Model and
-Sequential classes, but will train the model on multiple IPUs and stream
+PipelineModel and SequentialPipelineModel have the same APIs as the standard Keras
+Model and Sequential classes, but will train the model on multiple IPUs and stream
 the data into the devices using an Infeed queue which is created automatically.
 
-The constructor takes, rather than a list of layers as with the standard
-Sequential model, a list of lists of layers, one for each IPU pipeline stage.
-See the examples section to see how the API is used.
+When defining a graph for use with PipelineModel, the stage at which a node (or
+set of nodes) is to be executed is given by the ``PipelineStage`` context in
+which it is created.
+
+The constructor of SequentialPipelineModel takes, rather than a list of layers as
+with the standard Sequential model, a list of lists of layers, one for each IPU
+pipeline stage. 
+
+See the examples section to see how the APIs of each are used.
 
 In a machine learning model a step is often considered to be one pass through
 the model where the forward pass is done, then the gradients are calculated
@@ -149,8 +156,8 @@ step is equal to the batch size multiplied by the pipeline depth.
 This will be reflected in the rate at which the progress bar advances, and the
 entries in the Keras History.
 
-Note that similarly to the ``Sequentual`` class, ``PipelinedModel`` also
-supports automatic data-parallelism.
+Note that ``PipelineModel`` and ``SequentialPipelineModel`` also support
+automatic data parallelism, as with their non-pipelined counterparts.
 
 Custom training loops
 _____________________

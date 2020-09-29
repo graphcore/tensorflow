@@ -256,6 +256,13 @@ class Layer(module.Module):
     else:
       self._initial_weights = None
 
+    # For pipelining of ipu.keras.IPUModel
+    if ds_context.has_strategy():
+      strategy = ds_context.get_strategy()
+      if hasattr(strategy, "_pipeline_stage"):
+        stage = strategy._pipeline_stage
+        self._pipeline_stage = stage
+
   def build(self, input_shape):
     """Creates the variables of the layer (optional, for subclass implementers).
 

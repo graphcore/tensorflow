@@ -123,8 +123,8 @@ Keras
 ^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras
-  :members: Model, Sequential, PipelinedModel
-  :imported-members: Model Sequential, PipelinedModel
+  :members: Model, Sequential, PipelineModel, PipelineStage, SequentialPipelineModel
+  :imported-members: Model, Sequential, PipelineModel, PipelineStage, SequentialPipelineModel
 
 .. automodule:: tensorflow.python.ipu.keras.model
   :members: IPUModel
