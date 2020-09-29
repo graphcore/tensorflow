@@ -236,18 +236,20 @@ ENTRY top {
   arg3 = f32[2] parameter(2)
   arg4 = f32[2] parameter(3)
 
-  const1 = f32[] constant(1)
-  const2 = f32[2] constant({1, 1})
+  grad1 = f16[] parameter(4)
+  grad2 = f16[2] parameter(5)
+  cast1 = f32[] convert(grad1)
+  cast2 = f32[2] convert(grad2)
 
   load1 = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   load2 = f32[] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   load3 = f32[2] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   load4 = f32[2] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
-  add1 = f32[] add(load1, const1), sharding={maximal device=0}
-  add2 = f32[] add(load2, const1), sharding={maximal device=1}
-  add3 = f32[2] add(load3, const2), sharding={maximal device=0}
-  add4 = f32[2] add(load4, const2), sharding={maximal device=1}
+  add1 = f32[] add(load1, cast1), sharding={maximal device=0}
+  add2 = f32[] add(load2, cast1), sharding={maximal device=1}
+  add3 = f32[2] add(load3, cast2), sharding={maximal device=0}
+  add4 = f32[2] add(load4, cast2), sharding={maximal device=1}
 
   store1 = f32[] custom-call(arg1, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
   store2 = f32[] custom-call(arg2, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
@@ -287,6 +289,12 @@ ENTRY top {
       Cast<HloRemoteParameterLoad>(store12->control_successors()[0]);
   EXPECT_EQ(load34->operand(0)->parameter_number(), 2);
   EXPECT_EQ(load34->operand(1)->parameter_number(), 3);
+
+  // Check that the cast1 "input computation" has a load predecessor.
+  auto const* cast1 = FindInstruction(module, "cast1");
+  ASSERT_NE(cast1, nullptr);
+  EXPECT_EQ(cast1->control_predecessors().size(), 1);
+  EXPECT_TRUE(is_load(cast1->control_predecessors()[0]));
 }
 
 TEST_F(RemoteParameterParallelCombinerTest,
@@ -538,7 +546,6 @@ ENTRY e {
           EXPECT_EQ(target0.tgt->name(), "new_arg0");
           EXPECT_EQ(target0.backward_path.size(), 1);
           EXPECT_EQ(target0.backward_path[0]->opcode(), HloOpcode::kTranspose);
-
         } else {
           EXPECT_EQ(user->tuple_index(), 1);
           // arg4 should have its layout from arg1 from the new combined load.
@@ -550,7 +557,6 @@ ENTRY e {
           EXPECT_EQ(*target.layout_output_idx, 0);
         }
       }
-
     } else if (is_store(inst) && inst->operand_count() == 4) {
       found_combined_store = true;
       EXPECT_EQ(inst->shape(), combined_shape);
