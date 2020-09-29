@@ -368,6 +368,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
           initial_epoch=0,
           steps_per_epoch=None,
           steps_per_run=None,
+          prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `fit` method.
@@ -390,6 +391,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                        initial_epoch=initial_epoch,
                        steps_per_epoch=steps_per_epoch,
                        steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
                        **kwargs)
 
   def evaluate(self,
@@ -401,6 +403,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
     This provides the same functionality as the Keras Model `evaluate` method.
@@ -420,6 +423,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                             steps=steps,
                             callbacks=callbacks,
                             steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
                             **kwargs)
 
   def predict(self,
@@ -430,6 +434,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
     This provides the same functionality as the Keras Model `predict` method.
@@ -454,6 +459,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                            steps=steps,
                            callbacks=callbacks,
                            steps_per_run=steps_per_run,
+                           prefetch_depth=prefetch_depth,
                            **kwargs)
 
   def save(self,
@@ -894,6 +900,7 @@ class PipelineModel(ipu_model.Model):
           initial_epoch=0,
           steps_per_epoch=None,
           steps_per_run=None,
+          prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `fit` method.
@@ -916,6 +923,7 @@ class PipelineModel(ipu_model.Model):
                        initial_epoch=initial_epoch,
                        steps_per_epoch=steps_per_epoch,
                        steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
                        **kwargs)
 
   def evaluate(self,
@@ -927,6 +935,7 @@ class PipelineModel(ipu_model.Model):
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `evaluate` method.
@@ -946,6 +955,7 @@ class PipelineModel(ipu_model.Model):
                             steps=steps,
                             callbacks=callbacks,
                             steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
                             **kwargs)
 
   def predict(self,
@@ -956,6 +966,7 @@ class PipelineModel(ipu_model.Model):
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `predict` method.
@@ -980,6 +991,7 @@ class PipelineModel(ipu_model.Model):
                            steps=steps,
                            callbacks=callbacks,
                            steps_per_run=steps_per_run,
+                           prefetch_depth=prefetch_depth,
                            **kwargs)
 
   def save(self,

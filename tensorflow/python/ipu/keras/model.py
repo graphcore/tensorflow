@@ -349,7 +349,8 @@ class _IpuModelBase(KerasModel):
 
   @trackable.no_automatic_dependency_tracking
   def _do_internal(self, mode, ds, size, epochs, verbose, callbacks,
-                   initial_epoch, steps_per_epoch, steps_per_run, **kwargs):
+                   initial_epoch, steps_per_epoch, steps_per_run,
+                   prefetch_depth, **kwargs):
 
     self.args = kwargs
 
@@ -439,7 +440,10 @@ class _IpuModelBase(KerasModel):
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
-          ds, "infeed", replication_factor=self._get_replication_factor())
+          ds,
+          "infeed",
+          replication_factor=self._get_replication_factor(),
+          prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
           "outfeed", replication_factor=self._get_replication_factor())
 
@@ -552,8 +556,19 @@ class _IpuModelBase(KerasModel):
     return aggregator.results
 
   @trackable.no_automatic_dependency_tracking
-  def fit(self, x, y, batch_size, epochs, verbose, callbacks, shuffle,
-          initial_epoch, steps_per_epoch, steps_per_run, **kwargs):
+  def fit(self,
+          x,
+          y,
+          batch_size,
+          epochs,
+          verbose,
+          callbacks,
+          shuffle,
+          initial_epoch,
+          steps_per_epoch,
+          steps_per_run,
+          prefetch_depth=None,
+          **kwargs):
 
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
@@ -570,7 +585,7 @@ class _IpuModelBase(KerasModel):
 
     return self._do_internal(ModeKeys.TRAIN, ds, size, epochs, verbose,
                              callbacks, initial_epoch, steps_per_epoch,
-                             steps_per_run, **kwargs)
+                             steps_per_run, prefetch_depth, **kwargs)
 
   def evaluate(self,
                x=None,
@@ -580,6 +595,7 @@ class _IpuModelBase(KerasModel):
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
@@ -595,7 +611,7 @@ class _IpuModelBase(KerasModel):
     self._assert_compile_was_called()
 
     return self._do_internal(ModeKeys.TEST, ds, size, 1, verbose, callbacks, 0,
-                             steps, steps_per_run, **kwargs)
+                             steps, steps_per_run, prefetch_depth, **kwargs)
 
   def predict(self,
               x,
@@ -604,6 +620,7 @@ class _IpuModelBase(KerasModel):
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
@@ -617,7 +634,7 @@ class _IpuModelBase(KerasModel):
     _validate_dataset_element_count(ds, 1, "predict")
 
     return self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose, callbacks,
-                             0, steps, steps_per_run, **kwargs)
+                             0, steps, steps_per_run, prefetch_depth, **kwargs)
 
   def _get_replication_factor(self):
     if not self.got_replication_factor:
@@ -808,6 +825,7 @@ class IPUSequential(_IpuModelBase):
           initial_epoch=0,
           steps_per_epoch=None,
           steps_per_run=None,
+          prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `fit` method.
@@ -830,6 +848,7 @@ class IPUSequential(_IpuModelBase):
                        initial_epoch=initial_epoch,
                        steps_per_epoch=steps_per_epoch,
                        steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
                        **kwargs)
 
   # pylint: disable=arguments-differ
@@ -842,6 +861,7 @@ class IPUSequential(_IpuModelBase):
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `evaluate`
@@ -862,6 +882,7 @@ class IPUSequential(_IpuModelBase):
                             steps=steps,
                             callbacks=callbacks,
                             steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
                             **kwargs)
 
   # pylint: disable=arguments-differ
@@ -873,6 +894,7 @@ class IPUSequential(_IpuModelBase):
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `predict`
@@ -898,6 +920,7 @@ class IPUSequential(_IpuModelBase):
                            steps=steps,
                            callbacks=callbacks,
                            steps_per_run=steps_per_run,
+                           prefetch_depth=prefetch_depth,
                            **kwargs)
 
   def save(self,
@@ -1319,6 +1342,7 @@ class IPUModel(_IpuModelBase):
           initial_epoch=0,
           steps_per_epoch=None,
           steps_per_run=None,
+          prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `fit` method.
@@ -1340,6 +1364,7 @@ class IPUModel(_IpuModelBase):
                        initial_epoch=initial_epoch,
                        steps_per_epoch=steps_per_epoch,
                        steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
                        **kwargs)
 
   # pylint: disable=arguments-differ
@@ -1352,6 +1377,7 @@ class IPUModel(_IpuModelBase):
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `evaluate` method.
@@ -1370,6 +1396,7 @@ class IPUModel(_IpuModelBase):
                             steps=steps,
                             callbacks=callbacks,
                             steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
                             **kwargs)
 
   # pylint: disable=arguments-differ
@@ -1381,6 +1408,7 @@ class IPUModel(_IpuModelBase):
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Model `predict` method.
@@ -1398,6 +1426,7 @@ class IPUModel(_IpuModelBase):
                                                steps=steps,
                                                callbacks=callbacks,
                                                steps_per_run=steps_per_run,
+                                               prefetch_depth=prefetch_depth,
                                                **kwargs))
 
   def save(self,
