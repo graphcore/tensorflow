@@ -78,7 +78,10 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
       std::vector<int64> indices =
           stage_comp->root_instruction()->OperandIndices(parameter);
       if (indices.size() != 1) {
-        CHECK(!elementwise_modifier);
+        if (elementwise_modifier) {
+          // Only single elementwise modifier is allowed.
+          break;
+        }
 
         // Check whether there is an elementwise user - if there is then this
         // can be lowered directly into the resource update iff any other inputs
@@ -130,7 +133,7 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
         break;
       }
 
-      if (stage_idx + 1 < stages.forward.size() && !elementwise_modifier) {
+      if (stage_idx + 1 < stages.forward.size()) {
         // Check whether the value is passed to the next stage.
         HloInstruction* next_stage = stages.forward[stage_idx + 1];
         indices = next_stage->OperandIndices(gte);
