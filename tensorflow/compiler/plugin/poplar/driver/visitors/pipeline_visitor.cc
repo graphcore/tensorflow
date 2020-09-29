@@ -1256,20 +1256,22 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   std::unique_ptr<PipelineStageVisitor> visitor;
   if (has_recomputation) {
     DeferredArgRBVectors visitor_inputs = inputs;
-    // When recomputation is enabled, we need to add clones for inplace inputs
-    // of the pipeline stage (i.e. non parameters/weights), so that we can
-    // reuse the code for the recomputation stage.
-    auto inst_description = HloInstructionDescription(inst);
-    for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-      for (size_t flat_idx = 0; flat_idx != inputs[inplace_idx].size();
-           ++flat_idx) {
-        auto optional_tensor = visitor_inputs[inplace_idx][flat_idx];
+    // When recomputation is enabled, we need to add clones for all non read
+    // only inputs so that we can reuse the sequence between the forward and the
+    // recomputation stage.
+    for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+      const HloInstruction* operand = inst->operand(op_idx);
+      if (IsPipelineStageReadOnlyInput(operand)) {
+        continue;
+      }
+      for (size_t flat_idx = 0; flat_idx != inputs[op_idx].size(); ++flat_idx) {
+        auto optional_tensor = visitor_inputs[op_idx][flat_idx];
         if (optional_tensor) {
           const std::string name =
-              absl::StrCat(debug_name, "/clone/", inplace_idx, "/", flat_idx);
-          VLOG(1) << "Adding a clone for inplace input (" << inplace_idx << ", "
-                  << flat_idx << ").";
-          visitor_inputs[inplace_idx][flat_idx] = graph.clone(
+              absl::StrCat(debug_name, "/clone/", op_idx, "/", flat_idx);
+          VLOG(1) << "Adding a clone for input (" << op_idx << ", " << flat_idx
+                  << ").";
+          visitor_inputs[op_idx][flat_idx] = graph.clone(
               *optional_tensor, name,
               poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         }
