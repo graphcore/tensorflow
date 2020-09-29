@@ -1,17 +1,13 @@
 import argparse
 import tensorflow as tf
 
-from tensorflow.python import dtypes
-
 from tensorflow.python import ipu
 
 from tensorflow.python.ipu.keras.layers import Embedding
 from tensorflow.python.ipu.keras.layers import LSTM
 
 from tensorflow.python.keras.datasets import imdb
-from tensorflow.python.keras.layers import Concatenate
 from tensorflow.python.keras.layers import Dense
-from tensorflow.python.keras.layers import Input
 from tensorflow.python.keras.preprocessing import sequence
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
@@ -33,26 +29,11 @@ def get_dataset():
 
 # Define the model
 def get_model():
-  input_layer = Input(shape=(80), dtype=dtypes.int32, batch_size=32)
-
-  with ipu.keras.PipelineStage(0):
-    x = Embedding(max_features, 128)(input_layer)
-    x = LSTM(128, dropout=0.2)(x)
-
-  with ipu.keras.PipelineStage(1):
-    a = Dense(16, activation='relu')(x)
-
-  with ipu.keras.PipelineStage(2):
-    b = Dense(16, activation='relu')(x)
-
-  with ipu.keras.PipelineStage(3):
-    x = Concatenate()([a, b])
-    x = Dense(1, activation='sigmoid')(x)
-
-  return ipu.keras.PipelineModel(input_layer,
-                                 x,
-                                 gradient_accumulation_count=16,
-                                 device_mapping=[0, 1, 1, 0])
+  return ipu.keras.SequentialPipelineModel(
+      [[Embedding(max_features, 128)],
+       [LSTM(128, dropout=0.2),
+        Dense(1, activation='sigmoid')]],
+      gradient_accumulation_count=16)
 
 
 #

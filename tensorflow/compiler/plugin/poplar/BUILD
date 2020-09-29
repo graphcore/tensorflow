@@ -4333,6 +4333,20 @@ py_test(
     ],
 )
 
+py_test(
+    name = "example_tf2_sequential_pipelined_model",
+    size = "large",
+    srcs = ["docs/example_tf2_sequential_pipelined_model.py"],
+    args = [
+        "--epochs=1",
+        "--steps-per-epoch=2",
+    ],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "bias_apply_graph_caching_test",
     size = "medium",

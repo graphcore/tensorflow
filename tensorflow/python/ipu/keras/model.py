@@ -396,7 +396,6 @@ class _IpuModelBase(KerasModel):
             "Steps per epoch times accumulation count (%d x %d) is greater "
             "than the number of samples in the dataset (%d)." %
             (steps_per_epoch, self.accumulation_count, dataset_length))
-
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
@@ -405,10 +404,8 @@ class _IpuModelBase(KerasModel):
           self.__class__.__name__ + " requires the number of batches in the "
           "dataset (%d) to be a multiple of the accumulated batch size (%d)" %
           (mini_batches_per_epoch, self.accumulation_count))
-
     steps_per_epoch = mini_batches_per_epoch / (self.accumulation_count *
                                                 self._get_replication_factor())
-
     if not steps_per_run:
       steps_per_run = steps_per_epoch
 
@@ -1174,19 +1171,21 @@ class IPUModel(_IpuModelBase):
         return np.squeeze(x, 1)
       return x
 
-    assert isinstance(outputs, tuple)
-
-    # Multi output model.
-    if len(outputs) == len(self.outputs) and len(self.outputs) > 1:
+    def verify_shape():
       shapes_ok = True
       for t, o in zip(outputs, self.outputs):
         shapes_ok &= t.shape[1:] == o.shape[1:]
+      return shapes_ok
 
-      if shapes_ok:
-        return tuple(map(squeeze, outputs))
+    assert isinstance(outputs, tuple)
 
-      # Each tuple element is a per output tensor of dimensions:
-      # (dataset_length / batch_size, batch_size, output_dim)
+    # Multi output model.
+    if verify_shape():
+      return tuple(map(squeeze, outputs))
+
+    # Each tuple element is a per output tensor of dimensions:
+    # (dataset_length / batch_size, batch_size, output_dim)
+    if len(outputs) == len(self.outputs) and len(self.outputs) > 1:
       return tuple(map(reshape_multi_output, outputs))
 
     # Each input tuple element is a batch of outputs of dimensions:

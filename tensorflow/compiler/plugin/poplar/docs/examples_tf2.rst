@@ -20,3 +20,8 @@ This example shows how to use the IPU-specific Keras pipelined model
 class to train a network.
 
 .. literalinclude:: example_tf2_pipelined_model.py
+
+This example shows how to use the IPU-specific Keras pipelined sequential model
+class to train a network.
+
+.. literalinclude:: example_tf2_sequential_pipelined_model.py
