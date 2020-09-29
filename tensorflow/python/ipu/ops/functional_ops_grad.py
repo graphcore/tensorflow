@@ -24,6 +24,7 @@ from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import custom_gradient
+from tensorflow.python.util import nest
 """
     These gradient function should *never* be called directly.
 """
@@ -173,6 +174,33 @@ def _get_gradients_for_function(op, *grads):
   return func_grad_graph, func_grad_inputs
 
 
+def _pack_sequence_as(structured_outputs, op_outputs):
+  """Packs the outputs of a functional op.
+
+  The functions may contain None's in the list of `structured_outputs`.
+  `op_outputs` has those outputs missing. So we need to add those Nones to the
+  list of `op_outputs` and then pack it in the same structure as
+  `structured_outputs`.
+
+  Args:
+    structured_outputs: structured_outputs from one of the branch functions.
+    op_outputs: List of output tensors of the op.
+
+  Returns:
+    `op_outputs` packed like `structured_outputs`.
+  """
+  outputs_with_nones = []
+  counter = 0
+  for output in nest.flatten(structured_outputs, expand_composites=True):
+    if output is None:
+      outputs_with_nones.append(None)
+    else:
+      outputs_with_nones.append(op_outputs[counter])
+      counter += 1
+  return func_graph_module.pack_sequence_as(structured_outputs,
+                                            outputs_with_nones)
+
+
 @ops.RegisterGradient("Function")
 def _function_grad(op, *grads):
   """The gradient of a Function op."""
@@ -183,5 +211,4 @@ def _function_grad(op, *grads):
       Tout=func_grad_graph.output_types,
       output_shapes=func_grad_graph.output_shapes)
 
-  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
-                                            outputs)
+  return _pack_sequence_as(func_grad_graph.structured_outputs, outputs)
