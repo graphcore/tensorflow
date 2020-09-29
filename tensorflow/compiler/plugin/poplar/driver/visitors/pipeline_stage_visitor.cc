@@ -80,14 +80,13 @@ ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
 
 Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {
-  std::vector<bool> add_clones(callsite_inst->operand_count(), false);
-
-  // Mark all the inplace operands as requiring clones so that the input tensors
-  // are not clobbered when reusing the sequence.
-  auto inst_description = HloInstructionDescription(callsite_inst);
-  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-    add_clones[inplace_idx] = true;
-  }
+  std::vector<bool> add_clones(callsite_inst->operand_count());
+  // Mark all the non-read only inputs as requiring clones so that when the
+  // sequence is reused we can copy the tensor values into them.
+  absl::c_transform(callsite_inst->operands(), add_clones.begin(),
+                    [](const HloInstruction* operand) {
+                      return !IsPipelineStageReadOnlyInput(operand);
+                    });
 
   return DeferredVisitor::PropagateDeferredAllocations(callsite_inst,
                                                        add_clones);
@@ -143,25 +142,22 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
   // can be executed after the PipelineStage and before the
   // PipelineStageRecomputation since the values won't be modified inplace.
   poplar::program::Sequence seq;
-
-  auto inst_description = HloInstructionDescription(callsite);
-  // For each inplace operand, go through all the tensors for that operand and
-  // add copies from the instruction input tensors to the visitor input tensors
-  // (preserving the aliasing).
-  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-    // If inplace_idx is out of bounds then it's a state and therefore no copy
+  for (int64 op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
+    const HloInstruction* operand = callsite->operand(op_idx);
+    if (IsPipelineStageReadOnlyInput(operand)) {
+      continue;
+    }
+    // If op_idx is out of bounds then it's a state and therefore no copy
     // is needed.
-    if (inplace_idx < static_cast<int64>(computation_inputs_.size())) {
-      CHECK_EQ(inputs[inplace_idx].size(),
-               computation_inputs_[inplace_idx].size());
-      for (size_t flat_idx = 0; flat_idx != inputs[inplace_idx].size();
-           ++flat_idx) {
-        seq.add(
-            TensorCopyWithAliasing(graph, inputs[inplace_idx][flat_idx],
-                                   computation_inputs_[inplace_idx][flat_idx]));
+    if (op_idx < static_cast<int64>(computation_inputs_.size())) {
+      CHECK_EQ(inputs[op_idx].size(), computation_inputs_[op_idx].size());
+      for (size_t flat_idx = 0; flat_idx != inputs[op_idx].size(); ++flat_idx) {
+        seq.add(TensorCopyWithAliasing(graph, inputs[op_idx][flat_idx],
+                                       computation_inputs_[op_idx][flat_idx]));
       }
     }
   }
+
   // Add the actual sequence for the stage.
   seq.add(PipelineStageVisitor::GetCachedSequence());
   return seq;
