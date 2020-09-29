@@ -242,13 +242,37 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
 }
 
 Status ScheduleAllUsersBefore(HloInstruction* inst, HloInstruction* successor,
-                              HloReachabilityMap& reachability_map) {
+                              HloReachabilityMap* reachability_map,
+                              HloInstructionSet* scheduled_users) {
   for (auto* user : inst->users()) {
-    if (!reachability_map.IsReachable(successor, user)) {
-      TF_RETURN_IF_ERROR(user->AddControlDependencyTo(successor));
-      reachability_map.UpdateReachabilityThroughInstruction(successor);
-      TF_RETURN_IF_ERROR(
-          ScheduleAllUsersBefore(user, successor, reachability_map));
+    if (!reachability_map->IsReachable(successor, user)) {
+      if (scheduled_users->insert(user).second) {
+        TF_RETURN_IF_ERROR(user->AddControlDependencyTo(successor));
+        reachability_map->UpdateReachabilityThroughInstruction(successor);
+        TF_RETURN_IF_ERROR(ScheduleAllUsersBefore(
+            user, successor, reachability_map, scheduled_users));
+      }
+    }
+  }
+
+  return Status::OK();
+}
+
+Status ScheduleAllInputsAfter(HloInstruction* inst, HloInstruction* predecessor,
+                              HloReachabilityMap* reachability_map,
+                              HloInstructionSet* scheduled_inputs) {
+  for (auto* operand : inst->unique_operands()) {
+    if (operand->opcode() == HloOpcode::kParameter) {
+      continue;
+    }
+
+    if (!reachability_map->IsReachable(operand, predecessor)) {
+      if (scheduled_inputs->insert(operand).second) {
+        TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(operand));
+        reachability_map->UpdateReachabilityThroughInstruction(operand);
+        TF_RETURN_IF_ERROR(ScheduleAllInputsAfter(
+            operand, predecessor, reachability_map, scheduled_inputs));
+      }
     }
   }
 
@@ -275,14 +299,6 @@ Status AddSchedulingConstraints(
     // using optimizers that require two offloaded parameters for each weight
     // update (like LAMB/ADAM that require both the first and second moments).
     for (std::size_t delay = 1; delay <= i; ++delay) {
-      auto* prev_load = combined_loads[i - delay];
-
-      // To minimze liveness, we also try to schedule all users of the previous
-      // load before the current load. This attempts to ensure that the actual
-      // weight update is pushed as early as possible in the schedule.
-      TF_RETURN_IF_ERROR(
-          ScheduleAllUsersBefore(prev_load, load, *reachability_map));
-
       auto* prev_store = combined_stores[i - delay];
 
       // If we can successfully schedule the previous store before this load,
@@ -291,6 +307,28 @@ Status AddSchedulingConstraints(
       if (!reachability_map->IsReachable(load, prev_store)) {
         TF_RETURN_IF_ERROR(prev_store->AddControlDependencyTo(load));
         reachability_map->UpdateReachabilityThroughInstruction(load);
+
+        // To minimze liveness, we also try to schedule all users of the
+        // previous load before the current load. This attempts to ensure that
+        // the actual weight update is pushed as early as possible in the
+        // schedule, as soon as the necessary remote parameters are loaded.
+        auto* prev_load = combined_loads[i - delay];
+        HloInstructionSet scheduled_users;
+        TF_RETURN_IF_ERROR(ScheduleAllUsersBefore(
+            prev_load, load, reachability_map.get(), &scheduled_users));
+
+        // In addition, we try to schedule all the inputs needed by these users
+        // after the previous load. This attempts to make sure that there is
+        // as little overlap as possible between the updates of the different
+        // weights. For example, some models will cast all the gradients from
+        // float16 to float32, and this attempts to make sure that is done as
+        // late as possible in the schedule.
+        HloInstructionSet scheduled_inputs;
+        for (auto* user : scheduled_users) {
+          TF_RETURN_IF_ERROR(ScheduleAllInputsAfter(
+              user, prev_load, reachability_map.get(), &scheduled_inputs));
+        }
+
         break;
       }
     }
