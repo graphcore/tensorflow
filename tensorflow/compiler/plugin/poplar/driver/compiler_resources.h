@@ -120,8 +120,10 @@ struct CompilerResources {
 
   poplar::program::Sequence preamble_sequence;
 
-  std::stack<std::vector<poplar::program::Sequence>>
-      gradient_accumulation_zeroing_sequences;
+  std::stack<std::vector<poplar::RemoteBuffer>>
+      gradient_accumulation_zeroing_remote_buffers;
+
+  std::stack<std::vector<poplar::Tensor>> gradient_accumulation_zeroing_tensors;
 
   std::stack<std::vector<poplar::program::Sequence>>
       pipelining_write_undef_sequences;
