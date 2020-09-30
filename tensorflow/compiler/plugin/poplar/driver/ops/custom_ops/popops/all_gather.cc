@@ -30,6 +30,13 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+// Functor to hash a poplar type.
+struct PoplarTypeHasher {
+  std::size_t operator()(const poplar::Type& t) const noexcept {
+    return std::hash<std::string>()(t.toString());
+  }
+};
+
 // Return the number of elements in the given tensor.
 int64 ElementCount(const poplar::Tensor& tensor) {
   return tensor.numElements();

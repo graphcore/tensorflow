@@ -274,15 +274,6 @@ class DeferredVisitor : public FullVisitor {
   poplar::program::Sequence GetFunctionCall();
 
  protected:
-  // Signal that we are entering a new variable scope, where zeroing and write
-  // undef need to be tracked.
-  void EnterVariableScope();
-
-  // Signal that we are exiting a variable scope, where zeroing and write
-  // undef need to be tracked. Zeroing and write undef are left to the user of
-  // this function.
-  Status ExitVariableScope();
-
   Status AddSequenceForInstruction(
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
