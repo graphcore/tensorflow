@@ -188,7 +188,7 @@ will use the ``PipelineSchedule.Grouped`` mode, where the forward passes are
 grouped together, and the backward passes are grouped together.  The main
 alternative is the ``PipelineSchedule.Interleaved`` mode, where the forward and
 backward passes are interleaved, so that fewer activations need to be stored.
-Additionaly, the ``PipelineSchedule.Sequential`` mode,
+Additionally, the ``PipelineSchedule.Sequential`` mode,
 where the pipeline is scheduled in the same way as if it were a sharded model,
 may be useful when debugging your model.
 

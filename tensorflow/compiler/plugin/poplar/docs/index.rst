@@ -12,18 +12,20 @@ Targeting the IPU from TensorFlow
     intro
     tutorial
     device_selection
-    variables
-    rand_and_fp
-    logging
-    poplar_ops
+
     perf_training
-    functions
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training
+
+    rand_and_fp
+    poplar_ops
+    functions
     custom_codelet
     host_embedding
-    references
+    logging
+
     api
     supported_ops
+    references
     legal

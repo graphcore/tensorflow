@@ -1,18 +1,6 @@
 Tutorial
 --------
 
-TensorFlow is a powerful graph-modelling framework that can be used for the
-development, training and deployment of deep learning models. In the Graphcore
-software stack, TensorFlow sits at the highest level of abstraction. Poplar
-and PopLibs provide a software interface to operations running on the IPU.
-
-.. figure:: figures/Tensorflow_Poplar.png
-    :width: 100%
-    :alt: TensorFlow abstraction
-    :align: center
-
-    TensorFlow abstraction in relation to Poplar and the IPU
-
 For the discussion that follows, it is important to understand the three key
 concepts of *graph*, *session* and *device* as well as their functional
 interdependence.
@@ -70,13 +58,14 @@ the calculations from the separate IPUs to produce a single final result.
 A basic graph
 ~~~~~~~~~~~~~
 
-We begin with the most humble of aspirations: the ability to add.
+We begin with a simple example of adding some floating-point numbers.
 
 .. literalinclude:: tutorial_basic.py
     :language: python
     :linenos:
+    :emphasize-lines: 3,4,8-12,14-17,20-25,28
 
-Let's review the various key sections of the code as they are presented. In
+Let's review the key sections of the code. In
 lines 1-5 are the basic import statements, two of which pertain to the IPU
 specifically. Line 3 imports the IPU API, which will be the main interface
 to set configuration options for running the IPU session. ``ipu_scope`` is a helper
@@ -85,57 +74,24 @@ that the hardware is properly initialised when called by the script).
 
 .. literalinclude:: tutorial_basic.py
     :language: python
+    :linenos:
+    :lineno-start: 8
     :start-at: # Configure arguments for targeting the IPU
     :end-at: ipu.utils.configure_ipu_system
 
-In this section of the code basic configuration options are being defined.
+In this section of the code, basic configuration options are being defined.
 Boolean flags are passed to ``create_ipu_config``, which turn on
 profiling and a text-format report.
 
-* The ``profiling`` parameter enables trace event
-  logging on the IPU. This will monitor operations on the chip, providing
-  detailed data about the session as it runs on
-  hardware.
+* The ``profiling`` parameter enables event
+  logging on the IPU. This will monitor operations on the IPU, providing
+  detailed data about the session as it runs.
 
 * ``use_poplar_text_report`` configures the text format
   of the generated report, making it more readable for debugging purposes.
 
 Because profiling adds code and extra variables to extract the profiling
 information, it can change the performance and memory usage of your program.
-
-Running on the IPU Model simulator
-..................................
-
-You can run the graph on IPU hardware or on an IPU Model running on the host.
-The IPU Model is a simulation of the *behaviour* of the IPU hardware.
-It does not implement every aspect of a real IPU. For example, the
-IPU Model does not support replicated graphs in TensorFlow
-(see :ref:`replicated_graphs`).
-
-When using an IPU Model instead of actual IPU hardware, the runtime operations
-will behave exactly as they would on hardware. However, the profiler will
-*estimate* the performance of operations and the memory use so the profiling
-information will not be as precise as running on hardware.
-By default, the memory use will not include that required for IPU
-code.
-
-If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
-``True`` then Poplar will compile code for the IPU (in addition to the CPU code
-that is actually executed by the host). In this case, the reported
-IPU memory usage will include the memory used for code.
-
-The IPU Model can be a useful tool for debugging OOM-related issues.
-See :ref:`using_the_ipu_model` for more information.
-
-By default, the code will be run on IPU hardware. To run on the
-IPU Model instead, you need to set the environment variable
-``TF_POPLAR_FLAGS='--use_ipu_model'``, for example:
-
-.. code-block:: python
-
-    # Using IPU model instead of IPU hardware
-    if self.base_dictionary['ipu_model']:
-        os.environ['TF_POPLAR_FLAGS'] = '--use_ipu_model'
 
 Selecting hardware to run on
 ............................
@@ -153,6 +109,8 @@ each section targeting a distinct IPU.
     :language: python
     :start-at: with tf.device("cpu"):
     :end-at: pc = tf.placeholder
+    :lineno-start: 14
+    :linenos:
 
 In this section, TensorFlow placeholders are being placed into the CPU part of
 the graph.  These will be used to feed data using a feed dictionary when
@@ -162,6 +120,8 @@ executing ``session.run()``.
     :language: python
     :start-at: def basic_graph(pa, pb, pc):
     :end-at: result = basic_graph(pa, pb, pc)
+    :lineno-start: 20
+    :linenos:
 
 In this section, a graph of operations is created to do simple arithmetic on
 three input tensors.  The ``ipu_scope`` directive is used to ensure that these
@@ -176,7 +136,7 @@ be seen in the console log:
     ...: I tensorflow/compiler/plugin/poplar/driver/executor.cc:660] Device /device:IPU:0 attached to IPU: 0
     [3. 8.]
 
-Beyond summing the vectors correctly, the line directly preceding informs us
+The last line shows the result of adding the vectors. The line before that informs us
 that the targeted device was the IPU, and the index of the IPU that ran
 the graph was IPU 0.
 
@@ -185,6 +145,41 @@ identifier for the IPU, and so when using ``auto_select_ipus``, the actual IPU
 selected to run the graph may not be IPU 0, but could be any of
 the other IPUs that are free and available on the server. This will be covered
 in more detail in :ref:`sharding_a_graph`.
+
+Running on the IPU Model simulator
+..................................
+
+You can also run the graph on an "IPU Model" running on the host.
+The IPU Model is a simulation of the *behaviour* of the IPU hardware.
+It does not implement every aspect of a real IPU. For example, the
+IPU Model does not support replicated graphs in TensorFlow
+(see :ref:`replicated_graphs`).
+
+When using an IPU Model instead of actual IPU hardware, the runtime operations
+will behave exactly as they would on hardware. However, the profiler will
+*estimate* the performance of operations and memory use, so the profiling
+information will not be as precise as running on hardware.
+By default, the memory use will not include that required for IPU
+code.
+
+If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
+``True`` then Poplar will compile code for the IPU (in addition to the CPU code
+that is actually executed by the IPU Model). In this case, the reported
+IPU memory usage will include the memory used for code.
+
+The IPU Model can be a useful tool for debugging OOM-related issues.
+See :ref:`using_the_ipu_model` for more information.
+
+By default, the code will be run on IPU hardware. To run on the
+IPU Model instead, you need to set the environment variable
+``TF_POPLAR_FLAGS='--use_ipu_model'``, for example:
+
+.. code-block:: python
+
+    # Using IPU model instead of IPU hardware
+    if self.base_dictionary['ipu_model']:
+        os.environ['TF_POPLAR_FLAGS'] = '--use_ipu_model'
+
 
 Compiling the graph for the IPU
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,6 +206,7 @@ Let's now build on our previous TensorFlow script by adding
 .. literalinclude:: tutorial_xla_compile.py
     :language: python
     :linenos:
+    :emphasize-lines: 29,33
 
 The script has now gone from calling ``basic_graph`` directly, to feeding it as
 the graph input to ``ipu.ipu_compiler.compile()``. This takes the graph, along with
@@ -256,10 +252,11 @@ Let's now return to our basic script and add the sharding component.
 .. literalinclude:: tutorial_sharding.py
     :language: python
     :linenos:
+    :emphasize-lines: 9,14,29-38,43
 
 Focusing on the sharding parts of this new script, line 14 uses
-``auto_select_ipus`` to select four separate IPUs for the task. This will allow the
-script to go through the IPUs accessible by the host, determine which
+``auto_select_ipus`` to select four separate IPUs for the task. This will
+go through the IPUs accessible by the host, determine which
 are being utilised and which are free, and then subscribe to those IPUs that are
 available.
 
@@ -293,3 +290,73 @@ These are the IPUs selected to host the graph and to process respective shards
 as indexed in the code. See the `IPU Command Line Tools
 <https://docs.graphcore.ai/projects/command-line-tools/>`_ document for
 more information about how IPU IDs are allocated.
+
+Adding variables
+~~~~~~~~~~~~~~~~
+
+Do not add variables using ``tf.Variable([shape], initializer)``, because they will fail
+to obey certain operations, such as ``assign_add``.
+
+Make sure that all variables are added using a variable scope that is marked as
+a resource. This can be done globally, as shown below:
+
+.. code-block:: python
+
+  vscope = tf.get_variable_scope()
+  vscope.set_use_resource(True)
+  ...
+  var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
+  ...
+
+Or it can be done locally, in a specific scope:
+
+.. code-block:: python
+
+  with tf.variable_scope("vs", use_resource=True):
+    var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
+
+Troubleshooting
+...............
+
+If you get an error similar to the following (especially the lines containing
+``VariableV2``) it indicates that a variable has been created which is not a
+resource variable.
+
+.. code-block:: none
+
+    InvalidArgumentError (see above for traceback): Cannot assign a device for operation
+      'InceptionV1/Logits/Conv2d_0c_1x1/biases': Could not satisfy explicit device specification
+      '/device:IPU:0' because no supported kernel for IPU devices is available.
+    Colocation Debug Info:
+    Colocation group had the following types and devices:
+    Const: CPU IPU XLA_CPU
+    Identity: CPU IPU XLA_CPU
+    Fill: CPU IPU XLA_CPU
+    Assign: CPU
+    VariableV2: CPU
+
+Note on the global_step counter
+...............................
+
+More advanced execution control frameworks in TensorFlow use a scalar counter
+called ``global_step`` to count the number of iterations of training which have
+occurred. This counter is serialised along with the model. It allows the model
+to base parameters on the step count, even if the model is run multiple times.
+
+There is an ``add`` operation which adds to the ``global_step`` scalar on each
+training pass.  If the ``global_step`` variable is placed on the IPU device,
+then this increment operation will occur on the IPU too.  This will cause the
+Poplar training engine to be swapped out for the increment engine on each
+training step, causing very poor performance.
+
+To avoid this, use the expression
+``tf.train.get_or_create_global_step()`` in the CPU context before you create any special training
+sessions. This will ensure that the global_step variable is on the CPU.
+
+.. code-block:: python
+
+  with tf.device("cpu"):
+    tf.train.get_or_create_global_step()
+
+  with ipu.scopes.ipu_scope("/device:IPU:0"):
+    out = ipu.ipu_compiler.compile(model_fn, [...])

@@ -1,23 +1,18 @@
-Using IPU optimised operations
-------------------------------
+IPU-optimised operations
+------------------------
 
 Several custom versions of operators are provided to target functions
 available in PopLibs. See the :ref:`api-section` for more details.
 
-For recurrent neural networks, the custom LSTM and GRU ops need to be used
-because the underlying PopLibs functions will use significantly less memory
-on the IPU.
-They are also available as :ref:`keras-layers-api`.
+LSTM and GRU
+~~~~~~~~~~~~
 
-GRU
-~~~
+For recurrent neural networks, the custom LSTM
+(:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnLSTM`) and GRU
+(:py:class:`~tensorflow.python.ipu.rnn_ops.PopnnGRU`) ops need to be used
+because they will use significantly less memory on the IPU.
 
-See :py:class:`tensorflow.python.ipu.rnn_ops.PopnnGRU`.
-
-LSTM
-~~~~
-
-See :py:class:`tensorflow.python.ipu.rnn_ops.PopnnLSTM`.
+These are also available as :ref:`keras-layers-api`.
 
 Dropout
 ~~~~~~~
@@ -74,8 +69,8 @@ See :py:func:`tensorflow.python.ipu.normalization_ops.layer_norm`.
 GeLU activation
 ~~~~~~~~~~~~~~~
 
-GeLU, gaussian error linear units, is an alternative to the ReLU
-non-lineaity.  The paper at https://arxiv.org/pdf/1606.08415.pdf
-describes it.
+Gaussian error linear units (GeLU) is an alternative to the ReLU non-linearity.
+This is described in `"Gaussian Error Linear Units (GELUs)" Dan Hendrycks, Kevin
+Gimpel <https://arxiv.org/abs/1606.08415>`_.
 
 See :py:func:`tensorflow.python.ipu.nn_ops.gelu`.
