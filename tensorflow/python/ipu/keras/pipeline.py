@@ -57,17 +57,17 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   and provides the `fit` API for training the model.
 
   The different stages are specified, similarly to the Keras Sequential model,
-  as a list in the constructor.  With the PipelineModel class the list of
-  layers becomes a list of lists of layers, where each list contains the layers
-  for a particular stage.
+  as a list in the constructor.  With the SequentialPipelineModel class the list
+  of layers becomes a list of lists of layers, where each list contains the
+  layers for a particular stage.
 
   The pipeline depth argument describes the number of mini-batches which are
   sent through the pipeline in a single operation of the pipeline.  The
   effective batch size is therefore the mini-batch size multipled by the
   pipeline depth.
 
-  There are some limitations with the PipelineModel compared to the standard
-  Keras Model.
+  There are some limitations with the SequentialPipelineModel compared to the
+  standard Keras Model.
 
   - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
@@ -75,6 +75,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   - Weighted metrics, target tensors and sample weight mode are not supported.
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
+  - It cannot be used in a custom training loop.
 
   The model will only be constructed after the first call to the `fit` method,
   so a summary of the model will not be possible until after some training
@@ -259,7 +260,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     This provides the same functionality as the Keras Model ``compile``
     method.
 
-    Certain features are not supported by the IPU PipelineModel:
+    Certain features are not supported by the IPU SequentialPipelineModel:
     - sample_weight_mode
     - weighted_metrics
     - target_tensors
@@ -536,6 +537,7 @@ class PipelineModel(ipu_model.Model):
   - Weighted metrics, target tensors and sample weight mode are not supported.
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
+  - It cannot be used in a custom training loop.
 
   Example:
 

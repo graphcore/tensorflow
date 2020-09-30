@@ -654,7 +654,7 @@ class _IpuModelBase(KerasModel):
 
 
 class IPUSequential(_IpuModelBase):
-  """A Keras Sequential class specifically tergetting the IPU.  This class is
+  """A Keras Sequential class specifically targetting the IPU.  This is
   similar to the Keras Sequential model class, but it also supports the
   accumulation of gradient deltas, and an on-device training loop.
 
@@ -935,7 +935,7 @@ class IPUSequential(_IpuModelBase):
 
 
 class IPUModel(_IpuModelBase):
-  """A Keras Model class specifically tergetting the IPU.  This class is
+  """A Keras Model class specifically targetting the IPU.  This is
   similar to the Keras Model class, but it also supports the accumulation of
   gradient deltas, and an on-device training loop.
 
