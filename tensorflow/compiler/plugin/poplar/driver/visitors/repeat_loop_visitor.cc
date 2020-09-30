@@ -82,8 +82,9 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 
   auto& zeroing_remote_buffers =
       resources_.gradient_accumulation_zeroing_remote_buffers.top();
-  ZeroRemoteBuffers(resources_, GetMasterGraph(resources_),
-                    zeroing_remote_buffers, tensors_zeroing_sequence_);
+  for (auto zeroing_remote_buffer : zeroing_remote_buffers) {
+    tensors_zeroing_sequence_.add(zeroing_remote_buffer);
+  }
 
   TF_RETURN_IF_ERROR(ExitVariableScope());
 
