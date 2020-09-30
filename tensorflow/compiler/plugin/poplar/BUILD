@@ -4189,39 +4189,6 @@ py_test(
 )
 
 tf_xla_py_test(
-    name = "tutorial_basic",
-    size = "small",
-    srcs = ["docs/tutorial_basic.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "tutorial_sharding",
-    size = "small",
-    srcs = ["docs/tutorial_sharding.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "tutorial_xla_compile",
-    size = "small",
-    srcs = ["docs/tutorial_xla_compile.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "example_tf2_model_fit",
     size = "large",
     srcs = ["docs/example_tf2_model_fit.py"],
@@ -4732,10 +4699,7 @@ test_suite(
         "outfeed_example",
         "perf_training_example",
         "tutorial_attributes_example",
-        "tutorial_basic",
         "tutorial_custom_codelet",
-        "tutorial_sharding",
-        "tutorial_xla_compile",
     ] + if_horovod(["distributed_training_horovod_example"]),
 )
 
