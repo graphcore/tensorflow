@@ -37,8 +37,7 @@ RepeatLoopVisitor::RepeatLoopVisitor(
     const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, description, name, {},
                              reallocate_inputs_info) {
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.gradient_accumulation_zeroing_sequences.push({});
+  EnterVariableScope();
 }
 
 Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
@@ -76,11 +75,17 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero());
 
   // Create a sequence for all the zeroing gradient accumulation buffers.
-  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
-  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
-    tensors_zeroing_sequence_.add(zeroing_seq);
-  }
-  resources_.gradient_accumulation_zeroing_sequences.pop();
+  auto& zeroing_tensors =
+      resources_.gradient_accumulation_zeroing_tensors.top();
+  ZeroTensors(resources_, GetMasterGraph(resources_), zeroing_tensors,
+              tensors_zeroing_sequence_, name_ + "/ZeroAccumulators");
+
+  auto& zeroing_remote_buffers =
+      resources_.gradient_accumulation_zeroing_remote_buffers.top();
+  ZeroRemoteBuffers(resources_, GetMasterGraph(resources_),
+                    zeroing_remote_buffers, tensors_zeroing_sequence_);
+
+  TF_RETURN_IF_ERROR(ExitVariableScope());
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
