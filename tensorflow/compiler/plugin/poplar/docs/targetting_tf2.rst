@@ -11,6 +11,30 @@ target the IPU efficiently. The IPU achieves its performance by fusing
 operations into a single kernel that is executed repeatedly, amortising
 the cost of control and I/O.
 
+Function annotation with @tf.function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The function annotation ``@tf.function`` is well documented in the standard
+TensorFlow documentation. It converts the body of the annotated function into
+a fused set of operations that are executed as a group, in the same way as a
+whole graph would have been in TensorFlow version 1. In addition, a library
+called ``autograph`` will convert python flow control constructs into TensorFlow
+graph operations.
+
+Best practice is to ensure that anything which is intended to be executed on
+the IPU is placed into a function and annotated with ``@tf.function``. This
+does not apply to constructing a Keras model or using the Keras ``Model.fit()``
+API. See below for details on Keras.
+
+When calling a function that is marked with a ``@tf.function`` from within a
+distribution strategy like ``IPUStrategy``, you should not call them directly,
+but instead use the ``experimental_run_v2`` method.
+
+See the following online resources for more information.
+
+- https://www.tensorflow.org/tutorials/customization/performance
+- https://www.tensorflow.org/guide/function
+
 IPUStrategy
 ~~~~~~~~~~~
 
@@ -42,30 +66,6 @@ See the online documentation for more details.
 
 - https://www.tensorflow.org/guide/distributed_training
 
-Function annotation with @tf.function
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The function annotation ``@tf.function`` is well documented in the standard
-TensorFlow documentation. It converts the body of the annotated function into
-a fused set of operations that are executed as a group, in the same way as a
-whole graph would have been in TensorFlow version 1. In addition, a library
-called ``autograph`` will convert python flow control constructs into TensorFlow
-graph operations.
-
-Best practice is to ensure that anything which is intended to be executed on
-the IPU is placed into a function and annotated with ``@tf.function``. This
-does not apply to constructing a Keras model or using the Keras ``Model.fit()``
-API. See below for details on Keras.
-
-When calling a function that is marked with a ``@tf.function`` from within a
-distribution strategy like ``IPUStrategy``, you should not call them directly,
-but instead use the ``experimental_run_v2`` method.
-
-See the following online resources for more information.
-
-- https://www.tensorflow.org/tutorials/customization/performance
-- https://www.tensorflow.org/guide/function
-
 Keras
 ~~~~~
 
@@ -82,7 +82,7 @@ IPU optimized drop-in replacements for Keras Model and Keras Sequential are
 available and described below.
 
 Model class
-________________
+___________
 
 A higher performance alternative to using the standard Keras Model is
 available. It is called ``Model``, and found at
@@ -125,7 +125,7 @@ called directly. For a similar reason, you cannot get the list of trainable
 variables before you have executed it.
 
 PipelineModel and SequentialPipelineModel classes
-____________________
+_________________________________________________
 
 ``PipelineModel`` and ``SequentialPipelineModel`` are substitutes for the Keras
 Model and Sequential model classes (respectively), with support for multi-device
