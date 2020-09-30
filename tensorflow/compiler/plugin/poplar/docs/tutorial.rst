@@ -186,47 +186,24 @@ selected to run the graph may not be IPU 0, but could be any of
 the other IPUs that are free and available on the server. This will be covered
 in more detail in :ref:`sharding_a_graph`.
 
-An XLA graph
-~~~~~~~~~~~~
+Compiling the graph for the IPU
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The previous script introduced a very basic graph that consisted of the
-summation of
-three vectors and published the results of a forward pass. For certain
-applications, it will be necessary to incorporate control flow structures, as in
-conditional ``if`` or ``while`` statements. Certain recurrent
-neural network (RNN) layers and long-short term memory (LSTM) cells have
-conditionals implicitly defined in their source code. In those cases, it will be
-necessary to use the XLA library to define the graph. XLA is an optimised
-linear algebra library that interfaces the graph to a set of optimisation
-parsers that render highly efficient computation sets.
+XLA (Accelerated Linear Algebra) is a domain-specific compiler for linear
+algebra that can accelerate TensorFlow models. The Graphcore implementation
+generates code optimised for the IPU.
 
-Using XLA has certain restrictions, the most pertinent of which for the
-current discussion is that the dimensions of all tensors involved in the
-computational graph must be fully defined at compile time. Dealing with this
-restriction can at times require some meticulous refactoring of placeholders or
-input tensors (especially when dealing with mini-batch processing) but does
-not constitute a significant development overhead.
-
-The main interface to the XLA library is ``ipu.ipu_compiler.compile()``,
+The main interface to XLA is the ``ipu.ipu_compiler.compile()`` function,
 which will take a graph and a feed dictionary for input tensors, and
-return a tensor set. ``ipu.ipu_compiler.compile`` sits between the graph
+return a tensor set. ``ipu.ipu_compiler.compile()`` sits between the graph
 definition and the session construct, as shown below:
 
-.. figure:: figures/Session_Graph_XLA.png
-    :width: 50%
-    :alt: ``xla.compile`` in relation to a session and graph
-    :align: center
-
-    ``xla.compile`` in relation to a session and graph
-
-In most IPU-specific implementations, it is likely that an
-entire graph will be parsed through ``ipu.ipu_compiler.compile``. However, it is also
-possible to compile only a portion of a graph with XLA and then combine the resulting
-tensor set with another, non-XLA, graph.
-
-Further details about
-XLA compilation are available on the TensorFlow website:
-https://www.tensorflow.org/xla/tutorials/xla_compile.
+.. note::
+    To ensure that your code is executed efficiently on the IPU, you should compile
+    it with ``ipu.ipu_compiler.compile()``. For operations that are to be placed on
+    an IPU, this should be called inside an ``ipu_scope``. However, this is not
+    necessary when using an ``IPUEstimator`` or ``IPUStrategy`` in `TensorFlow 2
+    <https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/targetting_tf2.html>`_.
 
 Let's now build on our previous TensorFlow script by adding
 ``ipu.ipu_compiler.compile`` to the session definition.
@@ -236,47 +213,25 @@ Let's now build on our previous TensorFlow script by adding
     :linenos:
 
 The script has now gone from calling ``basic_graph`` directly, to feeding it as
-the graph input to ``ipu.ipu_compiler.compile``. This takes the graph, along with
+the graph input to ``ipu.ipu_compiler.compile()``. This takes the graph, along with
 the corresponding placeholders, as input.
 
-Note that the dimensions of the placeholders fed to ``ipu.ipu_compiler.compile``
-have been defined on the CPU. The *values* of these tensors are not
-defined until the ``session.run`` call.
+Using XLA has certain restrictions, the most relevant of which is that the
+dimensions of all tensors involved in the graph must be fully defined at compile
+time.
 
-In other words, it is only the *dimensions* of the placeholders that are the
-critical information for ``ipu.ipu_compiler.compile`` so that it can parse
-the graph correctly at compile time.
+As a result, the dimensions of the placeholders fed to
+``ipu.ipu_compiler.compile()`` have been defined on the CPU. The *values* of these
+tensors are not defined until the ``session.run()`` call.
 
-Given that this graph and the one in the previous example are the same, it
-is apparent that ``ipu.ipu_compiler.compile`` is not actually required to
-execute the graph. However, if the following code:
+In most IPU-specific implementations, it is likely that an entire graph will be
+parsed through ``ipu.ipu_compiler.compile()``. However, it is also possible to
+compile only a portion of a graph with XLA and then combine the resulting tensor
+set with another, non-XLA, graph.
 
-.. code-block:: python
+Further details about XLA compilation are available on the TensorFlow website:
+https://www.tensorflow.org/xla/.
 
-    def basic_graph(pa, pb, pc):
-        # Do basic addition on tensors
-        o1 = pa + pb
-        o2 = pa + pc
-        simple_graph_output = o1 + o2
-        return simple_graph_output
-
-Were to be replaced with:
-
-.. code-block:: python
-
-    def while_loop_graph(pa):
-            c = tf.constant(0)
-
-            def body_of_while_loop(i):
-                return i+1
-
-            cond = lambda i: i < 10
-            loop = tf.while_loop(cond, body_of_while_loop, [c])
-            square = pa * pa
-            return loop, square, tf.no_op()
-
-Then ``ipu.ipu_compiler.compile`` would be strictly required, because of the use
-of the ``tf.while_loop()`` conditional statement.
 
 .. _sharding_a_graph:
 
@@ -319,10 +274,7 @@ distinct shard, using
 
 As a result, shards 0 through 2 perform independent tensor sums, while shard
 3 performs an accumulated sum from the other three shards. In line 43
-we are using ``xla.compile`` to parse the graph.
-
-Note that sharding can
-also be performed without running through the XLA library.
+we are using ``ipu.ipu_compiler.compile()`` to parse the graph.
 
 The output of the session run will be something similar to this:
 
