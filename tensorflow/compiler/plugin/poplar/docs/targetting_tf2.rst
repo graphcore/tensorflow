@@ -1,15 +1,15 @@
-Targeting the IPU with TensorFlow 2
------------------------------------
+Support for TensorFlow 2
+------------------------
 
-In TensorFlow version 2, the Eager mode is enabled by default, and Keras has
-become the main API for constructing models. Distribution strategies are the
+In TensorFlow version 2, eager mode is enabled by default and Keras is
+the main API for constructing models. Distribution strategies are the
 new way of targeting different pieces of hardware.
 
-As in TensorFlow version 1, there are a small number of things
-that need to be done when constructing and executing a model in order to
-target the IPU efficiently. The IPU achieves its performance by fusing
-operations into a single kernel that is executed repeatedly, amortising
-the cost of control and I/O.
+The Graphcore implementation of TensorFlow includes IPU-specific implementations
+of the ``Model`` and ``Sequential`` classes, and adds ``PipelineModel`` and
+``SequentialPipelineModel`` classes for running a model on multiple IPUs. It
+also makes efficient use of the IPU by fusing operations into a single kernel
+that is executed repeatedly, amortising the cost of control and I/O.
 
 Function annotation with @tf.function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -18,7 +18,7 @@ The function annotation ``@tf.function`` is well documented in the standard
 TensorFlow documentation. It converts the body of the annotated function into
 a fused set of operations that are executed as a group, in the same way as a
 whole graph would have been in TensorFlow version 1. In addition, a library
-called ``autograph`` will convert python flow control constructs into TensorFlow
+called ``autograph`` will convert Python flow control constructs into TensorFlow
 graph operations.
 
 Best practice is to ensure that anything which is intended to be executed on
@@ -27,10 +27,10 @@ does not apply to constructing a Keras model or using the Keras ``Model.fit()``
 API. See below for details on Keras.
 
 When calling a function that is marked with a ``@tf.function`` from within a
-distribution strategy like ``IPUStrategy``, you should not call them directly,
+distribution strategy like ``IPUStrategy``, you should not call it directly,
 but instead use the ``experimental_run_v2`` method.
 
-See the following online resources for more information.
+See the following online resources for more information:
 
 - https://www.tensorflow.org/tutorials/customization/performance
 - https://www.tensorflow.org/guide/function
@@ -38,11 +38,11 @@ See the following online resources for more information.
 IPUStrategy
 ~~~~~~~~~~~
 
-Distribution strategies are a more advanced and flexible version of device
-tagging. The ``IPUStrategy`` is a sub-class of distribution strategy which
-specifically targets a system with one or more IPUs attached. A separate
-class ``IPUMultiWorkerStrategy`` is for targeting a multiple system
-configuration.
+The ``tf.distribute.Strategy`` is an API to distribute training across multiple
+devices. :py:class:`~tensorflow.python.ipu.ipu_strategy.IPUStrategy` is a
+subclass which targets a system with one or more IPUs attached. Another subclass,
+:py:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+targets a multiple system configuration.
 
 Use the ``strategy.scope()`` context to ensure that everything within that
 context will be compiled for the IPU device. You should do this instead
@@ -58,114 +58,134 @@ of using the ``tf.device`` context.
     with strategy.scope():
         ...
 
-It is important to construct any Keras model within the scope of the
-``IPUStrategy``, because a Keras ``Model`` class may create some of the model at
-construction time, and some other parts of it at execution time.
+It is important to construct a Keras model within the scope of the
+``IPUStrategy``, because Keras may create some parts of the model at
+construction time, and some other parts at execution time.
 
-See the online documentation for more details.
-
-- https://www.tensorflow.org/guide/distributed_training
+See the TensorFlow documentation for more details:
+https://www.tensorflow.org/guide/distributed_training
 
 Keras
 ~~~~~
 
-The Keras API is used for constructing models using a set of high-level ``Layers``
-objects. https://www.tensorflow.org/guide/keras.
+The Graphcore implementation of TensorFlow includes a port of Keras for the IPU,
+available as :py:class:`tensorflow.python.ipu.keras`.
 
-Full support is available for Keras on the IPU. It is important to ensure
-that the model is both instantiated and called from within an ``IPUStrategy``
-context.
+The Keras API is used for constructing models using a set of high-level ``Layer``
+objects. See https://www.tensorflow.org/guide/keras for more information.
 
-- https://www.tensorflow.org/guide/keras/train_and_evaluate
+IPU optimized replacements for the Keras ``Model`` and ``Sequential`` classes are
+available for the IPU. These have the following features:
 
-IPU optimized drop-in replacements for Keras Model and Keras Sequential are
-available and described below.
+* On-device training loop for reduction of communication overhead.
+* Gradient accumulation for simulating larger batch sizes.
+* Automatic data-parallelisation of the model when placed on a multi-IPU device.
+  This means that during training the gradients will be reduced across
+  replicas.
+
+These are described in more detail below.
+
+.. note::
+  The model must be both instantiated and called from within an ``IPUStrategy``
+  context.
+
+See https://www.tensorflow.org/guide/keras/train_and_evaluate for
+more background.
+
 
 Model class
 ___________
 
-A higher performance alternative to using the standard Keras Model is
-available. It is called ``Model``, and found at
-``tensorflow.python.ipu.keras.Model``. It supports the following features:
+An IPU port of the standard Keras ``Model`` is
+available as :py:class:`tensorflow.python.ipu.keras.Model`.
 
-* On device training loop for reduction of communication overhead.
-* Gradient accumulation for simulating larger batch sizes.
-* Automatic data-parallelism of the model when placed on a multi-IPU device,
-  which means that during training the gradients will be reduced across
-  replicas.
+This is a substitute for the standard Keras ``Model`` class, using only a single
+IPU for training. Unlike the standard Keras ``Model`` class, it cannot
+be called directly. You must use use the ``fit()``, ``evaluate()`` and
+``predict()`` methods for training, evaluation and making predictions.
 
-It is a substitute for the Keras Model class, when only a single IPU
-is used for training. For a high performance multi-IPU solution use the
-``PipelineModel`` described below.
-
-Unlike the standard Keras model classes, it must be trained, evaluated and
-operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
-called directly.
+For a high-performance, multi-IPU solution use the
+:ref:`pipeline-model`.
 
 Sequential class
 ________________
 
-A higher performance alternative to using the standard Keras Sequential is
-available. It is called ``Sequential``, and found at
-``tensorflow.python.ipu.keras.Sequential``. It supports the following features:
+An implementation of the Keras ``Sequential`` class is
+available as :py:class:`tensorflow.python.ipu.keras.Sequential`.
 
-* On device training loop for reduction of communication overhead.
-* Gradient accumulation for simulating larger batch sizes.
-* Automatic data-parallelism of the model when placed on a multi-IPU device,
-  which means that during training the gradients will be reduced across
-  replicas.
+This is a substitute for the standard Keras ``Sequential`` class, using only a
+single IPU for training. For a high-performance, multi-IPU solution use
+the :ref:`sequential-pipeline-model`.
 
-It is a substitute for the Keras Sequential class, when only a single IPU
-is used for training. For a high performance multi-IPU solution use the
-``SequentialPipelineModel`` described below.
+Unlike the standard Keras ``Model`` class, it cannot be
+called directly. You must use use the ``fit()``, ``evaluate()`` and
+``predict()`` methods for training, evaluation and making predictions.
+Similarly, you cannot get the list of trainable variables before you have
+executed the model.
 
-Unlike the standard Keras model classes, it must be trained, evaluated and
-operated with the ``fit``, ``evaluate`` and ``predict`` methods. It cannot be
-called directly. For a similar reason, you cannot get the list of trainable
-variables before you have executed it.
+.. _pipeline-model:
 
-PipelineModel and SequentialPipelineModel classes
-_________________________________________________
+PipelineModel class
+___________________
 
-``PipelineModel`` and ``SequentialPipelineModel`` are substitutes for the Keras
-Model and Sequential model classes (respectively), with support for multi-device
-IPU pipelines. Using pipelined execution allows the IPU to achieve high compute
-efficiency while utilising multiple devices.
+:py:class:`~tensorflow.python.ipu.keras.PipelineModel` is an alternative for the
+Keras ``Model`` class, with support for multi-device IPU pipelines. Using
+pipelined execution allows the IPU to achieve high compute efficiency while
+utilising multiple devices.
 
-PipelineModel and SequentialPipelineModel have the same APIs as the standard Keras
-Model and Sequential classes, but will train the model on multiple IPUs and stream
-the data into the devices using an Infeed queue which is created automatically.
+The ``PipelineModel`` has the same API as the standard Keras ``Model`` classes,
+but will train the model on multiple IPUs and stream the data into the devices
+using an ``Infeed`` queue which is created automatically.
 
-When defining a graph for use with PipelineModel, the stage at which a node (or
-set of nodes) is to be executed is given by the ``PipelineStage`` context in
-which it is created.
+When defining a model for use with ``PipelineModel``, the pipeline stage at
+which a ``Layer`` is to be executed is given by the
+:py:class:`~tensorflow.python.ipu.keras.PipelineModel` context in which it is
+called.
 
-The constructor of SequentialPipelineModel takes, rather than a list of layers as
-with the standard Sequential model, a list of lists of layers, one for each IPU
-pipeline stage. 
-
-See the examples section to see how the APIs of each are used.
-
-In a machine learning model a step is often considered to be one pass through
-the model where the forward pass is done, then the gradients are calculated
+In a machine learning model, a "step" is often considered to be one pass through
+the model, in which the forward pass is done, the gradients are calculated
 and then the parameters are updated. Since a pipeline accumulates multiple
-gradients before applying them collectively to the parameter, we call a step
-one of those pipeline operations. So the number of data samples processed per
+gradients before applying them collectively to the parameters, we call each
+of those pipeline operations a "step". So the number of data samples processed per
 step is equal to the batch size multiplied by the pipeline depth.
 
 This will be reflected in the rate at which the progress bar advances, and the
-entries in the Keras History.
+entries in the Keras history.
 
-Note that ``PipelineModel`` and ``SequentialPipelineModel`` also support
-automatic data parallelism, as with their non-pipelined counterparts.
+Like the ``Sequential`` class, ``PipelineModel`` also supports automatic
+data-parallelism.
+
+
+.. _sequential-pipeline-model:
+
+SequentialPipelineModel class
+_____________________________
+
+:py:class:`~tensorflow.python.ipu.keras.SequentialPipelineModel` is an
+alternative to the ``PipelineModel`` class for the Keras ``Sequential`` class.
+
+Like the constructor for the standard Keras ``Sequential`` model,
+``SequentialPipelineModel`` takes a list of lists of layers, where each list of
+layers is assigned to an IPU pipeline stage. See :ref:`tensorflow2examples` to
+see how the API is used.
+
+Like the ``Sequential`` class, ``SequentialPipelineModel`` also supports
+automatic data-parallelism.
 
 Custom training loops
 _____________________
 
 If a more sophisticated training loop is required, then it can be described
-inside a function which is marked as a ``@tf.function``. See the examples
-section for a full example.
+inside a function which is marked as a ``@tf.function``. See :ref:`tensorflow2examples`
+for an example.
 
 The outer training function should be called using the ``experimental_run_v2``
 method on the ``IPUStrategy`` object, to ensure that it is executed using the
 strategy's configuration.
+
+.. note::
+  It is not possible to use either ``PipelineModel`` or
+  ``SequentialPipelineModel`` in a custom training loop.
+
+For more information on the ``@tf.function`` annotation, see the
+`TensorFlow function documentation <https://www.tensorflow.org/guide/function>`_.

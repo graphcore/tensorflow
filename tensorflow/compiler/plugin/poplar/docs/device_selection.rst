@@ -10,6 +10,7 @@ while creating the graph:
 
 .. literalinclude:: tutorial_sharding.py
   :language: python
+  :linenos:
   :start-at: # Create the IPU section of the graph
   :end-at: result = ipu.ipu_compiler.compile
 
@@ -78,6 +79,7 @@ Once the hardware structure has been specified, the API call
 hardware.
 
 .. literalinclude:: tutorial_sharding.py
+  :linenos:
   :language: python
   :start-at: # Configure the IPU system
   :end-at: ipu.utils.configure_ipu_system
@@ -149,7 +151,7 @@ See the documentation in :ref:`api-section` for more details.
 .. _env-var-section:
 
 TF_POPLAR_FLAGS environment variable
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+....................................
 
 The options passed through ``create_ipu_config`` and ``configure_ipu_system``
 can be directed at any machine in a TensorFlow cluster.  Some configuration
@@ -159,69 +161,69 @@ If you set ``TF_POPLAR_FLAGS=--help`` and execute a TF session, it will output s
 help for each option. Some of the more common options are described below.
 For a full list, refer to  :ref:`api-section`.
 
-* ``--help`` will print the information for all the flags.
+.. list-table::
+  :width: 99%
+  :header-rows: 1
 
-* ``--use_synthetic_data`` will prevent the system from downloading or uploading
-  data to the card when executing code.  This is used for testing performance
-  without the overhead of data transfer.
+  * - Option
+    - Description
+  * - ``--dump_schedule_as_dot``
+    - Dump the schedule of the XLA graph to the user console.
+  * - ``--dump_text_reports_to_stdio``
+    - If profiling is enabled, then a text summary of the profile will be dumped
+      io standard output, in addition to the normal report processing.
+  * - ``--executable_cache_path``
+    - Enables the Poplar executable cache.
 
-* ``--synthetic_data_initializer`` is used in combination with the
-  ``--use_synthetic_data`` flag to control how the inputs to the graph will be initialised
-  on the IPU. The values will be either random (``--synthetic_data_initializer=random``)
-  or a constant value ``X`` (``--synthetic_data_initializer=X``)
+      See :ref:`caching_executables`.
+  * - ``--fallback_scheduler``
+    - Uses the standard TensorFlow scheduler, instead of the Graphcore specific
+      one.
+  * - ``--help``
+    - Print information for all the options.
+  * - ``--log_cycle_count``
+    - Log the number of cycles used in evaluating the main graph. The numeric
+      argument indicates the tile on which the cycle count operation will be
+      created. This may be used as an alternative to profiling for graphs with
+      dynamic control flow.
+  * - ``--max_compilation_threads``
+    - Sets the maximum number of threads which Poplar is allowed to use for
+      compiling the executable.
+  * - ``--max_infeed_threads``
+    - Sets the maximum number of threads which each infeed queue is allowed to
+      use when accessing data from datasets.
+  * - ``--null_data_feed``
+    - Cause any infeed queues to copy garbage data to the IPU rather than real
+      data. This option can be used to determine whether the dataset provided to
+      the infeed queue is the bottleneck during execution.
+  * - ``--save_interval_report``
+    - Dumps the Poplar interval report to the given directory.
+  * - ``--save_vertex_graph``
+    - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
+  * - ``--synthetic_data_initializer``
+    - Used in combination with the
+      ``--use_synthetic_data`` option to control how the inputs to the graph
+      will be initialised on the IPU.
 
-* ``--use_ipu_model`` will use the Poplar IPUModel for graph compilation and
-  execution.
+      The values will be either random: ``--synthetic_data_initializer=random``
 
-* ``--log_cycle_count`` will log the number of cycles used in evaluating the
-  main graph. The numeric argument indicates the tile on which the cycle count
-  operation will be created.
-  This may be used as an alternative to profiling
-  for graphs with dynamic control flow.
-
-* ``--while_loop_brute_force_max_trip_count`` is the upper bound for how many
-  iterations a while loop will be simulated for in order to brute force the
-  number of times it will be executed.
-
-* ``--max_compilation_threads`` sets the maximum number of threads which Poplar
-  is allowed to use for compiling the executable.
-
-* ``--max_infeed_threads`` sets the maximum number of threads which each infeed
-  queue is allowed to use when accessing data from datasets.
-
-* ``--save_vertex_graph`` dumps the Poplar vertex graph (as a DOT file) to the given
-  directory.
-
-* ``--save_interval_report`` dumps the Poplar interval report to the given
-  directory.
-
-* ``--executable_cache_path`` enables the Poplar executable cache.
-  See :ref:`caching_executables`.
-
-* ``--save_interval_report`` dumps the Poplar interval report to the given
-  directory.
-
-* ``--tensor_map_file_path`` will cause a JSON file containing the tile mapping
-  of all tensors to be written to this directory.
-
-* ``--dump_schedule_as_dot`` will dump the schedule of the XLA graph to the user
-  console.
-
-* ``--fallback_scheduler`` uses the standard TensorFlow scheduler, instead of
-  the Graphcore specific one.
-
-* ``--allow_nans`` will allow NaNs.
-
-* ``--null_data_feed`` will cause any infeed queues to copy garbage data to the
-  IPU rather than real data. This option can be used to determine whether the
-  dataset provided to the infeed queue is the bottleneck during execution.
-
-* ``--dump_text_reports_to_stdio`` if profiling is enabled, then a text summary
-  of the profile will be dumped into the standard output, in addition to the
-  normal report processing.
+      Or a constant value *X*: :samp:`--synthetic_data_initializer={X}`
+  * - ``--tensor_map_file_path``
+    - Cause a JSON file containing the tile mapping of all tensors to be written
+      to this directory.
+  * - ``--use_ipu_model``
+    - Use the Poplar IPUModel for graph compilation and execution.
+  * - ``--use_synthetic_data``
+    - Prevent the system from downloading or uploading data to the card when
+      executing code. This is used for testing performance without the overhead
+      of data transfer.
+  * - ``--while_loop_brute_force_max_trip_count``
+    - Sets the upper bound for how many iterations a while loop will be
+      simulated for in order to brute force the number of times it will be
+      executed.
 
 Multiple options can be specified at the same time by concatenating them like command line
-switches, for example: ``--executable_cache_path=/tmp/cache --allow_nans``.
+switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count``.
 
 .. _caching_executables:
 
@@ -232,7 +234,7 @@ It can take a long time to compile a large fused graph into an executable
 suitable for the IPU.  To prevent the need for compiling every time a
 TensorFlow process is started, you can enable an executable cache.
 
-You can use the flag ``--executable_cache_path`` to specify a directory where
+You can use the option ``--executable_cache_path`` to specify a directory where
 compiled files will be placed.  Fused XLA/HLO graphs are hashed with a 64-bit
 hash and stored in this directory. For example:
 

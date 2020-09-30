@@ -1,5 +1,5 @@
-Targeting the IPU from TensorFlow
-=================================
+Targeting the IPU from TensorFlow 2
+===================================
 
 .. gcdoc::
     :verb-borders:
@@ -10,22 +10,24 @@ Targeting the IPU from TensorFlow
     :numbered: 3
 
     intro
-    tutorial
     device_selection
-    variables
-    rand_and_fp
-    logging
-    poplar_ops
-    perf_training
-    functions
+
     targetting_tf2
     examples_tf2
+
+    perf_training
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training
+
+    rand_and_fp
+    poplar_ops
+    functions
     custom_codelet
     host_embedding
-    references
+    logging
+
     api
     supported_ops
+    references
     legal

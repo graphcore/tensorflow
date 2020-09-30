@@ -65,12 +65,13 @@ ipu_compile_summary(name, [op list])
 ____________________________________
 
 This produces a summary which can be tied into the rest of the summary system
-to produce output for Tensorboard. The parameter ``name`` is the name of the
+to produce output for TensorBoard. The parameter ``name`` is the name of the
 summary, and ``op`` is one of the operations in the IPU graph. It is best to choose either
 the inference output for an inference graph, the loss output for an evaluation
 graph, or the train op for a training graph.
 
 .. code-block:: python
+  :linenos:
 
   import tensorflow as tf
   from tensorflow.python import ipu
@@ -143,10 +144,10 @@ Extract the reports from the returned events
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the summary event generator has been used then the events will be inside
-``Tensor`` type events in the Tensorboard logs.
+``Tensor`` type events in the TensorBoard logs.
 
 .. A tool for extracting these from the log, called ``extract_logs.py``, is
-.. available in the Graphcore "Toolshed" repository on GitHub.
+.. available in ``scripts`` directory in the Poplar SDK.
 
 If the individual report gathering event is used then executing it will return
 an array of tensors.  Within each tensor is a string which is an ``IpuTraceEvent``
@@ -160,6 +161,7 @@ containing trace information.
 Several utility functions are available for extracting fields, for example:
 
 .. code-block:: python
+  :linenos:
 
   rep = sess.run(report)
   compile_reports = ipu.utils.extract_compile_reports(rep)
@@ -173,7 +175,7 @@ See the :ref:`api-section` section for more information.
 Producing reports for use with the PopVision Graph Analyser
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To configure Tensorflow to produce a directory containing files named
+To configure TensorFlow to produce a directory containing files named
 correctly for the PopVision Graph Analyser, you should enable the following
 features in the ``create_ipu_config`` options:
 
@@ -186,7 +188,7 @@ features in the ``create_ipu_config`` options:
 
 The system will then create subdirectories inside the configured one, with
 each subdirectory containing a single graph compilation.  The directories
-are named after the automatically generated Tensorflow operation clusters.
+are named after the automatically generated TensorFlow operation clusters.
 
 A simple way to discover which of the subdirectories is the one containing
 the main graph is to look for the one containing the largest report.json
@@ -195,7 +197,7 @@ file.
 Note that while the EXECUTE trace events contain every execution profile,
 if you dump execution profiles straight to disk, they will go into a file
 with a fixed filename, and each execution of the model - for instance by
-calling Session.run() in Tensorflow 1.x - will overwrite the file for the
+calling Session.run() in TensorFlow 1.x - will overwrite the file for the
 previous execution.
 
 Also be aware that the default size beyond which a report or graph file will
