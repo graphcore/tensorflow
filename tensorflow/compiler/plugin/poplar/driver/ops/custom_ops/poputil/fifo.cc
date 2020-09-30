@@ -106,10 +106,7 @@ struct TensorAliasingInformation {
   // populated.
   bool has_aliasing;
 
-  // Intervals for the given tensor.
-  std::vector<poplar::Interval> contiguous_intervals;
-
-  // The interval map will store the interval begining to the interval it
+  // The interval map will store the interval beginning to the interval it
   // aliases.
   std::map<std::size_t, poplar::Interval> interval_map;
 
@@ -134,14 +131,11 @@ GetAliasingInformationAndDealiesedTensor(poplar::Graph& graph,
   std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
       graph.getSortedContiguousRegions(tensor, {{0, tensor.numElements()}},
                                        false, &interval_aliases);
-  // Get the intervals for the flat input.
-  std::vector<poplar::Interval> contiguous_intervals =
-      tensor.getContiguousRegions();
 
   // Flatten the sorted contiguous intervals so that we can easily map it
   // to the aliasing information.
   std::vector<poplar::Interval> flat_intervals;
-  // The interval map will store the interval begining to the interval it
+  // The interval map will store the interval beginning to the interval it
   // aliases.
   std::map<std::size_t, poplar::Interval> interval_map;
   for (auto& intervals : sorted_contiguous_intervals) {
@@ -154,7 +148,6 @@ GetAliasingInformationAndDealiesedTensor(poplar::Graph& graph,
                       });
   }
   CHECK_EQ(interval_aliases.size(), flat_intervals.size());
-  CHECK_EQ(contiguous_intervals.size(), flat_intervals.size());
 
   // Update the aliasing map and get all the intervals with no aliasing.
   std::vector<poplar::Interval> flat_dealiased_intervals;
@@ -172,7 +165,6 @@ GetAliasingInformationAndDealiesedTensor(poplar::Graph& graph,
       poplar::concat(tensor.slices(flat_dealiased_intervals));
 
   info.has_aliasing = true;
-  info.contiguous_intervals = contiguous_intervals;
   info.interval_map = interval_map;
   info.inverse_map = GetInverseIntervalsMap(flat_dealiased_intervals);
   return std::make_pair(dealised_tensor, info);
@@ -184,16 +176,17 @@ poplar::Tensor AddAliasing(const poplar::Tensor& tensor,
     return tensor;
   }
 
-  std::vector<poplar::Tensor> output_regions(info.contiguous_intervals.size());
-  for (size_t i = 0; i != info.contiguous_intervals.size(); ++i) {
-    const poplar::Interval& interval = info.contiguous_intervals.at(i);
-    // First lookup the interval map to look through any aliasing.
-    const poplar::Interval& aliased_interval =
-        info.interval_map.at(interval.begin());
+  std::vector<poplar::Tensor> output_regions;
+  output_regions.reserve(info.interval_map.size());
+
+  // Since the std::map is sorted by the key which is the beginning of the
+  // interval, we can reconstruct the original tensor by iterating over it.
+  for (const auto& entry : info.interval_map) {
+    const poplar::Interval& aliased_interval = entry.second;
     // Get the output interval for that unaliased interval.
     const poplar::Interval& output_interval =
         info.inverse_map.at(aliased_interval.begin());
-    output_regions[i] = tensor.slice(output_interval);
+    output_regions.push_back(tensor.slice(output_interval));
   }
 
   // Concatenate the regions and reshape accordingly.
