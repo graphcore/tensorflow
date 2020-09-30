@@ -120,7 +120,7 @@ struct CompilerResources {
 
   poplar::program::Sequence preamble_sequence;
 
-  std::stack<std::vector<poplar::RemoteBuffer>>
+  std::stack<std::vector<poplar::program::Sequence>>
       gradient_accumulation_zeroing_remote_buffers;
 
   std::stack<std::vector<poplar::Tensor>> gradient_accumulation_zeroing_tensors;

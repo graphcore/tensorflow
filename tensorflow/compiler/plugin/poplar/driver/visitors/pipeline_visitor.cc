@@ -1607,8 +1607,9 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 
   auto& zeroing_remote_buffers =
       resources_.gradient_accumulation_zeroing_remote_buffers.top();
-  ZeroRemoteBuffers(resources_, graph, zeroing_remote_buffers,
-                    pipeline_tensors_zeroing_sequence_);
+  for (auto zeroing_remote_buffer : zeroing_remote_buffers) {
+    pipeline_tensors_zeroing_sequence_.add(zeroing_remote_buffer);
+  }
 
   // Create a sequence for all the write undefs of pipeline tensors (FIFOs).
   auto& write_undefs = resources_.pipelining_write_undef_sequences.top();

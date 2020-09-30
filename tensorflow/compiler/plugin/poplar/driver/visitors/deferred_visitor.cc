@@ -802,13 +802,12 @@ Status AddGradientAccumulationZeroing(CompilerResources& res,
 }
 
 Status AddGradientAccumulationZeroing(
-    CompilerResources& res, const poplar::RemoteBuffer& remote_buffer) {
+    CompilerResources& res, const poplar::program::Sequence& sequence) {
   if (res.gradient_accumulation_zeroing_remote_buffers.empty()) {
     return FailedPrecondition("Cannot zero gradient accumulation buffer.");
   }
 
-  res.gradient_accumulation_zeroing_remote_buffers.top().push_back(
-      remote_buffer);
+  res.gradient_accumulation_zeroing_remote_buffers.top().push_back(sequence);
   return Status::OK();
 }
 }  // namespace
@@ -832,8 +831,11 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
         graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
     TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
 
+    poplar::program::Sequence zeroing_seq;
+    ZeroRemoteBuffers(resources_, graph, {output}, zeroing_seq);
+
     // Add the remote buffer to the zeroing stack.
-    TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, output));
+    TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, zeroing_seq));
     return Status::OK();
   }
 
