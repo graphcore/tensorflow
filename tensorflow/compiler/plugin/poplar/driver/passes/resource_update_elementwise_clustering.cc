@@ -83,7 +83,7 @@ bool ValidClusterInput(
     const absl::flat_hash_set<int64>& allowed_parameter_indices) {
   // A valid cluster input is one which is guaranteed to be identical across all
   // replicas.
-  return IsScalarConstant(inst) ||
+  return IsScalarConstant(inst) || IsWideConstant(inst) ||
          IsValidParameterInput(inst, allowed_parameter_indices) ||
          IsAllReduce(inst) || IsReplicatedParameterLoad(inst) ||
          IsNonReplicatedParameterLoad(inst);
@@ -113,7 +113,8 @@ bool CanCluster(
     case HloOpcode::kCustomCall:
       return IsPopOpsElementwise(inst);
     case HloOpcode::kFusion:
-      return elementwise_comps.contains(inst->fused_instructions_computation());
+      return !IsWideConstant(inst) &&
+             elementwise_comps.contains(inst->fused_instructions_computation());
     default:
       return inst->IsElementwise();
   }
@@ -196,11 +197,33 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
     context->MapInstruction(cluster_input, parameter);
     return cluster_input;
   }
+
   const Shape& cluster_input_shape = cluster_input->shape();
   auto cluster_input_type = cluster_input_shape.element_type();
 
   const Shape in_comp_shape =
       ShapeUtil::MakeShape(cluster_input_type, cluster.GetShardDimensions());
+
+  if (IsWideConstant(cluster_input)) {
+    // Prevent aliasing from being expanded at the callsite by adding the
+    // constant as the input and broadcasting it inside of the computation.
+    HloInstruction* fusion_bcast = cluster_input->fused_expression_root();
+    HloInstruction* fusion_const = fusion_bcast->mutable_operand(0);
+
+    HloComputation* input_comp = cluster_input->parent();
+    HloInstruction* new_input =
+        input_comp->AddInstruction(fusion_const->Clone());
+
+    HloInstruction* parameter =
+        builder->AddInstruction(HloInstruction::CreateParameter(
+            param_idx, new_input->shape(), "parameter-" + new_input->name()));
+
+    HloInstruction* bcast = builder->AddInstruction(
+        HloInstruction::CreateBroadcast(in_comp_shape, parameter, {}));
+
+    context->MapInstruction(cluster_input, bcast);
+    return new_input;
+  }
 
   // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
   // all-gather.
