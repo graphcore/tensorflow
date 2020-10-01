@@ -113,6 +113,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
@@ -1172,6 +1173,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
+    pipeline.AddPass<ResourceUpdateCopyInserter>();
     pipeline.AddPass<HostEmbeddingNotification>();
 
     // Passes below this point need to respect control dependencies.
