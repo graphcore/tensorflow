@@ -25,8 +25,8 @@ $ export TF_POPLAR_BASE=/path/to/poplar_sdk/poplar-ubuntu_18_04-x.x.x
 ```
 
 TensorFlow must be built against a compatible version of the SDK. For example,
-the "r2.1/release-1.2" branch of TensorFlow for the IPU must be built against
-Poplar SDK 1.2.
+the "r2.1/sdk-release-1.3" branch of TensorFlow for the IPU must be built
+against Poplar SDK 1.3.
 
 
 ## Download the TensorFlow source
