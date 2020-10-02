@@ -393,7 +393,7 @@ def create_ipu_config(profiling=False,
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
-  opts.enable_gather_simplifier = False
+  opts.disable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
 
@@ -470,7 +470,7 @@ def set_optimization_options(opts,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
                              minimum_remote_tensor_size=128,
-                             gather_simplifier=False,
+                             gather_simplifier=True,
                              triangular_solve_expander_block_size=0,
                              enable_fast_math=False):
   """Set the IPU options related to performance / optimizations.
@@ -502,7 +502,7 @@ def set_optimization_options(opts,
       These are lowered to stream copies that can be merged by Poplar.
     minimum_remote_tensor_size: The minimum size (in bytes) a tensor has to be
       in order to be consider for being stored in remote memory.
-    gather_simplifier: Will enable more aggressive optimisation for embedding
+    gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
       expander blocks. 0 - implementation defined default.
@@ -524,7 +524,7 @@ def set_optimization_options(opts,
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.minimum_remote_tensor_size = minimum_remote_tensor_size
-  opts.enable_gather_simplifier = gather_simplifier
+  opts.disable_gather_simplifier = not gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
   opts.enable_fast_math = enable_fast_math

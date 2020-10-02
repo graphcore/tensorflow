@@ -198,7 +198,7 @@ message IpuOptions {
   IpuSelectionOrder selection_order = 21;
 
   // Whether to converts gathers into multiSlice operations.
-  bool enable_gather_simplifier = 22;
+  bool disable_gather_simplifier = 22;
 
   // Where to save the compiled executable.
   string serialization_folder = 23;

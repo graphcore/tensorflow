@@ -400,7 +400,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   }
 
   bool EnableGatherSimplifier() const {
-    return current_config_.enable_gather_simplifier();
+    return !current_config_.disable_gather_simplifier();
   }
 
   bool EnableMatmulCombiner() const {

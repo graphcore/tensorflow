@@ -192,6 +192,36 @@ TEST_F(GatherSimplifierTest, TestMultiSlice4) {
   EXPECT_EQ(GetNumGather(module->entry_computation()), 1);
 }
 
+TEST_F(GatherSimplifierTest, TestMultiSlice5) {
+  // TODO(T14037): enable this by adding transposes.
+  std::string hlo_string = R"(
+    HloModule top
+
+    ENTRY main {
+    operand = s32[3,8] parameter(0)
+    indices = s32[2] parameter(1)
+    ROOT gather = s32[3,2] gather(operand, indices),
+        offset_dims={0},
+        collapsed_slice_dims={1},
+        start_index_map={0},
+        index_vector_dim=1,
+        slice_sizes={3, 1}
+  }
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module0 = ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie();
+  auto* module = module0.get();
+
+  CompilerAnnotations annotations(module);
+  EXPECT_FALSE(GatherSimplifier().Run(module).ValueOrDie());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 0);
+  EXPECT_EQ(GetNumGather(module->entry_computation()), 1);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
