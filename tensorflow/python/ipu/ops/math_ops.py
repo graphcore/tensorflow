@@ -55,7 +55,7 @@ def serialized_matmul(a,
   * Along the rows dimension of `a` and the columns dimension of `b`
     (the `k`-dimension), by setting `serialization_dimension` to
     `a_rows_b_columns`.
-  * Along the rows dimension of `b` (the `n`-dimension), by setting
+  * Along the rows dimension of `b` (the `m`-dimension), by setting
     `serialization_dimension` to `b_rows`.
 
   Note that taking a gradient of a serialized matrix multiplication means that

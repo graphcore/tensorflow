@@ -144,8 +144,8 @@ Keras layers
 
 
 .. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM, SerialDense
-  :imported-members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM, SerialDense
+  :members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
+  :imported-members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
 
 .. _operators-api:
 

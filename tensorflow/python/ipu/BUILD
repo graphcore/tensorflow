@@ -116,7 +116,6 @@ py_library(
         "keras/layers/__init__.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
-        "keras/layers/math.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
         "keras/model.py",
@@ -426,20 +425,6 @@ tf_py_test(
         "//tensorflow/python/keras:layers",
     ],
     shard_count = 40,
-)
-
-tf_py_test(
-    name = "math_layers_test",
-    size = "large",
-    srcs = ["tests/math_layers_test.py"],
-    additional_deps = [
-        ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
-    ],
-    shard_count = 12,
 )
 
 py_test(
@@ -1190,7 +1175,6 @@ test_suite(
         "keras_rnn_test",
         "keras_sequential_pipeline_test",
         "map_gradient_optimizer_test",
-        "math_layers_test",
         "math_ops_test",
         "multi_conv_test",
         "outfeed_ordinal_test",
