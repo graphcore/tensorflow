@@ -24,3 +24,4 @@ from tensorflow.python.ipu.keras.layers.normalization import InstanceNorm
 from tensorflow.python.ipu.keras.layers.normalization import LayerNorm
 from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM, LSTM
 from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU, GRU
+from tensorflow.python.ipu.keras.layers.math import SerialDense
