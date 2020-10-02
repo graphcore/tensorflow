@@ -31,10 +31,11 @@ namespace poplarplugin {
 struct UserPositions {
   HloInstruction* instruction;
   std::vector<int64> indices;
+  bool reshape;
 
   std::string ToString() const {
     return absl::StrCat("UserPositions: ", instruction->name(), ":",
-                        absl::StrJoin(indices, ","));
+                        absl::StrJoin(indices, ","), ", reshape? ", reshape);
   }
 };
 
