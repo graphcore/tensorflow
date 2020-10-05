@@ -322,7 +322,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(10980622)
-      report.assert_max_tile_memory(9888)
+      report.assert_max_tile_memory(9685)
 
       # Main computation and outlined serialized one.
       self.assertEqual(len(report.tensor_map.computation_names()), 2)
