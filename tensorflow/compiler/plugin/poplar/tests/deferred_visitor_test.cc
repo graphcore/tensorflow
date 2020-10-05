@@ -752,6 +752,99 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   EXPECT_EQ(program_names[2], "StreamCopy");
 }
 
+TEST_F(DeferredVisitorTest, TestFunctionWithDeferredInputs) {
+  const string& hlo_string = R"(
+HloModule module
+
+func {
+  p0 = f32[8,8] parameter(0)
+  p1 = f32[8,8] parameter(1)
+  p2 = f32[8,8] parameter(2)
+  dot = f32[8,8] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add = f32[8,8] add(dot, p2)
+  ROOT t = (f32[8,8]) tuple(add)
+}
+
+func2 {
+  p0.2 = f32[8,8] parameter(0)
+  p1.2 = f32[8,8] parameter(1)
+  p2.2 = f32[8,8] parameter(2)
+  dot.2 = f32[8,8] dot(p0.2, p1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add.2 = f32[8,8] add(dot.2, p2.2)
+  ROOT t.2 = (f32[8,8]) tuple(add.2)
+}
+
+func3 {
+  p0.3 = f32[8,8] parameter(0)
+  p1.3 = f32[8,8] parameter(1)
+  p2.3 = f32[8,8] parameter(2)
+  dot.3 = f32[8,8] dot(p0.3, p1.3), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add.3 = f32[8,8] add(dot.3, p2.3)
+  ROOT t.3 = (f32[8,8]) tuple(add.3)
+}
+
+ENTRY main {
+  arg0 = f32[8,8] parameter(0)
+  arg1 = f32[8,8] parameter(1)
+  arg2 = f32[8,8] parameter(2)
+  arg3 = f32[8,8] parameter(3)
+  arg4 = f32[8,8] parameter(4)
+  arg5 = f32[8,8] parameter(5)
+  arg6 = f32[8,8] parameter(6)
+
+  c1 = (f32[8,8]) call(arg0, arg1, arg2), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1_gte = f32[8,8] get-tuple-element(c1), index=0
+  c2 = (f32[8,8]) call(arg3, c1_gte, arg4), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c2_gte = f32[8,8] get-tuple-element(c2), index=0
+  ROOT c3 = (f32[8,8]) call(arg5, arg6, c2_gte), to_apply=func3, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto entry_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("main");
+  auto func_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func");
+
+  // In this test we check that arg2 and arg4 get a deferred layout from the
+  // function call and that the third call has just a copy.
+  HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto arg2_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), arg2));
+  ASSERT_EQ(arg2_ts.size(), 1);
+
+  HloInstruction* arg4 = FindInstruction(module.get(), "arg4");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto arg4_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), arg4));
+  ASSERT_EQ(arg4_ts.size(), 1);
+
+  HloInstruction* c2_gte = FindInstruction(module.get(), "c2_gte");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto c2_gte_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), c2_gte));
+  ASSERT_EQ(c2_gte_ts.size(), 1);
+
+  HloInstruction* p2 = FindInstruction(module.get(), "p2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p2_ts,
+      FindInstructionOutputTensors(func_tensor_map, *resources.get(), p2));
+  ASSERT_EQ(p2_ts.size(), 1);
+
+  EXPECT_EQ(arg2_ts[0].getContiguousRegions(), p2_ts[0].getContiguousRegions());
+  EXPECT_EQ(arg4_ts[0].getContiguousRegions(), p2_ts[0].getContiguousRegions());
+  EXPECT_EQ(c2_gte_ts[0].getContiguousRegions(),
+            p2_ts[0].getContiguousRegions());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

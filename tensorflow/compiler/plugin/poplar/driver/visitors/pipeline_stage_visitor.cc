@@ -79,7 +79,8 @@ ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
     : PipelineStageVisitor(res, inputs, description, name) {}
 
 Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
-    const HloInstruction* callsite_inst) {
+    const HloInstruction* callsite_inst,
+    const DeferredArgRBVectors& callsite_inputs) {
   std::vector<bool> add_clones(callsite_inst->operand_count());
   // Mark all the non-read only inputs as requiring clones so that when the
   // sequence is reused we can copy the tensor values into them.
@@ -88,8 +89,8 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
                       return !IsPipelineStageReadOnlyInput(operand);
                     });
 
-  return DeferredVisitor::PropagateDeferredAllocations(callsite_inst,
-                                                       add_clones);
+  return DeferredVisitor::PropagateDeferredAllocations(
+      callsite_inst, callsite_inputs, add_clones);
 }
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(

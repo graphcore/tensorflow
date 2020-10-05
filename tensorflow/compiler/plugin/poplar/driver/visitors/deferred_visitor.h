@@ -266,7 +266,9 @@ class DeferredVisitor : public FullVisitor {
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
+  virtual Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs);
 
   poplar::program::Sequence GetSequence(
       bool copy_execution_counters = true) final;
@@ -288,7 +290,7 @@ class DeferredVisitor : public FullVisitor {
       const poplar::program::Sequence& seq) override;
 
   // Get the inputs for a deferred instruction.
-  StatusOr<DeferredArgRBVectors> GetInputsForDeferredInplaceRBInstruction(
+  StatusOr<DeferredArgRBVectors> GetInputsForDeferredRBInstruction(
       const HloInstruction* inst, bool preserve_aliasing = false);
 
   // Handlers which are aware of deferred allocations - can be overriden by
@@ -365,8 +367,9 @@ class DeferredVisitor : public FullVisitor {
 
   // Implementation of the PropagateDeferredAllocations which will add tensor
   // copies for any operand which requires it.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst,
-                                      std::vector<bool> add_clone);
+  Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone);
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
@@ -433,7 +436,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a layout.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
+  Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs) override;
 
   // If the visitor operator is allowed to reallocate inputs, then copies from
   // the callsite to computation inputs might be required as they are different

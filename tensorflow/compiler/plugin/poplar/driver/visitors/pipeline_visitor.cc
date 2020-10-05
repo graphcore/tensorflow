@@ -1247,9 +1247,9 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
   const std::string debug_name = GetDebugName(inst);
 
-  TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                      GetInputsForDeferredInplaceRBInstruction(
-                          inst, /*preserve_aliasing*/ true));
+  TF_ASSIGN_OR_RETURN(
+      DeferredArgRBVectors inputs,
+      GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
   const bool has_recomputation = stages_with_recomputation_.contains(stage);
 
@@ -1293,7 +1293,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
 
   TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(visitor.get(), order));
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst, inputs));
 
   // Get the sequence for the stage.
   if (has_recomputation) {
@@ -1450,9 +1450,9 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
 
   if (IsResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
-                            hlo, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(
+        DeferredArgRBVectors inputs,
+        GetInputsForDeferredRBInstruction(hlo, /*preserve_aliasing*/ true));
     TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
                         CreateResourceUpdateOp(resources_, hlo, inputs,
                                                hlo->shape(), tensor_map));
