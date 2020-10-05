@@ -44,23 +44,6 @@ using tensorflow::str_util::StartsWith;
 
 namespace xla {
 namespace poplarplugin {
-namespace {
-StatusOr<TensorVectors> GetCallInputs(CompilerResources& res,
-                                      const HloInstruction* inst,
-                                      TensorMap& tensor_map,
-                                      poplar::program::Sequence& seq,
-                                      const bool expand_aliasing = true) {
-  TensorVectors args;
-  for (int64 i = 0; i < inst->operand_count(); i++) {
-    TF_ASSIGN_OR_RETURN(TensorVector t,
-                        FindInstructionInputTensors(tensor_map, res, inst, i,
-                                                    seq, expand_aliasing));
-    args.push_back(t);
-  }
-  return args;
-}
-}  // namespace
-
 class ParallelMapTester : public DfsHloVisitorWithDefault {
  public:
   ParallelMapTester() : _is_ok(true) {}
@@ -269,7 +252,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     TF_RETURN_IF_ERROR(body_comp->AcceptOrdered(&body_visitor, order));
 
     // Make sure any deferred inputs to the instruction are pushed up.
-    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst));
+    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst, inputs));
   }
 
   const uint64 param_count = inputs[0].size();
@@ -398,7 +381,7 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
 
   const TensorOrRemoteBufferVector& loop_state = visitor.GetLoopState();
 
@@ -411,23 +394,57 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   return seq;
 }
 
+namespace {
+TensorOrRemoteBufferVectors GetFunctionInputs(CompilerResources& res,
+                                              const HloInstruction* inst,
+                                              poplar::program::Sequence& seq,
+                                              TensorMap& tensor_map) {
+  TensorOrRemoteBufferVectors inputs(inst->operand_count());
+  for (int64 i = 0; i != inst->operand_count(); ++i) {
+    inputs[i] = FindInstructionInputs(tensor_map, res, inst, i, seq);
+  }
+  return inputs;
+}
+}  // namespace
+
 StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
                                                     const HloInstruction* inst,
                                                     const xla::Shape& output,
                                                     TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  TensorOrRemoteBufferVectors inputs =
+      GetFunctionInputs(res, inst, seq, tensor_map);
+  // Call the create op with a deferred version of inputs.
+  DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence func_seq,
+      CreateFunctionOp(res, inst, deferred_inputs, output, tensor_map));
+  seq.add(func_seq);
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateFunctionOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
+    TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                      GetCallInputs(res, inst, tensor_map, seq));
 
   HloComputation* comp = inst->to_apply();
 
-  auto inputs_casted = CastTensorVectors(inputs);
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(
-                          res, inputs_casted, comp));
+                          res, deferred_inputs, comp));
 
+  // Make sure any deferred inputs to the instruction are pushed up.
+  TF_RETURN_IF_ERROR(
+      subcomp_visitor->PropagateDeferredAllocations(inst, deferred_inputs));
+
+  // Now that the all the inputs have been allocated and propagated, get them.
+  TensorOrRemoteBufferVectors inputs =
+      GetFunctionInputs(res, inst, seq, tensor_map);
   for (int64 o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
     auto& inst_inputs = inputs[o];
@@ -435,10 +452,17 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
       return xla::FailedPrecondition("Mismatched number of inputs.");
     }
     for (size_t i = 0; i < inst_inputs.size(); i++) {
+      if (inst_inputs[i].IsRemoteBuffer()) {
+        return xla::FailedPrecondition(
+            "Unable to handle used remote buffer tensor in function call "
+            "instruction %s",
+            inst->name());
+      }
+
       if (subcomp_visitor->InputIsUsed(o, i)) {
         if (comp_inputs[i].IsTensor()) {
-          seq.add(
-              poplar::program::Copy(inst_inputs[i], comp_inputs[i].AsTensor()));
+          seq.add(poplar::program::Copy(inst_inputs[i].AsTensor(),
+                                        comp_inputs[i].AsTensor()));
         } else if (comp_inputs[i].IsRemoteBuffer()) {
           return xla::FailedPrecondition(
               "Unable to handle used remote buffer tensor in function call "
@@ -532,7 +556,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst, inputs));
 
   // Make sure that inputs/outputs alias each other.
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
@@ -697,7 +721,7 @@ StatusOr<poplar::program::Program> CreateResourceUpdateOp(
                    .instructions();
   TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
   // Add to the sequence.
   seq.add(visitor.GetSequence());
   seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());

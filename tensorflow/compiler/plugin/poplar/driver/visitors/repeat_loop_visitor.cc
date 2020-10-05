@@ -52,9 +52,9 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     num_mini_batches_to_accumulate_ =
         GetResourceUpdateBatchesToAccumulate(inst);
 
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
-                            inst, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(
+        DeferredArgRBVectors inputs,
+        GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
     TF_ASSIGN_OR_RETURN(resource_update_sequence_,
                         CreateResourceUpdateOp(resources_, inst, inputs,

@@ -29,6 +29,13 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
     const HloComputation* computation) {
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+  return GetOrCompileSubcomputation(res, deferred_inputs, computation);
+}
+
+StatusOr<std::shared_ptr<DeferredVisitor>>
+SubcomputationGraphCache::GetOrCompileSubcomputation(
+    CompilerResources& res, DeferredArgRBVectors& inputs,
+    const HloComputation* computation) {
   auto itr = table_.find(computation);
   if (itr == table_.end()) {
     VLOG(2) << "Compiling sub-computation " << computation->name();
@@ -37,8 +44,7 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
     auto order =
         computation->parent()->schedule().sequence(computation).instructions();
     std::shared_ptr<DeferredVisitor> deferred_visitor =
-        std::make_shared<DeferredVisitor>(res, deferred_inputs,
-                                          computation->name());
+        std::make_shared<DeferredVisitor>(res, inputs, computation->name());
 
     DeferredVisitor* def_visitor =
         const_cast<DeferredVisitor*>(deferred_visitor.get());

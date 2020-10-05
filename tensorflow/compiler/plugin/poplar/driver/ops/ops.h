@@ -214,6 +214,12 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
                                                     const xla::Shape& output,
                                                     TensorMap& tensor_map);
 
+// Version of Function op which allows inputs to not have a layout.
+StatusOr<poplar::program::Program> CreateFunctionOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                                                     const HloInstruction* inst,
                                                     const xla::Shape& output,

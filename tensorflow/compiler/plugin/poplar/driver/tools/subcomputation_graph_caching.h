@@ -40,6 +40,11 @@ class SubcomputationGraphCache {
       CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
       const HloComputation* computation);
 
+  // Get or compile the DeferredVisitor for a computation.
+  StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
+      CompilerResources& res, DeferredArgRBVectors& inputs,
+      const HloComputation* computation);
+
  private:
   std::unordered_map<const HloComputation*, std::shared_ptr<DeferredVisitor>,
                      HloComputationHash, HloComputationEquals>

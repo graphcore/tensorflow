@@ -621,8 +621,8 @@ Status DeferredVisitor::HandleTuple(HloInstruction* inst) {
 }
 
 StatusOr<DeferredArgRBVectors>
-DeferredVisitor::GetInputsForDeferredInplaceRBInstruction(
-    const HloInstruction* inst, bool preserve_aliasing) {
+DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
+                                                   bool preserve_aliasing) {
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
 
   auto allowed_deferred_allocation_locations =
@@ -630,10 +630,6 @@ DeferredVisitor::GetInputsForDeferredInplaceRBInstruction(
   const bool is_lowered_inplace = IsLoweredInplace(inst);
 
   auto inplace_description = HloInstructionDescription(inst);
-  if (!inplace_description.IsInplaceType()) {
-    return InternalErrorStrCat("Trying to execute ", inst->name(),
-                               " as an inplace operation, but it is not.");
-  }
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
   auto inplace_indexes_set = inplace_description.GetInplaceOperandSet();
   // Go through all the operands and get the input tensors for any input that
@@ -650,13 +646,13 @@ DeferredVisitor::GetInputsForDeferredInplaceRBInstruction(
     for (size_t i = 0; i < shapes.size(); i++) {
       TensorLocation input_location(input_inst, i);
 
-      bool is_tensor_lowered_inplace =
-          is_lowered_inplace &&
+      bool can_defer =
+          deferred_allocation->IsDeferredAllocationLocation(input_location) &&
           allowed_deferred_allocation_locations[operand_idx][i];
 
-      const bool can_defer =
-          is_tensor_lowered_inplace &&
-          deferred_allocation->IsDeferredAllocationLocation(input_location);
+      if (inplace_description.IsInplaceType()) {
+        can_defer &= is_lowered_inplace;
+      }
 
       if (!can_defer) {
         // Cannot defer the allocation, hence get the output tensor for the
@@ -671,6 +667,10 @@ DeferredVisitor::GetInputsForDeferredInplaceRBInstruction(
           poplar::Tensor tensor = outputs[0];
           // Make sure to process any inplace operands correctly.
           if (inplace_indexes_set.contains(operand_idx)) {
+            const bool is_tensor_lowered_inplace =
+                is_lowered_inplace &&
+                allowed_deferred_allocation_locations[operand_idx][i];
+
             poplar::program::Sequence seq;
             tensor = GetTensorForInplaceOp(
                 outputs[0], resources_, inst, operand_idx, i, seq,
@@ -691,8 +691,8 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
   const bool preserve_aliasing = TupleOutputsNeedToPreserveAliasing(inst);
-  TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredInplaceRBInstruction(
-                                       inst, preserve_aliasing));
+  TF_ASSIGN_OR_RETURN(
+      auto inputs, GetInputsForDeferredRBInstruction(inst, preserve_aliasing));
 
   CHECK_EQ(inputs.size(), inst->operand_count());
 
@@ -737,8 +737,7 @@ Status DeferredVisitor::HandleCall(HloInstruction* inst) {
 Status DeferredVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
   if (IsRepeatLoop(inst)) {
     // Get inputs preserving any deferred allocations.
-    TF_ASSIGN_OR_RETURN(auto inputs,
-                        GetInputsForDeferredInplaceRBInstruction(inst));
+    TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
     TF_ASSIGN_OR_RETURN(
         auto seq, CreateRepeatOp(resources_, inst, inputs, GetOutputShape(inst),
                                  tensor_map));
@@ -746,11 +745,19 @@ Status DeferredVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     return Status::OK();
   } else if (IsPipelineOp(inst)) {
     // Get inputs preserving any deferred allocations.
-    TF_ASSIGN_OR_RETURN(auto inputs,
-                        GetInputsForDeferredInplaceRBInstruction(inst));
+    TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
     TF_ASSIGN_OR_RETURN(auto seq,
                         CreatePipelineOp(resources_, inst, inputs,
+                                         GetOutputShape(inst), tensor_map));
+    TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
+    return Status::OK();
+  } else if (IsFunction(inst)) {
+    // Get inputs preserving any deferred allocations.
+    TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
+
+    TF_ASSIGN_OR_RETURN(auto seq,
+                        CreateFunctionOp(resources_, inst, inputs,
                                          GetOutputShape(inst), tensor_map));
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     return Status::OK();
@@ -764,8 +771,7 @@ Status DeferredVisitor::HandleWhile(HloInstruction* inst) {
 }
 
 Status DeferredVisitor::HandleDeferredAllocationWhile(HloInstruction* inst) {
-  TF_ASSIGN_OR_RETURN(auto inputs,
-                      GetInputsForDeferredInplaceRBInstruction(inst));
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
   TF_ASSIGN_OR_RETURN(
       auto seq, CreateWhileOp(resources_, inst, inputs, GetOutputShape(inst),
                               tensor_map));
@@ -1067,13 +1073,16 @@ Status DeferredVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 }
 
 Status DeferredVisitor::PropagateDeferredAllocations(
-    const HloInstruction* callsite_inst) {
+    const HloInstruction* callsite_inst,
+    const DeferredArgRBVectors& callsite_inputs) {
   return PropagateDeferredAllocations(
-      callsite_inst, std::vector<bool>(callsite_inst->operand_count(), true));
+      callsite_inst, callsite_inputs,
+      std::vector<bool>(callsite_inst->operand_count(), true));
 }
 
 Status DeferredVisitor::PropagateDeferredAllocations(
-    const HloInstruction* callsite_inst, std::vector<bool> add_clone) {
+    const HloInstruction* callsite_inst,
+    const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone) {
   // Note that this is called after finish visit, so tensors are being added to
   // the scope which called the visitor.
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
@@ -1083,7 +1092,7 @@ Status DeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* input_inst = callsite_inst->operand(operand_idx);
     auto shapes = FlattenedXlaShape(input_inst->shape());
     for (size_t i = 0; i < shapes.size(); i++) {
-      if (!callsite_inputs_[operand_idx][i]) {
+      if (!callsite_inputs[operand_idx][i]) {
         VLOG(1) << "Propagating allocated tensor at callsite "
                 << callsite_inst->name() << " for input (" << input_inst->name()
                 << ", " << i << ").";
@@ -1100,7 +1109,6 @@ Status DeferredVisitor::PropagateDeferredAllocations(
           t = graph.clone(
               t, name, poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         }
-
         TF_RETURN_IF_ERROR(
             deferred_allocation->PostProcessAllocation({input_inst, i}, t));
       }
@@ -1311,9 +1319,11 @@ InplaceDeferredVisitor::InplaceDeferredVisitor(
       reallocate_inputs_info_(reallocate_inputs_info) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
-    const HloInstruction* callsite_inst) {
+    const HloInstruction* callsite_inst,
+    const DeferredArgRBVectors& callsite_inputs) {
   return DeferredVisitor::PropagateDeferredAllocations(
-      callsite_inst, std::vector<bool>(callsite_inst->operand_count(), false));
+      callsite_inst, callsite_inputs,
+      std::vector<bool>(callsite_inst->operand_count(), false));
 }
 
 StatusOr<poplar::program::Sequence>
