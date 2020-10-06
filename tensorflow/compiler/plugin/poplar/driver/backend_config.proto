@@ -148,6 +148,7 @@ message PoplarBackendConfig {
     }
 
     message FunctionConfig {
+      bool keep_input_layouts = 1;
     }
 
     message ResourceUpdateConfig {

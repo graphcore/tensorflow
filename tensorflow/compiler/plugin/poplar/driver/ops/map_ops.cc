@@ -434,9 +434,17 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
 
   HloComputation* comp = inst->to_apply();
 
+  bool keep_input_layouts = false;
+  if (IsFunction(inst)) {
+    TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
+                        inst->backend_config<PoplarBackendConfig>());
+    keep_input_layouts =
+        cfg.call_config().function_config().keep_input_layouts();
+  }
+
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(
-                          res, deferred_inputs, comp));
+                          res, deferred_inputs, comp, keep_input_layouts));
 
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(

@@ -224,16 +224,40 @@ Status DeferredAllocations::PostProcessAllocation(
   return Status::OK();
 }
 
+namespace {
+ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
+                                             bool reallocate) {
+  ReallocateInputsInfo output;
+  output.reserve(inputs.size());
+  for (const auto& input : inputs) {
+    output.emplace_back(input.size(), reallocate);
+  }
+  return output;
+}
+}  // namespace
+
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-    const std::string& name, const bool allocate_all_input_tensors,
-    const std::vector<const DeferredVisitor*>& dependent_computations)
+    const std::string& name, bool allocate_all_input_tensors,
+    const std::vector<const DeferredVisitor*>& dependent_computations,
+    bool reallocate_inputs)
+    : DeferredVisitor(
+          res, callsite_inputs, name, allocate_all_input_tensors,
+          dependent_computations,
+          GetReallocateInputsInfo(callsite_inputs, reallocate_inputs)) {}
+
+DeferredVisitor::DeferredVisitor(
+    CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
+    const std::string& name, bool allocate_all_input_tensors,
+    const std::vector<const DeferredVisitor*>& dependent_computations,
+    const ReallocateInputsInfo& reallocate_inputs_info)
     : FullVisitor(res, name),
       callsite_inputs_(callsite_inputs),
       computation_inputs_(callsite_inputs.size()),
       dependent_computations_(dependent_computations),
       used_tensors_(callsite_inputs.size()),
       allocated_tensors_(callsite_inputs.size()),
+      reallocate_inputs_info_(reallocate_inputs_info),
       allocate_all_input_tensors_(allocate_all_input_tensors) {
   for (size_t i = 0; i < callsite_inputs.size(); i++) {
     computation_inputs_[i].resize(callsite_inputs[i].size());
@@ -430,6 +454,27 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
 
     // Do not call the post process for tensors which are not allocated.
     poplar::Tensor output = *callsite_tensor;
+    TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
+                                input_location.flattened_output_tuple_index,
+                                output));
+    return Status::OK();
+  }
+
+  const bool reallocate_input =
+      reallocate_inputs_info_[param_num]
+                             [input_location.flattened_output_tuple_index];
+
+  if (callsite_tensor && !reallocate_input) {
+    // If a tensor is passed as an input and we are not reallocating inputs then
+    // use it and post process it immediately.
+    auto& graph =
+        GetGraphWithOutputIndex(resources_, input_location.instruction,
+                                input_location.flattened_output_tuple_index);
+    poplar::Tensor output = TensorCloneAndRebalanceAliasing(
+        graph, resources_, *callsite_tensor,
+        GetDebugName(input_location.instruction));
+
+    TF_RETURN_IF_ERROR(post_process_fn(output).status());
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
                                 input_location.flattened_output_tuple_index,
                                 output));
@@ -1288,18 +1333,6 @@ poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
   return seq;
 }
 
-namespace {
-ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
-                                             bool reallocate) {
-  ReallocateInputsInfo output;
-  output.reserve(inputs.size());
-  for (const auto& input : inputs) {
-    output.emplace_back(input.size(), reallocate);
-  }
-  return output;
-}
-}  // namespace
-
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description, const std::string& name,
@@ -1314,9 +1347,9 @@ InplaceDeferredVisitor::InplaceDeferredVisitor(
     const HloInstructionDescription& description, const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)
-    : DeferredVisitor(res, inputs, name, true, dependent_subcomputations),
-      description_(description),
-      reallocate_inputs_info_(reallocate_inputs_info) {}
+    : DeferredVisitor(res, inputs, name, true, dependent_subcomputations,
+                      reallocate_inputs_info),
+      description_(description) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
