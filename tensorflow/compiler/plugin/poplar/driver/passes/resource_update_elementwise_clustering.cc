@@ -1035,6 +1035,11 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
       call->backend_config<PoplarBackendConfig>().ValueOrDie();
   auto* call_config = backend_config.mutable_call_config();
   call_config->set_type(PoplarBackendConfig::CallConfig::Function);
+  auto* function_config = call_config->mutable_function_config();
+  // Because inputs will be dynamically sliced, keep the non-sliced layouts at
+  // the callsite - this means any rearrangement will only be done once inside
+  // of the call rather than at every callsite.
+  function_config->set_keep_input_layouts(true);
   TF_RETURN_IF_ERROR(call->set_backend_config(backend_config));
 
   // Connect up all the users of the cluster output.

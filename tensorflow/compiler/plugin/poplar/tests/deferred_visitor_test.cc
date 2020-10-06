@@ -845,6 +845,91 @@ ENTRY main {
             p2_ts[0].getContiguousRegions());
 }
 
+TEST_F(DeferredVisitorTest, TestFunctionKeepInputLayouts) {
+  const string& hlo_string = R"(
+HloModule module
+
+func {
+  p0 = f32[8,8] parameter(0)
+  p1 = f32[8,8] parameter(1)
+  dot = f32[8,8] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT t = (f32[8,8]) tuple(dot)
+}
+
+func2 {
+  p0.2 = f32[8,8] parameter(0)
+  p1.2 = f32[8,8] parameter(1)
+  dot.2 = f32[8,8] dot(p0.2, p1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT t.2 = (f32[8,8]) tuple(dot.2)
+}
+
+ENTRY main {
+  arg0 = f32[8,8] parameter(0)
+  arg1 = f32[8,8] parameter(1)
+
+  main_dot = f32[8,8] dot(arg0, arg1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+
+  c1 = (f32[8,8]) call(main_dot, arg0), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c2 = (f32[8,8]) call(arg1, main_dot), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1_gte = f32[8,8] get-tuple-element(c1), index=0
+  c2_gte = f32[8,8] get-tuple-element(c2), index=0
+  ROOT root_t = (f32[8,8],f32[8,8]) tuple(c1_gte, c2_gte)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+
+  HloInstruction* c2 = FindInstruction(module.get(), "c2");
+  // Mark c2 as not reallocating.
+  {
+    auto backend_config =
+        c2->backend_config<PoplarBackendConfig>().ValueOrDie();
+    auto* call_config = backend_config.mutable_call_config();
+    auto* function_cfg = call_config->mutable_function_config();
+    function_cfg->set_keep_input_layouts(true);
+    TF_ASSERT_OK(c2->set_backend_config(backend_config));
+  }
+
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  VLOG(0) << module->ToString();
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+  auto entry_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("main");
+  auto func_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func");
+  auto func2_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func2");
+
+  HloInstruction* main_dot = FindInstruction(module.get(), "main_dot");
+  TF_ASSERT_OK_AND_ASSIGN(auto main_dot_ts,
+                          FindInstructionOutputTensors(
+                              entry_tensor_map, *resources.get(), main_dot));
+  ASSERT_EQ(main_dot_ts.size(), 1);
+
+  HloInstruction* p0 = FindInstruction(module.get(), "p0");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p0_ts,
+      FindInstructionOutputTensors(func_tensor_map, *resources.get(), p0));
+  ASSERT_EQ(p0_ts.size(), 1);
+
+  HloInstruction* p1_2 = FindInstruction(module.get(), "p1.2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p1_2_ts,
+      FindInstructionOutputTensors(func2_tensor_map, *resources.get(), p1_2));
+  ASSERT_EQ(p1_2_ts.size(), 1);
+
+  // c1 is allowed to reallocate, so the input tensors will not match.
+  EXPECT_NE(main_dot_ts[0].getContiguousRegions(),
+            p0_ts[0].getContiguousRegions());
+  // c2 is not allowed to reallocate.
+  EXPECT_EQ(main_dot_ts[0].getContiguousRegions(),
+            p1_2_ts[0].getContiguousRegions());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
