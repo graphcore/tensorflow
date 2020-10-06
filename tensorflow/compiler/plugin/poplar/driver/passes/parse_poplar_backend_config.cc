@@ -124,6 +124,17 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               TF_ASSIGN_OR_RETURN(auto offload_variables,
                                   ParseThreeState(offload_variables_str));
               pipeline_config->set_offload_variables(offload_variables);
+
+              // Set the offload gradient accumulation buffers flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_gradient_accumulation_buffers_str,
+                  GetAttribute(attributes,
+                               OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS));
+              TF_ASSIGN_OR_RETURN(
+                  auto offload_gradient_accumulation_buffers,
+                  ParseThreeState(offload_gradient_accumulation_buffers_str));
+              pipeline_config->set_offload_gradient_accumulation_buffers(
+                  offload_gradient_accumulation_buffers);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
