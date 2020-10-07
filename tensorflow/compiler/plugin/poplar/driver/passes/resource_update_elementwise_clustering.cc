@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_factor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
@@ -261,14 +262,58 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
   // same number of elements.
   CHECK_EQ(cluster.GetClusterSize(),
            ShapeUtil::ElementsIn(cluster_input_shape));
+
+  auto pad_input = [&](HloInstruction* input) -> HloInstruction* {
+    if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+      HloInstruction* zero_f =
+          builder->AddInstruction(HloInstruction::CreateConstant(
+              LiteralUtil::Zero(cluster_input_type)));
+
+      // Pad the tensor to be a multiple of `replication_factor`.
+      const Shape pad_shape = ShapeUtil::MakeShape(
+          cluster_input_type, {cluster.GetAlignedClusterSize()});
+
+      PaddingConfig padding_config;
+      const std::size_t difference =
+          cluster.GetAlignedClusterSize() - cluster.GetClusterSize();
+      auto padding_config_dim = padding_config.add_dimensions();
+      padding_config_dim->set_edge_padding_high(difference);
+      padding_config_dim->set_edge_padding_low(0);
+      padding_config_dim->set_interior_padding(0);
+
+      input = builder->AddInstruction(
+          HloInstruction::CreatePad(pad_shape, input, zero_f, padding_config));
+      VLOG(2) << "pad: " << input->ToString();
+    }
+    return input;
+  };
+
   const Shape flat_shape =
       ShapeUtil::MakeShape(cluster_input_type, {cluster.GetClusterSize()});
+  // Convert an all reduce input into an outlined reduce scatter sum.
+  if (IsAllReduce(cluster_input)) {
+    HloInstruction* input = cluster_input->mutable_operand(0);
+    HloInstruction* input_reshaped = input_comp->AddInstruction(
+        HloInstruction::CreateReshape(flat_shape, input));
 
-  HloInstruction* cluster_input_reshaped = input_comp->AddInstruction(
-      HloInstruction::CreateReshape(flat_shape, cluster_input));
+    HloInstruction* parameter =
+        builder->AddInstruction(HloInstruction::CreateParameter(
+            param_idx, flat_shape, "parameter-" + input->name()));
+
+    // Add any necessary padding before scatter.
+    parameter = pad_input(parameter);
+
+    HloInstruction* scatter = builder->AddInstruction(
+        CreateReduceScatter({parameter}, in_comp_shape));
+    context->MapInstruction(cluster_input, scatter);
+    return input_reshaped;
+  }
 
   // All other inputs have to be sliced with dynamic-slice(input,
   // replication-index()).
+  HloInstruction* cluster_input_reshaped = input_comp->AddInstruction(
+      HloInstruction::CreateReshape(flat_shape, cluster_input));
+
   const Shape all_shards_shape = ShapeUtil::MakeShape(
       cluster_input_type, {replication_factor, cluster.GetShardSize()});
 
@@ -277,26 +322,7 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
           param_idx, flat_shape, "parameter-" + cluster_input->name()));
 
   // Add any necessary padding before slicing.
-  if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
-    HloInstruction* zero_f = builder->AddInstruction(
-        HloInstruction::CreateConstant(LiteralUtil::Zero(cluster_input_type)));
-
-    // Pad the tensor to be a multiple of `replication_factor`.
-    const Shape pad_shape = ShapeUtil::MakeShape(
-        cluster_input_type, {cluster.GetAlignedClusterSize()});
-
-    PaddingConfig padding_config;
-    const std::size_t difference =
-        cluster.GetAlignedClusterSize() - cluster.GetClusterSize();
-    auto padding_config_dim = padding_config.add_dimensions();
-    padding_config_dim->set_edge_padding_high(difference);
-    padding_config_dim->set_edge_padding_low(0);
-    padding_config_dim->set_interior_padding(0);
-
-    parameter = builder->AddInstruction(HloInstruction::CreatePad(
-        pad_shape, parameter, zero_f, padding_config));
-    VLOG(2) << "pad: " << parameter->ToString();
-  }
+  parameter = pad_input(parameter);
 
   // Reshaped the parameter so that it can be sliced.
   HloInstruction* reshaped = builder->AddInstruction(

@@ -48,8 +48,8 @@ class HloReduceScatterInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateReduceScatter(HloInstruction* input,
-                                                    const Shape& shape);
+std::unique_ptr<HloInstruction> CreateReduceScatter(
+    absl::Span<HloInstruction* const> input, const Shape& shape);
 
 }  // namespace poplarplugin
 }  // namespace xla

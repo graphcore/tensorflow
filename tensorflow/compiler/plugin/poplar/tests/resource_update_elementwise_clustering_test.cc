@@ -290,6 +290,16 @@ StatusOr<HloInstruction*> GetRewrittenInput(HloInstruction* inst, bool padded) {
   return inst;
 }
 
+StatusOr<HloInstruction*> GetScatterInput(HloInstruction* inst, bool padded) {
+  if (padded) {
+    TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+    EXPECT_THAT(inst->opcode(), HloOpcode::kPad);
+  }
+  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter)(inst));
+  return inst;
+}
+
 StatusOr<HloInstruction*> GetRewrittenOutput(HloInstruction* inst,
                                              bool sliced) {
   TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
@@ -547,8 +557,9 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
 
   HloInstruction* loop = FindInstruction(module.get(), "loop_call");
 
-  HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
+  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
   HloInstruction* arg0_r = FindInstruction(module.get(), "arg0_r");
+  HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
   HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
   HloInstruction* arg2_new = FindInstruction(module.get(), "arg2_new");
   HloInstruction* arg3 = FindInstruction(module.get(), "arg3");
@@ -592,23 +603,24 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
   HloInstruction *arg2_load, *arg2_store;
   TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
 
-  EXPECT_THAT(arg0_r->user_count(), 1);
-  HloInstruction* cluster_call = LookThroughReshape(arg0_r)->users()[0];
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* cluster_call = LookThroughReshape(arg0)->users()[0];
   EXPECT_TRUE(IsFunction(cluster_call));
   HloComputation* cluster_comp = cluster_call->to_apply();
 
   EXPECT_THAT(
       cluster_call->operands(),
-      ::testing::ElementsAre(LookThroughReshape(arg1),
-                             LookThroughReshape(arg0_r), arg3, arg2_load));
+      ::testing::ElementsAre(LookThroughReshape(arg1), LookThroughReshape(arg0),
+                             arg3, arg2_load));
 
   TF_ASSERT_OK_AND_ASSIGN(
       arg1, GetRewrittenInput(cluster_comp->parameter_instruction(0), false));
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   TF_ASSERT_OK_AND_ASSIGN(
-      arg0_r, GetRewrittenInput(cluster_comp->parameter_instruction(1), false));
-  EXPECT_THAT(arg0_r->shape(), ShapeUtil::MakeShape(F16, {64}));
+      HloInstruction * scatter,
+      GetScatterInput(cluster_comp->parameter_instruction(1), false));
+  EXPECT_THAT(scatter->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   arg3 = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(arg3->shape(), ShapeUtil::MakeShape(F16, {}));
@@ -620,7 +632,7 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
 
   EXPECT_THAT(arg2_load->user_count(), 1);
   arg2_new = arg2_load->users()[0];
-  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_load));
+  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(scatter, arg2_load));
   EXPECT_THAT(arg2_new->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   EXPECT_THAT(arg3->user_count(), 1);
@@ -730,6 +742,7 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   HloInstruction* loop = FindInstruction(module.get(), "loop_call");
 
   HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
+  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
   HloInstruction* arg0_r = FindInstruction(module.get(), "arg0_r");
   HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
   HloInstruction* arg2_new = FindInstruction(module.get(), "arg2_new");
@@ -776,23 +789,24 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
   HloInstruction *arg2_load, *arg2_store;
   TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
 
-  EXPECT_THAT(arg0_r->user_count(), 1);
-  HloInstruction* cluster_call = LookThroughReshape(arg0_r)->users()[0];
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* cluster_call = LookThroughReshape(arg0)->users()[0];
   EXPECT_TRUE(IsFunction(cluster_call));
   HloComputation* cluster_comp = cluster_call->to_apply();
 
   EXPECT_THAT(
       cluster_call->operands(),
-      ::testing::ElementsAre(LookThroughReshape(arg1),
-                             LookThroughReshape(arg0_r), arg3_new, arg2_load));
+      ::testing::ElementsAre(LookThroughReshape(arg1), LookThroughReshape(arg0),
+                             arg3_new, arg2_load));
 
   TF_ASSERT_OK_AND_ASSIGN(
       arg1, GetRewrittenInput(cluster_comp->parameter_instruction(0), false));
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   TF_ASSERT_OK_AND_ASSIGN(
-      arg0_r, GetRewrittenInput(cluster_comp->parameter_instruction(1), false));
-  EXPECT_THAT(arg0_r->shape(), ShapeUtil::MakeShape(F16, {64}));
+      HloInstruction * scatter,
+      GetScatterInput(cluster_comp->parameter_instruction(1), false));
+  EXPECT_THAT(scatter->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   HloInstruction* param_arg3_new = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(param_arg3_new->shape(), ShapeUtil::MakeShape(F16, {}));
@@ -808,7 +822,7 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest,
 
   EXPECT_THAT(arg2_load->user_count(), 1);
   arg2_new = arg2_load->users()[0];
-  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_load));
+  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(scatter, arg2_load));
   EXPECT_THAT(arg2_new->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   EXPECT_THAT(bcast->user_count(), 1);
@@ -904,8 +918,9 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
 
   HloInstruction* loop = FindInstruction(module.get(), "loop_call");
 
-  HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
+  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
   HloInstruction* arg0_r = FindInstruction(module.get(), "arg0_r");
+  HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
   HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
   HloInstruction* arg2_new = FindInstruction(module.get(), "arg2_new");
   HloInstruction* fusion = FindInstruction(module.get(), "fusion");
@@ -948,8 +963,8 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
   HloInstruction *arg2_load, *arg2_store;
   TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
 
-  EXPECT_THAT(arg0_r->user_count(), 1);
-  HloInstruction* cluster_call = LookThroughReshape(arg0_r)->users()[0];
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* cluster_call = LookThroughReshape(arg0)->users()[0];
   EXPECT_TRUE(IsFunction(cluster_call));
   HloComputation* cluster_comp = cluster_call->to_apply();
 
@@ -957,16 +972,17 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
   EXPECT_TRUE(Match(new_const, m::ConstantScalar(0.125)));
   EXPECT_THAT(
       cluster_call->operands(),
-      ::testing::ElementsAre(LookThroughReshape(arg1),
-                             LookThroughReshape(arg0_r), new_const, arg2_load));
+      ::testing::ElementsAre(LookThroughReshape(arg1), LookThroughReshape(arg0),
+                             new_const, arg2_load));
 
   TF_ASSERT_OK_AND_ASSIGN(
       arg1, GetRewrittenInput(cluster_comp->parameter_instruction(0), false));
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   TF_ASSERT_OK_AND_ASSIGN(
-      arg0_r, GetRewrittenInput(cluster_comp->parameter_instruction(1), false));
-  EXPECT_THAT(arg0_r->shape(), ShapeUtil::MakeShape(F16, {64}));
+      HloInstruction * scatter,
+      GetScatterInput(cluster_comp->parameter_instruction(1), false));
+  EXPECT_THAT(scatter->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   fusion = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(fusion->shape(), ShapeUtil::MakeShape(F16, {}));
@@ -981,7 +997,7 @@ TEST_F(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
 
   EXPECT_THAT(arg2_load->user_count(), 1);
   arg2_new = arg2_load->users()[0];
-  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_load));
+  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(scatter, arg2_load));
   EXPECT_THAT(arg2_new->shape(), ShapeUtil::MakeShape(F16, {64}));
 
   arg3_arg2_mul = fusion->users()[0];
@@ -1145,6 +1161,7 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
 
   HloInstruction* loop = FindInstruction(module.get(), "loop_call");
 
+  HloInstruction* arg0 = FindInstruction(module.get(), "arg0");
   HloInstruction* arg0_r = FindInstruction(module.get(), "arg0_r");
   HloInstruction* arg1 = FindInstruction(module.get(), "arg1");
   HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
@@ -1188,14 +1205,14 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   HloInstruction *arg2_load, *arg2_store;
   TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
 
-  EXPECT_THAT(arg0_r->user_count(), 1);
-  HloInstruction* cluster_call = LookThroughReshape(arg0_r)->users()[0];
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* cluster_call = LookThroughReshape(arg0)->users()[0];
   EXPECT_TRUE(IsFunction(cluster_call));
   HloComputation* cluster_comp = cluster_call->to_apply();
 
   EXPECT_THAT(cluster_call->operands(),
               ::testing::ElementsAre(LookThroughReshape(arg1),
-                                     LookThroughReshape(arg0_r), arg2_load));
+                                     LookThroughReshape(arg0), arg2_load));
 
   TF_ASSERT_OK_AND_ASSIGN(
       arg1, GetRewrittenInput(cluster_comp->parameter_instruction(0),
@@ -1204,9 +1221,10 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
               ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
 
   TF_ASSERT_OK_AND_ASSIGN(
-      arg0_r, GetRewrittenInput(cluster_comp->parameter_instruction(1),
-                                param.padded_and_sliced));
-  EXPECT_THAT(arg0_r->shape(),
+      HloInstruction * scatter,
+      GetScatterInput(cluster_comp->parameter_instruction(1),
+                      param.padded_and_sliced));
+  EXPECT_THAT(scatter->shape(),
               ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
 
   arg2_load = cluster_comp->parameter_instruction(2);
@@ -1224,7 +1242,7 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
 
   EXPECT_THAT(arg2_c->user_count(), 1);
   arg2_new = arg2_c->users()[0];
-  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(arg0_r, arg2_c));
+  EXPECT_THAT(arg2_new->operands(), ::testing::ElementsAre(scatter, arg2_c));
   EXPECT_THAT(arg2_new->shape(),
               ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
 
