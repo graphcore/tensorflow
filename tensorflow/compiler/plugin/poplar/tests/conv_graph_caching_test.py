@@ -102,9 +102,14 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_*weightsRearranged', 'Copy_',
-          'Copy_vs/*/OnTileCopy-0', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/Cast/convert.*/Cast', 'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
+          '__seed*',
+          'Copy_*weightsRearranged',
+          'Copy_',
+          'Copy_vs/*/OnTileCopy-0',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          'vs/Cast/convert.*/Cast',
+          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
+          'copy*_host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
