@@ -149,6 +149,7 @@ message PoplarBackendConfig {
 
     message FunctionConfig {
       bool keep_input_layouts = 1;
+      bool unique_sharding = 2;
     }
 
     message ResourceUpdateConfig {

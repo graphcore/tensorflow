@@ -1735,6 +1735,46 @@ main {
   }
 }
 
+TEST_F(ShardingPassTest, TestCallSingleShardingUniqueSharding) {
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp {
+  p0 = f16[4,4] parameter(0)
+  p1 = f16[4,4] parameter(1)
+  p2 = f16[4,4] parameter(2)
+  a1 = f16[4,4] add(p0, p1), sharding={maximal device=1}
+  a2 = f16[4,4] add(a1, p2), sharding={maximal device=1}
+  ROOT t = (f16[4,4], f16[4,4]) tuple(a1, a2)
+}
+
+main {
+  p0 = f16[4,4] parameter(0), sharding={maximal device=1}
+  p1 = f16[4,4] parameter(1), sharding={maximal device=1}
+  p2 = f16[4,4] parameter(2), sharding={maximal device=0}
+  c2 = f16[4,4] cosine(p2), sharding={maximal device=0}
+  l2 = f16[4,4] log(c2), sharding={maximal device=0}
+  ROOT call1 = (f16[4,4], f16[4,4]) call(p0, p1, l2), to_apply=subcomp, backend_config="{\"callConfig\":{\"type\":\"Function\", \"functionConfig\":{\"uniqueSharding\":\"1\"}}}"
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+  HloComputation* subcomp = FindComputation(module, "subcomp");
+  for (auto* inst : subcomp->instructions()) {
+    EXPECT_TRUE(inst->has_sharding());
+    EXPECT_EQ(inst->sharding().GetUniqueDevice(), 1);
+  }
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

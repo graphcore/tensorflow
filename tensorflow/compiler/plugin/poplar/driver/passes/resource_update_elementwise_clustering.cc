@@ -1043,6 +1043,10 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
   // the callsite - this means any rearrangement will only be done once inside
   // of the call rather than at every callsite.
   function_config->set_keep_input_layouts(true);
+  // Make sure that all inputs are copied to a single device with the most
+  // parameters before the function call - in a resource update this will allow
+  // copies of all hyper parameters to be scheduled earlier.
+  function_config->set_unique_sharding(true);
   TF_RETURN_IF_ERROR(call->set_backend_config(backend_config));
 
   // Connect up all the users of the cluster output.
