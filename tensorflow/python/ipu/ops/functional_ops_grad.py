@@ -20,10 +20,13 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework.func_graph import FuncGraph
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import custom_gradient
+from tensorflow.python.framework import dtypes
+from tensorflow.python.ops import gradients_util
 from tensorflow.python.util import nest
 """
     These gradient function should *never* be called directly.
@@ -150,7 +153,7 @@ def _get_gradients_for_function(op, *grads):
   grad_name = util.unique_grad_fn_name(func_graph.name)
   func_grad_graph = func_graph_module.func_graph_from_py_func(
       grad_name,
-      lambda: cond_v2._grad_fn(func_graph, grads), [], {},
+      lambda: _grad_fn(func_graph, grads), [], {},
       func_graph=_XlaFuncGradGraph(grad_name, func_graph))
 
   if func_grad_graph.op_needs_rewrite:
@@ -212,3 +215,53 @@ def _function_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes)
 
   return _pack_sequence_as(func_grad_graph.structured_outputs, outputs)
+
+
+def _grad_fn(func_graph, grads):
+  """The gradient function for each conditional branch.
+
+  This function builds the gradient graph of the corresponding forward-pass
+  conditional branch in `func_graph`. This is done by differentiating
+  func_graph's outputs w.r.t. its inputs.
+
+  This is a copy/paste from tensorflow/python/ops/cond_v2.py with the
+  replacement of None grads with Zero tensors omitted.
+
+  See https://phabricator.sourcevertex.net/T27721
+
+  Args:
+    func_graph: FuncGraph. The corresponding forward-pass function.
+    grads: The list of input gradient Tensors.
+
+  Returns:
+    The output gradient Tensors.
+  """
+  # Filter out untrainable function outputs.
+  assert len(func_graph.outputs) == len(grads)
+  ys = []
+  grad_ys = []
+  for y, grad_y in zip(func_graph.outputs, grads):
+    if not gradients_util.IsTrainable(y):
+      continue
+    ys.append(y)
+    grad_ys.append(grad_y)
+
+  # Build the gradient graph. Note that this builds the gradient computation of
+  # func_graph in the current graph, which requires capturing tensors from
+  # func_graph. The captured func_graph tensors are resolved to external tensors
+  # in _resolve_grad_inputs.
+  result = gradients_util._GradientsHelper(  # pylint: disable=protected-access
+      ys,
+      func_graph.inputs,
+      grad_ys=grad_ys,
+      src_graph=func_graph)
+
+  # Functions can't return None; replace Nones with zero tensors.
+  # Modified from upstream due to https://phabricator.sourcevertex.net/T27721
+  for i in enumerate(result):
+    if result[i] is None:
+      if func_graph.inputs[i].dtype == dtypes.resource:
+        continue
+      result[i] = array_ops.zeros_like(func_graph.inputs[i])
+
+  return result
