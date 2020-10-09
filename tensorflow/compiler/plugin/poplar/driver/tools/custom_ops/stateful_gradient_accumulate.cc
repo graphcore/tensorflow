@@ -181,21 +181,27 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
       operands, num_mini_batches);
 }
 
-HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(const Shape& shape,
-                                                           bool is_remote)
-    : HloPoplarInstruction(shape, {}, PoplarOp::GradientAccumulatorCreate,
-                           is_remote),
-      is_remote_(is_remote) {
-  // Mark the creator as stateful so that it does not get merged with other same
-  // shaped accumulators.
-  set_custom_call_has_side_effect(true);
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorCreate::CreateFromShapeOnly(const Shape& shape,
+                                                  bool is_remote) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(
+      shape, std::vector<HloInstruction*>{}, is_remote);
+}
+
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
+    const Shape& shape, HloInstruction* const variable, bool is_remote) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(
+      shape, std::vector<HloInstruction*>{variable}, is_remote);
 }
 
 HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(
-    HloInstruction* const variable, bool is_remote)
-    : HloPoplarInstruction(variable->shape(), {variable},
-                           PoplarOp::GradientAccumulatorCreate, is_remote),
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_remote)
+    : HloPoplarInstruction(shape, operands, PoplarOp::GradientAccumulatorCreate,
+                           is_remote),
       is_remote_(is_remote) {
+  CHECK_LE(operands.size(), 1);
   // Mark the creator as stateful so that it does not get merged with other same
   // shaped accumulators.
   set_custom_call_has_side_effect(true);
@@ -221,10 +227,7 @@ std::unique_ptr<HloInstruction>
 HloGradientAccumulatorCreate::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  CHECK_LE(new_operands.size(), 1);
-  return new_operands.size() == 0
-             ? absl::make_unique<HloGradientAccumulatorCreate>(shape)
-             : absl::make_unique<HloGradientAccumulatorCreate>(new_operands[0]);
+  return absl::make_unique<HloGradientAccumulatorCreate>(shape, new_operands);
 }
 
 std::vector<std::string>
@@ -237,12 +240,13 @@ HloGradientAccumulatorCreate::ExtraPoplarAttributesToStringImpl(
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
     HloInstruction* const variable, bool is_remote) {
-  return absl::make_unique<HloGradientAccumulatorCreate>(variable, is_remote);
+  return HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
+      variable->shape(), variable, is_remote);
 }
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
     const Shape& shape, bool is_remote) {
-  return absl::make_unique<HloGradientAccumulatorCreate>(shape, is_remote);
+  return HloGradientAccumulatorCreate::CreateFromShapeOnly(shape, is_remote);
 }
 
 HloGradientAccumulatorAdd::HloGradientAccumulatorAdd(
@@ -381,7 +385,9 @@ static HloPoplarInstructionFactory
 
 StatusOr<std::unique_ptr<HloInstruction>>
 HloGradientAccumulatorCreateFactoryFunc(HloCustomCallInstruction* call) {
-  return CreateGradientAccumulatorCreate(call->mutable_operand(0));
+  CHECK_EQ(call->operand_count(), 1);
+  return HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
+      call->shape(), call->mutable_operand(0));
 }
 
 static HloPoplarInstructionFactory gradient_accumulator_creator_factory(

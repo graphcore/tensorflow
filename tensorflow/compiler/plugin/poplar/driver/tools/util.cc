@@ -588,7 +588,8 @@ bool IsUsedOutsideSubcomputation(const HloInstruction& hlo,
 // It creates fusion instead of call.
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
-    const string& outlined_computation_name, HloComputation* computation) {
+    const string& outlined_computation_name, HloComputation* computation,
+    const std::vector<HloInstruction*>& explicit_parameters) {
   auto builder = HloComputation::Builder(outlined_computation_name);
 
   // A map from original instructions to their counterparts in the new
@@ -600,6 +601,15 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
   std::vector<HloInstruction*> arguments;
   std::vector<HloInstruction*> outputs;
   int64 parameter_count = 0;
+
+  for (HloInstruction* parameter : explicit_parameters) {
+    arguments.push_back(parameter);
+    InsertOrDie(&outlined_instructions, parameter,
+                builder.AddInstruction(HloInstruction::CreateParameter(
+                    parameter_count, parameter->shape(), "p")));
+    ++parameter_count;
+  }
+
   for (HloInstruction* instruction_to_outline : instructions_to_outline) {
     // Clone the original instruction.
     HloInstruction* outlined_instruction =

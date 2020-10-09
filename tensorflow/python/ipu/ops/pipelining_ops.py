@@ -34,7 +34,6 @@ from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
@@ -163,6 +162,7 @@ class PipelineStageOptions:
 def pipeline(computational_stages,
              pipeline_depth=None,
              gradient_accumulation_count=None,
+             gradient_accumulation_dtype=None,
              repeat_count=1,
              batch_serialization_iterations=1,
              inputs=None,
@@ -362,6 +362,17 @@ def pipeline(computational_stages,
       outputs of the previous pipeline state as its inputs.
     gradient_accumulation_count: the number of times each pipeline stage will
       be executed.
+    gradient_accumulation_dtype: The data type used for the gradient
+      accumulation buffer. One of:
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
+      The gradients passed to `Optimizer.apply_gradients` will have the dtype
+      requested here. If that dtype is different from the variable dtype
+      a cast is needed at some point to make them compatible. If you want
+      to cast the gradients immediately, you can wrap your optimizer in the
+      `MapGradientOptimizer` with a `tf.cast`.
     repeat_count: the number of times the pipeline will be executed.
     batch_serialization_iterations: number of times a loop executes to compute a
       batch on each pipeline stage execution. Currently only supported with the
@@ -687,8 +698,12 @@ def pipeline(computational_stages,
       for grad, var in grads_and_vars:
         if grad is not None:
           with ops.colocate_with(grad):
+            # Find the data type for the accumulator.
+            dtype = op_util.get_accumulator_dtype(var,
+                                                  gradient_accumulation_dtype)
             # Create an accumulator - variable is used as reference for shape/layout.
-            accumulator = gen_poputil_ops.gradient_accumulator_create(var)
+            accumulator = gen_poputil_ops.gradient_accumulator_create(
+                var, output_type=dtype)
             # Add the gradients to the accumulator.
             accumulator = gen_poputil_ops.gradient_accumulator_add(
                 accumulator, grad)
