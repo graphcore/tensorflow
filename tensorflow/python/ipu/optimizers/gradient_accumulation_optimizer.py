@@ -24,6 +24,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.training import optimizer
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ipu import functional_ops
+from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 
 
@@ -48,6 +49,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
                num_mini_batches,
                offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=False,
+               dtype=None,
                name="GradientAccumulationOptimizerV2"):
     """Construct a Gradient Accumulation Optimizer V2.
 
@@ -72,6 +74,16 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
+      dtype: The data type used for the gradient accumulation buffer. One of:
+          - `None`: Use an accumulator of the same type as the variable type.
+          - A `DType`: Use this type for all the accumulators.
+          - A callable that takes the variable and returns a `DType`: Allows
+            specifying the accumulator type on a per-variable basis.
+        The gradients passed to `Optimizer.apply_gradients` will have the dtype
+        requested here. If that dtype is different from the variable dtype
+        a cast is needed at some point to make them compatible. If you want
+        to cast the gradients immediately, you can wrap your optimizer in the
+        `MapGradientOptimizer` with a `tf.cast`.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizerV2".
     """
@@ -99,6 +111,8 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
     self._replicated_optimizer_state_sharding = bool_to_three_state(
         replicated_optimizer_state_sharding,
         self._offload_weight_update_variables)
+
+    self._dtype = dtype
 
   def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Compute gradients of "loss" for the variables in "var_list".
@@ -139,8 +153,11 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
     for grad, var in grads_and_vars:
       if grad is not None:
         with ops.colocate_with(grad):
+          # Find the data type for the accumulator.
+          dtype = op_util.get_accumulator_dtype(var, self._dtype)
           # Create an accumulator - variable is used as reference for shape/layout.
-          accumulator = gen_poputil_ops.gradient_accumulator_create(var)
+          accumulator = gen_poputil_ops.gradient_accumulator_create(
+              var, output_type=dtype)
           # Add the gradients to the accumulator.
           accumulator = gen_poputil_ops.gradient_accumulator_add(
               accumulator, grad)
@@ -151,7 +168,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
       accumulated_grads_and_vars.append((grad, var))
 
     # Create an explicit function call for the apply gradients - note that we
-    # allow external caputres here.
+    # allow external captures here.
     apply_grad_ops = []
 
     def resource_update_():
@@ -232,6 +249,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
                num_mini_batches,
                offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=False,
+               dtype=None,
                name="CrossReplicaGradientAccumulationOptimizerV2"):
     """Construct a Cross Replica Gradient Accumulation Optimizer V2.
 
@@ -253,6 +271,11 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
+      dtype: The data type used for the gradient accumulation buffer. One of:
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizerV2".
     """
@@ -266,7 +289,7 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
     self._opt = GradientAccumulationOptimizerV2(
         cross_replica_optimizer.CrossReplicaOptimizer(opt), num_mini_batches,
         offload_weight_update_variables, replicated_optimizer_state_sharding,
-        name)
+        dtype, name)
 
   def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Compute gradients of "loss" for the variables in "var_list".

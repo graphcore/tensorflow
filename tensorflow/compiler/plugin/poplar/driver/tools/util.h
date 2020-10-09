@@ -200,7 +200,8 @@ HloInstruction* ConvertInstruction(HloInstruction* inst,
 
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
-    const string& outlined_computation_name, HloComputation* computation);
+    const string& outlined_computation_name, HloComputation* computation,
+    const std::vector<HloInstruction*>& explicit_parameters = {});
 
 // Helper for storing slice dimensions.
 struct SliceInfo {

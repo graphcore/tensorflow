@@ -36,17 +36,19 @@ REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("GradientAccumulatorCreate")
-    .Input("variable: dtype")
-    .Output("output: dtype")
-    .Attr("dtype: {float16, float32}")
+    .Input("variable: input_type")
+    .Output("output: output_type")
+    .Attr("input_type: {float16, float32}")
+    .Attr("output_type: {float16, float32}")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("GradientAccumulatorAdd")
-    .Input("accumulator: dtype")
-    .Input("gradients: dtype")
-    .Output("accumulated: dtype")
-    .Attr("dtype: {float16, float32}")
+    .Input("accumulator: accumulator_type")
+    .Input("gradients: gradient_type")
+    .Output("accumulated: accumulator_type")
+    .Attr("accumulator_type: {float16, float32}")
+    .Attr("gradient_type: {float16, float32}")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
