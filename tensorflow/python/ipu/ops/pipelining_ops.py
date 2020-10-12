@@ -392,7 +392,7 @@ def pipeline(computational_stages,
       computational stages. An element at index `i` in the list represents which
       IPU the computational stage `computational_stages[i]` should reside on.
       This can be used to make sure computational stages which share
-      `tf.Variable`s are resident on the same IPU.
+      `tf.Variable` are resident on the same IPU.
     pipeline_schedule: Which scheduling algorithm to use for pipeline
       lowering. Defaults to `PipelineSchedule.Grouped`.
     forward_propagation_stages_poplar_options: If provided, a list of length
@@ -444,7 +444,7 @@ def pipeline(computational_stages,
       offloaded when beneficial.
       Note that this option has no effect for inference only pipelines.
     replicated_weight_sharding: When enabled and running a replicated model, any
-      `tf.Variable`s used by the pipeline stage computations (excluding those
+      `tf.Variable` used by the pipeline stage computations (excluding those
       only used by the weight update), will be partitioned across the replicas.
       Whenever the a partitioned `tf.Variable` is accessed, it will be first
       all-gathered across replicas to make sure each replica has access to the
