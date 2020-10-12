@@ -583,8 +583,20 @@ static std::set<HloOpcode> associative_opcodes = {
 // (A+B)+(C+sin(D)) contains three '+ operations which are part of an
 // associative set, and can be rearranged into A+(B+C)+sin(D), or
 // ((A+B)+C)+sin(D), or any other similar form.
+
+namespace {
+struct ToVisitCompare {
+  template <typename ValueType>
+  bool operator()(const ValueType& a, const ValueType& b) const {
+    return std::make_tuple(a.first->unique_id(), a.second) <
+           std::make_tuple(b.first->unique_id(), b.second);
+  }
+};
+}  // namespace
+
 std::set<HloInstruction*> HloMatcher::GetAssociativeSet(HloInstruction* root) {
-  std::set<std::pair<HloInstruction*, int>> to_visit = {{root, 0}};
+  std::set<std::pair<HloInstruction*, int>, ToVisitCompare> to_visit = {
+      {root, 0}};
   std::set<HloInstruction*> result;
 
   if (associative_opcodes.count(root->opcode()) == 0) {
