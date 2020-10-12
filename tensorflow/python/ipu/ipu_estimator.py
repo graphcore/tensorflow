@@ -99,7 +99,7 @@ class IPUEstimatorSpec(
   are needed, an `EstimatorSpec` can be passed to the `IPUEstimator` instead.
 
   `eval_metrics` is a tuple of a (`function`, `tensors`), where `tensors` is
-  either a list of `tf.Tensor`s or a dict from strings to `tf.Tensor`s, that is
+  either a list of `tf.Tensor` or a dict from strings to `tf.Tensor`, that is
   passed to the function. The function runs on the CPU and returns a dict of
   metrics. The tensors are transferred from the IPU to the CPU host and passed
   to the function.
