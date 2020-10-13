@@ -316,7 +316,7 @@ gone through the whole model pipeline.
 .. _optimiser-state-unloading:
 
 Accumulation data type
-----------------------
+______________________
 
 When accumulating gradients over a large number of mini-batches, it can be
 beneficial to perform the accumulation in a data type with higher precision
