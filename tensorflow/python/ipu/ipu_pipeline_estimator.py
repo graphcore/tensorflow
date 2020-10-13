@@ -37,6 +37,7 @@ class IPUPipelineEstimatorSpec(
         'mode',
         'computational_stages',
         'gradient_accumulation_count',
+        'gradient_accumulation_dtype',
         'eval_metrics_fn',
         'optimizer_function',
         'device_mapping',
@@ -54,6 +55,7 @@ class IPUPipelineEstimatorSpec(
               mode,
               computational_stages,
               gradient_accumulation_count=None,
+              gradient_accumulation_dtype=None,
               pipeline_depth=None,
               eval_metrics_fn=None,
               optimizer_function=None,
@@ -79,6 +81,17 @@ class IPUPipelineEstimatorSpec(
         outputs of the previous pipeline state as its inputs.
       gradient_accumulation_count: the number of times each pipeline stage will
         be executed.
+      gradient_accumulation_dtype: The data type used for the gradient
+        accumulation buffer. One of:
+          - `None`: Use an accumulator of the same type as the variable type.
+          - A `DType`: Use this type for all the accumulators.
+          - A callable that takes the variable and returns a `DType`: Allows
+            specifying the accumulator type on a per-variable basis.
+        The gradients passed to `Optimizer.apply_gradients` will have the dtype
+        requested here. If that dtype is different from the variable dtype
+        a cast is needed at some point to make them compatible. If you want
+        to cast the gradients immediately, you can wrap your optimizer in the
+        `MapGradientOptimizer` with a `tf.cast`.
       eval_metrics_fn: a Python function which takes the output of the
         last computational stage as parameters and returns a dict of evaluation
         metrics. The dict must contain a a loss tensor value with the key
@@ -134,6 +147,7 @@ class IPUPipelineEstimatorSpec(
         computational_stages=computational_stages,
         eval_metrics_fn=eval_metrics_fn,
         gradient_accumulation_count=gradient_accumulation_count,
+        gradient_accumulation_dtype=gradient_accumulation_dtype,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         pipeline_schedule=pipeline_schedule,
@@ -166,6 +180,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
+          gradient_accumulation_dtype=spec.gradient_accumulation_dtype,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
           inputs=spec.inputs,
           optimizer_function=spec.optimizer_function,

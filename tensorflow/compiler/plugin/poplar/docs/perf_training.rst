@@ -315,6 +315,32 @@ gone through the whole model pipeline.
 
 .. _optimiser-state-unloading:
 
+Accumulation data type
+----------------------
+
+When accumulating gradients over a large number of mini-batches, it can be
+beneficial to perform the accumulation in a data type with higher precision
+(and dynamic range) than that of the gradients. By default, the accumulation is
+performed using the same data type as the corresponding variable, but this can
+be overridden in the different APIs by passing ``gradient_accumulation_dtype``
+(or just ``dtype`` in the ``GradientAccumulationOptimizerV2`` API).
+
+Note that when accumulating the gradients using a different data type than that
+of the variable, an out-of-the box optimizer will not work since there will be a
+data type mismatch between the accumualated gradient and the variable when doing
+the weight update. You can use a custom optimizer to cast the final accumulated
+gradient to the data type of the variable before performing the weight update,
+for example like this with a Keras SGD optimizer:
+
+.. code-block:: python
+
+  class CastGradientsSGD(tf.keras.optimizers.SGD):
+    def apply_gradients(self, grads_and_vars, name=None):
+      cast_grads_and_vars = [(tf.cast(g, v.dtype), v)
+                             for (g, v) in grads_and_vars]
+      return super().apply_gradients(cast_grads_and_vars, name)
+
+
 Optimizer state offloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
