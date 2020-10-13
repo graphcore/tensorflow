@@ -26,6 +26,7 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.util import nest
 
 
 def function(func, name=None):
@@ -77,8 +78,7 @@ def function(func, name=None):
         if isinstance(outputs, ops.Operation):
           outputs = outputs.outputs
 
-      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                                outputs)
+      return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
   return func_wrapper
 
@@ -147,6 +147,33 @@ def _compile_function(func,
     # pylint: enable=protected-access
 
   return func_graph, captured_args
+
+
+def _pack_sequence_as(structured_outputs, op_outputs):
+  """Packs the outputs of a functional op.
+
+  The functions may contain None's in the list of `structured_outputs`.
+  `op_outputs` has those outputs missing. So we need to add those Nones to the
+  list of `op_outputs` and then pack it in the same structure as
+  `structured_outputs`.
+
+  Args:
+    structured_outputs: structured_outputs from one of the branch functions.
+    op_outputs: List of output tensors of the op.
+
+  Returns:
+    `op_outputs` packed like `structured_outputs`.
+  """
+  outputs_with_nones = []
+  counter = 0
+  for output in nest.flatten(structured_outputs, expand_composites=True):
+    if output is None:
+      outputs_with_nones.append(None)
+    else:
+      outputs_with_nones.append(op_outputs[counter])
+      counter += 1
+  return func_graph_module.pack_sequence_as(structured_outputs,
+                                            outputs_with_nones)
 
 
 def _convert_to_list(xs):

@@ -881,5 +881,6 @@ def _pipeline_stage(func,
             stage_id=stage_id)
     if isinstance(outputs, ops.Operation):
       return outputs
-    return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                              outputs)
+
+    return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
+        func_graph.structured_outputs, outputs)

@@ -142,8 +142,8 @@ def multi_conv(func=None, options=None):
               output_shapes=func_graph.output_shapes,
               option_flags=json_format.MessageToJson(option_proto))
 
-      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                                outputs)
+      return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
+          func_graph.structured_outputs, outputs)
 
     return multi_conv_wrapper
 

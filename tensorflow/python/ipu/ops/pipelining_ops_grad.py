@@ -17,6 +17,7 @@
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import functional_ops_grad
 from tensorflow.python.ops import control_flow_util_v2 as util
 
@@ -36,7 +37,7 @@ def _pipeline_stage_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes,
       stage_id=stage_id)
 
-  return functional_ops_grad._pack_sequence_as(  # pylint: disable=protected-access
+  return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
 
 
