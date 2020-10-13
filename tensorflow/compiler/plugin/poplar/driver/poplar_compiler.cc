@@ -144,6 +144,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -870,6 +871,7 @@ StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
     std::unique_ptr<HloModule> module,
     perftools::gputools::StreamExecutor* executor,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   return std::move(module);
 }
 
@@ -877,6 +879,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     std::unique_ptr<HloModule> module,
     perftools::gputools::StreamExecutor* stream_exec,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   if (stream_exec == nullptr) {
     return tensorflow::errors::Unknown(
         "NULL stream pointer in poplar compiler");
@@ -1536,6 +1539,7 @@ StatusOr<std::vector<std::unique_ptr<Executable>>> PoplarCompiler::Compile(
     std::unique_ptr<HloModuleGroup> module_group,
     std::vector<std::vector<se::StreamExecutor*>> stream_exec,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   if (module_group->empty()) {
     return std::vector<std::unique_ptr<Executable>>();
   }
