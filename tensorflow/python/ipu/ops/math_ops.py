@@ -18,7 +18,6 @@ IPU specific maths operations
 """
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
-from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -129,15 +128,6 @@ def serialized_matmul(a,
                           ml_type=None):
     name = name + "SplitAColumns"
 
-    @functional_ops.function
-    def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
-
     lhs_shape = lhs.shape.as_list()
     # Get the slice dimension, taking transpose into account.
     slice_dim = len(lhs_shape) - (1 if transpose_lhs else 2)
@@ -158,16 +148,21 @@ def serialized_matmul(a,
       output_slice_shape = list(output_shape)
       output_slice_shape[-2] = slice_size
 
+    def inner_func(lhs_, rhs_):
+      result = math_ops.matmul(lhs_,
+                               rhs_,
+                               transpose_lhs,
+                               transpose_rhs,
+                               name=name)
+      result = op_util.SetMlType(result, ml_type)
+      # Collapse any batch dimensions.
+      return remove_broadcasting_dimensions(result, output_slice_shape,
+                                            output_reduction_axis)
+
     result = []
     for i in range(0, serialization_factor):
       lhs_slice = slice_tensor(lhs, slice_dim, i * slice_size, slice_size)
       output_slice = inner_func(lhs_slice, rhs)
-
-      # Collapse any batch dimensions.
-      output_slice = remove_broadcasting_dimensions(output_slice,
-                                                    output_slice_shape,
-                                                    output_reduction_axis)
-
       result.append(output_slice)
     return array_ops.concat(result, axis=-2)
 
@@ -181,15 +176,6 @@ def serialized_matmul(a,
                                  output_reduction_axis=None,
                                  ml_type=None):
     name = name + 'SplitARowsBColumns'
-
-    @functional_ops.function
-    def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
 
     lhs_shape = lhs.shape.as_list()
     rhs_shape = rhs.shape.as_list()
@@ -211,6 +197,17 @@ def serialized_matmul(a,
           'Expected \'serialization_factor\' ({}) to divide the rows dimension '
           'of \'a\' ({}).'.format(serialization_factor, lhs_slice_dim_size))
 
+    def inner_func(lhs_, rhs_):
+      result = math_ops.matmul(lhs_,
+                               rhs_,
+                               transpose_lhs,
+                               transpose_rhs,
+                               name=name)
+      result = op_util.SetMlType(result, ml_type)
+      # Collapse any batch dimensions.
+      return remove_broadcasting_dimensions(result, output_shape,
+                                            output_reduction_axis)
+
     slice_size = lhs_slice_dim_size // serialization_factor
     # Do the first slice.
     lhs_slice = slice_tensor(lhs, lhs_slice_dim, 0, slice_size)
@@ -221,10 +218,6 @@ def serialized_matmul(a,
       lhs_slice = slice_tensor(lhs, lhs_slice_dim, i * slice_size, slice_size)
       rhs_slice = slice_tensor(rhs, rhs_slice_dim, i * slice_size, slice_size)
       result += inner_func(lhs_slice, rhs_slice)
-
-    # Collapse any batch dimensions.
-    result = remove_broadcasting_dimensions(result, output_shape,
-                                            output_reduction_axis)
 
     return result
 
@@ -238,15 +231,6 @@ def serialized_matmul(a,
                           output_reduction_axis=None,
                           ml_type=None):
     name = name + 'SplitBRows'
-
-    @functional_ops.function
-    def inner_func(lhs_, rhs_):
-      result = math_ops.matmul(lhs_,
-                               rhs_,
-                               transpose_lhs,
-                               transpose_rhs,
-                               name=name)
-      return op_util.SetMlType(result, ml_type)
 
     # Get the slice dimension, taking transpose into account.
     rhs_shape = rhs.shape.as_list()
@@ -267,16 +251,21 @@ def serialized_matmul(a,
       output_slice_shape = list(output_shape)
       output_slice_shape[-1] = slice_size
 
+    def inner_func(lhs_, rhs_):
+      result = math_ops.matmul(lhs_,
+                               rhs_,
+                               transpose_lhs,
+                               transpose_rhs,
+                               name=name)
+      result = op_util.SetMlType(result, ml_type)
+      # Collapse any batch dimensions.
+      return remove_broadcasting_dimensions(result, output_slice_shape,
+                                            output_reduction_axis)
+
     result = []
     for i in range(0, serialization_factor):
       rhs_slice = slice_tensor(rhs, slice_dim, i * slice_size, slice_size)
       output_slice = inner_func(lhs, rhs_slice)
-
-      # Collapse any batch dimensions.
-      output_slice = remove_broadcasting_dimensions(output_slice,
-                                                    output_slice_shape,
-                                                    output_reduction_axis)
-
       result.append(output_slice)
     return array_ops.concat(result, axis=-1)
 

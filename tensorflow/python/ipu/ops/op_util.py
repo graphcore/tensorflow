@@ -20,6 +20,7 @@ Popnn primitive neural network operators
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
+from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
@@ -29,6 +30,8 @@ from tensorflow.python.util import tf_contextlib
 
 
 def SetMlType(op, ml_type):
+  if context.executing_eagerly():
+    return op
   if ml_type:
     operation = op if isinstance(op, ops.Operation) else op.op
     attrs = xla_data_pb2.FrontendAttributes()
