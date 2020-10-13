@@ -19,7 +19,6 @@ Keras Pipelined Model interfaces for IPU
 
 from collections import OrderedDict
 from functools import partial
-import weakref
 import math
 
 from tensorflow.python.distribute import distribution_strategy_context
@@ -30,6 +29,7 @@ from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.layers import InputLayer
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
+from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import tf_inspect
 from tensorflow.python.util import nest
@@ -109,6 +109,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   def __init__(self,
                stages,
                gradient_accumulation_count,
+               gradient_accumulation_dtype=None,
                batch_serialization_iterations=1,
                device_mapping=None,
                pipeline_schedule=None,
@@ -128,6 +129,16 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
         stages: A python list of lists of Layers.
         gradient_accumulation_count: The number of mini-batches processed by
             the pipeline on each iteration.
+        gradient_accumulation_dtype: The data type used for the gradient
+          accumulation buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
         batch_serialization_iterations: number of times a loop executes to
             compute a batch on each pipeline stage execution. Currently only
             supported with the `PipelineSchedule.Sequential`.
@@ -223,6 +234,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     super().__init__(accumulation_count, shard_count, **kwargs)
 
     self.gradient_accumulation_count = gradient_accumulation_count
+    self.gradient_accumulation_dtype = gradient_accumulation_dtype
     self.stages = stages
 
     # Store additional pipeline params.
@@ -332,6 +344,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     pipeline = pipelining_ops.pipeline(
         stages,
         gradient_accumulation_count=self.gradient_accumulation_count,
+        gradient_accumulation_dtype=self.gradient_accumulation_dtype,
         repeat_count=repeat_count,
         inputs=[],
         infeed_queue=infeed_queue,
@@ -573,6 +586,7 @@ class PipelineModel(ipu_model.Model):
   def __init__(self,
                *args,
                gradient_accumulation_count,
+               gradient_accumulation_dtype=None,
                batch_serialization_iterations=1,
                device_mapping=None,
                pipeline_schedule=None,
@@ -684,6 +698,7 @@ class PipelineModel(ipu_model.Model):
     self.shard_count = 2**int(math.log2(shard_count))
 
     self.gradient_accumulation_count = gradient_accumulation_count
+    self.gradient_accumulation_dtype = gradient_accumulation_dtype
 
     # Store additional pipeline params.
     self.batch_serialization_iterations = batch_serialization_iterations
@@ -840,6 +855,7 @@ class PipelineModel(ipu_model.Model):
     pipeline = pipelining_ops.pipeline(
         stages,
         gradient_accumulation_count=self.gradient_accumulation_count,
+        gradient_accumulation_dtype=self.gradient_accumulation_dtype,
         repeat_count=repeat_count,
         inputs=[],
         infeed_queue=infeed_queue,

@@ -17,7 +17,6 @@
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
@@ -26,6 +25,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.keras.engine import training_utils
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
@@ -123,19 +123,21 @@ def simple_pipeline():
   ]
 
 
-def fixed_weight_pipeline():
+def fixed_weight_pipeline(dtype=None):
   return [
       [
           keras.layers.Dense(
               4,
               name="layer0",
-              kernel_initializer=keras.initializers.Constant(0.1)),
+              kernel_initializer=keras.initializers.Constant(0.1),
+              dtype=dtype),
       ],
       [
           keras.layers.Dense(
               2,
               name="layer1",
-              kernel_initializer=keras.initializers.Constant(0.1)),
+              kernel_initializer=keras.initializers.Constant(0.1),
+              dtype=dtype),
       ],
   ]
 
@@ -893,6 +895,41 @@ class IPUSequentialPipelineTest(test.TestCase):
       self.assertEqual(len(result), 1)
       self.assertEqual(type(result[0]), np.ndarray)
       self.assertEqual(result[0].shape, (96, 2))
+
+  @test_util.run_v2_only
+  def testGradientAccumulationDtype(self):
+    def dtype_getter(var):
+      self.assertEqual(var.dtype, np.float16)
+      return np.float32
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.SequentialPipelineModel(
+          fixed_weight_pipeline(dtype=np.float16),
+          gradient_accumulation_count=24,
+          gradient_accumulation_dtype=dtype_getter,
+          dtype=np.float16)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      outer = self
+
+      class CastSGD(keras.optimizer_v2.gradient_descent.SGD):
+        def apply_gradients(self, grads_and_vars, name=None):
+          cast_grads_and_vars = []
+          for (g, v) in grads_and_vars:
+            outer.assertEqual(g.dtype, np.float32)
+            cast_grads_and_vars.append((math_ops.cast(g, v.dtype), v))
+          return super().apply_gradients(cast_grads_and_vars, name)
+
+      opt = CastSGD()
+      m.compile(opt, loss='mse')
+      m.fit(test_dataset(x_val=np.float16(1.0),
+                         y_val=np.float16(0.2),
+                         length=48),
+            epochs=1)
 
 
 if __name__ == '__main__':

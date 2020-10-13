@@ -18,6 +18,7 @@ Keras Model interfaces for IPU
 """
 
 from functools import partial
+import copy
 import math
 import weakref
 
@@ -36,7 +37,6 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import functional_ops
-from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as cbks
 from tensorflow.python.keras import backend
@@ -53,6 +53,7 @@ from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.keras.utils import generic_utils
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
+from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
@@ -692,7 +693,10 @@ class IPUSequential(_IpuModelBase):
       m.fit(dataset, steps_per_epoch=144)
 
   """
-  def __init__(self, layers=None, accumulation_count=1):
+  def __init__(self,
+               layers=None,
+               accumulation_count=1,
+               accumulation_dtype=None):
     """
     Creates a Keras model, optimized to run on the IPU.
 
@@ -701,6 +705,16 @@ class IPUSequential(_IpuModelBase):
         accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
+        accumulation_dtype: The data type used for the gradient accumulation
+          buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
     """
     super().__init__(accumulation_count=accumulation_count, shard_count=1)
 
@@ -713,6 +727,7 @@ class IPUSequential(_IpuModelBase):
                          "Layers.")
 
     self.accumulation_count = accumulation_count
+    self.accumulation_dtype = accumulation_dtype
     self.model_layers = layers
 
   def build(self, input_shape):
@@ -792,7 +807,7 @@ class IPUSequential(_IpuModelBase):
         # If it is gradient accumulation then wrap in that too
         if self.accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              opt, self.accumulation_count)
+              opt, self.accumulation_count, dtype=self.accumulation_dtype)
 
         # Get gradients and apply them to the trainable variables
         grads_and_vars = opt.compute_gradients(l[0], self.trainable_variables)
@@ -972,7 +987,11 @@ class IPUModel(_IpuModelBase):
       model.fit(training_data, epochs=2, steps_per_epoch=128)
 
   """
-  def __init__(self, *args, accumulation_count=1, **kwargs):
+  def __init__(self,
+               *args,
+               accumulation_count=1,
+               accumulation_dtype=None,
+               **kwargs):
     """
     Creates a Keras model, optimized to run on the IPU. Needs to pass in
     ``inputs`` and ``outputs`` as either arguments or keyword arguments.
@@ -981,10 +1000,22 @@ class IPUModel(_IpuModelBase):
         accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
+        accumulation_dtype: The data type used for the gradient accumulation
+          buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
     """
     super().__init__(accumulation_count=accumulation_count,
                      shard_count=1,
                      **kwargs)
+
+    self.accumulation_dtype = accumulation_dtype
 
     # Signature detection
     if (len(args) == 2 or len(args) == 1 and 'outputs' in kwargs
@@ -1270,7 +1301,7 @@ class IPUModel(_IpuModelBase):
       if opt and training:
         if self.accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              opt, self.accumulation_count)
+              opt, self.accumulation_count, dtype=self.accumulation_dtype)
 
         for l in losses[:len(self.outputs)]:  # No grads for metrics.
           grads_and_vars = opt.compute_gradients(l, self.trainable_variables)
