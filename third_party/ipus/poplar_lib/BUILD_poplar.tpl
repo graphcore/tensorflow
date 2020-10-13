@@ -17,6 +17,7 @@ cc_library(
         "gcl/include",
         "poplar/include",
         "poplibs/include",
+        "libpvti/include",
     ],
 )
 
