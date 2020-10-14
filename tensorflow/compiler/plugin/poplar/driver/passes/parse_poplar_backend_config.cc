@@ -51,9 +51,9 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
   for (auto* comp : module->computations()) {
     for (auto instr : comp->instructions()) {
       auto attributes = instr->frontend_attributes();
-      PoplarBackendConfig poplar_config;
       // Check if the calls have the type field set from tf2xla.
       if (instr->opcode() == HloOpcode::kCall) {
+        PoplarBackendConfig poplar_config;
         auto call_config_type_attribute =
             attributes.map().find(FrontendAttributeId_Name(CALL_CONFIG_TYPE));
         if (call_config_type_attribute != attributes.map().end()) {
@@ -183,8 +183,8 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           }
           changed = true;
         }
+        TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_config));
       }
-      TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_config));
     }
   }
   return changed;
