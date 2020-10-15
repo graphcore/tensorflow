@@ -112,6 +112,7 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
+        ":backend_protos",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -145,18 +146,24 @@ cc_library(
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
         "driver/passes/forward_allocation.cc",
+        "driver/passes/function_optimizer.cc",
         "driver/passes/fuse_ops_early.cc",
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
+        "driver/passes/fusion_inliner.cc",
         "driver/passes/gather_simplifier.cc",
+        "driver/passes/gradient_accumulation_buffers_offload.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
         "driver/passes/gradient_accumulation_verifier.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
         "driver/passes/host_compute_barrier_inserter.cc",
         "driver/passes/host_compute_schedule_optimizer.cc",
         "driver/passes/host_compute_util.cc",
+        "driver/passes/host_embedding_notification.cc",
         "driver/passes/inplace_finder.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
+        "driver/passes/inter_tileset_copy_inserter.cc",
+        "driver/passes/io_tiles_placer.cc",
         "driver/passes/lift_recompute_suggestion.cc",
         "driver/passes/lower_frontend_attributes.cc",
         "driver/passes/matmul_combiner.cc",
@@ -170,6 +177,8 @@ cc_library(
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
+        "driver/passes/pipeline_batch_serialization_buffer_inserter.cc",
+        "driver/passes/pipeline_batch_serialization_loop_inserter.cc",
         "driver/passes/pipeline_communication_optimizer.cc",
         "driver/passes/pipeline_copy_inserter.cc",
         "driver/passes/pipeline_feed_hoisting.cc",
@@ -178,17 +187,22 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.cc",
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
+        "driver/passes/pipeline_recomputation_stage_inserter.cc",
+        "driver/passes/pipeline_resource_update_input_optimizer.cc",
         "driver/passes/pipeline_stage_merger.cc",
         "driver/passes/pipeline_tuple_remover.cc",
         "driver/passes/pipeline_verifier.cc",
-        "driver/passes/resource_update_fixer.cc",
-        "driver/passes/resource_update_variables_offload.cc",
+        "driver/passes/variables_offload_and_partition.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_instructions.cc",
+        "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
+        "driver/passes/resource_update_copy_inserter.cc",
+        "driver/passes/resource_update_elementwise_clustering.cc",
+        "driver/passes/resource_update_fixer.cc",
         "driver/passes/resource_update_schedule_optimizer.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
@@ -213,6 +227,7 @@ cc_library(
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
+        "driver/tools/custom_ops/copy_into.cc",
         "driver/tools/custom_ops/group_norm_infer.cc",
         "driver/tools/custom_ops/group_norm_train.cc",
         "driver/tools/custom_ops/group_norm_grad.cc",
@@ -221,6 +236,7 @@ cc_library(
         "driver/tools/custom_ops/execution_counter.cc",
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
+        "driver/tools/custom_ops/inter_tileset_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
         "driver/tools/custom_ops/multi_conv.cc",
         "driver/tools/custom_ops/multi_slice.cc",
@@ -259,6 +275,7 @@ cc_library(
         "driver/tools/matcher_predicates.cc",
         "driver/tools/matmul_util.cc",
         "driver/tools/ml_type_helper.cc",
+        "driver/tools/offloading_util.cc",
         "driver/tools/pipeline_util.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
@@ -291,18 +308,24 @@ cc_library(
         "driver/passes/expression_outliner.h",
         "driver/passes/f16_constant_folding.h",
         "driver/passes/forward_allocation.h",
+        "driver/passes/function_optimizer.h",
         "driver/passes/fuse_ops_early.h",
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
+        "driver/passes/fusion_inliner.h",
         "driver/passes/gather_simplifier.h",
+        "driver/passes/gradient_accumulation_buffers_offload.h",
         "driver/passes/gradient_accumulation_fuser.h",
         "driver/passes/gradient_accumulation_verifier.h",
         "driver/passes/hlo_computation_name_uniquify.h",
         "driver/passes/host_compute_barrier_inserter.h",
         "driver/passes/host_compute_schedule_optimizer.h",
         "driver/passes/host_compute_util.h",
+        "driver/passes/host_embedding_notification.h",
         "driver/passes/inplace_finder.h",
         "driver/passes/inter_ipu_copy_inserter.h",
+        "driver/passes/inter_tileset_copy_inserter.h",
+        "driver/passes/io_tiles_placer.h",
         "driver/passes/lift_recompute_suggestion.h",
         "driver/passes/lower_frontend_attributes.h",
         "driver/passes/matmul_combiner.h",
@@ -316,6 +339,8 @@ cc_library(
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
+        "driver/passes/pipeline_batch_serialization_buffer_inserter.h",
+        "driver/passes/pipeline_batch_serialization_loop_inserter.h",
         "driver/passes/pipeline_communication_optimizer.h",
         "driver/passes/pipeline_copy_inserter.h",
         "driver/passes/pipeline_feed_hoisting.h",
@@ -324,18 +349,22 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
+        "driver/passes/pipeline_recomputation_stage_inserter.h",
+        "driver/passes/pipeline_resource_update_input_optimizer.h",
         "driver/passes/pipeline_stage_merger.h",
         "driver/passes/pipeline_tuple_remover.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/post_serialize_gradient_accumulation.h",
         "driver/passes/recompute_instructions.h",
+        "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
+        "driver/passes/resource_update_copy_inserter.h",
+        "driver/passes/resource_update_elementwise_clustering.h",
         "driver/passes/resource_update_fixer.h",
         "driver/passes/resource_update_schedule_optimizer.h",
-        "driver/passes/resource_update_variables_offload.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/seed_hoisting.h",
@@ -343,6 +372,7 @@ cc_library(
         "driver/passes/sharding_pass.h",
         "driver/passes/slice_optimizer.h",
         "driver/passes/suggest_recompute.h",
+        "driver/passes/variables_offload_and_partition.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
@@ -358,12 +388,14 @@ cc_library(
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
+        "driver/tools/custom_ops/copy_into.h",
         "driver/tools/custom_ops/dropout_hlo.h",
         "driver/tools/custom_ops/execution_counter.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
         "driver/tools/custom_ops/host_embedding.h",
+        "driver/tools/custom_ops/inter_tileset_copy.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
         "driver/tools/custom_ops/lstm.h",
         "driver/tools/custom_ops/multi_conv.h",
@@ -404,9 +436,11 @@ cc_library(
         "driver/tools/matmul_util.h",
         "driver/tools/meta_graph.h",
         "driver/tools/ml_type_helper.h",
+        "driver/tools/offloading_util.h",
         "driver/tools/pipeline_util.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/tensor_location.h",
+        "driver/tools/tracepoint.h",
         "driver/tools/util.h",
         "driver/tools/while_loop_util.h",
     ],
@@ -534,7 +568,9 @@ cc_library(
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
         "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
+        "driver/ops/custom_ops/poputil/copy_into.cc",
         "driver/ops/custom_ops/poputil/fifo.cc",
+        "driver/ops/custom_ops/poputil/inter_tileset_copy.cc",
         "driver/ops/custom_ops/poputil/ipu_inter_copy.cc",
         "driver/ops/custom_ops/poputil/print_tensor.cc",
         "driver/ops/custom_ops/poputil/remap.cc",
@@ -579,6 +615,7 @@ cc_library(
         "driver/tools/send_recv_runtime_util.cc",
         "driver/tools/subcomputation_graph_caching.cc",
         "driver/tools/tensor_map.cc",
+        "driver/tools/tracepoint.cc",
         "driver/tools/verified_streams_indices.cc",
         "driver/visitors/deferred_visitor.cc",
         "driver/visitors/entry_visitor.cc",
@@ -623,6 +660,7 @@ cc_library(
         "driver/tools/spsc_outfeed_queue.h",
         "driver/tools/subcomputation_graph_caching.h",
         "driver/tools/tensor_map.h",
+        "driver/tools/tracepoint.h",
         "driver/tools/verified_streams_indices.h",
         "driver/vertex_templates.h",
         "driver/visitors/deferred_visitor.h",
@@ -1612,9 +1650,48 @@ xla_test(
 )
 
 xla_test(
+    name = "remote_parameter_parallel_combiner_test",
+    size = "small",
+    srcs = ["tests/remote_parameter_parallel_combiner_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "hlo_computation_name_uniquify_test",
     size = "small",
     srcs = ["tests/hlo_computation_name_uniquify_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "inter_tileset_copy_inserter_test",
+    size = "small",
+    srcs = ["tests/inter_tileset_copy_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "io_tiles_placer_test",
+    size = "small",
+    srcs = ["tests/io_tiles_placer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -1716,6 +1793,19 @@ xla_test(
     name = "host_compute_schedule_optimizer_test",
     size = "small",
     srcs = ["tests/host_compute_schedule_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "host_embedding_notify_pass_test",
+    size = "small",
+    srcs = ["tests/host_embedding_notify_pass_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -1844,6 +1934,18 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "meta_graph_test",
+    size = "small",
+    srcs = ["tests/meta_graph_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
@@ -2422,6 +2524,21 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_recomputation_stage_inserter_test",
+    size = "small",
+    srcs = ["tests/pipeline_recomputation_stage_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "scatter_simplifier_test",
     size = "small",
     srcs = ["tests/scatter_simplifier_test.cc"],
@@ -2497,6 +2614,21 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_resource_update_input_optimizer_test",
+    size = "small",
+    srcs = ["tests/pipeline_resource_update_input_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "pipeline_gradient_accumulation_optimizer_test",
     size = "small",
     srcs = ["tests/pipeline_gradient_accumulation_optimizer_test.cc"],
@@ -2557,9 +2689,9 @@ xla_test(
 )
 
 xla_test(
-    name = "resource_update_variables_offload_test",
+    name = "variables_offload_and_partition_test",
     size = "small",
-    srcs = ["tests/resource_update_variables_offload_test.cc"],
+    srcs = ["tests/variables_offload_and_partition_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -2765,6 +2897,79 @@ xla_test(
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "function_optimizer_test",
+    size = "small",
+    srcs = ["tests/function_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_batch_serialization_buffer_inserter_test",
+    size = "small",
+    srcs = ["tests/pipeline_batch_serialization_buffer_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_batch_serialization_loop_inserter_test",
+    size = "small",
+    srcs = ["tests/pipeline_batch_serialization_loop_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "gradient_accumulation_buffers_offload_test",
+    size = "small",
+    srcs = ["tests/gradient_accumulation_buffers_offload_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "fusion_inliner_test",
+    srcs = ["tests/fusion_inliner_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
@@ -3193,6 +3398,30 @@ tf_xla_py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+xla_test(
+    name = "resource_update_elementwise_clustering_test",
+    srcs = ["tests/resource_update_elementwise_clustering_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "resource_update_copy_inserter_test",
+    srcs = ["tests/resource_update_copy_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
@@ -4006,6 +4235,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4036,6 +4266,7 @@ py_test(
         "--iterations-per-loop=1",
         "--training-steps=1",
     ],
+    tags = ["isolated_poplar_tests"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4043,31 +4274,9 @@ py_test(
 )
 
 tf_xla_py_test(
-    name = "tutorial_basic",
-    size = "small",
-    srcs = ["docs/tutorial_basic.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "tutorial_sharding",
-    size = "small",
-    srcs = ["docs/tutorial_sharding.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "tutorial_xla_compile",
-    size = "small",
-    srcs = ["docs/tutorial_xla_compile.py"],
+    name = "example_tf2_model_fit",
+    size = "large",
+    srcs = ["docs/example_tf2_model_fit.py"],
     enabled_backends = ["poplar"],
     deps = [
         "//tensorflow:tensorflow_py",
@@ -4101,6 +4310,20 @@ py_test(
     name = "example_tf2_pipelined_model",
     size = "large",
     srcs = ["docs/example_tf2_pipelined_model.py"],
+    args = [
+        "--epochs=1",
+        "--steps-per-epoch=2",
+    ],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+py_test(
+    name = "example_tf2_sequential_pipelined_model",
+    size = "large",
+    srcs = ["docs/example_tf2_sequential_pipelined_model.py"],
     args = [
         "--epochs=1",
         "--steps-per-epoch=2",
@@ -4395,6 +4618,7 @@ test_suite(
         "dynamic_slice_layout_test",
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
+        "embeddings_gradient_optimizer_test",
         "executable_cache_test",
         "execution_counter_util_test",
         "expression_outliner_test",
@@ -4403,10 +4627,13 @@ test_suite(
         "f16_test",
         "find_all_users_test",
         "forward_allocation_test",
+        "function_optimizer_test",
         "fuse_ops_test",
         "fuse_wide_const_test",
         "fused_batch_norm_test",
+        "fusion_inliner_test",
         "gather_simplifier_embedding_lookup_test",
+        "gradient_accumulation_buffers_offload_test",
         "gradient_accumulation_fuser_test",
         "gradient_accumulation_optimization_pass_test",
         "graph_compile_io_map_test",
@@ -4420,7 +4647,9 @@ test_suite(
         "infeed_prefetch_test",
         "inplace_test",
         "inter_ipu_copy_inserter_test",
+        "inter_tileset_copy_inserter_test",
         "invalid_scheduler_selection",
+        "io_tiles_placer_test",
         "ipu_model_device_test",
         "layout_strip_test",
         "lift_recompute_suggestion_test",
@@ -4430,6 +4659,7 @@ test_suite(
         "matmul_graph_caching_test",
         "matmul_option_test",
         "matmul_test",
+        "meta_graph_test",
         "ml_type_classify_test",
         "module_flatten_test",
         "monitored_session_test",
@@ -4446,6 +4676,8 @@ test_suite(
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
         "outside_compilation_scope_test",
+        "pipeline_batch_serialization_buffer_inserter_test",
+        "pipeline_batch_serialization_loop_inserter_test",
         "pipeline_communication_optimizer_test",
         "pipeline_copy_inserter_test",
         "pipeline_feed_hoisting_test",
@@ -4455,7 +4687,9 @@ test_suite(
         "pipeline_grouped_recomputation_test",
         "pipeline_grouped_visitor_test",
         "pipeline_optimizer_test",
+        "pipeline_recomputation_stage_inserter_test",
         "pipeline_recomputation_test",
+        "pipeline_resource_update_input_optimizer_test",
         "pipeline_sequential_visitor_test",
         "pipeline_stage_merger_test",
         "pipeline_tuple_remover_test",
@@ -4468,12 +4702,14 @@ test_suite(
         "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",
+        "remote_parameter_parallel_combiner_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
         "report_framework_info_test",
+        "resource_update_copy_inserter_test",
+        "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",
         "resource_update_schedule_optimizer_test",
-        "resource_update_variables_offload_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
@@ -4501,6 +4737,7 @@ test_suite(
         "topk_onehot_test",
         "update_op_dependencies_test",
         "variable_test",
+        "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",
         "while_loop_alias_copy_test",
         "while_loop_condition_simplify_test",
@@ -4539,6 +4776,7 @@ test_suite(
         "distributed_training_example",
         "example_tf2_custom_training",
         "example_tf2_fit",
+        "example_tf2_model_fit",
         "example_tf2_pipelined_model",
         "function_block1",
         "function_block2",
@@ -4551,10 +4789,7 @@ test_suite(
         "outfeed_example",
         "perf_training_example",
         "tutorial_attributes_example",
-        "tutorial_basic",
         "tutorial_custom_codelet",
-        "tutorial_sharding",
-        "tutorial_xla_compile",
     ] + if_horovod(["distributed_training_horovod_example"]),
 )
 

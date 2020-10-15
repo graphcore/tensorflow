@@ -1,4 +1,4 @@
-IPU Host Embeddings
+IPU host embeddings
 -------------------
 
 An embedding table is a table in a model or compute graph that
@@ -40,22 +40,23 @@ created object is then passed to the user model where the
 be called with a similar API to ``tf.nn.embedding_lookup``.
 
 Once the IPU host embedding has been created and used within the model, the
-object must be "executed" with its call operator
-(:py:meth:`tensorflow.python.ipu.embedding_ops.HostEmbedding.__call__`) in the
-``session.run``. If this call is ommitted then the TensorFlow session
-will not configure the underlying Poplar engine correctly and the
-model execution will fail. The potentially modified embedding value
-will be returned from the session.
+object must be "registered" with the session using the context manager created
+by (:py:meth:`tensorflow.python.ipu.embedding_ops.HostEmbedding.register`).
+If TensorFlow session is not called within this context, TensorFlow will not
+configure the underlying Poplar engine correctly and the model execution will
+fail.
 
 Example
 ~~~~~~~~
 
 .. literalinclude:: host_embedding_example.py
+  :language: python
+  :linenos:
 
 Experimental functionality: IPU embeddings in remote buffers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As an alternative to host embeddings. There is experimental
+As an alternative to host embeddings, there is experimental
 functionality to store embedding tables in remote buffer memory
 (i.e. off-chip memory directly accessed by the IPU). In this case the
 IPU performs the lookup/update operations directly on the remote
@@ -71,28 +72,31 @@ globally changed to use remote buffer embeddings instead.
   This option is experimental, and may be changed or removed in future
   releases.
 
-Partitioning Strategies
+Partitioning strategies
 #######################
 
 When using IPU embeddings in remote buffers together with
 data-parallel replication, the embedding table is not duplicated for
-each replica. Instead a single copy of the table is shared between
+each replica. Instead, a single copy of the table is shared between
 replicas to make the most of available memory. However, each replica
 only has access to a distinct memory space so the table is
-partitioned into chunks between the replicas (this holds even only
+partitioned into chunks between the replicas (this holds even on
 hardware platforms like the DSS-8440 server where IPUs share physical
 external memory).
 
 The way the table is split between the memory attached to each replica
-is determined by the partitioning strategy. Currently, two
-partitioning strategies are offered. Each has trade-offs and the
+is determined by the partitioning strategy. Two
+partitioning strategies are available.
+These are the token strategy and the encoding strategy.
+Each has trade-offs and the
 choice of strategy will depend on the application. The partition
 strategy is set via the ``partition_strategy`` keyword argument of
 :py:func:`tensorflow.python.ipu.embedding_ops.create_host_embedding`.
 
-Token Strategy
+Token strategy
 **************
-The token strategy chooses to partition the embedding on the
+
+The token strategy partitions the embedding on the
 token axis. There will be ``ceil(t/r)`` whole tokens on each replica,
 where ``t`` is the token count and ``r`` is the replica count.
 
@@ -101,12 +105,13 @@ where ``t`` is the token count and ``r`` is the replica count.
 When this strategy is used, cross-replica operations are required to
 allow each replica to perform a lookup or update across the whole
 table (each replica's portion of the whole embedding table is private
-to that replica). Below is the psuedo-code, with explicit types and
+to that replica). Below is the pseudo-code, with explicit types and
 static shapes, for how this is implemented:
 
 .. code-block:: none
+  :linenos:
 
-  // Psuedo-code assuming we have table size `t`, and replica count `r`.
+  // Pseudo-code assuming we have table size `t`, and replica count `r`.
   f16[14, 64] global_lookup(
     local_table : f16[ceil(t/r), 64]
     global_indices : i32[14]
@@ -138,8 +143,9 @@ static shapes, for how this is implemented:
     // Reshape to the expected shape
     return reshape(result), shape=[14, 64] : f16[14, 64]
 
-Encoding Strategy
+Encoding strategy
 *****************
+
 The encoding strategy will partition the embedding on the encoding
 axis. There will be ``ceil(1/r)`` of every tokens on each replica,
 where ``r`` is the replica count. This means
@@ -151,12 +157,13 @@ is the element count for a single token.
 When this strategy is used, cross-replica operations are required to
 allow each replica to perform a lookup or update across the whole
 table (each replica's portion of the whole embedding table is private
-to that replica). Below is the psuedo-code, with explicit types and
+to that replica). Below is the pseudo-code, with explicit types and
 static shapes, for how this is implemented:
 
 .. code-block:: none
+  :linenos:
 
-  // Psuedo-code assuming we have table size `t`, replica count `r`, and
+  // Pseudo-code assuming we have table size `t`, replica count `r`, and
   // encoding size `e`.
   f16[14, e] global_lookup(
     local_table : f16[t, ceil(e/r)]
@@ -192,7 +199,7 @@ As a general rule, the token strategy is used when the encoding is much
 smaller than the token count. An example application for this would be
 language models where the vocabulary size is much larger than the encoding.
 
-Similarly, The encoding strategy is used when the token count is
+Conversely, the encoding strategy is used when the token count is
 small and the encoding is large enough to be split.
 This avoids a large amount of very small communication.
 An example application for this would be game playing models,

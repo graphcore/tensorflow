@@ -113,7 +113,9 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
         if (IsPopOpsElementwise(inst)) {
           // Unless both inst and the target are a binary elementwise operation
           // - this will force a shorter path as inst is also a valid target.
-          if (IsPopOpsElementwiseBinary(inst) &&
+          // target is only valid if operands are different - it doesn't make
+          // sense to map one operand the same as itself.
+          if (IsPopOpsElementwiseBinaryOperandsDifferent(inst) &&
               IsPopOpsElementwiseBinary(target)) {
             return false;
           }
@@ -210,8 +212,10 @@ static bool IsLayoutSensitiveTarget(const HloInstruction* target) {
 // depends on the layout of another input tensor - note that unlike layout
 // sensitive target, we do not need the access to the instruction which created
 // the tensor on which we depend on.
+// The input tensors should also be different - an input tensor's layout cannot
+// depend on itself
 static bool IsLayoutDependentTarget(const HloInstruction* target) {
-  if (IsPopOpsElementwiseBinary(target)) {
+  if (IsPopOpsElementwiseBinaryOperandsDifferent(target)) {
     return true;
   }
 
@@ -436,11 +440,16 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
             IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)
                 ? !Cast<HloCreateBuffer>(inst)->IsRemoteBuffer()
                 : false;
+        const bool is_buffer_load_slice =
+            IsPoplarInstruction(PoplarOp::BufferLoadSlice)(inst);
+        const bool is_inter_tileset_copy =
+            IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst);
 
         is_input = is_remap_deduce || is_host_embedding_lookup ||
                    is_remote_buffer_load || is_rw_user_op ||
                    is_recv_from_host || is_gradient_accumulator_create ||
-                   is_in_memory_create_buffer;
+                   is_in_memory_create_buffer || is_buffer_load_slice ||
+                   is_inter_tileset_copy;
         break;
       }
       default: { break; }
@@ -596,6 +605,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
       std::vector<HloInstruction*> targets =
           find_all_targets(edges.second, is_valid_target);
 
+      const auto shortest_paths_from_source = g.ShortestPathsFrom(source);
+
       for (HloInstruction* target : targets) {
         // Find layout producers for the target.
         // layout_producer is the op which produces the tensor whose layout is
@@ -618,7 +629,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
         auto* layout_producer = *optional_layout_producer;
 
         // Try and find the shortest paths from/to target.
-        auto optional_prefix = g.ShortestPath(source, target);
+        auto optional_prefix = shortest_paths_from_source.To(target);
         auto optional_suffix = g.ShortestPath(layout_producer, target);
         if (!(optional_prefix && optional_suffix)) {
           continue;
@@ -702,9 +713,10 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
       std::vector<HloInstruction*> targets =
           find_all_targets(edges.second, is_valid_target);
 
+      const auto shortest_paths = g.ShortestPathsFrom(source);
       for (auto target : targets) {
         // Try and find the shortest paths to target.
-        auto optional_prefix = g.ShortestPath(source, target);
+        auto optional_prefix = shortest_paths.To(target);
         if (!optional_prefix) {
           continue;
         }

@@ -188,7 +188,7 @@ will use the ``PipelineSchedule.Grouped`` mode, where the forward passes are
 grouped together, and the backward passes are grouped together.  The main
 alternative is the ``PipelineSchedule.Interleaved`` mode, where the forward and
 backward passes are interleaved, so that fewer activations need to be stored.
-Additionaly, the ``PipelineSchedule.Sequential`` mode,
+Additionally, the ``PipelineSchedule.Sequential`` mode,
 where the pipeline is scheduled in the same way as if it were a sharded model,
 may be useful when debugging your model.
 
@@ -240,9 +240,9 @@ into the ``optimizer_function`` argument of the pipeline operation.
 
 When a pipeline is running it will accumulate the gradients from each step of
 the pipeline and only apply the updates to the graph parameters at the end of
-each pipeline run, given by the ``pipeline_depth`` parameter. Consequently it is
-important for the system to have more knowledge of the optimiser and so it
-must be given to the pipeline operator using this function.
+each pipeline run, given by the ``gradient_accumulation_count`` parameter.
+Consequently it is important for the system to have more knowledge of the
+optimiser and so it must be given to the pipeline operator using this function.
 
 Device mapping
 ______________
@@ -306,14 +306,40 @@ __________
 
 All pipelined training graphs automatically apply gradient accumulation to the
 model such that the weight update is only computed once all the mini-batches,
-where the number of mini-batches is the ``pipeline_depth``, have gone through
-the whole model pipeline.
+where the number of mini-batches is the ``gradient_accumulation_count``, have
+gone through the whole model pipeline.
 
 .. Note:: Since the pipelined models always implement gradient accumulation, no
   gradient accumulation optimizer should also be used in combination with
   pipelining.
 
 .. _optimiser-state-unloading:
+
+Accumulation data type
+______________________
+
+When accumulating gradients over a large number of mini-batches, it can be
+beneficial to perform the accumulation in a data type with higher precision
+(and dynamic range) than that of the gradients. By default, the accumulation is
+performed using the same data type as the corresponding variable, but this can
+be overridden in the different APIs by passing ``gradient_accumulation_dtype``
+(or just ``dtype`` in the ``GradientAccumulationOptimizerV2`` API).
+
+Note that when accumulating the gradients using a different data type than that
+of the variable, an out-of-the box optimizer will not work since there will be a
+data type mismatch between the accumualated gradient and the variable when doing
+the weight update. You can use a custom optimizer to cast the final accumulated
+gradient to the data type of the variable before performing the weight update,
+for example like this with a Keras SGD optimizer:
+
+.. code-block:: python
+
+  class CastGradientsSGD(tf.keras.optimizers.SGD):
+    def apply_gradients(self, grads_and_vars, name=None):
+      cast_grads_and_vars = [(tf.cast(g, v.dtype), v)
+                             for (g, v) in grads_and_vars]
+      return super().apply_gradients(cast_grads_and_vars, name)
+
 
 Optimizer state offloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

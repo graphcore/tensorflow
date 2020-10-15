@@ -461,7 +461,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_',
           'DepthwiseConv2dNativeBackpropFilter/fusion*/Conv_6x6',
-          'Relu/custom-call*/Nonlinearity'
+          'Relu/relu*/Nonlinearity'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

@@ -202,11 +202,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 }
 
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
-    HloInstruction* pipeline_stage, CallGraph* call_graph) {
-  CHECK(IsAnyPipelineStageOpOrResourceUpdate(pipeline_stage));
-  absl::flat_hash_set<HloComputation*> computations_in_pipeline;
+    HloInstruction* caller, CallGraph* call_graph) {
+  absl::flat_hash_set<HloComputation*> called_computations;
   absl::flat_hash_set<HloComputation*> to_visit;
-  to_visit.insert(pipeline_stage->to_apply());
+  to_visit.insert(caller->to_apply());
   // We keep separate visited as some computations might be called but we do not
   // want to return them.
   absl::flat_hash_set<HloComputation*> visited;
@@ -227,12 +226,11 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     }
     // Both context is not allowed.
     if (node.context() == CallContext::kBoth) {
-      return InternalErrorStrCat(
-          "Detected a computation ", comp->name(),
-          " with CallContext::kBoth inside the PipelineStage ",
-          pipeline_stage->ToString());
+      return InternalErrorStrCat("Detected a computation ", comp->name(),
+                                 " with CallContext::kBoth inside the ",
+                                 caller->ToString());
     }
-    computations_in_pipeline.insert(comp);
+    called_computations.insert(comp);
 
     for (HloInstruction* inst : comp->instructions()) {
       // Visit any called computations.
@@ -240,7 +238,7 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
                    std::inserter(to_visit, to_visit.end()));
     }
   }
-  return computations_in_pipeline;
+  return called_computations;
 }
 
 Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
@@ -297,6 +295,17 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
         "Expected the instruction %s to have a tuple output shape.",
         inst->ToString().c_str());
   }
+  const bool all_gtes =
+      absl::c_all_of(inst->users(), [](const HloInstruction* user) {
+        return user->opcode() == HloOpcode::kGetTupleElement;
+      });
+
+  const bool is_root = comp->root_instruction() == inst;
+
+  if (all_gtes && !is_root) {
+    return inst;
+  }
+
   // Create a GTE from each subshape.
   const int64 num_elements = ShapeUtil::TupleElementCount(inst->shape());
   std::vector<HloInstruction*> gtes(num_elements);
@@ -313,6 +322,17 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
   HloInstruction* tuple =
       comp->AddInstruction(HloInstruction::CreateTuple(gtes));
   inst->SetupDerivedInstruction(tuple);
+
+  // Make sure all non-gte users now use the new output.
+  for (HloInstruction* user : inst->users()) {
+    if (user->opcode() != HloOpcode::kGetTupleElement) {
+      TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, tuple));
+    }
+  }
+
+  if (is_root) {
+    comp->set_root_instruction(tuple);
+  }
   return tuple;
 }
 
@@ -321,8 +341,7 @@ StatusOr<bool> FixRootInstruction(HloComputation* comp) {
   if (root->opcode() == HloOpcode::kTuple) {
     return false;
   }
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_root, ConvertAllUsersToGTEs(root));
-  comp->set_root_instruction(new_root);
+  TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(root).status());
   return true;
 }
 
@@ -470,7 +489,7 @@ StatusOr<HloInstruction*> CreatePipelineStage(
   auto empty_call = pipeline->AddInstruction(HloInstruction::CreateCall(
       stage_comp->root_instruction()->shape(), operands, stage_comp));
   empty_call->set_frontend_attributes(attributes);
-  empty_call->set_backend_config(cfg);
+  TF_RETURN_IF_ERROR(empty_call->set_backend_config(cfg));
   empty_call->set_metadata(metadata);
   return empty_call;
 }
@@ -919,9 +938,9 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   return new_call;
 }
 
-StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
-                                            HloComputation* comp_to_inline,
-                                            bool copy_sharding) {
+StatusOr<absl::flat_hash_map<HloInstruction*, HloInstruction*>>
+InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
+                  bool copy_sharding) {
   HloComputation* comp = caller->parent();
   // Hoist the computation out.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
@@ -938,6 +957,7 @@ StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
       // Clone new instruction inside the computation.
       hoisted = comp->AddInstruction(
           inst->CloneWithNewOperands(inst->shape(), new_operands));
+      TF_RETURN_IF_ERROR(hoisted->CopyAllControlDepsFrom(caller));
 
       if (copy_sharding) {
         CopyShardingIfPresent(caller, hoisted);
@@ -948,8 +968,9 @@ StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
   HloInstruction* new_root =
       hoisting_map.at(comp_to_inline->root_instruction());
   // Replace all uses.
+  TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(caller, new_root));
-  return new_root;
+  return hoisting_map;
 }
 
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
@@ -971,7 +992,7 @@ StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
       return 0;
     default:
-      return FailedPrecondition("Unknown pipeline schedule.");
+      return FailedPrecondition("Unsupported pipeline schedule.");
   }
 }
 
@@ -1700,6 +1721,16 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
           }
         }
         return false;
+      } else if (IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)) {
+        if (inst->user_count() != 1) {
+          return FailedPrecondition(
+              "Expected the buffer to be used exactly once.");
+        }
+        if (!IsAnyPipelineStageOp(inst->users()[0])) {
+          return FailedPrecondition(
+              "Expected the buffer to be used by a pipeline stage.");
+        }
+        return false;
       } else {
         return true;
       }
@@ -1789,8 +1820,10 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
       // Make sure the operands of the stage do not violate the data flow
       // constraints.
       TF_RETURN_IF_ERROR(VerifyPipelineStageOperands(inst));
-    } else if (IsGradientAccumulatorCreate(inst)) {
-      // Make sure the input to the creator is just a parameter.
+    } else if (IsGradientAccumulatorCreate(inst) &&
+               !operands_value_set.values().empty()) {
+      // Make sure the input to the creator is just a parameter if it's present.
+      // Creator may not have any inputs.
       CHECK_EQ(operands_value_set.values().size(), 1);
       CHECK_EQ(operands_value_set.values()[0]->instruction()->opcode(),
                HloOpcode::kParameter);
@@ -1924,6 +1957,10 @@ StatusOr<int64> PipelinePath::GetFifoDepth() {
         break;
       case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
         multiplier = 0;
+        break;
+      case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+        CHECK(type_ == Type::kForwardToBackward);
+        multiplier = 1;
         break;
       default:
         return FailedPrecondition("Unsupported pipeline schedule.");

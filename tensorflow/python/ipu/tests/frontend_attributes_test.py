@@ -187,37 +187,35 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           attributes1.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.FORCE_ON))
+          backend_config_pb2.ThreeState.Name(backend_config_pb2.THREESTATE_ON))
       self.assertIsNone(attributes1.map.get("attr_b"))
       self.assertEqual(
           attributes2.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.FORCE_OFF))
+          backend_config_pb2.ThreeState.Name(
+              backend_config_pb2.THREESTATE_OFF))
       self.assertEqual(attributes2.map.get("attr_b"), "b")
       self.assertEqual(
           attributes3.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.FORCE_ON))
+          backend_config_pb2.ThreeState.Name(backend_config_pb2.THREESTATE_ON))
       self.assertIsNone(attributes3.map.get("attr_b"))
       self.assertEqual(
           attributes4.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.FORCE_OFF))
+          backend_config_pb2.ThreeState.Name(
+              backend_config_pb2.THREESTATE_OFF))
 
       self.assertIsNone(attributes4.map.get("attr_b"))
       self.assertEqual(
           attributes5.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.NOT_SET))
+          backend_config_pb2.ThreeState.Name(
+              backend_config_pb2.THREESTATE_UNDEFINED))
       self.assertIsNone(attributes5.map.get("attr_b"))
 
   @test_util.deprecated_graph_mode_only
@@ -226,7 +224,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       outputs = {}
       with ops.device("/device:IPU:0"):
         with ipu.scopes.partials_type(np.float32):
-          pa, pb, fd = _createInputs([2, 2], np.float16)
+          pa, pb, fd = _createInputs([64, 64], np.float16)
           output = math_ops.matmul(pa, pb)
           outputs[output] = ("poplin::ConvPartial*<half,float", fd)
         with ipu.scopes.partials_type(np.float16):

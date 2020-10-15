@@ -44,23 +44,6 @@ using tensorflow::str_util::StartsWith;
 
 namespace xla {
 namespace poplarplugin {
-namespace {
-StatusOr<TensorVectors> GetCallInputs(CompilerResources& res,
-                                      const HloInstruction* inst,
-                                      TensorMap& tensor_map,
-                                      poplar::program::Sequence& seq,
-                                      const bool expand_aliasing = true) {
-  TensorVectors args;
-  for (int64 i = 0; i < inst->operand_count(); i++) {
-    TF_ASSIGN_OR_RETURN(TensorVector t,
-                        FindInstructionInputTensors(tensor_map, res, inst, i,
-                                                    seq, expand_aliasing));
-    args.push_back(t);
-  }
-  return args;
-}
-}  // namespace
-
 class ParallelMapTester : public DfsHloVisitorWithDefault {
  public:
   ParallelMapTester() : _is_ok(true) {}
@@ -119,16 +102,7 @@ StatusOr<poplar::program::Program> CreateParallelMap(CompilerResources& res,
 
   auto outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {
-    if (outputs[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
-    } else if (outputs[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, outputs[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in fusion instruction `%s`, expected a tensor "
-          "or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i]));
   }
 
   return seq;
@@ -196,16 +170,7 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
   const TensorOrRemoteBufferVector& outputs = inplace_visitor.outputs();
 
   for (size_t i = 0; i < outputs.size(); i++) {
-    if (outputs[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
-    } else if (outputs[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, outputs[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in fusion instruction `%s`, expected a tensor "
-          "or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i]));
   }
 
   return seq;
@@ -264,7 +229,6 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   // the conditional computation in order to allow the body to visitor to create
   // the tensors.
   DeferredVisitor condition_visitor(res, inputs, GetDebugName(inst) + "/Cond",
-                                    /*mark_all_input_tensors_as_used*/ false,
                                     /*allocate_all_input_tensors*/ false);
   const HloComputation* condition_comp = inst->while_condition();
   {
@@ -288,7 +252,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     TF_RETURN_IF_ERROR(body_comp->AcceptOrdered(&body_visitor, order));
 
     // Make sure any deferred inputs to the instruction are pushed up.
-    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst));
+    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst, inputs));
   }
 
   const uint64 param_count = inputs[0].size();
@@ -362,16 +326,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, predicate, body_seq));
 
   for (uint64 i = 0; i < param_count; i++) {
-    if (loop_state[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
-    } else if (loop_state[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, loop_state[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in while instruction `%s`, expected a tensor "
-          "or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, loop_state[i]));
   }
 
   return main_seq;
@@ -426,45 +381,78 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
 
   const TensorOrRemoteBufferVector& loop_state = visitor.GetLoopState();
 
   poplar::program::Sequence seq = visitor.GetRepeatLoopSequence(inst);
 
   for (uint64 i = 0; i < loop_state.size(); i++) {
-    if (loop_state[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
-    } else if (loop_state[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, loop_state[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in repeat instruction `%s`, expected a tensor "
-          "or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, loop_state[i]));
   }
 
   return seq;
 }
 
+namespace {
+TensorOrRemoteBufferVectors GetFunctionInputs(CompilerResources& res,
+                                              const HloInstruction* inst,
+                                              poplar::program::Sequence& seq,
+                                              TensorMap& tensor_map) {
+  TensorOrRemoteBufferVectors inputs(inst->operand_count());
+  for (int64 i = 0; i != inst->operand_count(); ++i) {
+    inputs[i] = FindInstructionInputs(tensor_map, res, inst, i, seq);
+  }
+  return inputs;
+}
+}  // namespace
+
 StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
                                                     const HloInstruction* inst,
                                                     const xla::Shape& output,
                                                     TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  TensorOrRemoteBufferVectors inputs =
+      GetFunctionInputs(res, inst, seq, tensor_map);
+  // Call the create op with a deferred version of inputs.
+  DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence func_seq,
+      CreateFunctionOp(res, inst, deferred_inputs, output, tensor_map));
+  seq.add(func_seq);
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateFunctionOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
+    TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                      GetCallInputs(res, inst, tensor_map, seq));
 
   HloComputation* comp = inst->to_apply();
 
-  auto inputs_casted = CastTensorVectors(inputs);
+  bool keep_input_layouts = false;
+  if (IsFunction(inst)) {
+    TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
+                        inst->backend_config<PoplarBackendConfig>());
+    keep_input_layouts =
+        cfg.call_config().function_config().keep_input_layouts();
+  }
+
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(
-                          res, inputs_casted, comp));
+                          res, deferred_inputs, comp, keep_input_layouts));
 
+  // Make sure any deferred inputs to the instruction are pushed up.
+  TF_RETURN_IF_ERROR(
+      subcomp_visitor->PropagateDeferredAllocations(inst, deferred_inputs));
+
+  // Now that the all the inputs have been allocated and propagated, get them.
+  TensorOrRemoteBufferVectors inputs =
+      GetFunctionInputs(res, inst, seq, tensor_map);
   for (int64 o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
     auto& inst_inputs = inputs[o];
@@ -472,10 +460,17 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
       return xla::FailedPrecondition("Mismatched number of inputs.");
     }
     for (size_t i = 0; i < inst_inputs.size(); i++) {
+      if (inst_inputs[i].IsRemoteBuffer()) {
+        return xla::FailedPrecondition(
+            "Unable to handle used remote buffer tensor in function call "
+            "instruction %s",
+            inst->name());
+      }
+
       if (subcomp_visitor->InputIsUsed(o, i)) {
         if (comp_inputs[i].IsTensor()) {
-          seq.add(
-              poplar::program::Copy(inst_inputs[i], comp_inputs[i].AsTensor()));
+          seq.add(poplar::program::Copy(inst_inputs[i].AsTensor(),
+                                        comp_inputs[i].AsTensor()));
         } else if (comp_inputs[i].IsRemoteBuffer()) {
           return xla::FailedPrecondition(
               "Unable to handle used remote buffer tensor in function call "
@@ -492,7 +487,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
   }
 
   // Add the function.
-  seq.add(subcomp_visitor->GetSequence());
+  seq.add(subcomp_visitor->GetFunctionCall());
 
   // Propagate the outputs.
   for (size_t i = 0; i < subcomp_visitor->outputs().size(); i++) {
@@ -529,6 +524,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
 
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+
   TF_ASSIGN_OR_RETURN(
       poplar::program::Sequence pipeline_seq,
       CreatePipelineOp(res, inst, deferred_inputs, output, tensor_map));
@@ -547,7 +543,8 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   HloComputation* pipeline_computation = inst->to_apply();
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
-  int64 pipeline_depth = cfg.call_config().pipeline_config().pipeline_depth();
+  int64 gradient_accumulation_count =
+      cfg.call_config().pipeline_config().gradient_accumulation_count();
   int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   CHECK_EQ(inputs.size(), inst->operand_count());
@@ -557,15 +554,17 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
       auto visitor,
       GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
                          GetDebugName(inst)));
+  TF_RETURN_IF_ERROR(
+      visitor->VerifyPipelineArguments(gradient_accumulation_count));
+
   auto order = pipeline_computation->parent()
                    ->schedule()
                    .sequence(pipeline_computation)
                    .instructions();
-
   TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst, inputs));
 
   // Make sure that inputs/outputs alias each other.
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
@@ -576,25 +575,16 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   seq.add(execution_counters.SetInitialValuesToZero());
 
   // Get the pipeline sequence.
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
-                      visitor->GetPipelineSequence(pipeline_depth));
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence pipeline_prog,
+      visitor->GetPipelineSequence(gradient_accumulation_count));
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 
   seq.add(poplar::program::Repeat(repeat_count, pipeline_prog));
 
   for (size_t i = 0; i < pipeline_state.size(); i++) {
-    if (pipeline_state[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_state[i]));
-    } else if (pipeline_state[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(
-          AddOutputRemoteBuffer(tensor_map, inst, i, pipeline_state[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in pipeline instruction `%s`, expected a tensor "
-          "or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, pipeline_state[i]));
   }
 
   return seq;
@@ -739,23 +729,14 @@ StatusOr<poplar::program::Program> CreateResourceUpdateOp(
                    .instructions();
   TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
   // Add to the sequence.
   seq.add(visitor.GetSequence());
   seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
   // Set up the outputs.
   const TensorOrRemoteBufferVector& outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {
-    if (outputs[i].IsTensor()) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
-    } else if (outputs[i].IsRemoteBuffer()) {
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, outputs[i]));
-    } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in resource update instruction `%s`, expected a "
-          "tensor or a remote buffer.",
-          inst->name());
-    }
+    TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i]));
   }
 
   return seq;

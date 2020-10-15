@@ -20,6 +20,7 @@ py_library(
         "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
+        "ops/op_util.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
@@ -115,6 +116,7 @@ py_library(
         "keras/layers/__init__.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
+        "keras/layers/math.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
         "keras/model.py",
@@ -130,6 +132,7 @@ py_library(
         "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
+        "ops/op_util.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/reduce_scatter_op.py",
@@ -191,13 +194,25 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "report_tf2_test",
+    name = "io_tiles_test",
     size = "medium",
-    srcs = ["tests/report_tf2_test.py"],
+    srcs = ["tests/io_tiles_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "report_tf2_test",
+    size = "medium",
+    srcs = ["tests/report_tf2_test.py"],
+    additional_deps = [
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
     ],
 )
 
@@ -317,6 +332,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "keras_sequential_pipeline_test",
+    size = "large",
+    srcs = ["tests/keras/keras_sequential_pipeline_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+    shard_count = 2,
+)
+
+tf_py_test(
     name = "keras_model_test",
     size = "large",
     srcs = ["tests/keras/keras_model_test.py"],
@@ -329,6 +359,21 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
     ],
     shard_count = 2,
+)
+
+tf_py_test(
+    name = "keras_functional_model_test",
+    size = "large",
+    srcs = ["tests/keras/keras_functional_model_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+    shard_count = 8,
 )
 
 tf_py_test(
@@ -383,6 +428,20 @@ tf_py_test(
     shard_count = 40,
 )
 
+tf_py_test(
+    name = "math_layers_test",
+    size = "large",
+    srcs = ["tests/math_layers_test.py"],
+    additional_deps = [
+        ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+    shard_count = 12,
+)
+
 py_test(
     name = "estimator_test",
     size = "medium",
@@ -427,6 +486,19 @@ tf_py_test(
     name = "host_embedding_lookup_test",
     size = "large",
     srcs = ["tests/host_embedding_lookup_test.py"],
+    additional_deps = [
+        ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "host_embedding_lookup_ga_test",
+    size = "large",
+    srcs = ["tests/host_embedding_lookup_ga_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -860,7 +932,7 @@ tf_py_test(
     data = [
         ":libpipelining_stateful_op.so",
     ],
-    shard_count = 4,
+    shard_count = 16,
 )
 
 tf_py_test(
@@ -909,7 +981,7 @@ tf_py_test(
     data = [
         ":libpipelining_stateful_op.so",
     ],
-    shard_count = 4,
+    shard_count = 16,
 )
 
 tf_py_test(
@@ -934,6 +1006,42 @@ tf_py_test(
     name = "pipelining_sequential_test",
     size = "large",
     srcs = ["tests/pipelining_sequential_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 16,
+)
+
+tf_py_test(
+    name = "pipelining_batch_serial_sequential_recomputation_test",
+    size = "large",
+    srcs = ["tests/pipelining_batch_serial_sequential_recomputation_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 16,
+)
+
+tf_py_test(
+    name = "pipelining_batch_serial_sequential_test",
+    size = "large",
+    srcs = ["tests/pipelining_batch_serial_sequential_test.py"],
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -1062,8 +1170,10 @@ test_suite(
         "functional_ops_test",
         "gcl_test",
         "gradient_accumulation_test",
+        "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
+        "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
@@ -1072,15 +1182,20 @@ test_suite(
         "ipu_strategy_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",
+        "keras_functional_model_test",
         "keras_model_test",
         "keras_normalization_test",
         "keras_pipeline_save_restore_test",
         "keras_pipeline_test",
         "keras_rnn_test",
+        "keras_sequential_pipeline_test",
         "map_gradient_optimizer_test",
+        "math_layers_test",
         "math_ops_test",
         "multi_conv_test",
         "outfeed_ordinal_test",
+        "pipelining_batch_serial_sequential_recomputation_test",
+        "pipelining_batch_serial_sequential_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
@@ -1114,5 +1229,5 @@ test_suite(
     tests = [
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
         "//tensorflow/python/ipu:all_tests",
-    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test"]),
+    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
 )

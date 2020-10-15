@@ -88,6 +88,20 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   return pipeline;
 }
 
+void GetProgramNamesFlattened(const Json::Value& json,
+                              std::vector<std::string>* out) {
+  for (const auto& program : json["programs"]) {
+    for (const auto& name : program.getMemberNames()) {
+      if (name == "Sequence") {
+        // Recurse.
+        GetProgramNamesFlattened(program[name], out);
+      } else {
+        out->push_back(name);
+      }
+    }
+  }
+}
+
 TEST_F(DeferredVisitorTest, TestDeferredAllocation) {
   const string& hlo_string = R"(
 
@@ -124,9 +138,9 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto arg = gte1->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -174,9 +188,9 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -229,9 +243,9 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
@@ -305,9 +319,10 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto gte1 = gte1_0->operand(0);
   auto gte = gte1->operand(0);
   auto arg = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor fusion_0_input_one_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1, seq,
+                           false)
           .ValueOrDie();
   poplar::Tensor gte1_0_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
@@ -329,8 +344,8 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   EXPECT_EQ(gte1, gte1_2->operand(0));
 
   poplar::Tensor fusion_1_input_one_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1, seq,
+                           false)
           .ValueOrDie();
   poplar::Tensor gte1_2_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1_2)[0];
@@ -385,9 +400,9 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
   auto infeed = gte->operand(0);
+  auto seq = visitor.GetRawSequence();
   poplar::Tensor root_tensor =
-      FindInstructionInput(tensor_map, *resources.get(), root, 1,
-                           visitor.GetMutableSequence(), false)
+      FindInstructionInput(tensor_map, *resources.get(), root, 1, seq, false)
           .ValueOrDie();
   poplar::Tensor gte1_tensor =
       FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
@@ -410,8 +425,8 @@ while_Sum-reduction.13 (x.14: f32[], y.15: f32[]) -> f32[] {
   ROOT add.16 = f32[] add(x.14, y.15)
 }
 
-_functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) {
-  arg_tuple.18 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
+_functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2])) -> (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) {
+  arg_tuple.18 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
   get-tuple-element.21 = f32[] get-tuple-element(arg_tuple.18), index=2
   get-tuple-element.19 = s32[] get-tuple-element(arg_tuple.18), index=0
   constant.26 = s32[] constant(1)
@@ -422,7 +437,8 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   get-tuple-element.24 = f32[1,4,4,2] get-tuple-element(arg_tuple.18), index=5
   get-tuple-element.25 = f32[1,1,2,2] get-tuple-element(arg_tuple.18), index=6
   convolution.48 = f32[1,4,4,2] convolution(get-tuple-element.24, get-tuple-element.25), window={size=1x1}, dim_labels=b01f_01io->b01f
-  get-tuple-element.23 = f32[2] get-tuple-element(arg_tuple.18), index=4
+  gte = (f32[2], f32[2]) get-tuple-element(arg_tuple.18), index=4
+  get-tuple-element.23 = f32[2] get-tuple-element(gte), index=0
   constant.33 = f32[] constant(0.1)
   broadcast.34 = f32[2] broadcast(constant.33), dimensions={}
   constant.32 = f32[2] constant({16, 16})
@@ -436,8 +452,7 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   reduce.54 = f32[] reduce(convert.51, convert.53), dimensions={0,1,2,3}, to_apply=while_Sum-reduction.13
   convert.55 = f32[] convert(reduce.54)
   get-tuple-element.22 = s32[] get-tuple-element(arg_tuple.18), index=3
-  tuple.56 = (f32[2]) tuple(f32[2] subtract.36)
-  get-tuple-element.57 = f32[2] get-tuple-element((f32[2]) tuple.56), index=0
+  tuple.56 = (f32[2], f32[2]) tuple(f32[2] subtract.36, f32[2] subtract.36)
   constant.40 = f32[] constant(0.1)
   broadcast.41 = f32[1,4,4,2] broadcast(constant.40), dimensions={}
   constant.28 = f32[] constant(1)
@@ -455,13 +470,12 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   subtract.47 = f32[1,1,2,2] subtract(get-tuple-element.25, multiply.46)
   tuple.60 = (f32[1,1,2,2]) tuple(subtract.47)
   get-tuple-element.61 = f32[1,1,2,2] get-tuple-element(tuple.60), index=0
-  ROOT tuple.62 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(add.27, add.31, convert.55, get-tuple-element.22, get-tuple-element.57, get-tuple-element.59, get-tuple-element.61)
+  ROOT tuple.62 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) tuple(add.27, add.31, convert.55, get-tuple-element.22, tuple.56, get-tuple-element.59, get-tuple-element.61)
 }
 
-_functionalize_cond_1__.63 (arg_tuple.64: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> (pred[]) {
-  arg_tuple.64 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
+cond_wrapper.77 (inputs.78: (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2])) -> pred[] {
+  arg_tuple.64 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
   get-tuple-element.67 = f32[] get-tuple-element(arg_tuple.64), index=2
-  get-tuple-element.69 = f32[2] get-tuple-element(arg_tuple.64), index=4
   get-tuple-element.70 = f32[1,4,4,2] get-tuple-element(arg_tuple.64), index=5
   get-tuple-element.71 = f32[1,1,2,2] get-tuple-element(arg_tuple.64), index=6
   get-tuple-element.65 = s32[] get-tuple-element(arg_tuple.64), index=0
@@ -470,25 +484,19 @@ _functionalize_cond_1__.63 (arg_tuple.64: (s32[], s32[], f32[], s32[], f32[2], f
   get-tuple-element.66 = s32[] get-tuple-element(arg_tuple.64), index=1
   constant.72 = s32[] constant(2)
   less-than.73 = pred[] compare(get-tuple-element.66, constant.72), direction=LT
-  and.75 = pred[] and(pred[] less-than.74, pred[] less-than.73)
-  ROOT tuple.76 = (pred[]) tuple(pred[] and.75)
+  ROOT and.75 = pred[] and(pred[] less-than.74, pred[] less-than.73)
 }
 
-cond_wrapper.77 (inputs.78: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2])) -> pred[] {
-  inputs.78 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) parameter(0)
-  call.79 = (pred[]) call(inputs.78), to_apply=_functionalize_cond_1__.63
-  ROOT get-tuple-element.80 = pred[] get-tuple-element((pred[]) call.79), index=0
-}
-
-ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32[2], arg2.3: f32[1,1,2,2]) -> (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) {
+ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32[2], arg2.3: f32[1,1,2,2]) -> (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) {
   constant1 = s32[] constant(0)
   constant2 = f32[] constant(10)
   constant3 = s32[] constant(10)
   arg1.2 = f32[2] parameter(1)
   arg0.1 = f32[1,4,4,2] parameter(0)
   arg2.3 = f32[1,1,2,2] parameter(2)
-  tuple.12 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(constant1, constant1, constant2, constant3, arg1.2, arg0.1, arg2.3)
-  ROOT while.81 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) while(tuple.12), condition=cond_wrapper.77, body=_functionalize_body_1__.17
+  t = (f32[2], f32[2]) tuple(arg1.2, arg1.2)
+  tuple.12 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) tuple(constant1, constant1, constant2, constant3, t, arg0.1, arg2.3)
+  ROOT while.81 = (s32[], s32[], f32[], s32[], (f32[2], f32[2]), f32[1,4,4,2], f32[1,1,2,2]) while(tuple.12), condition=cond_wrapper.77, body=_functionalize_body_1__.17
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -535,7 +543,14 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   EXPECT_EQ(entry_loop_input_tensors[6], loop_tuple_tensors[6]);
 
   EXPECT_EQ(entry_loop_tensors.size(), loop_tuple_tensors.size());
-  EXPECT_EQ(entry_loop_tensors, loop_tuple_tensors);
+  for (int64 i = 0; i != entry_loop_tensors.size(); i++) {
+    if (i == 2) {
+      // 2nd input is reallocated inside of the loop.
+      EXPECT_NE(entry_loop_tensors[i], loop_tuple_tensors[i]);
+    } else {
+      EXPECT_EQ(entry_loop_tensors[i], loop_tuple_tensors[i]);
+    }
+  }
 }
 
 TEST_F(DeferredVisitorTest, TestDeferredAllocationInsideLoops) {
@@ -688,6 +703,231 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   auto result_tuple = result.DecomposeTuple();
   // Expect correct value for the biases.
   EXPECT_EQ(result_tuple[4], LiteralUtil::CreateR1<float>({-103.2, 96.8}));
+}
+
+TEST_F(DeferredVisitorTest, TestGroupingOfStreamCopiesFromInfeed) {
+  const string& hlo_string = R"(
+
+HloModule module
+_pop_op_conv_biasadd (arg_0: f32[1,4,4,2], arg_1: f32[2]) -> f32[1,4,4,2] {
+  arg_0 = f32[1,4,4,2] parameter(0)
+  arg_1 = f32[2] parameter(1)
+  broadcast.6.clone = f32[1,4,4,2] broadcast(arg_1), dimensions={3}
+  ROOT add.7.clone = f32[1,4,4,2] add(arg_0, broadcast.6.clone)
+}
+
+ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
+  arg = f32[1,1,2,2] parameter(0)
+  after-all = token[] after-all()
+  infeed = ((f32[1,4,4,2], f32[2]), token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed5\"\002\001\001"
+  gte = (f32[1,4,4,2], f32[2]) get-tuple-element(((f32[1,4,4,2], f32[2]), token[]) infeed), index=0
+  gte0 = f32[1,4,4,2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=0
+  convolution.5 = f32[1,4,4,2] convolution(gte0, arg), window={size=1x1}, dim_labels=b01f_01io->b01f
+  gte1 = f32[2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=1
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+}
+)";
+  auto module = ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), /*merge_infeeds=*/true);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  const auto* entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  // Get and flatten the resulting sequence.
+  const auto seq = visitor.GetRawSequence();
+  std::ostringstream oss;
+  poplar::program::dumpProgram(GetMasterGraph(*resources.get()), seq, oss);
+  Json::Value json;
+  EXPECT_TRUE(Json::Reader().parse(oss.str().c_str(), json));
+  std::vector<std::string> program_names;
+  GetProgramNamesFlattened(json, &program_names);
+
+  // Check that the stream copies are grouped at the beginning, ready to be
+  // merged by Poplar.
+  ASSERT_GE(program_names.size(), 3);
+  EXPECT_EQ(program_names[0], "StreamCopy");
+  EXPECT_EQ(program_names[1], "StreamCopy");
+  EXPECT_EQ(program_names[2], "StreamCopy");
+}
+
+TEST_F(DeferredVisitorTest, TestFunctionWithDeferredInputs) {
+  const string& hlo_string = R"(
+HloModule module
+
+func {
+  p0 = f32[8,8] parameter(0)
+  p1 = f32[8,8] parameter(1)
+  p2 = f32[8,8] parameter(2)
+  dot = f32[8,8] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add = f32[8,8] add(dot, p2)
+  ROOT t = (f32[8,8]) tuple(add)
+}
+
+func2 {
+  p0.2 = f32[8,8] parameter(0)
+  p1.2 = f32[8,8] parameter(1)
+  p2.2 = f32[8,8] parameter(2)
+  dot.2 = f32[8,8] dot(p0.2, p1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add.2 = f32[8,8] add(dot.2, p2.2)
+  ROOT t.2 = (f32[8,8]) tuple(add.2)
+}
+
+func3 {
+  p0.3 = f32[8,8] parameter(0)
+  p1.3 = f32[8,8] parameter(1)
+  p2.3 = f32[8,8] parameter(2)
+  dot.3 = f32[8,8] dot(p0.3, p1.3), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  add.3 = f32[8,8] add(dot.3, p2.3)
+  ROOT t.3 = (f32[8,8]) tuple(add.3)
+}
+
+ENTRY main {
+  arg0 = f32[8,8] parameter(0)
+  arg1 = f32[8,8] parameter(1)
+  arg2 = f32[8,8] parameter(2)
+  arg3 = f32[8,8] parameter(3)
+  arg4 = f32[8,8] parameter(4)
+  arg5 = f32[8,8] parameter(5)
+  arg6 = f32[8,8] parameter(6)
+
+  c1 = (f32[8,8]) call(arg0, arg1, arg2), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1_gte = f32[8,8] get-tuple-element(c1), index=0
+  c2 = (f32[8,8]) call(arg3, c1_gte, arg4), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c2_gte = f32[8,8] get-tuple-element(c2), index=0
+  ROOT c3 = (f32[8,8]) call(arg5, arg6, c2_gte), to_apply=func3, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto entry_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("main");
+  auto func_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func");
+
+  // In this test we check that arg2 and arg4 get a deferred layout from the
+  // function call and that the third call has just a copy.
+  HloInstruction* arg2 = FindInstruction(module.get(), "arg2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto arg2_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), arg2));
+  ASSERT_EQ(arg2_ts.size(), 1);
+
+  HloInstruction* arg4 = FindInstruction(module.get(), "arg4");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto arg4_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), arg4));
+  ASSERT_EQ(arg4_ts.size(), 1);
+
+  HloInstruction* c2_gte = FindInstruction(module.get(), "c2_gte");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto c2_gte_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), c2_gte));
+  ASSERT_EQ(c2_gte_ts.size(), 1);
+
+  HloInstruction* p2 = FindInstruction(module.get(), "p2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p2_ts,
+      FindInstructionOutputTensors(func_tensor_map, *resources.get(), p2));
+  ASSERT_EQ(p2_ts.size(), 1);
+
+  EXPECT_EQ(arg2_ts[0].getContiguousRegions(), p2_ts[0].getContiguousRegions());
+  EXPECT_EQ(arg4_ts[0].getContiguousRegions(), p2_ts[0].getContiguousRegions());
+  EXPECT_EQ(c2_gte_ts[0].getContiguousRegions(),
+            p2_ts[0].getContiguousRegions());
+}
+
+TEST_F(DeferredVisitorTest, TestFunctionKeepInputLayouts) {
+  const string& hlo_string = R"(
+HloModule module
+
+func {
+  p0 = f32[8,8] parameter(0)
+  p1 = f32[8,8] parameter(1)
+  dot = f32[8,8] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT t = (f32[8,8]) tuple(dot)
+}
+
+func2 {
+  p0.2 = f32[8,8] parameter(0)
+  p1.2 = f32[8,8] parameter(1)
+  dot.2 = f32[8,8] dot(p0.2, p1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT t.2 = (f32[8,8]) tuple(dot.2)
+}
+
+ENTRY main {
+  arg0 = f32[8,8] parameter(0)
+  arg1 = f32[8,8] parameter(1)
+
+  main_dot = f32[8,8] dot(arg0, arg1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+
+  c1 = (f32[8,8]) call(main_dot, arg0), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c2 = (f32[8,8]) call(arg1, main_dot), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1_gte = f32[8,8] get-tuple-element(c1), index=0
+  c2_gte = f32[8,8] get-tuple-element(c2), index=0
+  ROOT root_t = (f32[8,8],f32[8,8]) tuple(c1_gte, c2_gte)
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+
+  HloInstruction* c2 = FindInstruction(module.get(), "c2");
+  // Mark c2 as not reallocating.
+  {
+    auto backend_config =
+        c2->backend_config<PoplarBackendConfig>().ValueOrDie();
+    auto* call_config = backend_config.mutable_call_config();
+    auto* function_cfg = call_config->mutable_function_config();
+    function_cfg->set_keep_input_layouts(true);
+    TF_ASSERT_OK(c2->set_backend_config(backend_config));
+  }
+
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  VLOG(0) << module->ToString();
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+  auto entry_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("main");
+  auto func_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func");
+  auto func2_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("func2");
+
+  HloInstruction* main_dot = FindInstruction(module.get(), "main_dot");
+  TF_ASSERT_OK_AND_ASSIGN(auto main_dot_ts,
+                          FindInstructionOutputTensors(
+                              entry_tensor_map, *resources.get(), main_dot));
+  ASSERT_EQ(main_dot_ts.size(), 1);
+
+  HloInstruction* p0 = FindInstruction(module.get(), "p0");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p0_ts,
+      FindInstructionOutputTensors(func_tensor_map, *resources.get(), p0));
+  ASSERT_EQ(p0_ts.size(), 1);
+
+  HloInstruction* p1_2 = FindInstruction(module.get(), "p1.2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p1_2_ts,
+      FindInstructionOutputTensors(func2_tensor_map, *resources.get(), p1_2));
+  ASSERT_EQ(p1_2_ts.size(), 1);
+
+  // c1 is allowed to reallocate, so the input tensors will not match.
+  EXPECT_NE(main_dot_ts[0].getContiguousRegions(),
+            p0_ts[0].getContiguousRegions());
+  // c2 is not allowed to reallocate.
+  EXPECT_EQ(main_dot_ts[0].getContiguousRegions(),
+            p1_2_ts[0].getContiguousRegions());
 }
 
 }  // namespace

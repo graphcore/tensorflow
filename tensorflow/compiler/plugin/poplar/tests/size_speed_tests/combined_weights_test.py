@@ -106,12 +106,12 @@ class CombinedWeightsTest(xla_test.XLATestCase):
           'Switch')['children'][0]
 
       self.assertLess(
-          len(report.get_program(download_weights_index)['children']), 8,
+          len(report.get_program(download_weights_index)['children']), 12,
           "The download weights sequence should not have lots of entries "
           "(because the copies will have been merged)")
 
       # Also check the overall size
-      report.assert_total_tile_memory(8592650)
+      report.assert_total_tile_memory(8725954)
 
 
 if __name__ == "__main__":

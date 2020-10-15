@@ -75,7 +75,7 @@ std::unique_ptr<CompilerResources> GetMockResources(
 
   // Add mock vgraphs
   for (int i = 0; i < number_of_vgraphs; ++i) {
-    resources->shard_graphs.emplace_back(
+    resources->shard_compute_graphs.emplace_back(
         resources->main_graph->createVirtualGraph(i * 4, (i + 1) * 4));
   }
   resources->shard_to_ipu_id.resize(number_of_vgraphs);
@@ -186,9 +186,9 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-IPU-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.4"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-IPU-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.5"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -218,22 +218,22 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 1
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call: 1
-/custom-call.3: 5
-/custom-call.1: 2
-/custom-call: 1
-/custom-call.2: 4
-/custom-call.1: 2
-/custom-call.3: 5
-/custom-call.2: 4
-/custom-call: 1
-/custom-call.3: 5
-/custom-call.1: 2
-/custom-call.2: 4
-/custom-call.3: 5
+  const std::string expected = R"(/print-tensor: 1
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.1: 2
+/print-tensor: 1
+/print-tensor.2: 4
+/print-tensor.1: 2
+/print-tensor.3: 5
+/print-tensor.2: 4
+/print-tensor: 1
+/print-tensor.3: 5
+/print-tensor.1: 2
+/print-tensor.2: 4
+/print-tensor.3: 5
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -322,9 +322,9 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-IPU-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-IPU-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.2"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -354,12 +354,12 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
+  const std::string expected = R"(/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -407,7 +407,7 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -449,11 +449,11 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("fifo"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -483,10 +483,10 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 4
-/custom-call: 4
-/custom-call: 4
-/custom-call: 4
+  const std::string expected = R"(/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
+/print-tensor: 4
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -539,7 +539,7 @@ ENTRY pipeline {
 
   a0 = ((f32[2], f32[4], f32[2], f32[2])) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = (f32[2], f32[4], f32[2], f32[2]) get-tuple-element(a0), index=0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"isInplace\":true}"
-  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
+  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":1}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -581,11 +581,11 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("fifo"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
@@ -615,14 +615,14 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
-/custom-call: {306,6012}
+  const std::string expected = R"(/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
+/print-tensor: {306,6012}
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -668,7 +668,7 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -710,11 +710,11 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.1"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
+      {entry_computation->GetInstructionWithName("fifo"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -827,10 +827,10 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":2}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  b1 = f32[] custom-call(gte_b), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=1}
+  b1 = f32[] custom-call(gte_b), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":2}", sharding={maximal device=1}
   c0 = (f32[]) call(gte_b), to_apply=_stage_2, sharding={{maximal device=2}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=2}, backend_config="{\"isInplace\":true}"
   d0 = (f32[]) call(gte_c), to_apply=_stage_2_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
@@ -878,23 +878,23 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_e"), 4},
       {entry_computation->GetInstructionWithName("d"), 5},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call"), 0},
+      {entry_computation->GetInstructionWithName("fifo"), 0},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 1},
+      {entry_computation->GetInstructionWithName("fifo.1"), 1},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("custom-call.3"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.4"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("custom-call.5"), 3},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
       // Inter-ipu-copy between stage 1 and 4
-      {entry_computation->GetInstructionWithName("custom-call.6"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 1},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("custom-call.7"), 4},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.5"), 4},
       // Inter-ipu-copy between stage 0 and 5
-      {entry_computation->GetInstructionWithName("custom-call.8"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.6"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -1071,15 +1071,15 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_e"), 4},
       {entry_computation->GetInstructionWithName("d"), 5},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.6"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("custom-call.7"), 1},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 1},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.8"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.2"), 2},
       // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("custom-call.9"), 3},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.3"), 3},
       // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("custom-call.10"), 4},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.4"), 4},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -1108,54 +1108,54 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 0
-/custom-call.1: 1
-/custom-call: 0
-/custom-call.2: 2
-/custom-call.1: 1
-/custom-call.3: 3
-/custom-call.2: 2
-/custom-call.4: 4
-/custom-call.3: 3
-/custom-call.5: 5
-/custom-call.4: 4
-/custom-call: 0
-/custom-call.5: 5
-/custom-call.1: 1
-/custom-call: 0
-/custom-call.2: 2
-/custom-call.1: 1
-/custom-call.3: 3
-/custom-call.2: 2
-/custom-call.4: 4
-/custom-call.3: 3
-/custom-call.5: 5
-/custom-call.4: 4
-/custom-call: 0
-/custom-call.5: 5
-/custom-call.1: 1
-/custom-call: 0
-/custom-call.2: 2
-/custom-call.1: 1
-/custom-call.3: 3
-/custom-call.2: 2
-/custom-call.4: 4
-/custom-call.3: 3
-/custom-call.5: 5
-/custom-call.4: 4
-/custom-call: 0
-/custom-call.5: 5
-/custom-call.1: 1
-/custom-call: 0
-/custom-call.2: 2
-/custom-call.1: 1
-/custom-call.3: 3
-/custom-call.2: 2
-/custom-call.4: 4
-/custom-call.3: 3
-/custom-call.5: 5
-/custom-call.4: 4
-/custom-call.5: 5
+  const std::string expected = R"(/print-tensor: 0
+/print-tensor.1: 1
+/print-tensor: 0
+/print-tensor.2: 2
+/print-tensor.1: 1
+/print-tensor.3: 3
+/print-tensor.2: 2
+/print-tensor.4: 4
+/print-tensor.3: 3
+/print-tensor.5: 5
+/print-tensor.4: 4
+/print-tensor: 0
+/print-tensor.5: 5
+/print-tensor.1: 1
+/print-tensor: 0
+/print-tensor.2: 2
+/print-tensor.1: 1
+/print-tensor.3: 3
+/print-tensor.2: 2
+/print-tensor.4: 4
+/print-tensor.3: 3
+/print-tensor.5: 5
+/print-tensor.4: 4
+/print-tensor: 0
+/print-tensor.5: 5
+/print-tensor.1: 1
+/print-tensor: 0
+/print-tensor.2: 2
+/print-tensor.1: 1
+/print-tensor.3: 3
+/print-tensor.2: 2
+/print-tensor.4: 4
+/print-tensor.3: 3
+/print-tensor.5: 5
+/print-tensor.4: 4
+/print-tensor: 0
+/print-tensor.5: 5
+/print-tensor.1: 1
+/print-tensor: 0
+/print-tensor.2: 2
+/print-tensor.1: 1
+/print-tensor.3: 3
+/print-tensor.2: 2
+/print-tensor.4: 4
+/print-tensor.3: 3
+/print-tensor.5: 5
+/print-tensor.4: 4
+/print-tensor.5: 5
 )";
 
   ASSERT_EQ(expected, ss.str());
@@ -1204,7 +1204,7 @@ ENTRY pipeline {
 
   a0 = (f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[2] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"offload\":0,\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -1246,11 +1246,11 @@ ENTRY pipeline {
       {entry_computation->GetInstructionWithName("gte_c"), 2},
       {entry_computation->GetInstructionWithName("d"), 3},
       // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy"), 0},
       // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.3"), 2},
+      {entry_computation->GetInstructionWithName("ipu-inter-copy.1"), 2},
       // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 0},
+      {entry_computation->GetInstructionWithName("fifo"), 0},
   };
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
@@ -1280,14 +1280,14 @@ ENTRY pipeline {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
-/custom-call: {206,212}
+  const std::string expected = R"(/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
+/print-tensor: {206,212}
 )";
 
   // Check the output of the stage has aliases.
@@ -1296,7 +1296,7 @@ ENTRY pipeline {
                   .containsAliases());
   // Check that the fifo has aliases.
   ASSERT_TRUE(resources->tensor_maps.GetTensorMapForComputation("pipeline")
-                  .FindTensorByName("custom-call.1", 0)
+                  .FindTensorByName("fifo", 0)
                   .containsAliases());
   ASSERT_EQ(expected, ss.str());
 }
@@ -1389,12 +1389,12 @@ ENTRY e {
   engine.run(0);
   device.detach();
 
-  const std::string expected = R"(/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
-/custom-call: 3
+  const std::string expected = R"(/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
+/print-tensor: 3
 )";
 
   ASSERT_EQ(expected, ss.str());

@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,8 @@ class HloModule;
 namespace poplarplugin {
 
 /**
- * Pass which inserts Pipeline recomputation stages into the graph.
+ * Pass which copies all the non-stateful computation operations from the
+ * forward pass into the backward pass.
  */
 class PipelineRecomputation : public HloModulePass {
  public:
@@ -45,4 +46,4 @@ class PipelineRecomputation : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_

@@ -29,7 +29,7 @@ By default this seed is set randomly, but it can be reset by using the function
 
 Due to the hardware threading in the device, if the seed reset function is used
 then the ``target.deterministicWorkers`` Poplar Engine option will need to be set
-to ``true``.
+to "portable".
 
 This can be done using
 :py:func:`tensorflow.python.ipu.utils.set_compilation_options`.

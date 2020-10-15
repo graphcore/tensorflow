@@ -506,12 +506,13 @@ class ReportJSON(object):
           self.tensor_map.computation_names(), ["*_stage_%d_" % i])
       self.test.assertTrue(stage, "No stage %d found" % i)
       ipus = self.tensor_map.ipu_ids(stage)
-      self.test.assertEqual(
-          len(ipus), 1,
-          "Stage %d was mapped to more than one ipu: %s" % (i + 1, ipus))
-      self.test.assertEqual(
-          ipus.pop(), expected_ipu,
-          "Stage %d did not run on the expected IPU" % (i + 1))
+      if ipus:
+        self.test.assertEqual(
+            len(ipus), 1,
+            "Stage %d was mapped to more than one ipu: %s" % (i + 1, ipus))
+        self.test.assertEqual(
+            ipus.pop(), expected_ipu,
+            "Stage %d did not run on the expected IPU" % (i + 1))
 
   def assert_each_tile_memory_is_less_than(self, expected, tolerance=0.01):
     low = 0

@@ -14,8 +14,9 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 
-#include <popops/Collectives.hpp>
+#include <gcl/Collectives.hpp>
 #include <popops/DynamicSlice.hpp>
+#include <poputil/Util.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -29,6 +30,25 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+// Return the number of elements in the given tensor.
+int64 ElementCount(const poplar::Tensor& tensor) {
+  return tensor.numElements();
+}
+
+// Reshape the tensor to the given shape, excluding the outermost dimension.
+poplar::Tensor Reshape(const poplar::Tensor& tensor,
+                       const std::vector<std::size_t>& shape) {
+  return tensor.reshapePartial(1, 2, shape);
+}
+
+// Return a functor that slices the elements from the given tensor.
+std::function<poplar::Tensor(int64, int64)> OffsetSlice(
+    const poplar::Tensor& tensor, unsigned axis) {
+  return [&tensor, axis](int64 offset, int64 count) -> poplar::Tensor {
+    return tensor.slice(offset, offset + count, axis);
+  };
+}
+
 class AllGatherOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -36,15 +56,102 @@ class AllGatherOp : public PoplarOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
+    const int64 num_inputs = inst->operand_count();
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
-    // Replicated sum the concatenated tensor
-    poplar::Tensor output =
-        popops::replicatedAllGather(graph, input, seq, GetDebugName(inst),
-                                    GetReplicatedCollectiveOptions(res));
+    // If there is no replication, then we can just duplicate the inputs.
+    if (res.replication_factor < 2) {
+      for (int64 i = 0; i < num_inputs; ++i) {
+        TF_ASSIGN_OR_RETURN(
+            poplar::Tensor input,
+            FindInstructionInput(tensor_map, res, inst, i, seq));
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+        poplar::Tensor output_tensor = poputil::duplicate(
+            graph, input, seq, GetDebugName(inst),
+            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensor));
+      }
+
+      return seq;
+    }
+
+    // Keeps track of what types we have seen in a deterministic ordering.
+    std::vector<poplar::Type> seen_types;
+
+    // Keeps track of the input tensors, grouped by type.
+    absl::flat_hash_map<poplar::Type, std::vector<poplar::Tensor>,
+                        PoplarTypeHasher>
+        typed_inputs;
+
+    // Keeps track of the output position, grouped by type.
+    absl::flat_hash_map<poplar::Type, std::vector<int64>, PoplarTypeHasher>
+        output_tracking;
+
+    // Keeps track of the input shape, grouped by type.
+    absl::flat_hash_map<poplar::Type, std::vector<std::vector<std::size_t>>,
+                        PoplarTypeHasher>
+        shape_tracking;
+
+    // Collect up all the inputs
+    for (int64 i = 0; i < num_inputs; ++i) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor input,
+                          FindInstructionInput(tensor_map, res, inst, i, seq));
+
+      // If we haven't seen the type before, add it to the list of seen types.
+      if (!typed_inputs.contains(input.elementType())) {
+        seen_types.push_back(input.elementType());
+      }
+      typed_inputs[input.elementType()].push_back(input.flatten());
+      shape_tracking[input.elementType()].push_back(input.shape());
+      output_tracking[input.elementType()].push_back(i);
+    }
+
+    // Visit each seen type in the provided order.
+    for (auto type : seen_types) {
+      auto& typed_input = typed_inputs[type];
+
+      // Concatenate all the inputs of the same type.
+      poplar::Tensor input = poplar::concat(typed_input);
+
+      // all gather the concatenated tensor.
+      poplar::Tensor output =
+          gcl::allGather(GetMasterGraph(res), input, seq, GetDebugName(inst),
+                         GetReplicatedCollectiveOptions(res));
+
+      // Work out what each sub-tensor's element count is.
+      std::vector<int64> element_count;
+      element_count.reserve(typed_input.size());
+      absl::c_transform(typed_input, std::back_inserter(element_count),
+                        ElementCount);
+
+      // Use the sub-tensor element count to work out the offset.
+      std::vector<int64> element_offset;
+      element_offset.reserve(typed_input.size() + 1);
+      element_offset.push_back(0);
+      absl::c_partial_sum(element_count, std::back_inserter(element_offset));
+      element_offset.resize(element_count.size());
+
+      // Slice each of the sub-tensors from the output.
+      std::vector<poplar::Tensor> output_tensors;
+      element_offset.reserve(element_count.size());
+      absl::c_transform(element_offset, element_count,
+                        std::back_inserter(output_tensors),
+                        OffsetSlice(output, 1));
+
+      // Reshape to the expected output.
+      auto& shape_track = shape_tracking[type];
+      absl::c_transform(output_tensors, shape_track, output_tensors.begin(),
+                        Reshape);
+
+      // Add output tensors.
+      auto& output_track = output_tracking[type];
+      for (int i = 0; i < output_tensors.size(); ++i) {
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, output_track[i],
+                                    output_tensors[i]));
+      }
+    }
+
+    // Return the sequence.
     return seq;
   }
 };

@@ -13,11 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_
 
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -69,19 +70,17 @@ struct CompilerAnnotations;
  * }
  *
  * Here p2 is only used by the resource update computation inside of the
- * pipeline. We therefore remove it from being a paramater to the pipeline and
- * the resource update computations and instead add load/store instructions.
- * Note that we cannot change the input/output signatures of the entry
- * computation so we make sure that p2 has no other uses and the output at the
- * p2 index uses a dummy operation which doesn't do anything, resulting in:
+ * pipeline. We therefore mark it as a remote paramater and add load/store
+ * instructions inside of the resource update, resulting in:
  *
  * wu_comp {
  *   p0 = parameter(0)
  *   p1 = parameter(1)
- *   p2 = remote-parameter-load() entry_parameter_idx = 2
- *   p0', p2' = apply_grads(p0, p1, p2)
- *   token = remote-parameter-store(p2') entry_output_idx = 2
- *   ROOT t = tuple(p0)
+ *   p2 = parameter(2)
+ *   p2_loaded = remote-parameter-load(p2)
+ *   p0', p2' = apply_grads(p0, p1, p2_loaded)
+ *   p2_stored = remote-paramter-store(p2, p2')
+ *   ROOT t = tuple(p0, p2_stored)
  * }
  *
  * pipeline {
@@ -91,28 +90,32 @@ struct CompilerAnnotations;
  *   pipeline_stages(p0, p1, ...)
  *   bwd_pipeline_stages(...., p0, p1, ....)
  *   ...
- *   t = resource_update(..., p0, p1, ...)
+ *   p2 = parameter(2) <- parameter now
+ *   t = resource_update(..., p0, p1, p2, ...)
  *   gte0 = gte(t) index 0 <- updated value of p0
+ *   gte1 = gte(t) index 1 <- updated value of p2
  *   ....
- *   ROOT out = tuple(gte0, p1, , ...)
+ *   ROOT out = tuple(gte0, p1, gte1, ...)
  * }
  *
  * entry {
  *   p0 = parameter(0)
  *   p1 = parameter(1)
- *   p2 = parameter(2) <- has no users.
+ *   p2 = parameter(2)
  *   ...
  *   p = pipeline (p0, p1, p2 ...)
  *   gte0 = gte(p) index 0
  *   gte1 = gte(p) index 1
- *   dummy = output-dummy()
- *   ROOT t = tuple(gte0, gte1, dummy, ...)
+ *   gte2 = gte(p) index 2
+ *   ROOT t = tuple(gte0, gte1, gte2, ...)
  * }
  */
-class ResourceUpdateVariablesOffload : public HloModulePass {
+class VariablesOffloadAndPartition : public HloModulePass {
  public:
-  explicit ResourceUpdateVariablesOffload(CompilerAnnotations& annotations,
-                                          bool remote_memory_supported);
+  VariablesOffloadAndPartition(CompilerAnnotations& annotations,
+                               bool remote_memory_supported,
+                               int64 minimum_remote_tensor_size,
+                               int64 replication_factor);
   absl::string_view name() const override {
     return "resource-update-variables-offload";
   }
@@ -121,14 +124,18 @@ class ResourceUpdateVariablesOffload : public HloModulePass {
 
  private:
   // Optimize an instruction which contains a resource update.
-  StatusOr<bool> Optimize(HloInstruction* call_op,
-                          HloInstruction* resource_update);
+  StatusOr<bool> Optimize(HloInstruction* call_op);
+  StatusOr<ThreeState> ShouldOffloadInPipeline(
+      HloInstruction* const pipeline_op);
+  StatusOr<bool> ShouldPartitionInPipeline(HloInstruction* const pipeline_op);
 
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
+  const int64 minimum_remote_tensor_size_;
+  const int64 replication_factor_;
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_

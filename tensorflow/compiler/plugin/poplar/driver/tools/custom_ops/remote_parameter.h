@@ -31,7 +31,9 @@ namespace poplarplugin {
  */
 class HloRemoteParameterLoad : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterLoad(HloInstruction* const rbuffer);
+  explicit HloRemoteParameterLoad(absl::Span<HloInstruction* const> rbuffers,
+                                  std::vector<uint64> replication_factors = {
+                                      1});
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -40,19 +42,29 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
 
   bool IsPopOpsElementwise() const override;
+  uint64 GetReplicationFactor(int64 index) const {
+    CHECK_LT(index, replication_factors_.size());
+    return replication_factors_[index];
+  }
+  std::size_t GetReplicationFactorCount() const {
+    return replication_factors_.size();
+  }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
+  const std::vector<uint64> replication_factors_;
+
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
-    HloInstruction* const rbuffer);
+    absl::Span<HloInstruction* const> rbuffers,
+    std::vector<uint64> replication_factors = {1});
 
 /**
  * HloRemoteParameterStore represents a write to a variable stored in remote
@@ -60,8 +72,9 @@ std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
  */
 class HloRemoteParameterStore : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterStore(HloInstruction* const rbuffer,
-                                   HloInstruction* const value);
+  explicit HloRemoteParameterStore(
+      absl::Span<HloInstruction* const> rbuffers_and_values,
+      std::vector<uint64> replication_factors = {1});
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -71,21 +84,34 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
+  absl::Span<HloInstruction* const> RemoteBuffers() const;
+  absl::Span<HloInstruction* const> ValuesToStore() const;
+  uint64 GetReplicationFactor(int64 index) const {
+    CHECK_LT(index, replication_factors_.size());
+    return replication_factors_[index];
+  }
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
+  const std::vector<uint64> replication_factors_;
+
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
-    HloInstruction* const rbuffer, HloInstruction* const value);
+    absl::Span<HloInstruction* const> rbuffers_and_values,
+    std::vector<uint64> replication_factors = {1});
 
-// HloCreateBuffer represents a creation of a buffer, where the buffer can be
-// stored in either device memory or remote memory.
+/**
+ * HloCreateBuffer represents a creation of a buffer, where the buffer can be
+ * stored in either device memory or remote memory.
+ * Note that the buffer is sliceable on the outter dimension.
+ */
 class HloCreateBuffer : public HloPoplarInstruction {
  public:
   explicit HloCreateBuffer(const Shape& shape, bool is_remote);
@@ -114,6 +140,73 @@ class HloCreateBuffer : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
                                                       bool is_remote);
+
+/**
+ * HloBufferLoadSlice represents an instruction which loads a slice of data
+ * from a buffer, which is stored in remote memory, at a given offset.
+ */
+class HloBufferLoadSlice : public HloPoplarInstruction {
+ public:
+  HloBufferLoadSlice(const Shape& shape, HloInstruction* const buffer,
+                     HloInstruction* const offset);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 0; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
+    const Shape& shape, HloInstruction* const buffer,
+    HloInstruction* const offset);
+
+/**
+ * HloBufferStoreSlice represents an instruction which stores a slice of data
+ * into a buffer, which is stored in remote memory, at a given offset.
+ * Outputs the updated buffer.
+ */
+class HloBufferStoreSlice : public HloPoplarInstruction {
+ public:
+  HloBufferStoreSlice(HloInstruction* const buffer, HloInstruction* const slice,
+                      HloInstruction* const offset);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 1; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateBufferStoreSlice(
+    HloInstruction* const buffer, HloInstruction* const slice,
+    HloInstruction* const offset);
 
 }  // namespace poplarplugin
 }  // namespace xla

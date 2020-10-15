@@ -583,8 +583,20 @@ static std::set<HloOpcode> associative_opcodes = {
 // (A+B)+(C+sin(D)) contains three '+ operations which are part of an
 // associative set, and can be rearranged into A+(B+C)+sin(D), or
 // ((A+B)+C)+sin(D), or any other similar form.
+
+namespace {
+struct ToVisitCompare {
+  template <typename ValueType>
+  bool operator()(const ValueType& a, const ValueType& b) const {
+    return std::make_tuple(a.first->unique_id(), a.second) <
+           std::make_tuple(b.first->unique_id(), b.second);
+  }
+};
+}  // namespace
+
 std::set<HloInstruction*> HloMatcher::GetAssociativeSet(HloInstruction* root) {
-  std::set<std::pair<HloInstruction*, int>> to_visit = {{root, 0}};
+  std::set<std::pair<HloInstruction*, int>, ToVisitCompare> to_visit = {
+      {root, 0}};
   std::set<HloInstruction*> result;
 
   if (associative_opcodes.count(root->opcode()) == 0) {
@@ -845,7 +857,7 @@ bool HloMatcher::MatchPattern(HloInstruction* root,
               (inst->opcode() == HloOpcode::kConstant) ||
               (inst->opcode() == HloOpcode::kBroadcast &&
                inst->operand(0)->opcode() == HloOpcode::kConstant) ||
-              IsPopOpsFusion(inst, "wide_const");
+              IsWideConstant(inst);
           if (!ignore_sharding) {
             sharding_devices.insert(*sharding.UniqueDevice());
           }
@@ -1120,7 +1132,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
   *(cfg->mutable_inplace_operands()) = {inplace_indices.begin(),
                                         inplace_indices.end()};
 
-  fusion->set_backend_config(backend_config);
+  TF_CHECK_OK(fusion->set_backend_config(backend_config));
 
   fusion->set_metadata(old->metadata());
   if (sharding_device) {

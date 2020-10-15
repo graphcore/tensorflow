@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import os
 import numpy as np
 
@@ -45,7 +44,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*',
-          'IpuReplicationNormalise/custom-call*/replication_normalise/Op/Divide',
+          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
           'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
           '/OnTileCopy',
           'Copy_XLA_Args*OnTileCopy',
@@ -70,7 +69,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*',
-          'IpuReplicationNormalise/custom-call*/replication_normalise/Op/Divide',
+          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
           'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
           '/OnTileCopy',
           'Copy_XLA_Args*OnTileCopy',

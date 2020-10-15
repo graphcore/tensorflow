@@ -21,6 +21,8 @@ limitations under the License.
 #include <queue>
 #include <set>
 #include <stack>
+#include <utility>
+#include <vector>
 
 #include "absl/types/optional.h"
 
@@ -64,55 +66,6 @@ class MetaGraph {
     }
 
     return consumers;
-  }
-
-  absl::optional<std::pair<int64_t, std::vector<T>>> ShortestPathImpl(
-      T src, T dst) const {
-    MetaGraphMap<int64_t> dist;
-    MetaGraphMap<T> prev;
-    MetaGraphSet visited;
-
-    const auto comp = [&](T a, T b) { return dist[a] < dist[b]; };
-
-    std::priority_queue<T, std::vector<T>, decltype(comp)> queue(comp);
-
-    const auto vs = GetVertices();
-    for (const auto& v : vs) {
-      dist[v] = std::numeric_limits<int64_t>::max();
-    }
-
-    dist[src] = 0;
-    queue.push(src);
-    bool found = src == dst;
-    while (!queue.empty() && !found) {
-      const auto top = queue.top();
-      queue.pop();
-      visited.insert(top);
-
-      const auto itr = graph_.find(top);
-      if (itr != graph_.end()) {
-        std::for_each(itr->second.begin(), itr->second.end(), [&](T v) {
-          if (visited.count(v) == 0) {
-            found |= v == dst;
-            dist[v] = dist[top] + 1;
-            prev[v] = top;
-            queue.push(v);
-          }
-        });
-      }
-    }
-
-    // Only return the distance and path if we have actually found it.
-    if (found) {
-      std::vector<T> path = {dst};
-      while (path.back() != src) {
-        path.push_back(prev[path.back()]);
-      }
-      std::reverse(path.begin(), path.end());
-      return std::make_pair(dist[dst], path);
-    } else {
-      return absl::nullopt;
-    }
   }
 
   Graph graph_;
@@ -200,24 +153,6 @@ class MetaGraph {
     return result;
   }
 
-  absl::optional<int64_t> ShortestPathDistance(T src, T dst) const {
-    auto optional_result = ShortestPathImpl(src, dst);
-    if (optional_result) {
-      return optional_result->first;
-    } else {
-      return absl::nullopt;
-    }
-  }
-
-  absl::optional<std::vector<T>> ShortestPath(T src, T dst) const {
-    auto optional_result = ShortestPathImpl(src, dst);
-    if (optional_result) {
-      return optional_result->second;
-    } else {
-      return absl::nullopt;
-    }
-  }
-
   template <typename Predicate>
   static bool IsPathOk(const std::vector<T>& path, Predicate pred) {
     for (unsigned i = 0; i < path.size(); i++) {
@@ -228,6 +163,54 @@ class MetaGraph {
     }
     return true;
   };
+
+  struct ShortestPaths {
+    absl::optional<std::vector<T>> To(T dst) const {
+      if (prev.count(dst) == 0) {
+        return absl::nullopt;
+      }
+
+      std::vector<T> path = {dst};
+      while (path.back() != src) {
+        path.push_back(prev.at(path.back()));
+      }
+      std::reverse(path.begin(), path.end());
+      return path;
+    }
+
+    T src;
+    MetaGraphMap<T> prev;
+  };
+
+  ShortestPaths ShortestPathsFrom(T src) const {
+    // Use a breadth-first search from the source to all targets. As this is an
+    // unweighted graph, the path discovered first is the shortest one.
+
+    MetaGraphMap<T> prev;
+    std::queue<T> queue;
+    queue.push(src);
+
+    while (!queue.empty()) {
+      const auto u = queue.front();
+      queue.pop();
+
+      const auto itr = graph_.find(u);
+      if (itr != graph_.end()) {
+        for (const auto& v : itr->second) {
+          if (v != src && prev.count(v) == 0) {
+            queue.push(v);
+            prev[v] = u;
+          }
+        }
+      }
+    }
+
+    return ShortestPaths{src, std::move(prev)};
+  }
+
+  absl::optional<std::vector<T>> ShortestPath(T src, T dst) const {
+    return ShortestPathsFrom(src).To(dst);
+  }
 
   MetaGraphSet& operator[](T& key) { return graph_[key]; }
 

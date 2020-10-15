@@ -396,7 +396,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   }
 
   bool EnableGatherSimplifier() const {
-    return current_config_.enable_gather_simplifier();
+    return !current_config_.disable_gather_simplifier();
   }
 
   bool EnableMatmulCombiner() const {
@@ -417,7 +417,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool SupportsRemoteBuffers() const;
 
-  int64 GclNumIoTiles() const { return current_config_.gcl_num_io_tiles(); }
+  int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }
+
+  bool ShouldPlaceOpsOnIoTiles() const {
+    return current_config_.place_ops_on_io_tiles() && GetNumIoTiles() > 0;
+  }
 
   poplar::OptionFlags GclOptions() const { return gcl_options_; }
 
@@ -448,6 +452,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int64 GetMaxSendRecvClusterSize() const {
     return current_config_.max_send_recv_cluster_size();
+  }
+
+  int64 GetMinimumRemoteTensorSize() const {
+    return current_config_.minimum_remote_tensor_size();
   }
 
   int64 GetTriangularSolveExpanderBlockSize() const {
@@ -548,6 +556,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     virtual StatusOr<int> GetEncodingWidth() const = 0;
 
     virtual xla::StatusOr<int> GetElementSize() const = 0;
+
+    virtual Status Notify(int replica) = 0;
   };
 
   template <typename T>
@@ -568,6 +578,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status RegisterHostEmbedding(
       const std::string& embedding_id,
       std::unique_ptr<HostEmbeddingInterface_> embedding);
+  Status DeregisterHostEmbedding(const std::string& embedding_id);
 
   tensorflow::Rendezvous* GetRendezvous();
 
@@ -575,9 +586,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void SetHasCycleCounter() { has_cycle_counter_ = true; }
   static std::string GetCycleCounterStream();
-
-  void ClearCompilationFailure();
-  void NotifyCompilationFailure();
 
   void SetCurrentReplicationFactor(int64 executable_replication_factor);
 
@@ -592,9 +600,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   struct TensorControl {
     size_t size = 0;
+    PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     unsigned int ref_count = 0;
     bool on_device = false;
     bool in_remote_memory = false;
+    bool replica_partitioned = false;
     std::string input_handle;
     std::string output_handle;
     ConversionFn output_convertor;
@@ -603,6 +613,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
     TensorControl(size_t size_);
     ~TensorControl();
+
+    TF_DISALLOW_COPY_AND_ASSIGN(TensorControl);
   };
 
   struct InputDef {
@@ -610,19 +622,22 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     ConversionFn fn;
     bool streamed;
     bool remote_parameter;
+    bool replica_partitioned;
 
     InputDef() {}
     InputDef(TensorControl* tc, ConversionFn fn, bool streamed,
-             bool remote_parameter)
+             bool remote_parameter, bool replica_partitioned)
         : tc(tc),
           fn(fn),
           streamed(streamed),
-          remote_parameter(remote_parameter) {}
+          remote_parameter(remote_parameter),
+          replica_partitioned(replica_partitioned) {}
     InputDef(const InputDef& other)
         : tc(other.tc),
           fn(other.fn),
           streamed(other.streamed),
-          remote_parameter(other.remote_parameter) {}
+          remote_parameter(other.remote_parameter),
+          replica_partitioned(other.replica_partitioned) {}
   };
   using InputPairList = std::vector<InputDef>;
   using ArgsHandleMap = std::map<std::string, InputDef>;
@@ -642,7 +657,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static void FlattenedDeviceMemoryList(
       InputPairList&, const xla::Shape&, void*,
-      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter);
+      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter,
+      bool is_replica_partitioned);
 
   static void FlattenedOutputDeviceMemoryList(
       OutputPairList&, const xla::Shape&, void*,
@@ -769,12 +785,18 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ConnectHostEmbeddingUpdateToRendezvous(
       const HostEmbeddingInfo& update_info,
       HostEmbeddingInterface_* embedding_interface);
+  Status ConnectHostEmbeddingNotify(
+      const HostEmbeddingInfo& notify_info,
+      HostEmbeddingInterface_* embedding_interface);
 
   Status DisconnectHostEmbeddingLookup(
       const HostEmbeddingInfo& lookup_info,
       HostEmbeddingInterface_* embedding_interface);
   Status DisconnectHostEmbeddingUpdate(
       const HostEmbeddingInfo& update_info,
+      HostEmbeddingInterface_* embedding_interface);
+  Status DisconnectHostEmbeddingNotify(
+      const HostEmbeddingInfo& notify_info,
       HostEmbeddingInterface_* embedding_interface);
 
   // Connect buffers provided by infeed transfer manager to Poplar
@@ -873,8 +895,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
-    std::vector<std::vector<std::unique_ptr<OutfeedQueueType>>>
-        callback_to_io_thread_queues;
+    using OutfeedQueueStorage =
+        std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
+    std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
@@ -894,8 +917,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       host_embeddings_;
 
   std::mutex host_embeddings_mutex_;
-  std::condition_variable host_embeddings_cv;
-  bool host_embedding_registration_is_open_ = true;
 
   SeedGenerator seed_generator_;
 

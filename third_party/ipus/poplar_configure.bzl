@@ -85,8 +85,12 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/tbb/lib", "poplar/lib/tbb")
             repository_ctx.symlink(poplar_base + "/popsec/include", "poplar/popsec/include")
             repository_ctx.symlink(poplar_base + "/popsec/lib", "poplar/popsec/lib")
+            repository_ctx.symlink(poplar_base + "/libpvti/lib", "poplar/libpvti/lib")
+            repository_ctx.symlink(poplar_base + "/libpvti/include", "poplar/libpvti/include")
             if repository_ctx.path(poplar_base + "/popsec/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/popsec/lib64", "poplar/popsec/lib64")
+            if repository_ctx.path(poplar_base + "/libpvti/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/libpvti/lib64", "poplar/libpvti/lib64")
 
             repository_ctx.symlink(poplar_base + "/gcl/include", "poplar/gcl/include")
             repository_ctx.symlink(poplar_base + "/gcl/lib", "poplar/lib/gcl")

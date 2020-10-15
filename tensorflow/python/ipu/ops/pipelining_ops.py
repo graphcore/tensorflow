@@ -22,6 +22,7 @@ from enum import IntEnum
 
 from google.protobuf import json_format
 
+from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
@@ -29,13 +30,14 @@ from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
+from tensorflow.python.util.deprecation import deprecated_args
 
 
 class PipelineSchedule(IntEnum):
@@ -153,9 +155,16 @@ class PipelineStageOptions:
     return self._proto
 
 
+@deprecated_args(
+    None,
+    "pipeline_depth is deprecated, use gradient_accumulation_count instead",
+    "pipeline_depth")
 def pipeline(computational_stages,
-             pipeline_depth,
+             pipeline_depth=None,
+             gradient_accumulation_count=None,
+             gradient_accumulation_dtype=None,
              repeat_count=1,
+             batch_serialization_iterations=1,
              inputs=None,
              infeed_queue=None,
              outfeed_queue=None,
@@ -165,7 +174,12 @@ def pipeline(computational_stages,
              forward_propagation_stages_poplar_options=None,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
-             offload_weight_update_variables=True,
+             offload_weight_update_variables=None,
+             replicated_optimizer_state_sharding=False,
+             offload_activations=None,
+             offload_gradient_accumulation_buffers=None,
+             replicated_weight_sharding=None,
+             offload_weights=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -243,7 +257,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
-                          pipeline_depth=250,
+                          gradient_accumulation_count=250,
                           repeat_count=2,
                           inputs=[],
                           infeed_queue=infeed_queue,
@@ -267,8 +281,9 @@ def pipeline(computational_stages,
   will be executed on the fourth IPU and the third layer and the probabilities
   and classed on the second IPU.
 
-  This creates a pipeline of depth 250 (specified by the `pipeline_depth`),
-  which means each pipeline stage is executed 250 times.
+  This creates a pipeline of depth 250 (specified by the
+  `gradient_accumulation_count`), which means each pipeline stage is executed
+  250 times.
 
   This pipeline is then executed 2 times (specified by the `repeat_count`)
   The results of the pipeline (probabilities and classes) are returned to the
@@ -308,7 +323,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
-                          pipeline_depth=128,
+                          gradient_accumulation_count=128,
                           repeat_count=10,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
@@ -345,8 +360,23 @@ def pipeline(computational_stages,
     computational_stages: a list of python functions, where each function
       represents a computational pipeline stage. The function takes the
       outputs of the previous pipeline state as its inputs.
-    pipeline_depth: the number of times each pipeline stage will be executed.
+    gradient_accumulation_count: the number of times each pipeline stage will
+      be executed.
+    gradient_accumulation_dtype: The data type used for the gradient
+      accumulation buffer. One of:
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
+      The gradients passed to `Optimizer.apply_gradients` will have the dtype
+      requested here. If that dtype is different from the variable dtype
+      a cast is needed at some point to make them compatible. If you want
+      to cast the gradients immediately, you can wrap your optimizer in the
+      `MapGradientOptimizer` with a `tf.cast`.
     repeat_count: the number of times the pipeline will be executed.
+    batch_serialization_iterations: number of times a loop executes to compute a
+      batch on each pipeline stage execution. Currently only supported with the
+      `PipelineSchedule.Sequential`.
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and
       passed as an input in the first pipeline stage.
@@ -362,7 +392,7 @@ def pipeline(computational_stages,
       computational stages. An element at index `i` in the list represents which
       IPU the computational stage `computational_stages[i]` should reside on.
       This can be used to make sure computational stages which share
-      `tf.Variable`s are resident on the same IPU.
+      `tf.Variable` are resident on the same IPU.
     pipeline_schedule: Which scheduling algorithm to use for pipeline
       lowering. Defaults to `PipelineSchedule.Grouped`.
     forward_propagation_stages_poplar_options: If provided, a list of length
@@ -376,7 +406,7 @@ def pipeline(computational_stages,
     weight_update_poplar_options: If provided, a PipelineStageOptions object
       which allows for fine grained control of the Poplar options for the
       weight update stage.
-    offload_weight_update_variables: If True, any `tf.Variable` which is
+    offload_weight_update_variables: When enabled, any `tf.Variable` which is
       only used by the weight update of the pipeline (for example the
       accumulator variable when using the `tf.MomentumOptimizer`), will be
       stored in the remote memory. During the weight update this variable will
@@ -384,8 +414,52 @@ def pipeline(computational_stages,
       after it has been updated. Requires the machine to be configured with
       support for `Poplar remote buffers`. Offloading variables into remote
       memory can reduce maximum memory liveness, but can also increase the
-      computation time of the weight update. Note that this option has no effect
-      for inference only pipelines.
+      computation time of the weight update.
+      When set to `None` the variables will be placed in either in-processor or
+      remote memory automatically based on the current best placement strategy.
+      Note that this option has no effect for inference only pipelines.
+    replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
+      offloaded (for example the accumulator variable when using the
+      `tf.MomentumOptimizer`), will be partitioned across the replicas. This
+      can exploit the additional bandwidth of the IPU-Links to improve overall
+      throughput.
+      Note that this option has no effect for inference only pipelines.
+    offload_activations: When enabled, all the activations for the batches which
+      are not being executed by the pipeline stages at the given time are stored
+      in remote memory. Requires the machine to be configured with support for
+      `Poplar remote buffers`. Offloading activations into remote memory can
+      reduce maximum memory liveness, but can also increase the computation time
+      as activations have to be copied from/to the device(s).
+      When set to `None`, the activations might be offloaded when beneficial.
+    offload_gradient_accumulation_buffers: When enabled, all the gradient
+      accumulation buffers are stored in remote memory. Offloading gradient
+      accumulation buffers into remote memory can reduce maximum memory
+      liveness, but can also increase the computation time as the buffers have
+      to be copied to the device, updated and the copied off the device.
+      Requires the machine to be configured with support for `Poplar remote
+      buffers`.
+      When set to `None`, the `offload_gradient_accumulation_buffers` might be
+      offloaded when beneficial.
+      Note that this option has no effect for inference only pipelines.
+    replicated_weight_sharding: When enabled and running a replicated model, any
+      `tf.Variable` used by the pipeline stage computations (excluding those
+      only used by the weight update), will be partitioned across the replicas.
+      Whenever the a partitioned `tf.Variable` is accessed, it will be first
+      all-gathered across replicas to make sure each replica has access to the
+      whole `tf.Variable`. This can exploit the additional bandwidth of the
+      IPU-Links to improve overall throughput.
+      When set to `None`, the activations might be offloaded when beneficial.
+      This feature is enabled by default when the pipeline schedule is
+      `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`,
+      where this option can reduce the memory usage at the cost of extra
+      communication.
+    offload_weights: When enabled and `replicated_weight_sharding` is enabled,
+      any `tf.Variable` which are partitioned across replicas will be stored in
+      `Poplar remote buffers`.  Offloading variables into remote memory can
+      further reduce maximum memory liveness, but can also increase the
+      computation time due to extra communication. When set to `None` the
+      variables will be placed in either in-processor or remote memory
+      automatically based on the current best placement strategy.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -400,6 +474,12 @@ def pipeline(computational_stages,
 
   """
   name = name if name else "pipeline"
+
+  if pipeline_depth:
+    gradient_accumulation_count = pipeline_depth
+
+  if not gradient_accumulation_count:
+    raise ValueError("gradient_accumulation_count must be specified.")
 
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
@@ -417,8 +497,24 @@ def pipeline(computational_stages,
       logging.warn("Passing tensor {} by value.".format(str(input)))
       inputs[i] = input.value()
 
-  device_mapping = device_mapping if device_mapping else list(
-      range(0, len(computational_stages)))
+  if pipeline_schedule is None:
+    pipeline_schedule = (PipelineSchedule.Sequential
+                         if batch_serialization_iterations > 1 else
+                         PipelineSchedule.Grouped)
+
+  if not isinstance(pipeline_schedule, PipelineSchedule):
+    raise TypeError("The given pipeline_schedule is not a member of the "
+                    "PipelineSchedule enumeration.")
+
+  if (batch_serialization_iterations > 1
+      and pipeline_schedule != PipelineSchedule.Sequential):
+    raise NotImplementedError("Batch serialization is only supported with the "
+                              "`Sequential` schedule.")
+
+  if device_mapping is None:
+    device_mapping = [0] * len(
+        computational_stages) if batch_serialization_iterations > 1 else list(
+            range(len(computational_stages)))
 
   if not isinstance(computational_stages, (list, tuple)):
     raise TypeError(
@@ -427,7 +523,7 @@ def pipeline(computational_stages,
   if infeed_queue:
     if not isinstance(infeed_queue, ipu_infeed_queue.IPUInfeedQueue):
       raise TypeError("infeed_queue is not an instance of "
-                      "ipu_infeed_queue.IPUOutfeedQueue")
+                      "ipu_infeed_queue.IPUInfeedQueue")
 
   if outfeed_queue:
     if not isinstance(outfeed_queue, ipu_outfeed_queue.IPUOutfeedQueue):
@@ -446,13 +542,6 @@ def pipeline(computational_stages,
         "Each stage must be mapped to an IPU: %d mappings != %d stages" %
         (len(device_mapping), len(computational_stages)))
 
-  if pipeline_schedule is None:
-    pipeline_schedule = PipelineSchedule.Grouped
-
-  if not isinstance(pipeline_schedule, PipelineSchedule):
-    raise TypeError("The given pipeline_schedule is not a member of the "
-                    "PipelineSchedule enumeration.")
-
   # TODO(T18660) interleaved schedule does not support multiple stages on the
   # same IPU during training.
   if pipeline_schedule == PipelineSchedule.Interleaved and len(
@@ -461,6 +550,36 @@ def pipeline(computational_stages,
         "The pipelining schedule 'Interleaved' does not currently support "
         "multiple pipeline stages on the same device for training graphs. "
         "Please use a different pipeline schedule.")
+
+  if (pipeline_schedule == PipelineSchedule.Sequential
+      and batch_serialization_iterations > 1
+      and len(set(device_mapping)) != 1):
+    raise NotImplementedError(
+        "When using batch serialization, all the pipeline stages need to be "
+        "mapped to a single IPU.")
+
+  def bool_to_three_state(value, default=None):
+    if value is None:
+      return default if default else backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_UNDEFINED)
+    elif value:
+      return backend_config_pb2.ThreeState.Name(
+          backend_config_pb2.THREESTATE_ON)
+    return backend_config_pb2.ThreeState.Name(
+        backend_config_pb2.THREESTATE_OFF)
+
+  # Convert some of the binary options into three states.
+  offload_weight_update_variables = bool_to_three_state(
+      offload_weight_update_variables)
+  replicated_optimizer_state_sharding = bool_to_three_state(
+      replicated_optimizer_state_sharding,
+      default=offload_weight_update_variables)
+  offload_activations = bool_to_three_state(offload_activations)
+  offload_gradient_accumulation_buffers = bool_to_three_state(
+      offload_gradient_accumulation_buffers)
+  replicated_weight_sharding = bool_to_three_state(replicated_weight_sharding)
+  offload_weights = bool_to_three_state(offload_weights,
+                                        default=replicated_weight_sharding)
 
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
@@ -535,6 +654,7 @@ def pipeline(computational_stages,
                                 stage_id,
                                 device_mapping[stage_id],
                                 outputs,
+                                training=optimizer_function is not None,
                                 infeed_queue=stage_infeed_queue,
                                 outfeed_queue=stage_outfeed_queue,
                                 name=stage_name)
@@ -569,14 +689,18 @@ def pipeline(computational_stages,
       for grad, var in grads_and_vars:
         if grad is not None:
           with ops.colocate_with(grad):
+            # Find the data type for the accumulator.
+            dtype = op_util.get_accumulator_dtype(var,
+                                                  gradient_accumulation_dtype)
             # Create an accumulator - variable is used as reference for shape/layout.
-            accumulator = gen_poputil_ops.gradient_accumulator_create(var)
+            accumulator = gen_poputil_ops.gradient_accumulator_create(
+                var, output_type=dtype)
             # Add the gradients to the accumulator.
             accumulator = gen_poputil_ops.gradient_accumulator_add(
                 accumulator, grad)
             # Sink the accumulators.
             grad = gen_poputil_ops.gradient_accumulator_sink(
-                accumulator, num_mini_batches=pipeline_depth)
+                accumulator, num_mini_batches=gradient_accumulation_count)
         # Use the accumulated gradients.
         accumulated_grads_and_vars.append((grad, var))
 
@@ -600,7 +724,9 @@ def pipeline(computational_stages,
             Tout=func_graph.output_types,
             output_shapes=func_graph.output_shapes,
             offload_weight_update_variables=offload_weight_update_variables,
-            num_batches_to_accumulate=pipeline_depth)
+            replicated_optimizer_state_sharding=
+            replicated_optimizer_state_sharding,
+            num_batches_to_accumulate=gradient_accumulation_count)
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
@@ -635,11 +761,17 @@ def pipeline(computational_stages,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
-          pipeline_depth=pipeline_depth,
+          gradient_accumulation_count=gradient_accumulation_count,
+          batch_serialization_iterations=batch_serialization_iterations,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
           pipeline_poplar_config=json_format.MessageToJson(
-              pipeline_poplar_config))
+              pipeline_poplar_config),
+          offload_activations=offload_activations,
+          offload_gradient_accumulation_buffers=
+          offload_gradient_accumulation_buffers,
+          replicated_weight_sharding=replicated_weight_sharding,
+          offload_weights=offload_weights)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %
@@ -652,6 +784,7 @@ def _pipeline_stage(func,
                     stage_id,
                     device_id,
                     args,
+                    training,
                     infeed_queue=None,
                     outfeed_queue=None,
                     name=None):
@@ -695,6 +828,7 @@ def _pipeline_stage(func,
       return func(*(args + dequeue_ops))
 
     func_to_compile = infeed_func_wrapper
+
   # If we have an outfeed, then we wrap the function in another function which
   # enqueues the outfeed.
   if outfeed_queue:
@@ -711,11 +845,15 @@ def _pipeline_stage(func,
 
     func_to_compile = outfeed_func_wrapper
 
+  def gradient_override_wrapper(*args, **kwargs):
+    with op_util.gradient_override_scope(training):
+      return func_to_compile(*args, **kwargs)
+
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
     try:
       func_graph, captured_args = functional_ops._compile_function(
-          func_to_compile, args, scope, control_outputs)
+          gradient_override_wrapper, args, scope, control_outputs)
     except functional_ops._InvalidCaptureException as e:
       raise ValueError(
           "Trying to capture the tensor %s which is not a resource. This tensor"
@@ -734,5 +872,6 @@ def _pipeline_stage(func,
             stage_id=stage_id)
     if isinstance(outputs, ops.Operation):
       return outputs
-    return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                              outputs)
+
+    return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
+        func_graph.structured_outputs, outputs)

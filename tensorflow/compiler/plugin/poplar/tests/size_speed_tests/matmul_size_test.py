@@ -179,8 +179,8 @@ class MatMulSizeTest(xla_test.XLATestCase):
                                    for k in (x, y, z)})
       self.assertAllClose(np.full([B, I], 129.0), output[0])
       report.parse_log()
-      report.assert_total_tile_memory(138912857)
-      report.assert_max_tile_memory(114711)
+      report.assert_total_tile_memory(125580981)
+      report.assert_max_tile_memory(103185)
 
 
 if __name__ == "__main__":

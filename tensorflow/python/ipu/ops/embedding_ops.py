@@ -31,6 +31,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.util import deprecation
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
+from tensorflow.python.eager import context
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
@@ -153,6 +154,9 @@ def embedding_lookup(params,
 
 
 class HostEmbeddingOptimizerSpec:
+  # There are unused arguments because we are also defining an interface that will
+  # be used by subclasses.
+  # pylint: disable=W0613
   """ Description of the Host Embedding optimizer.
 
       Despite the embedding living on the host, we want to compute the gradients
@@ -163,7 +167,7 @@ class HostEmbeddingOptimizerSpec:
       Currently only supports SGD.
 
   """
-  def __init__(self, learning_rate):
+  def __init__(self, learning_rate, optimizer_name=None):
     """
     Create a HostEmbeddingOptimizerSpec.
 
@@ -172,9 +176,116 @@ class HostEmbeddingOptimizerSpec:
 
     """
     self._learning_rate = learning_rate
+    if optimizer_name is None:
+      optimizer_name = "SGD"
+    self._optimizer_name = optimizer_name
 
   def get_learning_rate(self):
+    """
+    Get the optimiser learning rate.
+
+    Returns:
+      The learning rate.
+
+    """
     return self._learning_rate
+
+  def create_lookup_instruction(self, embedding_tensor, indices, slot_vars,
+                                partition_strategy, name):
+    """
+    Create a lookup instruction.
+
+    This will be called from the `HostEmbedding` wrapper class.
+
+    Args:
+        embedding_tensor: The TF embedding tensor bound to the CPU.
+        indices: The TF indices tensor bound to the IPU.
+        slot_vars: Any created slot variables.
+        partition_strategy: The user selected partition strategy.
+        name: The name of the host embedding.
+
+    Returns:
+      The result of the embedding lookup in an IPU tensor.
+
+    """
+    with variable_scope.variable_scope(name, reuse=variable_scope.AUTO_REUSE):
+      dummy = variable_scope.get_variable("__dummy",
+                                          shape=[],
+                                          dtype=embedding_tensor.dtype,
+                                          trainable=True)
+    return gen_pop_datastream_ops.ipu_device_embedding_lookup_trainable(
+        dummy,
+        indices,
+        embedding_id=name,
+        embedding_shape=embedding_tensor.shape,
+        optimizer=self._optimizer_name,
+        partition_strategy=partition_strategy,
+        learning_rate=self.get_learning_rate())
+
+  def create_register_instruction(self, embedding_tensor, slot_vars, name):
+    """
+    Create a register instruction.
+
+    This will be called when entering the `HostEmbedding` context manager.
+
+    Args:
+        embedding_tensor: The TF embedding tensor bound to the CPU.
+        slot_vars: Any created slot variables.
+        name: The name of the host embedding.
+
+    Returns:
+      The register instruction.
+
+    """
+    return gen_pop_datastream_ops.ipu_host_embedding_register(
+        embedding_tensor, name, optimizer=self._optimizer_name)
+
+  def create_deregister_instruction(self, embedding_tensor, slot_vars, name):
+    """
+    Create a deregister instruction.
+
+    This will be called when exiting the `HostEmbedding` context manager.
+
+    Args:
+        embedding_tensor: The TF embedding tensor bound to the CPU.
+        slot_vars: Any created slot variables.
+        name: The name of the host embedding.
+
+    Returns:
+      The deregister instruction.
+
+    """
+    return gen_pop_datastream_ops.ipu_host_embedding_deregister(
+        embedding_tensor, name)
+
+  def create_slot_variables(self, embedding_tensor, name):
+    """
+    Create any required slot variables for this optimiser.
+
+    This will be called when exiting the `HostEmbedding` context manager.
+
+    Args:
+        embedding_tensor: The TF embedding tensor bound to the CPU.
+        name: The name of the host embedding.
+
+    Returns:
+      A list of TF tensors bound to the CPU.
+
+    """
+    return []
+
+
+class HostEmbeddingSGDGAOptimizerSpec(HostEmbeddingOptimizerSpec):
+  def __init__(self, learning_rate, accumulation_factor):
+    if accumulation_factor > 1:
+      super().__init__(learning_rate, "SGD+GA")
+    else:
+      super().__init__(learning_rate)
+
+    self._accumulation_factor = accumulation_factor
+
+  def get_accumulation_factor(self):
+    return self._accumulation_factor
 
 
 class HostEmbedding:
@@ -214,6 +325,9 @@ class HostEmbedding:
           "HostEmbedding optimizer_spec is not a HostEmbeddingOptimizerSpec" +
           " or None")
 
+    if optimizer_spec is None:
+      optimizer_spec = HostEmbeddingOptimizerSpec(0)
+
     if partition_strategy not in ["TOKEN", "ENCODING"]:
       raise ValueError("Unknown partition strategy " + str(partition_strategy))
 
@@ -222,27 +336,73 @@ class HostEmbedding:
     self._partition_strategy = partition_strategy
     self._optimizer_spec = optimizer_spec
     self._has_lookup = False
+    self._slot_vars = optimizer_spec.create_slot_variables(
+        self._embedding_tensor, self._name)
 
-  @deprecation.deprecated_args(None, "This argument no longer has any effect.",
-                               "iteration_count", "replication_factor",
-                               "training")
-  def __call__(self, iteration_count=0, replication_factor=1, training=True):
-    """ Register the host embedding with the session.
+  def get_embedding_tensor(self):
+    """ Retrieve the CPU bound embedding tensor.
+
+        Returns:
+          The TF CPU tensor for the embedding.
+    """
+    return self._embedding_tensor
+
+  def register(self, session=None):
+    """ Creates a host embedding context manager bound to the given session.
 
         Args:
-          iteration_count: The number of iterations in the user model.
-          replication_factor: The replication count of the user graph.
-          training: Whether this host embedding will be trained on this run.
-                    This allows the user to specify that the embedding won't be
-                    updated, despite the construction of gradient operations.
-                    This is useful for validation, using the training graph.
+          session: The session to register the embedding to.
         Returns:
-          A TensorFlow op which will serve the embedding to the device.
+          A Python context manager object. This object manages the lifetime
+          of the host embedding connection to the IPU.
     """
-    if self._has_lookup:
-      return gen_pop_datastream_ops.ipu_host_embedding(self._embedding_tensor,
-                                                       self._name)
-    return self._embedding_tensor
+
+    if (session is None) and (not context.executing_eagerly()):
+      raise ValueError(
+          "HostEmbedding.register requires a session when eager execution"
+          "is disabled.")
+
+    # Define this class within the function scope to make it inaccessible to
+    # the user.
+    class HostEmbeddingScope:
+      # We use protected access as though `HostEmbeddingScope` is a friend
+      # class of `HostEmbedding`.
+      # pylint: disable=W0212
+      def __init__(self, parent, session=None):
+        self._parent = parent
+        self._session = session
+
+      def _register(self):
+        return self._parent._optimizer_spec.create_register_instruction(
+            self._parent._embedding_tensor, self._parent._slot_vars,
+            self._parent._name)
+
+      def _deregister(self):
+        return self._parent._optimizer_spec.create_deregister_instruction(
+            self._parent._embedding_tensor, self._parent._slot_vars,
+            self._parent._name)
+
+      def __enter__(self):
+        if self._session is not None:
+          self._session.run(self._register())
+        else:
+          self._register()
+        return self._parent
+
+      def __exit__(self, exception_type, exception_value, traceback):
+        if self._session is not None:
+          self._session.run(self._deregister())
+        else:
+          self._deregister()
+
+    return HostEmbeddingScope(self, session)
+
+  def __call__(self, *args, **kwargs):
+    # Keeping the old function just so an exception can be used to inform
+    # users of the API change.
+    raise NotImplementedError(
+        "HostEmbedding.__call__ is not supported. "
+        "Please use the context manager created with HostEmbedding.register.")
 
   @deprecation.deprecated_args(None, "This argument no longer has any effect.",
                                "count")
@@ -270,28 +430,10 @@ class HostEmbedding:
     num_indices = reduce(mul, indices_shape, 1)
     indices_flat = array_ops.reshape(indices, [num_indices])
 
-    if self._optimizer_spec is not None:
-      with variable_scope.variable_scope(self._name,
-                                         reuse=variable_scope.AUTO_REUSE):
-        dummy = variable_scope.get_variable("__dummy",
-                                            shape=[],
-                                            dtype=self._embedding_tensor.dtype,
-                                            trainable=True)
-      result = gen_pop_datastream_ops.ipu_device_embedding_lookup_trainable(
-          dummy,
-          indices_flat,
-          embedding_id=self._name,
-          embedding_shape=self._embedding_tensor.shape,
-          optimizer="SGD",
-          partition_strategy=self._partition_strategy,
-          learning_rate=self._optimizer_spec.get_learning_rate())
-    else:
-      result = gen_pop_datastream_ops.ipu_device_embedding_lookup(
-          indices_flat,
-          embedding_id=self._name,
-          embedding_shape=self._embedding_tensor.shape,
-          partition_strategy=self._partition_strategy,
-          dtype=self._embedding_tensor.dtype)
+    result = self._optimizer_spec.create_lookup_instruction(
+        self._embedding_tensor, indices_flat, self._slot_vars,
+        self._partition_strategy, self._name)
+
     self._has_lookup = True
     # Reshape the result back to the caller's expected shape
     return array_ops.reshape(

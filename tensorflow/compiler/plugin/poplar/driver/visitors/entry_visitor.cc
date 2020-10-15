@@ -85,20 +85,22 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
-    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry", true) {}
+    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry") {}
 
-StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
-    const HloInstruction* inst) {
-  // Get the right sequence for stream copies, otherwise fallback to the
+Status EntryVisitor::AddSequenceForInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  // Use the right sequence for stream copies, otherwise fallback to the
   // default.
-  switch (inst->opcode()) {
-    case HloOpcode::kParameter: {
-      const auto& in_info = resources_.annotations.input_output_aliasing_map
-                                .GetEntryInputInfos()[inst->parameter_number()];
-      return in_info.IsStreaming() ? &sequence : &host_to_device;
+  if (inst->opcode() == HloOpcode::kParameter) {
+    const auto& in_info = resources_.annotations.input_output_aliasing_map
+                              .GetEntryInputInfos()[inst->parameter_number()];
+    if (!in_info.IsStreaming()) {
+      host_to_device.add(seq);
+      return Status::OK();
     }
-    default: { return DeferredVisitor::GetSequenceForInstruction(inst); }
   }
+
+  return DeferredVisitor::AddSequenceForInstruction(inst, seq);
 }
 
 StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
@@ -159,7 +161,11 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
         GetGraphWithOutputIndex(resources_, inst, flat_tuple_index);
     tensor = graph.clone(non_modified_tensor,
                          GetDebugName(inst) + ".resource_not_modified_clone");
-    sequence.add(poplar::program::Copy(non_modified_tensor, tensor));
+
+    // Call the base class since we do not want our own handling of
+    // parameters for this special case.
+    TF_RETURN_IF_ERROR(DeferredVisitor::AddSequenceForInstruction(
+        inst, poplar::program::Copy(non_modified_tensor, tensor)));
   }
   return tensor;
 }
@@ -197,8 +203,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
        ++idx) {
     auto& out_info = entry_outputs[idx];
 
-    poplar::program::Sequence& seq =
-        out_info.IsStreaming() ? sequence : device_to_host;
+    poplar::program::Sequence seq;
 
     // Flatten the tuple tensor (if required) and iterate over all of them
     const Shape layout_sub_shape =
@@ -252,8 +257,9 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
            ++tuple_index) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
-          sequence.add(poplar::program::Copy(out_tensors[tuple_index],
-                                             in_tensors[tuple_index]));
+          AddSequenceForInstruction(
+              root, poplar::program::Copy(out_tensors[tuple_index],
+                                          in_tensors[tuple_index]));
         }
       }
     }
@@ -276,6 +282,12 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
                                     resources_.always_rearrange_copies_on_host,
                                 graph, resources_, seq, out_info, root));
       }
+    }
+
+    if (out_info.IsStreaming()) {
+      AddSequenceForInstruction(root, seq);
+    } else {
+      device_to_host.add(seq);
     }
   }
 

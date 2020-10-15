@@ -17,6 +17,7 @@ import numpy as np
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -33,6 +34,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
+from tensorflow.python.training import optimizer as optimizer_lib
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -663,7 +665,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2, stage3],
-            pipeline_depth=6,
+            gradient_accumulation_count=6,
             repeat_count=1,
             inputs=[],
             infeed_queue=infeed_queue,
@@ -706,7 +708,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -748,7 +750,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -771,7 +773,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 18
+    gradient_accumulation_count = 18
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -855,7 +857,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3],
         lambda: [], [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -879,7 +881,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -914,7 +916,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         lambda: [], [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -935,7 +937,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 20
+    gradient_accumulation_count = 20
     repeat_count = 2
     optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
@@ -1004,7 +1006,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           [stage1, stage2, stage3, stage4, stage5],
           inputs_fn, [10.01],
           repeat_count,
-          pipeline_depth,
+          gradient_accumulation_count,
           dataset_fn,
           optimizer,
           self,
@@ -1129,7 +1131,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(ValueError,
                                   "An optimizer_function must be provided"):
         pipelining_ops.pipeline([identity, identity, identity, identity],
-                                pipeline_depth=4,
+                                gradient_accumulation_count=4,
                                 inputs=[1.0],
                                 outfeed_queue=outfeed_queue,
                                 outfeed_loss=True)
@@ -1137,7 +1139,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(ValueError,
                                   "An outfeed_queue must be provided"):
         pipelining_ops.pipeline([identity, identity, identity, identity],
-                                pipeline_depth=4,
+                                gradient_accumulation_count=4,
                                 inputs=[1.0],
                                 optimizer_function=optimizer_function,
                                 outfeed_loss=True)
@@ -1164,7 +1166,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
-                                       pipeline_depth=8,
+                                       gradient_accumulation_count=8,
                                        inputs=[x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
@@ -1203,7 +1205,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def my_net(x):
         return pipelining_ops.pipeline(
             [identity, identity, identity, dictstage],
-            pipeline_depth=8,
+            gradient_accumulation_count=8,
             inputs=[x],
             outfeed_queue=outfeed_queue)
 
@@ -1255,7 +1257,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, stage2],
-                                       pipeline_depth=4,
+                                       gradient_accumulation_count=4,
                                        inputs=[x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function)
@@ -1299,7 +1301,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
-                                       pipeline_depth=8,
+                                       gradient_accumulation_count=8,
                                        inputs=[x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
@@ -1399,7 +1401,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -1438,12 +1440,183 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3],
         inputs_fn, [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
         14415,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithEmbeddingOptimization(self):
+    dataset_size = 100
+    embedding_size = 15
+
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(dataset_size, shape=[4])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value,
+                             np.int32), math_ops.cast(label % 4, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 8
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    np.random.seed(1)
+    embedding_shape = (dataset_size, embedding_size)
+    embedding_initializer = np.random.normal(0, 1, embedding_shape).astype(
+        np.float32)
+    weights_shape = (embedding_size, embedding_size)
+    weights_initializer = np.random.normal(0, 1,
+                                           weights_shape).astype(np.float32)
+
+    def stage1(idx, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        embedding = variable_scope.get_variable(
+            "c",
+            dtype=np.float32,
+            initializer=embedding_initializer,
+            trainable=True)
+        x = embedding_ops.embedding_lookup(embedding, idx)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable("w0",
+                                             dtype=np.float32,
+                                             initializer=weights_initializer,
+                                             trainable=True)
+        x = math_ops.matmul(x, weight)
+      return x, label
+
+    def stage3(x, label):
+      x = math_ops.reduce_sum(x, axis=[-1])
+      return x, label
+
+    def stage4(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        12049,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
+
+  @test_util.deprecated_graph_mode_only
+  def testGradientAccumulationDtype(self):
+    gradient_accumulation_count = 8
+    gradient_accumulation_dtype = np.float32
+
+    x = np.finfo(np.float16).max
+    y = np.array(0.0, dtype=np.float16)
+    initial_w = np.array(1.0, dtype=np.float16)
+    learning_rate = 2**-10
+
+    features = np.repeat(x, gradient_accumulation_count)
+    labels = np.repeat(y, gradient_accumulation_count)
+    dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("grad_outfeed")
+
+    def stage1(features, labels):
+      w = variable_scope.get_variable(name="w", initializer=initial_w)
+      partial = w * features
+      return partial, labels
+
+    def stage2(partial, labels):
+      loss = partial + labels
+      return loss
+
+    def identity(*args):
+      return args
+
+    def optimizer_function(loss):
+      class CastingGradientDescent(optimizer_lib.Optimizer):  # pylint: disable=abstract-method
+        """Compute update using the dtype of the gradient, and then cast to
+        the dtype of the variable."""
+        def __init__(self, outer):
+          self.outer = outer
+          super().__init__(use_locking=False, name="CastingGradientDescent")
+
+        def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+          update_ops = []
+
+          for (grad, var) in grads_and_vars:
+            self.outer.assertEqual(grad.dtype, gradient_accumulation_dtype)
+            update_ops.append(grad_outfeed_queue.enqueue(grad))
+            delta = math_ops.cast(-learning_rate * grad, var.dtype)
+            update_ops.append(var.assign_add(delta))
+
+          return control_flow_ops.group(*update_ops)
+
+      opt = CastingGradientDescent(self)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def model():
+      pipeline_op = pipelining_ops.pipeline(
+          computational_stages=[stage1, identity, identity, stage2],
+          gradient_accumulation_count=gradient_accumulation_count,
+          gradient_accumulation_dtype=gradient_accumulation_dtype,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          optimizer_function=optimizer_function,
+          name="Pipeline")
+      return pipeline_op
+
+    def compiled_model():
+      with ops.device("/device:IPU:0"):
+        return ipu_compiler.compile(model)
+
+    with tu.ipu_session() as sess:
+
+      train_op = compiled_model()
+
+      dequeued_gradient = grad_outfeed_queue.dequeue()
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      sess.run(infeed_queue.initializer)
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(train_op)
+      [actual_accumulated_gradient] = sess.run(dequeued_gradient)
+
+      # L(x) = w * x + y
+      # dL(x)/dw = x
+      # This would overflow in fp16:
+      expected_accumulated_gradient = gradient_accumulation_count * x.astype(
+          gradient_accumulation_dtype)
+
+      self.assertAllEqual(expected_accumulated_gradient,
+                          actual_accumulated_gradient)
+
+      sess.run(infeed_queue.deleter)
+      sess.run(outfeed_queue.deleter)
+      sess.run(grad_outfeed_queue.deleter)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import functional_ops_grad
 from tensorflow.python.ops import control_flow_util_v2 as util
 
@@ -41,5 +42,5 @@ def _multi_conv_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes,
       option_flags=op.get_attr("option_flags"))
 
-  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
-                                            outputs)
+  return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
+      func_grad_graph.structured_outputs, outputs)

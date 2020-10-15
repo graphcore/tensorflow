@@ -17,10 +17,12 @@ import numpy as np
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -30,6 +32,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
+from tensorflow.python.training import optimizer as optimizer_lib
 from tensorflow.python.training import adam
 from tensorflow.python.training import rmsprop
 from tensorflow.python.ipu import embedding_ops
@@ -516,6 +519,98 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testCompare6RMS(self):
     self._compare6(rmsprop.RMSPropOptimizer(0.01))
+
+  @test_util.deprecated_graph_mode_only
+  def testGradientAccumulationDtype(self):
+    gradient_accumulation_count = 8
+    gradient_accumulation_dtype = np.float32
+
+    x = np.finfo(np.float16).max
+    y = np.array(0.0, dtype=np.float16)
+    initial_w = np.array(1.0, dtype=np.float16)
+    learning_rate = 2**-10
+
+    features = np.repeat(x, gradient_accumulation_count)
+    labels = np.repeat(y, gradient_accumulation_count)
+    dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    class CastingGradientDescent(optimizer_lib.Optimizer):  # pylint: disable=abstract-method
+      """Compute update using the dtype of the gradient, and then cast to
+      the dtype of the variable."""
+      def __init__(self, outer):
+        self.outer = outer
+        super().__init__(use_locking=False, name="CastingGradientDescent")
+
+      def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+        update_ops = []
+
+        for (grad, var) in grads_and_vars:
+          self.outer.assertEqual(grad.dtype, gradient_accumulation_dtype)
+          update_ops.append(grad_outfeed_queue.enqueue(grad))
+          delta = math_ops.cast(-learning_rate * grad, var.dtype)
+          update_ops.append(var.assign_add(delta))
+
+        return control_flow_ops.group(*update_ops)
+
+    def model_iteration(features, labels):
+      w = variable_scope.get_variable(name="w", initializer=initial_w)
+      partial = w * features
+      loss = partial + labels
+
+      def dtype_getter(var):
+        self.assertEqual(var, w)
+        return gradient_accumulation_dtype
+
+      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+          CastingGradientDescent(self),
+          gradient_accumulation_count,
+          dtype=dtype_getter)
+      return opt.minimize(loss)
+
+    def model():
+      return loops.repeat(gradient_accumulation_count,
+                          model_iteration,
+                          infeed_queue=infeed_queue)
+
+    def compiled_model():
+      with ops.device("/device:IPU:0"):
+        return ipu_compiler.compile(model)
+
+    train_op = compiled_model()
+
+    dequeued_gradient = grad_outfeed_queue.dequeue()
+
+    profiling = utils.running_on_ipu_model()
+    cfg = utils.create_ipu_config(profiling=profiling,
+                                  profile_execution=profiling)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
+    cfg = utils.auto_select_ipus(cfg, 1)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    with tu.ipu_session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(train_op)
+      [actual_accumulated_gradient] = sess.run(dequeued_gradient)
+
+      # L(x) = w * x + y
+      # dL(x)/dw = x
+      # This would overflow in fp16:
+      expected_accumulated_gradient = gradient_accumulation_count * x.astype(
+          gradient_accumulation_dtype)
+
+      self.assertAllEqual(expected_accumulated_gradient,
+                          actual_accumulated_gradient)
+
+      sess.run(infeed_queue.deleter)
+      sess.run(grad_outfeed_queue.deleter)
 
 
 if __name__ == "__main__":

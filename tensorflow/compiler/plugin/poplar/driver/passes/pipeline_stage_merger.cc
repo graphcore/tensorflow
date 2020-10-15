@@ -82,7 +82,7 @@ StatusOr<bool> MergeLastForwardAndBackwardStage(
                         last_fwd_stage->backend_config<PoplarBackendConfig>());
     cfg.mutable_call_config()->set_type(
         PoplarBackendConfig::CallConfig::PipelineStageBackward);
-    last_fwd_stage->set_backend_config(cfg);
+    TF_RETURN_IF_ERROR(last_fwd_stage->set_backend_config(cfg));
     last_bwd_stage = last_fwd_stage;
     last_bwd_stage->clear_sharding();
   }

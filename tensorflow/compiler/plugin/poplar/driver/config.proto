@@ -40,7 +40,6 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 37
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -199,7 +198,7 @@ message IpuOptions {
   IpuSelectionOrder selection_order = 21;
 
   // Whether to converts gathers into multiSlice operations.
-  bool enable_gather_simplifier = 22;
+  bool disable_gather_simplifier = 22;
 
   // Where to save the compiled executable.
   string serialization_folder = 23;
@@ -236,8 +235,8 @@ message IpuOptions {
   // Options controlling the configuration of Poplar data transfers.
   VerifiedTransfers verified_transfers = 29;
 
-  // How many tiles to reserve per IPU for the Graphcore Communication Library.
-  int64 gcl_num_io_tiles = 30;
+  // How many tiles to reserve per IPU for IO operations.
+  int64 num_io_tiles = 30;
 
   // Collective operations options for the Graphcore Communication Library.
   repeated PoplarOptionFlag gcl_options = 31;
@@ -254,4 +253,15 @@ message IpuOptions {
   // Options for multi-replica distribution.
   int64 multi_replica_process_count = 35;
   int64 multi_replica_process_index = 36;
+
+  // The minimum size a tensor (in bytes) has to be in order to be consider for
+  // being stored in remote memory.
+  int64 minimum_remote_tensor_size = 37;
+
+  // Whether to place TensorFlow operations on IO tiles.
+  bool place_ops_on_io_tiles = 38;
+
+  // Whether to enable remote buffers for the compilations without devices
+  // attached.
+  bool enable_remote_buffers_without_device = 39;
 };

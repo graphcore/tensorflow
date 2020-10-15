@@ -62,7 +62,7 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
     auto target = resources->main_graph->getTarget();
     auto tiles_per_ipu = target.getTilesPerIPU();
     for (int64 i = 0; i != num_shards; ++i) {
-      resources->shard_graphs.emplace_back(
+      resources->shard_compute_graphs.emplace_back(
           resources->main_graph->createVirtualGraph(i * tiles_per_ipu,
                                                     (i + 1) * tiles_per_ipu));
     }

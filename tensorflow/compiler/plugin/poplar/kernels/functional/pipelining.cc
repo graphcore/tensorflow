@@ -151,6 +151,8 @@ class ResourceUpdateOp : public XlaOpKernel {
                                         "to have no explicit outputs."));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weight_update_variables",
                                      &offload_weight_update_variables_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_optimizer_state_sharding",
+                                     &replicated_optimizer_state_sharding_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_batches_to_accumulate",
                                      &num_batches_to_accumulate_));
   }
@@ -203,10 +205,17 @@ class ResourceUpdateOp : public XlaOpKernel {
                        PoplarBackendConfig_CallConfig_Type_Name(
                            PoplarBackendConfig::CallConfig::ResourceUpdate)));
     // Set the offload_weight_update_variables flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
-                       std::to_string(offload_weight_update_variables_)));
+    OP_REQUIRES_OK(
+        ctx,
+        builder->SetInstructionFrontendAttribute(
+            outputs, FrontendAttributeId_Name(OFFLOAD_WEIGHT_UPDATE_VARIABLES),
+            offload_weight_update_variables_));
+    // Set the offload_weight_update_variables flag.
+    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
+                            outputs,
+                            FrontendAttributeId_Name(
+                                PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES),
+                            replicated_optimizer_state_sharding_));
     // Set the num_batches_to_accumulate flag.
     OP_REQUIRES_OK(
         ctx, builder->SetInstructionFrontendAttribute(
@@ -237,7 +246,8 @@ class ResourceUpdateOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  bool offload_weight_update_variables_;
+  std::string offload_weight_update_variables_;
+  std::string replicated_optimizer_state_sharding_;
   int64 num_batches_to_accumulate_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ResourceUpdateOp);
@@ -254,7 +264,17 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
+                                     &gradient_accumulation_count_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
+                                     &batch_serialization_iterations_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("offload_activations", &offload_activations_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_gradient_accumulation_buffers",
+                                     &offload_gradient_accumulation_buffers_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_weight_sharding",
+                                     &replicated_weight_sharding_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
     OP_REQUIRES_OK(
@@ -346,9 +366,17 @@ class PipelineOp : public XlaOpKernel {
                             PoplarBackendConfig_CallConfig_Type_Name(
                                 PoplarBackendConfig::CallConfig::Pipeline)));
     // Set the pipeline depth.
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
-                            std::to_string(pipeline_depth_)));
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(GRADIENT_ACCUMULATION_COUNT),
+                 std::to_string(gradient_accumulation_count_)));
+    // Set the batch serialization iterations.
+    OP_REQUIRES_OK(
+        ctx,
+        builder->SetInstructionFrontendAttribute(
+            outputs,
+            FrontendAttributeId_Name(PIPELINE_BATCH_SERIALIZATION_ITERATIONS),
+            std::to_string(batch_serialization_iterations_)));
     // Set the repeat count.
     OP_REQUIRES_OK(ctx,
                    builder->SetInstructionFrontendAttribute(
@@ -364,6 +392,28 @@ class PipelineOp : public XlaOpKernel {
         ctx, builder->SetInstructionFrontendAttribute(
                  outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
                  pipeline_poplar_config_));
+    // Set the offload_activations flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_ACTIVATIONS),
+                       offload_activations_));
+    // Set the offload_gradient_accumulation_buffers flag.
+    OP_REQUIRES_OK(
+        ctx,
+        builder->SetInstructionFrontendAttribute(
+            outputs,
+            FrontendAttributeId_Name(OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS),
+            offload_gradient_accumulation_buffers_));
+    // Set the replicated_weight_sharding flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(PARTITION_VARIABLES),
+                       replicated_weight_sharding_));
+    // Set the offload_weights flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
+                       offload_weights_));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -390,10 +440,15 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 pipeline_depth_;
+  int64 gradient_accumulation_count_;
+  int64 batch_serialization_iterations_;
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;
+  std::string offload_activations_;
+  std::string offload_gradient_accumulation_buffers_;
+  std::string replicated_weight_sharding_;
+  std::string offload_weights_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

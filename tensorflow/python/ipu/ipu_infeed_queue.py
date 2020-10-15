@@ -92,7 +92,8 @@ class IPUInfeedQueue:
                feed_name,
                device_ordinal=0,
                replication_factor=1,
-               data_to_prefetch=1):
+               data_to_prefetch=1,
+               prefetch_depth=None):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -120,6 +121,13 @@ class IPUInfeedQueue:
          fewer round trips to host memory. It may be that larger number of
          batches should be prefetched at once in order to see any benefit as the
          lookup itself has some overhead from internal copies.
+        prefetch_depth: the number of elements poplar will prefetch.
+          The depth of the poplar datastream buffer size which may be prefetched
+          before being read by the device. By default the prefetch_depth size is
+          automatically determined. Increasing the size of the prefetch_depth
+          allows for prefetching of multiple entries, increasing the probability
+          there will be a valid entry in the buffer for the device to read
+          before falling back to synchronously fetching the next entry.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not
@@ -134,12 +142,24 @@ class IPUInfeedQueue:
       if not output_shape.is_fully_defined():
         raise ValueError("""Output shape {} is not fully defined. If using \
 tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
+    if prefetch_depth is None:
+      prefetch_depth = 1
+    if prefetch_depth <= 0:
+      raise ValueError(
+          "prefetch_depth must be greater than zero, but it is {}".format(
+              prefetch_depth))
+    if prefetch_depth > 255:
+      raise ValueError(
+          "prefetch_depth must be less than 256, but it is {}".format(
+              prefetch_depth))
+
     with ops.device('/device:CPU:0'):
       self._replication_factor = replication_factor
       self._dataset = dataset
       self._structure = dataset_ops.get_structure(self._dataset)
       self._flat_structure = dataset._flat_structure
       self._device_ordinal = device_ordinal
+      self._prefetch_depth = prefetch_depth
 
       # We use max to clamp 0/1 to the same value.
       self._io_batch_size = max(1, data_to_prefetch)
@@ -199,6 +219,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
         feed_id=self._id,
         replication_factor=self._replication_factor,
         io_batch_size=self._io_batch_size,
+        prefetch_depth=self._prefetch_depth,
         **self._flat_structure)
     self._dequeued = True
     return structure.from_tensor_list(self._structure, flat_ret)

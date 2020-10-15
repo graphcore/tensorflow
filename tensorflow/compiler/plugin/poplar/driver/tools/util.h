@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -127,10 +128,12 @@ StatusOr<std::vector<NativeT>> WideConstToNativeType(
 bool IsInstructionInEntryComputation(const HloInstruction*);
 bool IsPopOpsFusion(const HloComputation*, const std::string& postfix = "");
 bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
+bool IsFusion(const HloInstruction*, const std::string& name);
 bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
 int64 GetRepeatLoopCount(const HloInstruction*);
+bool GetRepeatLoopAllowFinerAliasAnalysis(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineStageRecomputation(const HloInstruction*);
@@ -138,9 +141,18 @@ bool IsResourceUpdate(const HloInstruction*);
 bool IsFunction(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
+bool IsBatchSerializedPipelineOp(const HloInstruction*);
+int64 GetPipelineRepeatCount(const HloInstruction*);
+int64 GetGradientAccumulationCount(const HloInstruction*);
+int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
+ThreeState GetPipelineOffloadActivations(const HloInstruction*);
+ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
+ThreeState GetPipelinePartitionVariables(const HloInstruction*);
+ThreeState GetPipelineOffloadVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
-bool GetResourceUpdateOffloadVariables(const HloInstruction*);
+ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
+ThreeState GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 
@@ -189,7 +201,8 @@ HloInstruction* ConvertInstruction(HloInstruction* inst,
 
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
-    const string& outlined_computation_name, HloComputation* computation);
+    const string& outlined_computation_name, HloComputation* computation,
+    const std::vector<HloInstruction*>& explicit_parameters = {});
 
 // Helper for storing slice dimensions.
 struct SliceInfo {
@@ -208,6 +221,11 @@ SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape);
 
 Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
                            const int64 dimension);
+
+// Get a unique GTE user of `inst` at a given tuple index.
+StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
+                                           int64 tuple_index);
+
 // Poplar's dimShuffle does: return_value.dimensions[i] =
 // argument.dimensions[permutations[i]] Whereas ShapeUtil::PermuteDimensions
 // does: return_value.dimensions[permutation[i]] = argument.dimensions[i].
@@ -239,6 +257,8 @@ struct HloComputationEquals {
 };
 
 Status CreateDirIfMissing(const std::string& path);
+
+StatusOr<Tileset> GetTileset(const HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla

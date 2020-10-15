@@ -90,10 +90,12 @@ bool IsBackwardsConv(HloInstruction* inst) {
 }
 
 struct Replacer {
+  virtual ~Replacer() = default;
   virtual Status Replace() = 0;
 };
 
 struct Matcher {
+  virtual ~Matcher() = default;
   virtual std::unique_ptr<Replacer> PatternMatch(
       HloInstruction* inst) const = 0;
 };

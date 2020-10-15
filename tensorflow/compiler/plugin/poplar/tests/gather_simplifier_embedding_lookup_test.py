@@ -45,9 +45,11 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    self.assertFalse(cfg.enable_gather_simplifier)
+    self.assertFalse(cfg.disable_gather_simplifier)
+    cfg = utils.set_optimization_options(cfg, gather_simplifier=False)
+    self.assertTrue(cfg.disable_gather_simplifier)
     cfg = utils.set_optimization_options(cfg, gather_simplifier=True)
-    self.assertTrue(cfg.enable_gather_simplifier)
+    self.assertFalse(cfg.disable_gather_simplifier)
     utils.configure_ipu_system(cfg)
 
     # Set test range shape.
@@ -83,9 +85,9 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
 
       # This tests gather simplifier hlo pass for embedding_lookup case.
       # It checks if "embedding_lookup/gather*/multiSlice" string was
-      # replaced by embedding_lookup/custom-call/*/multiSlice".
+      # replaced by embedding_lookup/multi-slice/*/multiSlice".
       ok = [
-          'embedding_lookup/custom-call/output/multiSlice/*',
+          'embedding_lookup/multi-slice/output/multiSlice/*',
           '__seed/set/setMasterSeed',
           'host-exchange-local-copy-',
       ]

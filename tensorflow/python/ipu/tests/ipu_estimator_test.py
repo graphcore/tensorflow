@@ -512,6 +512,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       return dataset
 
     ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=1)
 
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              ipu_options=ipu_options,
@@ -576,8 +577,10 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                            compile_ipu_code=True,
                            execution_trace=False)
 
+    ipu_options = ipu_utils.auto_select_ipus(report.ipu_config, num_ipus=1)
+
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                             ipu_options=report.ipu_config,
+                                             ipu_options=ipu_options,
                                              compile_summary=True)
 
     run_config = ipu_run_config.RunConfig(ipu_run_config=ipu_config,
@@ -1027,6 +1030,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
     ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=1)
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                              ipu_options=ipu_options,
                                              compile_summary=True)
@@ -1050,6 +1054,27 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                                ipu_options=ipu_options,
                                                compile_summary=True)
 
+    with self.assertRaisesRegex(
+        ValueError, r"`IPURunConfig` configured with 4 devices "
+        r"\(4 num_replicas times 1 num_shards\), "
+        r"but `IpuOptions` configured with 1 devices"):
+      ipu_options = ipu_utils.create_ipu_config(profiling=True)
+      ipu_options = ipu_utils.auto_select_ipus(ipu_options, [4, 1])
+      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                               num_replicas=4,
+                                               ipu_options=ipu_options,
+                                               compile_summary=True,
+                                               ordinal=1)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, [2, 4])
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=4,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True,
+                                             ordinal=1)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
     ipu_options = ipu_utils.create_ipu_config(profiling=True)
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -1066,22 +1091,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                              ipu_options=ipu_options,
                                              compile_summary=True)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
-
-    with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
-      ipu_options = ipu_utils.create_ipu_config(profiling=True)
-      ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
-      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                               num_replicas=4,
-                                               ipu_options=ipu_options,
-                                               compile_summary=True)
-
-    with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
-      ipu_options = ipu_utils.create_ipu_config(profiling=True)
-      ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
-      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                               num_shards=4,
-                                               ipu_options=ipu_options,
-                                               compile_summary=True)
 
     ipu_options = ipu_utils.create_ipu_config(profiling=True)
     ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2, 3])

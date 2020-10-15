@@ -18,7 +18,9 @@ Normalization Keras layers
 """
 
 from tensorflow.python.framework import dtypes
+from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -128,7 +130,9 @@ class GroupNorm(Layer):
     self.built = True
 
   # pylint: disable=arguments-differ
-  def call(self, inputs, training=True):
+  def call(self, inputs, training=None):
+    if training is None:
+      training = K.learning_phase()
 
     params_shape = [self.channels]
 
@@ -141,7 +145,7 @@ class GroupNorm(Layer):
                                       dtype=self.dtype,
                                       shape=params_shape)
 
-    if training:
+    def group_norm_training():
       outputs, _, _ = gen_popnn_ops.popnn_group_norm_training(
           inputs=inputs,
           gamma=self.gamma,
@@ -150,8 +154,9 @@ class GroupNorm(Layer):
           epsilon=self.epsilon,
           num_groups=self.groups,
           strided_channel_grouping=self.strided_channel_grouping)
+      return outputs
 
-    else:
+    def group_norm_inference():
       # Calculate the moments.
       mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
           inputs=inputs,
@@ -170,6 +175,11 @@ class GroupNorm(Layer):
           epsilon=self.epsilon,
           num_groups=self.groups,
           strided_channel_grouping=self.strided_channel_grouping)
+      return outputs
+
+    outputs = tf_utils.smart_cond(training, group_norm_training,
+                                  group_norm_inference)
+
     return outputs
 
 
@@ -221,7 +231,7 @@ class InstanceNorm(GroupNorm):
     super(InstanceNorm, self).build(input_shape)
 
   # pylint: disable=useless-super-delegation
-  def call(self, inputs, training=True):
+  def call(self, inputs, training=None):
     return super(InstanceNorm, self).call(inputs, training)
 
 
@@ -276,5 +286,5 @@ class LayerNorm(GroupNorm):
     super(LayerNorm, self).build(input_shape)
 
   # pylint: disable=useless-super-delegation
-  def call(self, inputs, training=True):
+  def call(self, inputs, training=None):
     return super(LayerNorm, self).call(inputs, training)

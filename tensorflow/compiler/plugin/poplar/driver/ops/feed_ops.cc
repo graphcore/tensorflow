@@ -70,11 +70,16 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
           GetInfeedCopyHandle(infeed->name(), tuple_index);
       TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
           infeed_config.feed_id(), tuple_index, handle, seq, inst));
+
+      poplar::OptionFlags fifo_options =
+          res.streams_indices.GraphFeedOptions(handle);
+      fifo_options.set("bufferingDepth",
+                       std::to_string(infeed_config.prefetch_depth()));
+
       auto fifo = graph.addHostToDeviceFIFO(
           handle, tensor_to_update.elementType(),
           tensor_to_update.numElements(),
-          poplar::ReplicatedStreamMode::REPLICATE,
-          res.streams_indices.GraphFeedOptions(handle));
+          poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
       if (res.use_verified_transfers) {
         TF_ASSIGN_OR_RETURN(poplar::Tensor index,
                             res.streams_indices.IndexTensor(handle, inst, seq));

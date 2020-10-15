@@ -37,7 +37,8 @@ bool IsPipelineOk(const PipelineStages& stages) {
           break;
         case HloOpcode::kGetTupleElement: {
           // Make sure GTE is on the previous stage.
-          if (operand->operand(0) == stages.forward[fwd_stage_id - 1]) {
+          if (fwd_stage_id > 0 &&
+              operand->operand(0) == stages.forward.at(fwd_stage_id - 1)) {
             break;
           }
         }
@@ -57,8 +58,9 @@ bool IsPipelineOk(const PipelineStages& stages) {
         case HloOpcode::kGetTupleElement: {
           // Make sure GTE is on the previous stage or on the corresponding fwd
           // stage.
-          if (operand->operand(0) == stages.backward[bwd_stage_id + 1] ||
-              operand->operand(0) == stages.forward[bwd_stage_id]) {
+          if ((bwd_stage_id < stages.backward.size() - 1 &&
+               operand->operand(0) == stages.backward.at(bwd_stage_id + 1)) ||
+              operand->operand(0) == stages.forward.at(bwd_stage_id)) {
             break;
           }
         }

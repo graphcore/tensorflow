@@ -20,6 +20,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/synchronization/notification.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
 
@@ -90,8 +92,8 @@ class InfeedQueue {
 
   // Non-blocking pop with sentinel checking. Returns false if no items
   // are available or the end is reached.
-  bool TryPop(T& item) {
-    if (!queue_.TryPop(item)) {
+  bool TryPop(T& item, std::size_t look_ahead = 0) {
+    if (!queue_.TryPop(item, look_ahead)) {
       return false;
     }
     if (item == kEndOfQueueSentinel) {
@@ -102,8 +104,8 @@ class InfeedQueue {
 
   // Blocking pop with sentinel checking. Returns false if and only if the end
   // is reached.
-  bool BlockPop(T& item) {
-    queue_.BlockPop(item);
+  bool BlockPop(T& item, std::size_t look_ahead = 0) {
+    queue_.BlockPop(item, look_ahead);
     return item != kEndOfQueueSentinel;
   }
 
@@ -118,10 +120,11 @@ class InfeedIterator {
   InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
                  tensorflow::data::IteratorContext::Params params,
                  tensorflow::data::DatasetBase* dataset,
-                 tensorflow::CancellationManager* cancellation_manager,
                  InfeedAllocator* infeed_allocator_, int64 replication_factor,
                  const std::vector<xla::Shape>& shapes,
                  const std::string& feed_id);
+
+  ~InfeedIterator();
 
   Status GetNext(std::vector<tensorflow::Tensor>* outputs,
                  bool* end_of_sequence);
@@ -135,13 +138,18 @@ class InfeedIterator {
   std::vector<Shape> shapes_;
 
   // Not owned.
-  // Cancellation manager from the poplar executor.
-  tensorflow::CancellationManager* cancellation_manager_;
   // Allocator that should be used for allocating buffers for infeeds.
   InfeedAllocator* infeed_allocator_;
 
+  std::shared_ptr<tensorflow::mutex> mu_;
+  std::shared_ptr<absl::Notification> cancelled_notification_;
+
   // Owned
   // Note that member order is important.
+  // Cancellation manager for the dataset.
+  tensorflow::CancellationManager cancellation_manager_;
+  // Function called to deregister the parent of the cancellation manager.
+  std::function<void()> deregister_cancellation_manager_parent_fn_;
   // Resource manager used by the iterators.
   tensorflow::ResourceMgr resource_mgr_;
   // The device manager which contains the device for this iterator.
@@ -160,7 +168,8 @@ class InfeedIterator {
   // The device iterator used for this queue.
   std::unique_ptr<tensorflow::data::IteratorBase> iterator_;
   // Storage of infeed queues.
-  std::vector<std::vector<std::unique_ptr<InfeedQueue>>> infeed_queues_;
+  using InfeedQueueStorage = std::unique_ptr<InfeedQueue, void (*)(void*)>;
+  std::vector<std::vector<InfeedQueueStorage>> infeed_queues_;
   // Used by the accessor.
   std::vector<std::vector<InfeedQueue*>> infeed_queues_ptrs_;
 };

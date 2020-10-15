@@ -72,6 +72,9 @@ For example, this will not work:
 .. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
   :members: IPUHorovodStrategy
 
+.. automodule:: tensorflow.python.ipu.horovod.ipu_multi_replica_strategy
+  :members: IPUMultiReplicaStrategy
+
 .. _datasets-api:
 
 Datasets
@@ -120,11 +123,11 @@ Keras
 ^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras
-  :members: Sequential, PipelinedModel
-  :imported-members: Sequential, PipelinedModel
+  :members: Model, Sequential, PipelineStage, PipelineModel, SequentialPipelineModel
+  :imported-members: Model, Sequential, PipelineModel, PipelineStage, SequentialPipelineModel
 
 .. automodule:: tensorflow.python.ipu.keras.model
-  :members: IPUSequential
+  :members: IPUModel, IPUSequential
 
 .. _keras-layers-api:
 
@@ -141,8 +144,8 @@ Keras layers
 
 
 .. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
-  :imported-members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
+  :members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM, SerialDense
+  :imported-members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM, SerialDense
 
 .. _operators-api:
 

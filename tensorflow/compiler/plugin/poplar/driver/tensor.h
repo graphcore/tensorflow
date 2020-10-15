@@ -58,6 +58,10 @@ bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
 bool PoplarShapeMatchesXLAShape(poplar::RemoteBuffer remote_buffer,
                                 const xla::Shape& shape);
 
+bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
+                                const xla::Shape& shape,
+                                CompilerResources& resources);
+
 // Concatenate all tensors into a single tensor.
 poplar::Tensor FlattenAndConcatenateTensors(
     const std::vector<poplar::Tensor>& tensors);
@@ -176,11 +180,27 @@ StatusOr<poplar::Tensor> BroadcastTensor(
     const poplar::Tensor& in, const xla::Shape& out,
     const std::vector<int64>& dimensions = {});
 
+Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
+                 const TensorOrRemoteBuffer& torb);
+
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor);
 
 Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
                              int64 n, poplar::RemoteBuffer rbuffer);
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             bool is_replica_partitioned);
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             int64 slice_dimension);
+
+Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
+                             int64 n, poplar::RemoteBuffer rbuffer,
+                             bool is_replica_partitioned,
+                             int64 slice_dimension);
 
 /* This returns a [range) which correspond to the flat tuple indices of output
  * tensors.
@@ -310,7 +330,7 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
  * @param inst the instruction which uses tensor.
  * @param operand_index the index of `inst` operand where tensor came from.
  * @param operand_tuple_idx the output tuple index for the operand where tensor
- * came from.
+ *        came from.
  * @param seq sequence where copies might be added.
  * @param is_lowered_inplace whether this tensor is being lowered inplace.
  * @param parallel_writeable_output whether the output must be parallel
@@ -349,7 +369,8 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(
     bool always_preserve_aliases = false);
 
 /**
- * Same as the above function, but has the option to also return remote buffers.
+ * Same as the above function, but has the option to also return remote
+ * buffers.
  */
 StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,

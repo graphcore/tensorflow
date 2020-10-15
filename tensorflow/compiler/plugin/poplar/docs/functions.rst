@@ -36,6 +36,8 @@ A `variable_scope` is not a `tf.Tensor`-like object and therefore it cannot be
 passed as an argument, so if we used the following function:
 
 .. literalinclude:: function_block1.py
+  :language: python
+  :linenos:
 
 Each invocation of the function of the function will use the same variable.
 
@@ -43,6 +45,8 @@ To circumvent this, we can use Python closures to create unique scopes for each
 invocation of the function:
 
 .. literalinclude:: function_block2.py
+  :language: python
+  :linenos:
 
 Here we wrap the IPU function (`f`) in a Python function(`func`), which has
 extra arguments (the variable scope name). These extra arguments can then be
@@ -53,9 +57,12 @@ Alternatively we can explicitly pass the `tf.Variables` as inputs to the
 function:
 
 .. literalinclude:: function_block3.py
+  :language: python
+  :linenos:
 
 Examples
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+
 Functions can be beneficial in many scenarios, especially where we want to
 reduce the amount of code generated.
 
@@ -67,6 +74,8 @@ where the inputs and outputs have the same shapes and data types. We can create
 a single function for these common building blocks to reduce the code size.
 
 .. literalinclude:: function_example1.py
+  :language: python
+  :linenos:
 
 Serializing large operations
 ____________________________
@@ -76,4 +85,6 @@ Such spikes can be reduced by serializing the operation, however it can result
 in extra code. To try and avoid the extra code, IPU functions can be used.
 
 .. literalinclude:: function_example2.py
+  :language: python
+  :linenos:
 

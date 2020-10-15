@@ -102,9 +102,14 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_*weightsRearranged', 'Copy_',
-          'Copy_vs/*/OnTileCopy-0', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/Cast/convert.*/Cast', 'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
+          '__seed*',
+          'Copy_*weightsRearranged',
+          'Copy_',
+          'Copy_vs/*/OnTileCopy-0',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          'vs/Cast/convert.*/Cast',
+          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
+          'copy*_host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -440,8 +445,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(11223228)
-      report.assert_max_tile_memory(9631)
+      report.assert_total_tile_memory(11336260)
+      report.assert_max_tile_memory(9675)
 
       # Would fail if there were two convolutions in the graph
       ok = ['__seed*', 'a/convolution', 'Copy_']

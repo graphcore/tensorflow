@@ -14,7 +14,6 @@
 # ==============================================================================
 """Test for IPU Keras Pipelined model save and restore."""
 
-
 import os
 import shutil
 
@@ -72,7 +71,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -98,7 +98,8 @@ class IPUPipelineTest(test.TestCase):
 
     # Restore the weights and check that they are back to the trained
     with strategy.scope():
-      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -135,7 +136,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -152,7 +154,8 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
 
       # Create a new model and train (should restore from checkpoint)
-      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -173,7 +176,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 

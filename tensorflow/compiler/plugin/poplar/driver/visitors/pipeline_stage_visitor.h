@@ -57,7 +57,9 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite);
+  Status PropagateDeferredAllocations(
+      const HloInstruction* callsite,
+      const DeferredArgRBVectors& callsite_inputs) override;
 
   // Get the sequence for the forward stage, adding any copies for inplace
   // inputs.

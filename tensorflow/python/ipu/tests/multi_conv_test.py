@@ -151,7 +151,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     ]
 
     conv_classifications = [0, 2, 1, 2]
-    compute_sets = ['/custom-call*/MultiConv']
+    compute_sets = ['/multi-conv*/MultiConv']
     _compare_ipu_to_cpu(self,
                         body,
                         inputs_fn,
@@ -209,7 +209,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     ]
     # TODO(T22014): the bwd conv is not classified correctly.
     conv_classifications = [1, 2, 0, 2]
-    compute_sets = ['/custom-call*/MultiConv']
+    compute_sets = ['/multi-conv*/MultiConv']
     _compare_ipu_to_cpu(self,
                         body,
                         inputs_fn,
@@ -253,7 +253,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     init_values = [np.ones([2, 32, 32, 4]), np.ones([2, 32, 32, 2])]
 
     conv_classifications = [1, 0, 0, 0]
-    compute_sets = ['/custom-call*/MultiConv']
+    compute_sets = ['/multi-conv*/MultiConv']
     _compare_ipu_to_cpu(self,
                         body,
                         inputs_fn,
@@ -295,7 +295,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     conv_classifications = [2, 0, 0, 0]
     # Note how there is only one multiconv instruction.
     compute_sets = [
-        '/custom-call/MultiConv_',
+        '/multi-conv/MultiConv_',
         'ipu/Mean*/reduce*/Reduce',
         'ipu/add',
         '__seed/set/setMasterSeed',
@@ -339,7 +339,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     init_values = [np.ones([2, 32, 32, 4]), np.ones([2, 32, 32, 4])]
 
     conv_classifications = [1, 0, 0, 0]
-    compute_sets = ['/custom-call*/MultiConv']
+    compute_sets = ['/multi-conv*/MultiConv']
     _compare_ipu_to_cpu(self,
                         body,
                         inputs_fn,

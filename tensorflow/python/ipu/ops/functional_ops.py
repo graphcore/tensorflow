@@ -18,11 +18,15 @@ Functional operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
+from tensorflow.compiler.xla import xla_data_pb2
+from tensorflow.core.framework import attr_value_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.util import nest
 
 
 def function(func, name=None):
@@ -74,8 +78,7 @@ def function(func, name=None):
         if isinstance(outputs, ops.Operation):
           outputs = outputs.outputs
 
-      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                                outputs)
+      return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
   return func_wrapper
 
@@ -89,9 +92,29 @@ def _compile_function(func,
                       scope,
                       control_outputs,
                       allow_external_captures=False):
+  parent_graph = ops.get_default_graph()
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
-  add_control_dependencies = ops.get_default_graph()._add_control_dependencies  # pylint: disable=protected-access
+  add_control_dependencies = parent_graph._add_control_dependencies  # pylint: disable=protected-access
+
+  # Functions inherit frontend attributes and the gradient override map from the
+  # parent graph.
+  proto = xla_data_pb2.FrontendAttributes()
+  value = parent_graph._attr_scope_map.get(scopes.FRONTEND_ATTRIBUTES_NAME)  # pylint: disable=protected-access
+  if value:
+    proto.ParseFromString(value.s)
+  attribute = attr_value_pb2.AttrValue(s=proto.SerializeToString())
+  gradient_override_map = dict(parent_graph._gradient_override_map)  # pylint: disable=protected-access
+
+  def func_wrapper(*args, **kwargs):
+    # Add the frontend attributes to the current attributes.
+    g = ops.get_default_graph()
+    attributes = dict(g._attr_scope_map)  # pylint: disable=protected-access
+    attributes[scopes.FRONTEND_ATTRIBUTES_NAME] = attribute
+
+    with g._attr_scope(attributes):  # pylint: disable=protected-access
+      with g.gradient_override_map(gradient_override_map):
+        return func(*args, **kwargs)
 
   func_name = util.unique_fn_name(scope, "func")
   captured_args = ops.convert_n_to_tensor(args)
@@ -99,7 +122,7 @@ def _compile_function(func,
   # Compile the function to a graph.
   func_graph = func_graph_module.func_graph_from_py_func(
       func_name,
-      func,
+      func_wrapper,
       captured_args, {},
       add_control_dependencies=add_control_dependencies)
 
@@ -124,6 +147,33 @@ def _compile_function(func,
     # pylint: enable=protected-access
 
   return func_graph, captured_args
+
+
+def _pack_sequence_as(structured_outputs, op_outputs):
+  """Packs the outputs of a functional op.
+
+  The functions may contain None's in the list of `structured_outputs`.
+  `op_outputs` has those outputs missing. So we need to add those Nones to the
+  list of `op_outputs` and then pack it in the same structure as
+  `structured_outputs`.
+
+  Args:
+    structured_outputs: structured_outputs from one of the branch functions.
+    op_outputs: List of output tensors of the op.
+
+  Returns:
+    `op_outputs` packed like `structured_outputs`.
+  """
+  outputs_with_nones = []
+  counter = 0
+  for output in nest.flatten(structured_outputs, expand_composites=True):
+    if output is None:
+      outputs_with_nones.append(None)
+    else:
+      outputs_with_nones.append(op_outputs[counter])
+      counter += 1
+  return func_graph_module.pack_sequence_as(structured_outputs,
+                                            outputs_with_nones)
 
 
 def _convert_to_list(xs):

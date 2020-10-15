@@ -107,7 +107,7 @@ static HloInstruction* AddAllGatherAndReshape(HloInstruction* original,
 
   // Gather the updates from all replicas.
   HloInstruction* gathered =
-      comp->AddInstruction(CreateAllGather(original, new_update_shape));
+      comp->AddInstruction(CreateAllGather({original}, new_update_shape));
 
   Shape flattened_shape = original->shape();
   flattened_shape.set_dimensions(

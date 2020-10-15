@@ -118,6 +118,7 @@ with tf.Session() as sess:
   sess.run(infeed_queue.initializer)
 
   # Train the model for some iterations
-  for i in range(25):
-    l, _ = sess.run([run_loop, embedding()])
-    print("Step " + str(i) + ", loss = " + str(l))
+  with embedding.register(sess):
+    for i in range(25):
+      l = sess.run(run_loop)
+      print("Step " + str(i) + ", loss = " + str(l))

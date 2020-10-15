@@ -19,6 +19,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -45,9 +46,19 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
   if (paths.empty()) {
     return false;
   }
+  // Get whether any Fifos which will be inserted should be offloaded.
+  TF_ASSIGN_OR_RETURN(const bool offload_fifos,
+                      PipelineFIFOInserter::OffloadFifos(
+                          pipeline_op, remote_memory_supported_));
 
   // Convert the paths into FIFOs.
   for (auto& path : paths) {
+    if (schedule ==
+            PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved &&
+        path.GetType() != PipelinePath::Type::kForwardToBackward) {
+      continue;
+    }
+
     const auto& visited_stages = path.GetVisitedStages();
     HloInstruction* stage = path.GetNewConsumerStage();
 
@@ -68,8 +79,8 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
     } else {
       TF_ASSIGN_OR_RETURN(const uint64 fifo_depth, path.GetFifoDepth());
       // Create the FIFO.
-      stage_input =
-          pipeline_comp->AddInstruction(CreateFifo(operand, fifo_depth));
+      stage_input = pipeline_comp->AddInstruction(
+          CreateFifo(operand, fifo_depth, offload_fifos));
       stage_input->SetAndSanitizeName(operand->name() + ".fifo");
     }
 
@@ -80,6 +91,10 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
 
   return true;
 }
+
+PipelineCommunicationOptimizer::PipelineCommunicationOptimizer(
+    bool remote_memory_supported)
+    : remote_memory_supported_(remote_memory_supported) {}
 
 StatusOr<bool> PipelineCommunicationOptimizer::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
@@ -97,13 +112,9 @@ StatusOr<bool> PipelineCommunicationOptimizer::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
   switch (schedule) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential: {
-      TF_ASSIGN_OR_RETURN(changed, OptimizePipeline(pipeline_op));
-      break;
-    }
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
     case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved: {
-      VLOG(1) << "Interleaved schedule is not supported by the "
-                 "PipelineCommunicationOptimizer pass.";
+      TF_ASSIGN_OR_RETURN(changed, OptimizePipeline(pipeline_op));
       break;
     }
     default: { return FailedPrecondition("Unknown pipeline schedule."); }

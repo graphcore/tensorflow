@@ -37,6 +37,36 @@ num_hidden = 5
 data_type = np.float32
 
 
+def _getLSTMLayer(keras_layer=None,
+                  return_state=True,
+                  return_sequences=False,
+                  time_major=False,
+                  dropout=0.,
+                  unit_forget_bias=False,
+                  stateful=False,
+                  kernel_initializer=None,
+                  recurrent_initializer=None,
+                  bias_initializer=None):
+  kernel_initializer = (kernel_initializer if kernel_initializer else
+                        init_ops.constant_initializer(0.1, data_type))
+  recurrent_initializer = (recurrent_initializer if recurrent_initializer else
+                           init_ops.constant_initializer(0.2, data_type))
+  bias_initializer = (bias_initializer if bias_initializer else
+                      init_ops.constant_initializer(0.3, data_type))
+  return keras_layer(num_hidden,
+                     dtype=data_type,
+                     kernel_initializer=kernel_initializer,
+                     recurrent_initializer=recurrent_initializer,
+                     bias_initializer=bias_initializer,
+                     recurrent_activation="sigmoid",
+                     dropout=dropout,
+                     time_major=time_major,
+                     return_sequences=return_sequences,
+                     return_state=return_state,
+                     unit_forget_bias=unit_forget_bias,
+                     stateful=stateful)
+
+
 def _kerasLSTMImpl(instance,
                    x_vals,
                    h_val,
@@ -58,19 +88,8 @@ def _kerasLSTMImpl(instance,
 
     state = None if stateful else rnn_cell.LSTMStateTuple(c, h)
 
-    layer = keras_layer(
-        num_hidden,
-        dtype=data_type,
-        kernel_initializer=init_ops.constant_initializer(0.1, data_type),
-        recurrent_initializer=init_ops.constant_initializer(0.2, data_type),
-        bias_initializer=init_ops.constant_initializer(0.3, data_type),
-        recurrent_activation="sigmoid",
-        dropout=dropout,
-        time_major=time_major,
-        return_sequences=return_sequences,
-        return_state=return_state,
-        unit_forget_bias=unit_forget_bias,
-        stateful=stateful)
+    layer = _getLSTMLayer(keras_layer, return_state, return_sequences,
+                          time_major, dropout, unit_forget_bias, stateful)
     output = layer(inputs=x, initial_state=state, training=training)
     shapes = [w.shape for w in layer.get_weights()]
 
@@ -153,14 +172,6 @@ class IpuLstmTest(test.TestCase):
     self.assertTrue(isinstance(ipu_result[0][0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
-  def test_no_dynamic_training(self):
-    x, h, c = self._get_random_inputs()
-
-    with self.assertRaisesRegex(ValueError,
-                                'PopnnLSTM does not support a dynamic'):
-      _lstmIPU(self, x, h, c, training=None)
-
-  @test_util.deprecated_graph_mode_only
   def test_class_alias(self):
     self.assertTrue(isinstance(ipu.layers.LSTM, type))
     self.assertEqual(ipu.layers.PopnnLSTM, ipu.layers.LSTM)
@@ -224,6 +235,55 @@ class IpuLstmTest(test.TestCase):
     ipu_result = _lstmIPU(self, x, h, c, stateful=True, time_major=True)
     self.assertAllClose(ipu_result, cpu_result)
 
+  @test_util.run_v2_only
+  def test_lstm_save_load_weights(self):
+    xs, _, _ = self._get_random_inputs()
+    x = xs[0]
+    # Run on CPU
+    layer_cpu = _getLSTMLayer(recurrent_v2.LSTM,
+                              kernel_initializer='truncated_normal',
+                              recurrent_initializer='normal',
+                              bias_initializer='truncated_normal')
+    cpu_result = layer_cpu(x, training=True)
+
+    # Create IPU layer, build it, and get the weights from the cpu layer.
+    layer_ipu = _getLSTMLayer(ipu.layers.PopnnLSTM)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    layer_ipu.set_weights(layer_cpu.get_weights())
+
+    ipu_result = layer_ipu(x, training=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+
+def _getGRULayer(keras_layer=None,
+                 return_state=True,
+                 return_sequences=False,
+                 time_major=False,
+                 dropout=0.,
+                 stateful=False,
+                 reset_after=False,
+                 kernel_initializer=None,
+                 recurrent_initializer=None,
+                 bias_initializer=None):
+  kernel_initializer = (kernel_initializer
+                        or init_ops.constant_initializer(0.1, data_type))
+  recurrent_initializer = (recurrent_initializer
+                           or init_ops.constant_initializer(0.2, data_type))
+  bias_initializer = (bias_initializer
+                      or init_ops.constant_initializer(0.3, data_type))
+  return keras_layer(num_hidden,
+                     dtype=data_type,
+                     kernel_initializer=kernel_initializer,
+                     recurrent_initializer=recurrent_initializer,
+                     bias_initializer=bias_initializer,
+                     recurrent_activation="sigmoid",
+                     dropout=dropout,
+                     time_major=time_major,
+                     return_sequences=return_sequences,
+                     return_state=return_state,
+                     reset_after=reset_after,
+                     stateful=stateful)
+
 
 def _kerasGRUImpl(instance,
                   x_vals,
@@ -243,19 +303,8 @@ def _kerasGRUImpl(instance,
 
     init = None if stateful else init_ph
 
-    layer = keras_layer(
-        num_hidden,
-        dtype=data_type,
-        kernel_initializer=init_ops.constant_initializer(0.1, data_type),
-        recurrent_initializer=init_ops.constant_initializer(0.2, data_type),
-        bias_initializer=init_ops.constant_initializer(0.3, data_type),
-        recurrent_activation="sigmoid",
-        dropout=dropout,
-        time_major=time_major,
-        return_sequences=return_sequences,
-        return_state=return_state,
-        reset_after=False,
-        stateful=stateful)
+    layer = _getGRULayer(keras_layer, return_state, return_sequences,
+                         time_major, dropout, stateful)
     output = layer(inputs=x, initial_state=init, training=training)
 
   with instance.test_session() as sess:
@@ -328,14 +377,6 @@ class IpuGruTest(test.TestCase):
     self.assertTrue(isinstance(ipu_result[0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
-  def test_no_dynamic_training(self):
-    x, init = self._get_random_inputs()
-
-    with self.assertRaisesRegex(ValueError,
-                                'PopnnGRU does not support a dynamic'):
-      _gruIPU(self, x, init, training=None)
-
-  @test_util.deprecated_graph_mode_only
   def test_class_alias(self):
     self.assertTrue(isinstance(ipu.layers.GRU, type))
     self.assertEqual(ipu.layers.PopnnGRU, ipu.layers.GRU)
@@ -373,6 +414,25 @@ class IpuGruTest(test.TestCase):
 
     cpu_result = _gruCPU(self, x, init, stateful=True, time_major=True)
     ipu_result = _gruIPU(self, x, init, stateful=True, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.run_v2_only
+  def test_gru_save_load_weights(self):
+    xs, _ = self._get_random_inputs()
+    x = xs[0]
+    # Run on CPU
+    layer_cpu = _getGRULayer(recurrent_v2.GRU,
+                             kernel_initializer='truncated_normal',
+                             recurrent_initializer='normal',
+                             bias_initializer='truncated_normal')
+    cpu_result = layer_cpu(x, training=True)
+
+    # Create IPU layer, build it, and get the weights from the cpu layer.
+    layer_ipu = _getGRULayer(ipu.layers.PopnnGRU)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    layer_ipu.set_weights(layer_cpu.get_weights())
+
+    ipu_result = layer_ipu(x, training=True)
     self.assertAllClose(ipu_result, cpu_result)
 
 

@@ -121,6 +121,11 @@ bool IsRemoteParameter(int64 parameter_number,
 bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res);
 bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res);
 
+bool IsReplicaPartitioned(int64 parameter_number,
+                          const RemoteParameterInfos& remote_parameter_infos);
+bool IsReplicaPartitioned(int64 parameter_number, const CompilerResources& res);
+bool IsReplicaPartitioned(HloInstruction* inst, const CompilerResources& res);
+
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
 
 StatusOr<std::string> GetInstructionCompilationInfo(
@@ -169,6 +174,25 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const poplar::OptionFlags& engine_opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
     const std::vector<string>& checkpoint_feeds_order);
+
+// Zero the given remote buffers
+void ZeroRemoteBuffers(
+    CompilerResources& res, poplar::Graph& graph,
+    const ::std::vector<poplar::RemoteBuffer>& remote_buffers,
+    poplar::program::Sequence& sequence);
+
+// Zero the given tensors efficiently.
+void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
+                 const std::vector<poplar::Tensor>& tensors,
+                 poplar::program::Sequence& sequence,
+                 const std::string& debug_prefix);
+
+// Functor to hash a poplar type.
+struct PoplarTypeHasher {
+  inline std::size_t operator()(const poplar::Type& t) const noexcept {
+    return std::hash<std::string>()(t.toString());
+  }
+};
 
 }  // namespace poplarplugin
 }  // namespace xla

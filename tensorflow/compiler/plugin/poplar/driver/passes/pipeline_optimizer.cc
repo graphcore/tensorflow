@@ -138,7 +138,7 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
   // | p_in_comp = parameter(0)       |  || | p = parameter(0)                 |
   // | log = log(p_in_comp)           |  || | ...                              |
   // | ROOT t = tuple(p_in_comp, log) |  || |__________________________________|
-  // |________________________________|   => c_bwd = forward_pipeline_stage(gte)
+  // |________________________________|   => c_bwd = forward_pipeline_stage(p)
   // This will avoid having FIFOs for variables.
 
   for (size_t stage_id = 0; stage_id != stages.forward.size(); ++stage_id) {

@@ -30,6 +30,7 @@ bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
+bool IsWideConstant(const HloInstruction*);
 bool IsWideConstantZero(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
 bool IsFloat(const HloInstruction*);
@@ -59,6 +60,7 @@ bool IsBiasAdd(const HloInstruction*);
 bool IsPopOpsBiasAdd(const xla::HloInstruction*);
 bool IsPopOpsElementwise(const xla::HloInstruction*);
 bool IsPopOpsElementwiseBinary(const xla::HloInstruction*);
+bool IsPopOpsElementwiseBinaryOperandsDifferent(const xla::HloInstruction*);
 bool IsNormInference(const xla::HloInstruction*);
 bool IsNormTraining(const xla::HloInstruction*);
 bool IsNormInferenceOrTraining(const xla::HloInstruction*);
@@ -73,6 +75,7 @@ bool IsAnySliceApply(const HloInstruction*);
 bool IsUniformSingleDimSlice(const HloInstruction*);
 bool IsSingleElement(const HloInstruction*);
 bool IsReduceAddOrMultiply(const HloInstruction*);
+bool IsSerializedGradientAccumulation(const HloInstruction*);
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a
  * custom Poplibs instruction of a specified type.
@@ -82,6 +85,10 @@ bool IsReduceAddOrMultiply(const HloInstruction*);
  * @returns The unary predicate.
  */
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op);
+
+inline bool IsPoplarInstruction(PoplarOp op, const HloInstruction* inst) {
+  return IsPoplarInstruction(op)(inst);
+}
 }  // namespace poplarplugin
 }  // namespace xla
 

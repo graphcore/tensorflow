@@ -167,6 +167,8 @@ bool IsAllowedTupleSharding(const HloInstruction* inst) {
     case HloOpcode::kOutfeed:
     case HloOpcode::kGetTupleElement:
       return true;
+    case HloOpcode::kCustomCall:
+      return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
     default:
       return false;
   }
@@ -321,6 +323,12 @@ bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
          IsPopOpsFusion(inst->fused_instructions_computation(), postfix);
 }
 
+bool IsFusion(const HloInstruction* inst, const std::string& name) {
+  return inst->opcode() == HloOpcode::kFusion &&
+         IsFusionComputationWithPrefix(inst->fused_instructions_computation(),
+                                       name);
+}
+
 bool IsArithmeticExpressionFusion(const HloComputation* comp) {
   return IsFusionComputationWithPrefix(comp, "_arithmetic_expression");
 }
@@ -348,6 +356,17 @@ bool CallConfigHasType(const HloInstruction* inst,
   }
   return false;
 }
+int64 PipelineBatchSerializationIterations(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kCall) {
+    PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+    if (cfg.call_config().has_pipeline_config()) {
+      return std::max<int64>(
+          1,
+          cfg.call_config().pipeline_config().batch_serialization_iterations());
+    }
+  }
+  return 1;
+}
 }  // namespace
 
 bool IsRepeatLoop(const HloInstruction* inst) {
@@ -357,6 +376,11 @@ bool IsRepeatLoop(const HloInstruction* inst) {
 int64 GetRepeatLoopCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().repeat_config().repeat_count();
+}
+
+bool GetRepeatLoopAllowFinerAliasAnalysis(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().repeat_config().allow_finer_alias_analysis();
 }
 
 bool IsPipelineStage(const HloInstruction* inst) {
@@ -391,6 +415,48 @@ bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }
 
+bool IsBatchSerializedPipelineOp(const HloInstruction* inst) {
+  return IsPipelineOp(inst) && (PipelineBatchSerializationIterations(inst) > 1);
+}
+
+int64 GetPipelineRepeatCount(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().repeat_count();
+}
+
+int64 GetGradientAccumulationCount(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().gradient_accumulation_count();
+}
+
+int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().batch_serialization_iterations();
+}
+
+ThreeState GetPipelineOffloadActivations(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().offload_activations();
+}
+
+ThreeState GetPipelineOffloadGradientAccumulationBuffers(
+    const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .pipeline_config()
+      .offload_gradient_accumulation_buffers();
+}
+
+ThreeState GetPipelinePartitionVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().partition_variables();
+}
+
+ThreeState GetPipelineOffloadVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().offload_variables();
+}
+
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();
@@ -401,9 +467,17 @@ int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction* inst) {
   return cfg.call_config().resource_update_config().num_batches_to_accumulate();
 }
 
-bool GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
+ThreeState GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().resource_update_config().offload_variables();
+}
+
+ThreeState GetResourceUpdatePartitionOffloadedVariables(
+    const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .resource_update_config()
+      .partition_offloaded_variables();
 }
 
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
@@ -450,7 +524,7 @@ void SetInplaceBackendField(HloInstruction* inst, bool inplace) {
   auto backend_config =
       inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   backend_config.set_is_inplace(inplace);
-  inst->set_backend_config(backend_config);
+  TF_CHECK_OK(inst->set_backend_config(backend_config));
 }
 }  // namespace
 
@@ -529,7 +603,8 @@ bool IsUsedOutsideSubcomputation(const HloInstruction& hlo,
 // It creates fusion instead of call.
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
-    const string& outlined_computation_name, HloComputation* computation) {
+    const string& outlined_computation_name, HloComputation* computation,
+    const std::vector<HloInstruction*>& explicit_parameters) {
   auto builder = HloComputation::Builder(outlined_computation_name);
 
   // A map from original instructions to their counterparts in the new
@@ -541,6 +616,15 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
   std::vector<HloInstruction*> arguments;
   std::vector<HloInstruction*> outputs;
   int64 parameter_count = 0;
+
+  for (HloInstruction* parameter : explicit_parameters) {
+    arguments.push_back(parameter);
+    InsertOrDie(&outlined_instructions, parameter,
+                builder.AddInstruction(HloInstruction::CreateParameter(
+                    parameter_count, parameter->shape(), "p")));
+    ++parameter_count;
+  }
+
   for (HloInstruction* instruction_to_outline : instructions_to_outline) {
     // Clone the original instruction.
     HloInstruction* outlined_instruction =
@@ -651,6 +735,24 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
   return statusor.ValueOrDie();
 }
 
+StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
+                                           int64 tuple_index) {
+  absl::flat_hash_set<HloInstruction*> gtes;
+  for (HloInstruction* user : inst->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    if (user->tuple_index() == tuple_index) {
+      gtes.insert(user);
+    }
+  }
+  if (gtes.size() != 1) {
+    return InternalErrorStrCat(
+        "Expected the gradient accumulation buffer to only have a "
+        "single user, but it has ",
+        gtes.size(), " users.");
+  }
+  return *std::begin(gtes);
+}
+
 size_t HloComputationHash::operator()(const HloComputation* comp) const {
   // A computation hash is the hash of all its parameters and its root
   // instruction. We are reluctant to hash all the instructions as the order
@@ -684,6 +786,12 @@ Status CreateDirIfMissing(const std::string& path) {
   }
 
   return Status::OK();
+}
+
+StatusOr<Tileset> GetTileset(const HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(const auto backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  return backend_config.tileset();
 }
 
 }  // namespace poplarplugin

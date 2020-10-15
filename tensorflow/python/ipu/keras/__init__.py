@@ -18,5 +18,7 @@ Keras API
 """
 
 from tensorflow.python.ipu.keras import layers
-from tensorflow.python.ipu.keras.model import Sequential
-from tensorflow.python.ipu.keras.pipeline import PipelinedModel
+from tensorflow.python.ipu.keras.model import Sequential, Model
+from tensorflow.python.ipu.keras.pipeline import PipelineModel
+from tensorflow.python.ipu.keras.pipeline import PipelineStage
+from tensorflow.python.ipu.keras.pipeline import SequentialPipelineModel

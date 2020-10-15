@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 
+#include <map>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
@@ -426,14 +428,10 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
   return true;
 }
 
-// Given a pipeline `stage` instruction, set sharding for the `inst`, handling
-// tuples.
-Status SetPipelineStageInstructionSharding(const HloInstruction* stage,
-                                           HloInstruction* inst) {
-  auto optional_sharding = stage->sharding().ExtractSingleSharding();
-  if (!optional_sharding) {
-    return FailedPrecondition("Could not extract single sharding.");
-  }
+Status PropagateShardingDeviceToInstruction(int64 sharding_device,
+                                            HloInstruction* inst) {
+  const HloSharding single_sharding =
+      HloSharding::AssignDevice(sharding_device);
   Shape shape = inst->shape();
   // Outfeeds are a special case, where the sharding matches the sharding of
   // tensors which will be outfed (i.e. operand 0).
@@ -446,9 +444,9 @@ Status SetPipelineStageInstructionSharding(const HloInstruction* stage,
                               !ShapeUtil::IsEmptyTuple(shape) &&
                               IsAllowedTupleSharding(inst);
 
-  HloSharding sharding =
-      tuple_sharding ? HloSharding::SingleTuple(shape, *optional_sharding)
-                     : *optional_sharding;
+  HloSharding sharding = tuple_sharding
+                             ? HloSharding::SingleTuple(shape, single_sharding)
+                             : single_sharding;
 
   inst->set_sharding(sharding);
   return Status::OK();
@@ -469,42 +467,95 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
     const HloSharding& sharding = fwd_stage->sharding();
     CHECK(sharding.HasUniqueDevice());
     // Turn it into tuple sharding.
-    TF_RETURN_IF_ERROR(
-        SetPipelineStageInstructionSharding(fwd_stage, fwd_stage));
+    TF_RETURN_IF_ERROR(PropagateShardingDeviceToInstruction(
+        sharding.GetUniqueDevice(), fwd_stage));
   }
   // Mark backward stages with matching sharding from the forward stage.
   for (size_t stage_id = 0; stage_id != stages.backward.size(); ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
-    TF_RETURN_IF_ERROR(
-        SetPipelineStageInstructionSharding(fwd_stage, bwd_stage));
+    const HloSharding& sharding = fwd_stage->sharding();
+    TF_RETURN_IF_ERROR(PropagateShardingDeviceToInstruction(
+        sharding.GetUniqueDevice(), bwd_stage));
   }
   // For each stage propagate the sharding information to:
   // 1.  all the subcomputations called by the pipeline stage.
   // 2.  all the user GTEs.
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
+      const int64 sharding_device = stage->sharding().GetUniqueDevice();
       // First propagate sharding inside.
       // Get all the computations called.
       TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,
                           GetAllComputationsCalledBy(stage, call_graph));
+
       for (HloComputation* comp : called_in_stage) {
         for (HloInstruction* inst : comp->instructions()) {
           // Set sharding for each instruction.
-          TF_RETURN_IF_ERROR(SetPipelineStageInstructionSharding(stage, inst));
+          TF_RETURN_IF_ERROR(
+              PropagateShardingDeviceToInstruction(sharding_device, inst));
         }
         computations_in_pipeline.insert(comp);
       }
       // Then propagate sharding to users.
       for (HloInstruction* user : stage->users()) {
         CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-        TF_RETURN_IF_ERROR(SetPipelineStageInstructionSharding(stage, user));
+        TF_RETURN_IF_ERROR(
+            PropagateShardingDeviceToInstruction(sharding_device, user));
       }
     }
   }
   return computations_in_pipeline;
 }
 
+// Convert the computation sharding such that the computation and all the
+// computations it calls are assigned to the device which has the most (bytes)
+// parameters.
+Status ConvertComputationToUniqueSharding(HloInstruction* caller,
+                                          HloComputation* comp,
+                                          CallGraph* call_graph) {
+  TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_comps,
+                      GetAllComputationsCalledBy(caller, call_graph));
+
+  // Find the device with most parameters.
+  std::map<int64, int64> bytes_per_shard;
+
+  for (HloInstruction* parameter : comp->parameter_instructions()) {
+    const Shape shape = parameter->shape();
+    const auto& sharding = parameter->sharding();
+
+    TF_ASSIGN_OR_RETURN(auto sharding_tree, sharding.AsShapeTree(shape));
+    for (const auto& leaf : sharding_tree.leaves()) {
+      const Shape subshape =
+          ShapeUtil::GetSubshape(parameter->shape(), leaf.first);
+      const HloSharding leaf_sharding = leaf.second;
+      bytes_per_shard[leaf_sharding.GetUniqueDevice()] +=
+          ShapeUtil::ByteSizeOf(subshape);
+    }
+  }
+
+  if (bytes_per_shard.size() > 1) {
+    // Get the device with most bytes.
+    const int64 sharding_device =
+        absl::c_max_element(bytes_per_shard,
+                            [](const std::pair<int64, int64>& a,
+                               const std::pair<int64, int64>& b) {
+                              return a.second < b.second;
+                            })
+            ->first;
+
+    VLOG(1) << "Reassigning computation " << comp->name() << " to device "
+            << sharding_device;
+    for (HloComputation* comp : called_comps) {
+      for (HloInstruction* inst : comp->instructions()) {
+        // Set sharding for each instruction.
+        TF_RETURN_IF_ERROR(
+            PropagateShardingDeviceToInstruction(sharding_device, inst));
+      }
+    }
+  }
+  return Status::OK();
+}
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
@@ -610,6 +661,21 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
         }
 
         TF_ASSIGN_OR_RETURN(bool done, ProcessComputation(comp, attempt));
+
+        // Check whether this is a function which requires unique sharding.
+        if (done && call_graph_node.caller_callsites().size() == 1 &&
+            IsFunction(call_graph_node.caller_callsites()[0].instruction())) {
+          HloInstruction* caller =
+              call_graph_node.caller_callsites()[0].instruction();
+          TF_ASSIGN_OR_RETURN(auto backend_config,
+                              caller->backend_config<PoplarBackendConfig>());
+          const bool unique_sharding =
+              backend_config.call_config().function_config().unique_sharding();
+          if (unique_sharding) {
+            TF_RETURN_IF_ERROR(ConvertComputationToUniqueSharding(
+                caller, comp, call_graph.get()));
+          }
+        }
 
         // Patch up GTE sharding.  GTEs should always have the sharding taken
         // from their operand, not their users.  During the initial copying of
@@ -748,6 +814,5 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
 
   return true;
 }
-
 }  // namespace poplarplugin
 }  // namespace xla

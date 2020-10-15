@@ -18,14 +18,18 @@ Keras Model interfaces for IPU
 """
 
 from functools import partial
+import copy
 import math
 import weakref
+
+import numpy as np
 
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework.errors_impl import NotFoundError
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -33,19 +37,27 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import functional_ops
-from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as cbks
 from tensorflow.python.keras import backend
+from tensorflow.python.keras import metrics as metrics_module
 from tensorflow.python.keras import Model as KerasModel
 from tensorflow.python.keras import optimizers
 from tensorflow.python.keras.layers import Layer
-from tensorflow.python.keras.engine import training
+from tensorflow.python.keras.engine import base_layer_utils
+from tensorflow.python.keras.engine import data_adapter
+from tensorflow.python.keras.engine import network
+from tensorflow.python.keras.engine import node as node_module
+from tensorflow.python.keras.engine import training as keras_training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
+from tensorflow.python.keras.utils import generic_utils
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
+from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import nest
+from tensorflow.python.util import tf_inspect
 
 
 def _validate_args(kwargs, fn):
@@ -70,6 +82,44 @@ def _validate_args(kwargs, fn):
     raise NotImplementedError(
         "IPU Keras models do not support these parameters to " + fn + "(): " +
         ", ".join(bad_args))
+
+
+def _validate_dataset_element_count(ds, count, fn_name):
+  structure = dataset_ops.get_structure(ds)
+  if not isinstance(structure, tuple) or len(structure) != count:
+    if count > 1 or not isinstance(structure, tensor_spec.TensorSpec):
+      raise ValueError(fn_name +
+                       "() requires a dataset containing a tuple of " +
+                       str(count) + " elements.")
+
+
+def _get_dataset_and_count(x, y, batch_size):
+  adapter_cls = data_adapter.select_data_adapter(x, y)
+  adapter = adapter_cls(x, y, batch_size=batch_size)
+
+  dataset = adapter.get_dataset()
+  size = adapter.get_size()
+
+  if adapter.has_partial_batch():
+    original_dataset = dataset
+    dataset = dataset.unbatch()
+    # Remove the partial batch from the dataset.
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+
+    # Check whether the dataset should be prefetched.
+    prefetch_buffer = None
+    if isinstance(original_dataset, dataset_ops.PrefetchDataset):
+      prefetch_buffer = original_dataset._buffer_size  # pylint: disable=protected-access
+    elif (isinstance(original_dataset, dataset_ops.DatasetV1Adapter) and
+          isinstance(original_dataset._dataset, dataset_ops.PrefetchDataset)):  # pylint: disable=protected-access
+      prefetch_buffer = original_dataset._dataset._buffer_size  # pylint: disable=protected-access
+
+    if prefetch_buffer is not None:
+      dataset = dataset.prefetch(prefetch_buffer)
+
+    size -= 1
+
+  return dataset, size
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
@@ -202,6 +252,18 @@ class _IpuModelBase(KerasModel):
                                               loss_weights=loss_weights,
                                               **kwargs)
 
+  # This method should be overriden in child classes that are capable of
+  # handling models with multiple outputs. The problem is that in _add_loss,
+  # ordinarily a new metric would be created with a new training endpoint,
+  # however this involves the creation of weights. This is problematic for
+  # graph execution (variables cannot be created in a tf.function decorated
+  # function). So, this method should be overriden to return instance lifetime
+  # metrics that are created outside of the training loop.
+  def _get_output_loss_metrics(self):
+    raise NotImplementedError(
+        "_get_ouput_loss_metrics must be overriden for multiple output models."
+    )
+
   # This is a duplication of the graph compilation section of the method
   # Model.compile in training.py
   def _add_loss(self, targets):
@@ -217,9 +279,18 @@ class _IpuModelBase(KerasModel):
     self._training_endpoints = []
     for o, n, l, t in zip(self.outputs, self.output_names, self.loss_functions,
                           target_tensors):
-      endpoint = training._TrainingEndpoint(o, n, l)  # pylint: disable=protected-access
+      endpoint = keras_training._TrainingEndpoint(o, n, l)  # pylint: disable=protected-access
       endpoint.create_training_target(t, run_eagerly=self.run_eagerly)
       self._training_endpoints.append(endpoint)
+
+    # Create a metric wrapper for each output loss.
+    if len(self._training_endpoints) > 1:
+      metrics = self._get_output_loss_metrics()
+      assert len(metrics) == len(self._training_endpoints)
+
+      for endpoint, metric in zip(self._training_endpoints, metrics):
+        if not endpoint.should_skip_target():
+          endpoint.output_loss_metric = metric
 
     # Prepare list loss weights, same size of model outputs.
     training_utils.prepare_loss_weights(self._training_endpoints,
@@ -278,8 +349,9 @@ class _IpuModelBase(KerasModel):
           "training.Optimizer subclasses are supported.")
 
   @trackable.no_automatic_dependency_tracking
-  def _do_internal(self, mode, ds, epochs, verbose, callbacks, initial_epoch,
-                   steps_per_epoch, steps_per_run, **kwargs):
+  def _do_internal(self, mode, ds, size, epochs, verbose, callbacks,
+                   initial_epoch, steps_per_epoch, steps_per_run,
+                   prefetch_depth, **kwargs):
 
     self.args = kwargs
 
@@ -306,9 +378,12 @@ class _IpuModelBase(KerasModel):
 
     if require_steps_per_epoch:
       if not steps_per_epoch:
-        raise ValueError(
-            "When using an infinitely repeating dataset, you must provide "
-            "the number of steps per epoch (steps_per_epoch).")
+        if size is None:
+          raise ValueError(
+              "When using an infinitely repeating dataset, you must provide "
+              "the number of steps per epoch (steps_per_epoch).")
+        else:
+          steps_per_epoch = size // self.accumulation_count
 
     # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
@@ -323,7 +398,6 @@ class _IpuModelBase(KerasModel):
             "Steps per epoch times accumulation count (%d x %d) is greater "
             "than the number of samples in the dataset (%d)." %
             (steps_per_epoch, self.accumulation_count, dataset_length))
-
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
@@ -332,10 +406,8 @@ class _IpuModelBase(KerasModel):
           self.__class__.__name__ + " requires the number of batches in the "
           "dataset (%d) to be a multiple of the accumulated batch size (%d)" %
           (mini_batches_per_epoch, self.accumulation_count))
-
     steps_per_epoch = mini_batches_per_epoch / (self.accumulation_count *
                                                 self._get_replication_factor())
-
     if not steps_per_run:
       steps_per_run = steps_per_epoch
 
@@ -348,7 +420,7 @@ class _IpuModelBase(KerasModel):
 
     outer_loop_count = int(steps_per_epoch / steps_per_run)
 
-    total_samples = mini_batches_per_epoch * (epochs - initial_epoch)
+    total_batches = mini_batches_per_epoch * (epochs - initial_epoch)
 
     # Prepare for progress reporting
     callbacks = cbks.configure_callbacks(callbacks,
@@ -369,7 +441,10 @@ class _IpuModelBase(KerasModel):
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
-          ds, "infeed", replication_factor=self._get_replication_factor())
+          ds,
+          "infeed",
+          replication_factor=self._get_replication_factor(),
+          prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
           "outfeed", replication_factor=self._get_replication_factor())
 
@@ -383,11 +458,11 @@ class _IpuModelBase(KerasModel):
 
     # Aggregator for combining the various outputs/metrics together
     if mode != ModeKeys.PREDICT:
-      aggregator = training_utils.MetricsAggregator(use_steps=False,
-                                                    num_samples=total_samples)
+      aggregator = training_utils.MetricsAggregator(use_steps=True,
+                                                    steps=total_batches)
     else:
-      aggregator = training_utils.OutputsAggregator(use_steps=False,
-                                                    num_samples=total_samples)
+      aggregator = training_utils.OutputsAggregator(use_steps=True,
+                                                    steps=total_batches)
 
     # Outer loop
     try:
@@ -448,14 +523,13 @@ class _IpuModelBase(KerasModel):
 
           results = gen(results)
 
-        results = enumerate(results)
         # Get the final loss and metrics
-        i, r = next(results)
+        r = next(results)
         aggregator.create(r)
-        aggregator.aggregate(r, 0, 1)
+        aggregator.aggregate(r)
 
-        for i, r in results:
-          aggregator.aggregate(r, i, i + 1)
+        for r in results:
+          aggregator.aggregate(r)
 
         aggregator.finalize()
         results = aggregator.results
@@ -483,87 +557,85 @@ class _IpuModelBase(KerasModel):
     return aggregator.results
 
   @trackable.no_automatic_dependency_tracking
-  def fit(self, x, *, epochs, verbose, callbacks, shuffle, initial_epoch,
-          steps_per_epoch, steps_per_run, **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ +
-                       " can only `fit` with a `tf.data.Dataset` "
-                       "as input.")
+  def fit(self,
+          x,
+          y,
+          batch_size,
+          epochs,
+          verbose,
+          callbacks,
+          shuffle,
+          initial_epoch,
+          steps_per_epoch,
+          steps_per_run,
+          prefetch_depth=None,
+          **kwargs):
 
-    if 'y' in kwargs:
-      raise ValueError(
-          "Labels should be provided by the 'x' DataSet containing a tuple.")
-
-    if 'batch_size' in kwargs:
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
                        self.__class__.__name__ + ".fit(). Use the "
                        "DataSet.batch() method to apply batching at the input "
                        "dataset level.")
 
-    _validate_args(kwargs, "fit")
+    ds, size = _get_dataset_and_count(x, y, batch_size)
 
-    structure = dataset_ops.get_structure(x)
-    if not isinstance(structure, tuple) or len(structure) != 2:
-      raise ValueError(
-          self.__class__.__name__ + ".fit requires a dataset containing a "
-          "tuple of two elements, the data value and the target value.")
+    _validate_args(kwargs, "fit")
+    _validate_dataset_element_count(ds, 2, "fit")
 
     self._assert_compile_was_called()
 
-    return self._do_internal(ModeKeys.TRAIN, x, epochs, verbose, callbacks,
-                             initial_epoch, steps_per_epoch, steps_per_run,
-                             **kwargs)
+    return self._do_internal(ModeKeys.TRAIN, ds, size, epochs, verbose,
+                             callbacks, initial_epoch, steps_per_epoch,
+                             steps_per_run, prefetch_depth, **kwargs)
 
   def evaluate(self,
                x=None,
-               *,
+               y=None,
+               batch_size=None,
                verbose=1,
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ + " can only `evaluate` with a "
-                       "`tf.data.Dataset` as input.")
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError("Do not specify `batch_size` in " +
+                       self.__class__.__name__ + ".evaluate(). Use the "
+                       "DataSet.batch() method to apply batching at the input "
+                       "dataset level.")
+
+    ds, size = _get_dataset_and_count(x, y, batch_size)
 
     _validate_args(kwargs, "evaluate")
-
-    structure = dataset_ops.get_structure(x)
-    if not isinstance(structure, tuple) or len(structure) != 2:
-      raise ValueError(
-          self.__class__.__name__ + ".evaluate requires a dataset containing "
-          "a tuple of two elements, the data value and the target value.")
+    _validate_dataset_element_count(ds, 2, "evaluate")
 
     self._assert_compile_was_called()
 
-    return self._do_internal(ModeKeys.TEST, x, 1, verbose, callbacks, 0, steps,
-                             steps_per_run, **kwargs)
+    return self._do_internal(ModeKeys.TEST, ds, size, 1, verbose, callbacks, 0,
+                             steps, steps_per_run, prefetch_depth, **kwargs)
 
   def predict(self,
               x,
-              *,
+              batch_size=None,
               verbose=0,
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(self.__class__.__name__ + " can only `predict` with a "
-                       "`tf.data.Dataset` as input.")
+    if batch_size and isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError("Do not specify `batch_size` in " +
+                       self.__class__.__name__ + ".predict(). Use the "
+                       "DataSet.batch() method to apply batching at the input "
+                       "dataset level.")
+
+    ds, size = _get_dataset_and_count(x, None, batch_size)
 
     _validate_args(kwargs, "predict")
+    _validate_dataset_element_count(ds, 1, "predict")
 
-    structure = dataset_ops.get_structure(x)
-    if not (isinstance(structure, tensor_spec.TensorSpec) or
-            (isinstance(structure, tensor_spec.TensorSpec)
-             and len(structure) != 1)):
-      raise ValueError(
-          self.__class__.__name__ + ".predict requires a dataset containing "
-          "either a tuple of one single data value, or just a single data "
-          "value.")
-
-    return self._do_internal(ModeKeys.PREDICT, x, 1, verbose, callbacks, 0,
-                             steps, steps_per_run, **kwargs)
+    return self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose, callbacks,
+                             0, steps, steps_per_run, prefetch_depth, **kwargs)
 
   def _get_replication_factor(self):
     if not self.got_replication_factor:
@@ -583,7 +655,7 @@ class _IpuModelBase(KerasModel):
 
 
 class IPUSequential(_IpuModelBase):
-  """A Keras Sequential class specifically tergetting the IPU.  This class is
+  """A Keras Sequential class specifically targetting the IPU.  This is
   similar to the Keras Sequential model class, but it also supports the
   accumulation of gradient deltas, and an on-device training loop.
 
@@ -621,7 +693,10 @@ class IPUSequential(_IpuModelBase):
       m.fit(dataset, steps_per_epoch=144)
 
   """
-  def __init__(self, layers=None, accumulation_count=1):
+  def __init__(self,
+               layers=None,
+               accumulation_count=1,
+               accumulation_dtype=None):
     """
     Creates a Keras model, optimized to run on the IPU.
 
@@ -630,6 +705,16 @@ class IPUSequential(_IpuModelBase):
         accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
+        accumulation_dtype: The data type used for the gradient accumulation
+          buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
     """
     super().__init__(accumulation_count=accumulation_count, shard_count=1)
 
@@ -642,7 +727,15 @@ class IPUSequential(_IpuModelBase):
                          "Layers.")
 
     self.accumulation_count = accumulation_count
+    self.accumulation_dtype = accumulation_dtype
     self.model_layers = layers
+
+  def build(self, input_shape):
+    s = input_shape
+    for l in self.model_layers:
+      l.build(s)
+      s = l.compute_output_shape(s)
+    self.built = True
 
   @trackable.no_automatic_dependency_tracking
   def compile(self,
@@ -672,6 +765,8 @@ class IPUSequential(_IpuModelBase):
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
+    training = mode == ModeKeys.TRAIN
+
     def main_body(inputs):
 
       if not self.inputs:
@@ -679,7 +774,11 @@ class IPUSequential(_IpuModelBase):
 
       x = inputs
       for l in self.model_layers:
-        x = l(x)
+        kwargs = {}
+        argspec = tf_inspect.getfullargspec(l.call).args
+        if 'training' in argspec:
+          kwargs['training'] = training
+        x = l(x, **kwargs)
 
       return x
 
@@ -708,7 +807,7 @@ class IPUSequential(_IpuModelBase):
         # If it is gradient accumulation then wrap in that too
         if self.accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              opt, self.accumulation_count)
+              opt, self.accumulation_count, dtype=self.accumulation_dtype)
 
         # Get gradients and apply them to the trainable variables
         grads_and_vars = opt.compute_gradients(l[0], self.trainable_variables)
@@ -727,10 +826,13 @@ class IPUSequential(_IpuModelBase):
 
     return result.outputs
 
+  # pylint: disable=arguments-differ
   @trackable.no_automatic_dependency_tracking
   def fit(self,
           x=None,
+          y=None,
           *,
+          batch_size=None,
           epochs=1,
           verbose=1,
           callbacks=None,
@@ -738,6 +840,7 @@ class IPUSequential(_IpuModelBase):
           initial_epoch=0,
           steps_per_epoch=None,
           steps_per_run=None,
+          prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `fit` method.
@@ -751,6 +854,8 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().fit(x,
+                       y,
+                       batch_size=batch_size,
                        epochs=epochs,
                        verbose=verbose,
                        callbacks=callbacks,
@@ -758,15 +863,20 @@ class IPUSequential(_IpuModelBase):
                        initial_epoch=initial_epoch,
                        steps_per_epoch=steps_per_epoch,
                        steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
                        **kwargs)
 
+  # pylint: disable=arguments-differ
   def evaluate(self,
                x=None,
+               y=None,
                *,
+               batch_size=None,
                verbose=1,
                steps=None,
                callbacks=None,
                steps_per_run=None,
+               prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `evaluate`
@@ -781,19 +891,25 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().evaluate(x,
+                            y,
+                            batch_size=batch_size,
                             verbose=verbose,
                             steps=steps,
                             callbacks=callbacks,
                             steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
                             **kwargs)
 
+  # pylint: disable=arguments-differ
   def predict(self,
               x,
               *,
+              batch_size=None,
               verbose=0,
               steps=None,
               callbacks=None,
               steps_per_run=None,
+              prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides the same functionality as the Keras Sequential `predict`
@@ -814,10 +930,12 @@ class IPUSequential(_IpuModelBase):
     repeated indefinitely, then this will be ok.
     """
     return super().predict(x,
+                           batch_size=batch_size,
                            verbose=verbose,
                            steps=steps,
                            callbacks=callbacks,
                            steps_per_run=steps_per_run,
+                           prefetch_depth=prefetch_depth,
                            **kwargs)
 
   def save(self,
@@ -831,4 +949,527 @@ class IPUSequential(_IpuModelBase):
         "IPU keras models do not support the `save` interface.")
 
 
+class IPUModel(_IpuModelBase):
+  """A Keras Model class specifically targetting the IPU.  This is
+  similar to the Keras Model class, but it also supports the accumulation of
+  gradient deltas, and an on-device training loop.
+
+  There are some limitations with the Model compared to the standard Keras
+  Model.
+
+  - Keras V1 optimizers cannot be used.
+  - Loss weightings can only be specified as a list, not a callable.
+  - Weighted metrics, target tensors and sample weight mode are not supported.
+  - Validation cannot be performed as part of the `fit` loop.
+  - The model cannot be called using the __call__() interface.
+
+  Example:
+
+  .. code-block:: python
+
+    dataset = ...
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      inputs = keras.Input(shape=(784,))
+
+      # Add some more vertices to the graph.
+      x = keras.layers.Dense(64, activation="relu")(inputs)
+      x = keras.layers.Dense(64, activation="relu")(x)
+      x = keras.layers.Dense(10)(x)
+
+      model = ipu.keras.Model(inputs=inputs, outputs=x)
+      model.compile(
+        loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        optimizer=keras.optimizers.RMSprop(),
+        metrics=["accuracy"])
+
+      model.fit(training_data, epochs=2, steps_per_epoch=128)
+
+  """
+  def __init__(self,
+               *args,
+               accumulation_count=1,
+               accumulation_dtype=None,
+               **kwargs):
+    """
+    Creates a Keras model, optimized to run on the IPU. Needs to pass in
+    ``inputs`` and ``outputs`` as either arguments or keyword arguments.
+
+    Args:
+        accumulation_count: The number of mini-batches to process
+            while accumulating their gradients, before running a
+            parameter/weight update step.
+        accumulation_dtype: The data type used for the gradient accumulation
+          buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
+    """
+    super().__init__(accumulation_count=accumulation_count,
+                     shard_count=1,
+                     **kwargs)
+
+    self.accumulation_dtype = accumulation_dtype
+
+    # Signature detection
+    if (len(args) == 2 or len(args) == 1 and 'outputs' in kwargs
+        or 'inputs' in kwargs and 'outputs' in kwargs):
+      self._init_network(*args, **kwargs)
+    else:
+      raise ValueError("Model was not provided with 'inputs' and 'outputs'")
+
+    # Create an output loss metric for each output if there is more than
+    # one model output.
+    self._loss_metrics = None
+    if len(self.outputs) > 1:
+      self._loss_metrics = []
+      for i in range(len(self.outputs)):
+        name = "output_%d" % i
+        self._loss_metrics.append(metrics_module.Mean(name=name))
+
+  @trackable.no_automatic_dependency_tracking
+  def _init_network(self, inputs, outputs, name=None, **kwargs):
+    generic_utils.validate_kwargs(
+        kwargs, {'trainable'},
+        'Functional models may only specify `name` and `trainable` keyword '
+        'arguments during initialization. Got an unexpected argument:')
+    # Normalize and set self.inputs, self.outputs.
+    if isinstance(inputs, list) and len(nest.flatten(inputs)) == 1:
+      inputs = inputs[0]
+    if isinstance(outputs, list) and len(nest.flatten(outputs)) == 1:
+      outputs = outputs[0]
+    self._nested_outputs = outputs
+    self._nested_inputs = inputs
+    self.inputs = nest.flatten(inputs)
+    self.outputs = nest.flatten(outputs)
+
+    if any(not hasattr(tensor, '_keras_history') for tensor in self.outputs):
+      base_layer_utils.create_keras_history(self._nested_outputs)
+
+    self._base_init(name=name, **kwargs)
+    self._validate_graph_inputs_and_outputs()
+
+    self._input_layers = []
+    self._output_layers = []
+
+    # Store the output coordinates to map the a node in the graph to an output.
+    self._output_coordinates = []
+
+    # Build self._output_layers:
+    for x in self.outputs:
+      layer, node_index, tensor_index = x._keras_history  # pylint: disable=protected-access
+      self._output_layers.append(layer)
+      self._output_coordinates.append((layer, node_index, tensor_index))
+
+    # Build self._input_layers:
+    for x in self.inputs:
+      layer, node_index, tensor_index = x._keras_history  # pylint: disable=protected-access
+      # It's supposed to be an input layer, so only one node
+      # and one tensor output.
+      assert node_index == 0
+      assert tensor_index == 0
+      self._input_layers.append(layer)
+
+    # A Model does not create weights of its own, thus it is already built.
+    self.built = True
+    self._is_graph_network = True
+
+    # Keep track of the network's nodes and layers.
+    nodes, nodes_by_depth, layers, _ = network._map_graph_network(  # pylint: disable=protected-access
+        self.inputs, self.outputs)
+    self._network_nodes = nodes
+    self._nodes_by_depth = nodes_by_depth
+    self._layers = layers
+    self._layer_call_argspecs = {}
+    for layer in self._layers:
+      self._layer_call_argspecs[layer] = tf_inspect.getfullargspec(layer.call)
+      layer._attribute_sentinel.add_parent(self._attribute_sentinel)  # pylint: disable=protected-access
+
+    self._track_layers(self._layers)
+
+    # Create the node linking internal inputs to internal outputs.
+    node_module.Node(outbound_layer=self,
+                     inbound_layers=[],
+                     node_indices=[],
+                     tensor_indices=[],
+                     input_tensors=self._nested_inputs,
+                     output_tensors=self._nested_outputs)
+
+    self.output_names = []
+    self.input_names = [layer.name for layer in self._input_layers]
+    self._set_output_names()
+
+    self._create_post_order()
+
+  def _get_output_loss_metrics(self):
+    return self._loss_metrics
+
+  def _create_post_order(self):
+    self._post_order_node_execution = []
+    # Set of reference tensors which were computed.
+    computed_set = set()
+
+    # Execute input layers first.
+    for op, layer in zip(self.inputs, self._input_layers):
+      assert len(layer.inbound_nodes) == 1
+      self._post_order_node_execution.append(layer.inbound_nodes[0])
+      computed_set.add(str(id(op)))
+
+    depth_keys = list(self._nodes_by_depth.keys())
+    depth_keys.sort(reverse=True)
+    # Remove the input layers as they have already been computed.
+    depth_keys = depth_keys[1:]
+
+    for depth in depth_keys:
+      nodes = self._nodes_by_depth[depth]
+      for node in nodes:
+        # Check all the node inputs have been executed.
+        if all(
+            str(id(tensor)) in computed_set
+            for tensor in nest.flatten(node.input_tensors)):
+
+          self._post_order_node_execution.append(node)
+          # Update computed_set.
+          computed_set.update(
+              [str(id(x)) for x in nest.flatten(node.output_tensors)])
+
+    assert len(self._post_order_node_execution) == len(self._network_nodes)
+
+  def _execute_layer_node(self, node, training, tensor_dict):
+    convert_kwargs_to_constants = True
+    # This is always a single layer, never a list.
+    layer = node.outbound_layer
+
+    # Call layer (reapplying ops to new inputs).
+    computed_tensors = nest.map_structure(lambda t: tensor_dict[str(id(t))],
+                                          node.input_tensors)
+
+    # Ensure `training` arg propagation if applicable.
+    kwargs = copy.copy(node.arguments) if node.arguments else {}
+    if convert_kwargs_to_constants:
+      kwargs = network._map_tensors_to_constants(kwargs)  # pylint: disable=protected-access
+
+    argspec = self._layer_call_argspecs[layer].args
+    if 'training' in argspec:
+      kwargs.setdefault('training', training)
+      if (type(kwargs['training']) is ops.Tensor and  # pylint: disable=unidiomatic-typecheck
+          any([
+              kwargs['training'] is x
+              for x in backend._GRAPH_LEARNING_PHASES.values()  # pylint: disable=protected-access
+          ])):
+        kwargs['training'] = training  # Materialize placeholder.
+
+    # Map Keras tensors in kwargs to their computed value.
+    def _map_tensor_if_from_keras_layer(t):
+      if isinstance(t, ops.Tensor) and hasattr(t, '_keras_history'):
+        t_id = str(id(t))
+        return tensor_dict[t_id]
+      return t
+
+    kwargs = nest.map_structure(_map_tensor_if_from_keras_layer, kwargs)
+
+    # Compute outputs.
+    output_tensors = layer(computed_tensors, **kwargs)
+
+    # Update tensor_dict.
+    for x, y in zip(nest.flatten(node.output_tensors),
+                    nest.flatten(output_tensors)):
+      tensor_dict[str(id(x))] = y
+
+  def _get_output_tensors(self, tensor_dict):
+    output_tensors = []
+    for output_layer, node_index, tensor_index in self._output_coordinates:
+      # Map the output node tensor to an output in the graph.
+      output = output_layer.get_output_at(node_index)
+      if isinstance(output, list):
+        output = output[tensor_index]
+      else:
+        assert tensor_index == 0
+
+      assert str(
+          id(output)) in tensor_dict, 'Could not compute output ' + str(output)
+      tensor = tensor_dict[str(id(output))]
+      output_tensors.append(tensor)
+
+    output_tensors = nest.pack_sequence_as(self._nested_outputs,
+                                           output_tensors)
+    return output_tensors
+
+  def _format_output(self, outputs):
+    def reshape_multi_output(x):
+      # Input Dims: (dataset_length / batch_size, batch_size, output_dim)
+      ds_len = x.shape[0] * x.shape[1]
+      return np.reshape(x, (ds_len, *x.shape[2:]))
+
+    def reshape_single_output(x):
+      # Input Dims: (batch_size * output_dim0, output_dim1...)
+      a = x.shape[0]
+      b = self.outputs[0].shape[1]  # shape[0] is None (unknown batch size)
+      assert a % b == 0
+
+      split_factor = a / b
+
+      x_split = np.split(x, split_factor)
+      x_split = map(lambda x: np.expand_dims(x, 0), x_split)
+      return np.vstack(x_split)
+
+    def squeeze(x):
+      # If each output is a single value, reduce to single rank tensor.
+      if x.ndim == 2 and x.shape[1] == 1:
+        return np.squeeze(x, 1)
+      return x
+
+    def verify_shape():
+      shapes_ok = True
+      for t, o in zip(outputs, self.outputs):
+        shapes_ok &= t.shape[1:] == o.shape[1:]
+      return shapes_ok
+
+    assert isinstance(outputs, tuple)
+
+    # Multi output model.
+    if verify_shape():
+      return tuple(map(squeeze, outputs))
+
+    # Each tuple element is a per output tensor of dimensions:
+    # (dataset_length / batch_size, batch_size, output_dim)
+    if len(outputs) == len(self.outputs) and len(self.outputs) > 1:
+      return tuple(map(reshape_multi_output, outputs))
+
+    # Each input tuple element is a batch of outputs of dimensions:
+    # (batch_size * output_dim0, output_dim1...)
+    # Output is a tensor of dimensions:
+    # (dataset_length, output_dim0, output_dim1...)
+    stacked = np.vstack(list(map(reshape_single_output, outputs)))
+    return squeeze(stacked)
+
+  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
+                         mode):
+    training = mode == ModeKeys.TRAIN
+
+    def main_body(inputs):
+      inputs = nest.flatten(inputs)
+      assert len(inputs) == len(self.inputs)
+
+      # Dictionary mapping reference tensors to computed tensors.
+      tensor_dict = {}
+
+      # "Execute" the input layers
+      for op, layer, tensor in zip(self.inputs, self._input_layers, inputs):
+        tensor_dict[str(id(op))] = layer(tensor)
+        if isinstance(op, ops.Tensor) and isinstance(tensor, ops.Tensor):
+          try:
+            tensor.set_shape(tensor.shape.merge_with(op.shape))
+          except ValueError:
+            logging.warning(
+                'Model was constructed with shape {} for input {}, but it was '
+                're-called on a Tensor with incompatible shape {}.'.format(
+                    op, op.shape, tensor.shape))
+
+      # Execute the remaining nodes.
+      for node in self._post_order_node_execution[len(inputs):]:
+        self._execute_layer_node(node, training, tensor_dict)
+
+      output_tensors = self._get_output_tensors(tensor_dict)
+      return output_tensors
+
+    def inference_body(*args):
+      outfeed_queue.enqueue(main_body(args))
+      return []
+
+    def training_body(*args):
+      n_inputs = len(self.inputs)
+      inputs = list(args[:n_inputs])
+      targets = list(args[n_inputs:])
+
+      x = main_body(inputs)
+      self._set_output_attrs(x)
+
+      losses = self._add_loss(targets)
+      outfeed_queue.enqueue(losses)
+
+      if not self.trainable_weights:
+        raise ValueError("Model must have at least one trainable parameter.")
+
+      opt = self._get_optimizer()
+      if opt and training:
+        if self.accumulation_count > 1:
+          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+              opt, self.accumulation_count, dtype=self.accumulation_dtype)
+
+        for l in losses[:len(self.outputs)]:  # No grads for metrics.
+          grads_and_vars = opt.compute_gradients(l, self.trainable_variables)
+          opt.apply_gradients(grads_and_vars)
+      return []
+
+    def body(*args):
+      # Flatten all the arguments.
+      args = nest.flatten(args)
+      fn = functional_ops.function(inference_body if mode ==
+                                   ModeKeys.PREDICT else training_body)
+      return fn(*args)
+
+    result = loops.repeat(int(repeat_count * self.accumulation_count),
+                          body,
+                          infeed_queue=infeed_queue)
+
+    return result.outputs
+
+  def _get_internal_run_loop(self):
+    if not self.internal_loop_fn:
+      fn = partial(IPUModel._internal_run_loop, self)
+      self.internal_loop_fn = def_function.function(fn,
+                                                    autograph=False,
+                                                    experimental_compile=True)
+    return self.internal_loop_fn
+
+  def build(self, input_shape):
+    """Builds the model based on input shapes received.
+
+    Args:
+     input_shape: Single tuple, TensorShape, or list of shapes, where shapes
+         are tuples, integers, or TensorShapes.
+    """
+
+    # A Model does not create weights of its own, thus it is already built.
+    assert self._is_graph_network
+    self.built = True
+    return
+
+  @trackable.no_automatic_dependency_tracking
+  def compile(self,
+              optimizer='rmsprop',
+              loss=None,
+              metrics=None,
+              loss_weights=None,
+              **kwargs):
+    """
+    This provides the same functionality as the Keras Model ``compile`` method.
+
+    Certain features are not supported by the IPU Model:
+    - sample_weight_mode
+    - weighted_metrics
+    - target_tensors
+    """
+    return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
+
+  # pylint: disable=arguments-differ
+  @trackable.no_automatic_dependency_tracking
+  def fit(self,
+          x=None,
+          y=None,
+          *,
+          batch_size=None,
+          epochs=1,
+          verbose=1,
+          callbacks=None,
+          shuffle=True,
+          initial_epoch=0,
+          steps_per_epoch=None,
+          steps_per_run=None,
+          prefetch_depth=None,
+          **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `fit` method.
+
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the steps_per_run value. If the dataset is
+    infinite, because it has been repeated indefinitely, then this condition is
+    satisfied.
+    """
+    return super().fit(x,
+                       y,
+                       batch_size=batch_size,
+                       epochs=epochs,
+                       verbose=verbose,
+                       callbacks=callbacks,
+                       shuffle=shuffle,
+                       initial_epoch=initial_epoch,
+                       steps_per_epoch=steps_per_epoch,
+                       steps_per_run=steps_per_run,
+                       prefetch_depth=prefetch_depth,
+                       **kwargs)
+
+  # pylint: disable=arguments-differ
+  def evaluate(self,
+               x=None,
+               y=None,
+               *,
+               batch_size=None,
+               verbose=1,
+               steps=None,
+               callbacks=None,
+               steps_per_run=None,
+               prefetch_depth=None,
+               **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `evaluate` method.
+
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the steps_per_run value. If the dataset is
+    infinite, because it has been repeated indefinitely, then this condition is
+    satisfied.
+    """
+    return super().evaluate(x,
+                            y,
+                            batch_size=batch_size,
+                            verbose=verbose,
+                            steps=steps,
+                            callbacks=callbacks,
+                            steps_per_run=steps_per_run,
+                            prefetch_depth=prefetch_depth,
+                            **kwargs)
+
+  # pylint: disable=arguments-differ
+  def predict(self,
+              x,
+              *,
+              batch_size=None,
+              verbose=0,
+              steps=None,
+              callbacks=None,
+              steps_per_run=None,
+              prefetch_depth=None,
+              **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `predict` method.
+
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the steps_per_run value. If the dataset is
+    infinite, because it has been repeated indefinitely, then this condition is
+    satisfied.
+    """
+    return self._format_output(super().predict(x,
+                                               batch_size=batch_size,
+                                               verbose=verbose,
+                                               steps=steps,
+                                               callbacks=callbacks,
+                                               steps_per_run=steps_per_run,
+                                               prefetch_depth=prefetch_depth,
+                                               **kwargs))
+
+  def save(self,
+           filepath,
+           overwrite=True,
+           include_optimizer=True,
+           save_format=None,
+           signatures=None,
+           options=None):
+    raise NotImplementedError(
+        "IPU keras models do not support the `save` interface.")
+
+
+Model = IPUModel
 Sequential = IPUSequential

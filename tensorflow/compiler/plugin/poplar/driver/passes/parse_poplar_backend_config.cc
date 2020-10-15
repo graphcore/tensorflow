@@ -35,6 +35,14 @@ StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
   }
   return itr->second;
 }
+
+StatusOr<ThreeState> ParseThreeState(const std::string& value) {
+  ThreeState parsed;
+  if (!ThreeState_Parse(value, &parsed)) {
+    return xla::FailedPrecondition("Could not parse the ThreeState value.");
+  }
+  return parsed;
+}
 }  // namespace
 
 StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
@@ -43,9 +51,9 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
   for (auto* comp : module->computations()) {
     for (auto instr : comp->instructions()) {
       auto attributes = instr->frontend_attributes();
-      PoplarBackendConfig poplar_config;
       // Check if the calls have the type field set from tf2xla.
       if (instr->opcode() == HloOpcode::kCall) {
+        PoplarBackendConfig poplar_config;
         auto call_config_type_attribute =
             attributes.map().find(FrontendAttributeId_Name(CALL_CONFIG_TYPE));
         if (call_config_type_attribute != attributes.map().end()) {
@@ -61,10 +69,23 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
             case PoplarBackendConfig::CallConfig::Pipeline: {
               auto* pipeline_config = call_config->mutable_pipeline_config();
               // Get the pipeline depth.
-              TF_ASSIGN_OR_RETURN(std::string pipeline_depth_str,
-                                  GetAttribute(attributes, PIPELINE_DEPTH));
-              int64 pipeline_depth = std::stoll(pipeline_depth_str);
-              pipeline_config->set_pipeline_depth(pipeline_depth);
+              TF_ASSIGN_OR_RETURN(
+                  std::string gradient_accumulation_count_str,
+                  GetAttribute(attributes, GRADIENT_ACCUMULATION_COUNT));
+              int64 gradient_accumulation_count =
+                  std::stoll(gradient_accumulation_count_str);
+              pipeline_config->set_gradient_accumulation_count(
+                  gradient_accumulation_count);
+
+              // Get the batch serialization iterations.
+              TF_ASSIGN_OR_RETURN(
+                  std::string batch_serialization_iterations_str,
+                  GetAttribute(attributes,
+                               PIPELINE_BATCH_SERIALIZATION_ITERATIONS));
+              int64 batch_serialization_iterations =
+                  std::stoll(batch_serialization_iterations_str);
+              pipeline_config->set_batch_serialization_iterations(
+                  batch_serialization_iterations);
 
               // Get the repeat count.
               TF_ASSIGN_OR_RETURN(
@@ -80,6 +101,40 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
                   std::stoi(schedule_str));
               pipeline_config->set_schedule({schedule});
+
+              // Set the offload activations flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_activations_str,
+                  GetAttribute(attributes, OFFLOAD_ACTIVATIONS));
+              TF_ASSIGN_OR_RETURN(auto offload_activations,
+                                  ParseThreeState(offload_activations_str));
+              pipeline_config->set_offload_activations(offload_activations);
+
+              // Set the partition variables flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string partition_variables_str,
+                  GetAttribute(attributes, PARTITION_VARIABLES));
+              TF_ASSIGN_OR_RETURN(auto partition_variables,
+                                  ParseThreeState(partition_variables_str));
+              pipeline_config->set_partition_variables(partition_variables);
+
+              // Set the offload variables flag.
+              TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
+                                  GetAttribute(attributes, OFFLOAD_VARIABLES));
+              TF_ASSIGN_OR_RETURN(auto offload_variables,
+                                  ParseThreeState(offload_variables_str));
+              pipeline_config->set_offload_variables(offload_variables);
+
+              // Set the offload gradient accumulation buffers flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_gradient_accumulation_buffers_str,
+                  GetAttribute(attributes,
+                               OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS));
+              TF_ASSIGN_OR_RETURN(
+                  auto offload_gradient_accumulation_buffers,
+                  ParseThreeState(offload_gradient_accumulation_buffers_str));
+              pipeline_config->set_offload_gradient_accumulation_buffers(
+                  offload_gradient_accumulation_buffers);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
@@ -97,10 +152,24 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               auto* resource_update_config =
                   call_config->mutable_resource_update_config();
               // Get the offload variables flag.
-              TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
-                                  GetAttribute(attributes, OFFLOAD_VARIABLES));
-              auto offload_variables = std::stoi(offload_variables_str);
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_variables_str,
+                  GetAttribute(attributes, OFFLOAD_WEIGHT_UPDATE_VARIABLES));
+              TF_ASSIGN_OR_RETURN(auto offload_variables,
+                                  ParseThreeState(offload_variables_str));
               resource_update_config->set_offload_variables(offload_variables);
+
+              // Get the partition offload variables flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string partition_offload_variables_str,
+                  GetAttribute(attributes,
+                               PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES));
+              TF_ASSIGN_OR_RETURN(
+                  auto partition_offload_variables,
+                  ParseThreeState(partition_offload_variables_str));
+              resource_update_config->set_partition_offloaded_variables(
+                  partition_offload_variables);
+
               // Get the num batches to accumulate flag.
               TF_ASSIGN_OR_RETURN(
                   std::string num_batches_to_accumulate_str,
@@ -114,8 +183,8 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           }
           changed = true;
         }
+        TF_RETURN_IF_ERROR(instr->set_backend_config(poplar_config));
       }
-      instr->set_backend_config(poplar_config);
     }
   }
   return changed;

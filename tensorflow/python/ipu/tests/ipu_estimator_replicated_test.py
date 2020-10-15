@@ -16,6 +16,7 @@
 import glob
 import numpy as np
 
+from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python import ipu
@@ -29,6 +30,7 @@ from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -61,7 +63,8 @@ class _SessionRunCounter(session_run_hook.SessionRunHook):
     self.num_session_runs += 1
 
 
-class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
+class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
+                                 parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testTrainReplicated(self):
     if ipu_utils.running_on_ipu_model():
@@ -120,11 +123,17 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     # loss is averaged across iterations per loop
     self.assertEqual(loss_output, [14.0, 16.0, 18.0])
 
+  @parameterized.parameters(
+      {'use_gradient_accumulation': False},
+      {'use_gradient_accumulation': True},
+  )
   @test_util.deprecated_graph_mode_only
-  def testTrainReplicatedOnRegressionDataset(self):
+  def testTrainReplicatedOnRegressionDataset(self, use_gradient_accumulation):
     if ipu_utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
+
+    iterations_per_loop = 2
 
     def my_model_fn(features, labels, mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -135,9 +144,15 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
       optimizer = gradient_descent.GradientDescentOptimizer(0.1)
       sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(optimizer)
-      cross_replica_optimizer_obj = \
-      cross_replica_optimizer.CrossReplicaOptimizer(
-          sharded_optimizer_obj)
+
+      if use_gradient_accumulation:
+        cross_replica_optimizer_obj = gradient_accumulation_optimizer.\
+            CrossReplicaGradientAccumulationOptimizerV2(
+                sharded_optimizer_obj, iterations_per_loop)
+      else:
+        cross_replica_optimizer_obj = \
+          cross_replica_optimizer.CrossReplicaOptimizer(sharded_optimizer_obj)
+
       train_op = cross_replica_optimizer_obj.minimize(loss)
 
       return model_fn_lib.EstimatorSpec(mode=mode,
@@ -153,9 +168,10 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
     config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_replicas=4,
-                                                   ipu_options=ipu_options),
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=iterations_per_loop,
+            num_replicas=4,
+            ipu_options=ipu_options),
         log_step_count_steps=1,
         save_summary_steps=1)
 

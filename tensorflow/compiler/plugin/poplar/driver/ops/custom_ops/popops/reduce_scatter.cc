@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include <popops/Collectives.hpp>
+#include <gcl/Collectives.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Pad.hpp>
 
@@ -84,10 +84,10 @@ class ReduceScatterOp : public PoplarOpDef {
         InterleavePerReplica(graph, inputs, res.replication_factor);
 
     // Do the actual reduce scatter on the interleaved input.
-    poplar::Tensor interleaved_output = popops::replicatedReduceScatter(
-        graph, interleaved_input, popops::Operation::ADD, seq,
-        GetDebugName(inst) + "/ReduceScatter",
-        GetReplicatedCollectiveOptions(res));
+    poplar::Tensor interleaved_output =
+        gcl::reduceScatter(graph, interleaved_input, popops::Operation::ADD,
+                           seq, GetDebugName(inst) + "/ReduceScatter",
+                           GetReplicatedCollectiveOptions(res));
 
     // Deinterleave output.
     // Before: interleaved_output = [sum(a0), sum(a1), sum(b0)] (on replica 1/2)

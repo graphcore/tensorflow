@@ -33,16 +33,36 @@ struct CompilerResources;
 
 namespace subcomputation_graph_caching {
 
+struct SubcomputationGraphCacheKey {
+  const HloComputation* computation;
+  bool keep_input_layouts;
+};
+
+struct SubcomputationGraphCacheKeyHash {
+  size_t operator()(const SubcomputationGraphCacheKey& key) const;
+};
+
+struct SubcomputationGraphCacheKeyEquals {
+  bool operator()(const SubcomputationGraphCacheKey& a,
+                  const SubcomputationGraphCacheKey& b) const;
+};
+
 class SubcomputationGraphCache {
  public:
   // Get or compile the DeferredVisitor for a computation.
   StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
       CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
-      const HloComputation* computation);
+      const HloComputation* computation, bool keep_input_layouts = false);
+
+  // Get or compile the DeferredVisitor for a computation.
+  StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
+      CompilerResources& res, DeferredArgRBVectors& inputs,
+      const HloComputation* computation, bool keep_input_layouts = false);
 
  private:
-  std::unordered_map<const HloComputation*, std::shared_ptr<DeferredVisitor>,
-                     HloComputationHash, HloComputationEquals>
+  std::unordered_map<
+      const SubcomputationGraphCacheKey, std::shared_ptr<DeferredVisitor>,
+      SubcomputationGraphCacheKeyHash, SubcomputationGraphCacheKeyEquals>
       table_;
 };
 
