@@ -17,6 +17,11 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_RESOURCES_H_
 
 #include <memory>
+#include <stack>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <poplar/Graph.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplin/Convolution.hpp>
@@ -24,10 +29,8 @@ limitations under the License.
 #include <popops/DynamicSlice.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poputil/GraphFunction.hpp>
-#include <stack>
-#include <string>
-#include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
@@ -157,6 +160,10 @@ struct CompilerResources {
   int64 num_io_tiles;
 
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
+
+  absl::flat_hash_map<std::string,
+                      std::pair<poplar::program::Sequence, poplar::Tensor>>
+      io_tile_infeed_cache;
 
   CompilerResources(
       HloModule* module, const CompilerInformation& information,

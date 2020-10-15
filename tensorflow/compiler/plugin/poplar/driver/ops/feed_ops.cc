@@ -36,6 +36,69 @@ namespace pe = popops::expr;
 namespace xla {
 namespace poplarplugin {
 
+namespace {
+Status CreatePoplarFIFO(
+    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    const xla::poplarplugin::PoplarFeedConfig& infeed_config,
+    const std::string& handle, poplar::Graph& graph,
+    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq) {
+  TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
+      infeed_config.feed_id(), tuple_index, handle, seq, inst));
+
+  poplar::OptionFlags fifo_options =
+      res.streams_indices.GraphFeedOptions(handle);
+  fifo_options.set("bufferingDepth",
+                   std::to_string(infeed_config.prefetch_depth()));
+
+  auto fifo = graph.addHostToDeviceFIFO(
+      handle, tensor_to_update.elementType(), tensor_to_update.numElements(),
+      poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
+  if (res.use_verified_transfers) {
+    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
+                        res.streams_indices.IndexTensor(handle, inst, seq));
+    seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
+                                  res.streams_indices.CopyOptions()));
+    // Increment the index by one.
+    popops::mapInPlace(
+        graph, pe::Add(pe::_1, pe::Const(1)), {index.slice(0, 1)}, seq,
+        GetDebugName(inst) + "/InfeedIndexInc/" + std::to_string(tuple_index));
+  } else {
+    seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
+  }
+
+  return Status::OK();
+}
+
+Status CreateIOTilePoplarFIFO(
+    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    const xla::poplarplugin::PoplarFeedConfig& infeed_config,
+    const std::string& handle, poplar::Graph& graph,
+    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq) {
+  // Is the stream registered in the cache?
+  auto itr = res.io_tile_infeed_cache.find(handle);
+
+  if (itr != res.io_tile_infeed_cache.end()) {
+    // Reuse the cache program and copy the result into the tensor.
+    seq.add(itr->second.first);
+    seq.add(poplar::program::Copy(itr->second.second, tensor_to_update));
+
+    return Status::OK();
+  }
+
+  // Wasn't in the cache, so we'll create one.
+  poplar::Tensor tmp = graph.clone(tensor_to_update);
+  TF_RETURN_IF_ERROR(CreatePoplarFIFO(res, inst, tuple_index, infeed_config,
+                                      handle, graph, tmp, seq));
+
+  // Add to the cache.
+  res.io_tile_infeed_cache[handle] = std::make_pair(seq, tmp);
+  seq.add(poplar::program::Copy(tmp, tensor_to_update));
+
+  return Status::OK();
+}
+
+}  // namespace
+
 StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                                 const HloInstruction* inst,
                                                 int64 tuple_index,
@@ -68,31 +131,15 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
     if (!UseSyntheticData()) {
       const std::string handle =
           GetInfeedCopyHandle(infeed->name(), tuple_index);
-      TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-          infeed_config.feed_id(), tuple_index, handle, seq, inst));
 
-      poplar::OptionFlags fifo_options =
-          res.streams_indices.GraphFeedOptions(handle);
-      fifo_options.set("bufferingDepth",
-                       std::to_string(infeed_config.prefetch_depth()));
-
-      auto fifo = graph.addHostToDeviceFIFO(
-          handle, tensor_to_update.elementType(),
-          tensor_to_update.numElements(),
-          poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
-      if (res.use_verified_transfers) {
-        TF_ASSIGN_OR_RETURN(poplar::Tensor index,
-                            res.streams_indices.IndexTensor(handle, inst, seq));
-        seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
-                                      res.streams_indices.CopyOptions()));
-        // Increment the index by one.
-        popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
-                           {index.slice(0, 1)}, seq,
-                           GetDebugName(inst) + "/InfeedIndexInc/" +
-                               std::to_string(tuple_index));
-      } else {
-        seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
+      TF_ASSIGN_OR_RETURN(auto tileset, GetTileset(inst));
+      if (tileset == TILESET_IO_TILES) {
+        return CreateIOTilePoplarFIFO(res, inst, tuple_index, infeed_config,
+                                      handle, graph, tensor_to_update, seq);
       }
+
+      return CreatePoplarFIFO(res, inst, tuple_index, infeed_config, handle,
+                              graph, tensor_to_update, seq);
     } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
       // Initialize the tensor with a synthetic initalizer.
       auto& initializer = DataInitializer::GetSyntheticDataInitializer();
