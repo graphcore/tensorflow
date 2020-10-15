@@ -1143,7 +1143,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size);
     pipeline.AddPass<PipelineStageMerger>();
-    pipeline.AddPass<PipelineCommunicationOptimizer>();
+    pipeline.AddPass<PipelineCommunicationOptimizer>(
+        resources.remote_memory_supported);
     AddPipelineOptimizerPass(pipeline);
     {
       auto& batch_serialization_pass = pipeline.AddPass<HloPassPipeline>(
@@ -1161,7 +1162,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.information.minimum_remote_tensor_size,
         resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
-    pipeline.AddPass<PipelineFIFOInserter>();
+    pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
     pipeline.AddPass<ResourceUpdateElementwiseClustering>(
         resources.replication_factor);
     {
@@ -1210,7 +1211,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<PipelineRecomputationStageInserter>(
-        poplar_executor->RecomputationEnabled());
+        poplar_executor->RecomputationEnabled(),
+        resources.remote_memory_supported);
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<FlattenCallGraph>();
     }

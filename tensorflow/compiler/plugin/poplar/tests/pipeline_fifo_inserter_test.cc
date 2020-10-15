@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
@@ -95,13 +96,13 @@ ENTRY main {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  PipelineFIFOInserter inserter;
+  PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineFIFOInserterTest, TestTrainingInsertFIFOs) {
-  std::string hlo = R"(
+std::string GetHlo(ThreeState offload) {
+  constexpr absl::string_view hlo_format = R"(
 HloModule cluster
 
 _pop_op_conv_biasadd {
@@ -444,7 +445,7 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":1}}}"
+  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":1,\"offload_activations\":\"%s\"}}}"
   get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
   get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
   get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0
@@ -454,12 +455,38 @@ ENTRY cluster {
   ROOT tuple.286 = (f32[2]{0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.269, get-tuple-element.273, get-tuple-element.268, get-tuple-element.272, get-tuple-element.271, get-tuple-element.270)
 }
 )";
+  return absl::StrFormat(hlo_format, ThreeState_Name(offload));
+}
 
+struct PipelineFIFOInserterTestOffloadSpec {
+  ThreeState offload;
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const PipelineFIFOInserterTestOffloadSpec& spec) {
+  return os << "{ offload: " << ThreeState_Name(spec.offload) << "}";
+}
+
+class PipelineFIFOInserterTestOffload
+    : public HloTestBase,
+      public ::testing::WithParamInterface<
+          PipelineFIFOInserterTestOffloadSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    PipelineFIFOInserterTestOffloadCases, PipelineFIFOInserterTestOffload,
+    ::testing::ValuesIn(std::vector<PipelineFIFOInserterTestOffloadSpec>{
+        {THREESTATE_OFF},
+        {THREESTATE_ON},
+        {THREESTATE_UNDEFINED},
+    }));
+
+TEST_P(PipelineFIFOInserterTestOffload, DoTest) {
+  auto param = GetParam();
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
-  PipelineFIFOInserter inserter;
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetHlo(param.offload), config));
+  PipelineFIFOInserter inserter(true);
   HloComputation* pipeline_computation =
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
@@ -476,8 +503,12 @@ ENTRY cluster {
   EXPECT_THAT(stage_1_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_1_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(1))->depth(), 1);
+  EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(1))->offload(),
+              param.offload == THREESTATE_ON);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_1_bwd->operand(2)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(2))->depth(), 1);
+  EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(2))->offload(),
+              param.offload == THREESTATE_ON);
   EXPECT_THAT(stage_1_bwd->operand(3)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_THAT(stage_1_bwd->operand(4)->opcode(), HloOpcode::kParameter);
   EXPECT_THAT(stage_1_bwd->operand(5)->opcode(), HloOpcode::kParameter);
@@ -487,6 +518,8 @@ ENTRY cluster {
   EXPECT_THAT(stage_0_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_0_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_0_bwd->operand(1))->depth(), 2);
+  EXPECT_THAT(Cast<HloFifoInstruction>(stage_0_bwd->operand(1))->offload(),
+              param.offload == THREESTATE_ON);
   EXPECT_THAT(stage_0_bwd->operand(2)->opcode(), HloOpcode::kParameter);
   EXPECT_THAT(stage_0_bwd->operand(3)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_THAT(stage_0_bwd->operand(4)->opcode(), HloOpcode::kParameter);

@@ -27,6 +27,27 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+StatusOr<bool> PipelineFIFOInserter::OffloadFifos(
+    const HloInstruction* pipeline_op, bool remote_memory_supported) {
+  switch (GetPipelineOffloadActivations(pipeline_op)) {
+    case THREESTATE_OFF:
+    case THREESTATE_UNDEFINED: {
+      return false;
+    }
+    case THREESTATE_ON: {
+      if (!remote_memory_supported) {
+        return FailedPrecondition(
+            "Activation offloading has been enabled, however the current "
+            "configuration of the IPU devices does not support "
+            "remote memory. Set the `offload_activations` argument of "
+            "`pipelining_ops.pipeline` to `False` to stop seeing this "
+            "message.");
+      }
+      return true;
+    }
+    default: { return FailedPrecondition("Unknown state."); }
+  }
+}
 
 StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
     HloInstruction* pipeline_op) {
@@ -45,6 +66,9 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
   const int64 last_stage_id = stages.forward.size() - 1;
   TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
                       GetFifoDepthMultiplier(pipeline_op));
+  // Get whether any Fifos which will be inserted should be offloaded.
+  TF_ASSIGN_OR_RETURN(const bool offload_fifos,
+                      OffloadFifos(pipeline_op, remote_memory_supported_));
 
   for (HloInstruction* stage : stages.backward) {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
@@ -103,13 +127,17 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
       VLOG(3) << "Inserting FIFO for stage " << stage_id.id;
       HloInstruction* fifo_inst = pipeline_comp->AddInstruction(
           CreateFifo(fwd_stage_input,
-                     fifo_depth_multiplier * (last_stage_id - stage_id.id)));
+                     fifo_depth_multiplier * (last_stage_id - stage_id.id),
+                     offload_fifos));
       TF_RETURN_IF_ERROR(fwd_stage_input->ReplaceUseWith(stage, fifo_inst));
       changed = true;
     }
   }
   return changed;
 }
+
+PipelineFIFOInserter::PipelineFIFOInserter(bool remote_memory_supported)
+    : remote_memory_supported_(remote_memory_supported) {}
 
 StatusOr<bool> PipelineFIFOInserter::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,

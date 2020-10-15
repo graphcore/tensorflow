@@ -393,11 +393,11 @@ ENTRY cluster {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  PipelineFIFOInserter inserter;
+  PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputationStageInserter recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true, false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -492,7 +492,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputationStageInserter recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true, false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
@@ -856,11 +856,11 @@ ENTRY cluster {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  PipelineFIFOInserter inserter;
+  PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputationStageInserter recomputation(false);
+  PipelineRecomputationStageInserter recomputation(false, false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
@@ -936,7 +936,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineFIFOInserter inserter;
+  PipelineFIFOInserter inserter(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -951,7 +951,7 @@ ENTRY e {
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
-  PipelineRecomputationStageInserter recomputation(true);
+  PipelineRecomputationStageInserter recomputation(true, false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));

@@ -48,6 +48,9 @@ class PoputilFifoOp : public XlaOpKernel, IpuOpKernel {
     int32 depth;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("depth", &depth));
     attribute_map_.AddAttribute("depth", depth);
+    bool offload;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload", &offload));
+    attribute_map_.AddAttribute("offload", offload);
   }
 
   void Compile(XlaOpKernelContext* ctx) override {

@@ -30,6 +30,11 @@ namespace poplarplugin {
  */
 class PipelineFIFOInserter : public HloModulePass {
  public:
+  static StatusOr<bool> OffloadFifos(const HloInstruction* pipeline_op,
+                                     bool remote_memory_supported);
+
+  explicit PipelineFIFOInserter(bool remote_memory_supported);
+
   absl::string_view name() const override { return "fifo-inserter"; }
 
   StatusOr<bool> Run(HloModule* module) override;
@@ -37,6 +42,8 @@ class PipelineFIFOInserter : public HloModulePass {
  private:
   // Insert FIFOs for a particular pipeline.
   StatusOr<bool> InsertInPipeline(HloInstruction* pipeline_op);
+
+  bool remote_memory_supported_;
 };
 
 }  // namespace poplarplugin
