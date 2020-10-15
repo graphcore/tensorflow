@@ -28,9 +28,9 @@ SET PATH=%PATH%;C:\%PYTHON_DIRECTORY%
 
 %PIP_EXE% install setuptools --upgrade
 %PIP_EXE% install future>=0.17.1 --no-deps
-%PIP_EXE% install tf-estimator-nightly --no-deps
+%PIP_EXE% install tf-estimator-nightly==2.0.0.dev2020011309 --no-deps
 %PIP_EXE% install tb-nightly --no-deps
-%PIP_EXE% install numpy --upgrade --no-deps
+%PIP_EXE% install numpy==1.18.5 --upgrade --no-deps
 %PIP_EXE% install opt_einsum --upgrade
 %PIP_EXE% install pandas --upgrade --no-deps
 %PIP_EXE% install protobuf --upgrade --no-deps

@@ -2867,6 +2867,7 @@ tf_py_test(
         ":framework_for_generated_wrappers",
         "//third_party/py/numpy",
     ],
+    tags = ["no_rocm"],
 )
 
 cuda_py_test(
@@ -4417,6 +4418,7 @@ cuda_py_test(
         "//tensorflow/python/eager:def_function",
     ],
     shard_count = 2,
+    tags = ["no_pip"],
 )
 
 cuda_py_test(
@@ -4463,6 +4465,7 @@ cuda_py_test(
         ":platform",
         "//third_party/py/numpy",
     ],
+    tags = ["no_windows_gpu"],
 )
 
 cuda_py_test(
@@ -5914,6 +5917,7 @@ tf_py_test(
         "client_testlib",
         "framework_test_lib",
     ],
+    tags = ["no_rocm"],
 )
 
 tf_py_test(
@@ -5936,7 +5940,10 @@ tf_py_test(
         ":errors",
         ":lib",
     ],
-    tags = ["no_windows"],
+    tags = [
+        "no_rocm",
+        "no_windows",
+    ],
 )
 
 tf_py_test(
@@ -6638,6 +6645,7 @@ tf_py_test(
         ":random_ops",
     ],
     main = "layers/pooling_test.py",
+    tags = ["no_rocm"],
 )
 
 cuda_py_test(
