@@ -261,20 +261,20 @@ by processing multiple batches of training examples before updating the model.
 The gradients from each batch are accumulated and these accumulated gradients
 are used to compute the weight update.
 When gradient accumulation is used, the effective batch size of the model is the
-'number of mini-batches' for which the gradients are accumulated multiplied by
+number of mini-batches for which the gradients are accumulated multiplied by
 the mini-batch size.
 
 Gradient accumulation is a useful optimisation technique for replicated graphs
 as it reduces the number of times the gradients are exchanged between replicas
-by a factor of 'number of mini-batches'. This is because the gradients only need
+by a factor of the number of mini-batches. This is because the gradients only need
 to be exchanged between replicas when the weight update is computed.
 When gradient accumulation is used with replication, the effective batch size of
-the model is the 'number of mini-batches' for which the gradients are
+the model is the number of mini-batches for which the gradients are
 accumulated multiplied by the mini-batch size multiplied by the replication
 factor.
 
-There are multiple convenient ways to use gradient accumulation in your model
-with minimal modifications to your model.
+There are multiple convenient ways to use gradient accumulation with minimal
+modifications to your model.
 
 Optimizers
 __________
@@ -282,38 +282,35 @@ __________
 Gradient accumulation optimizers provide an easy way to add gradient
 accumulation to your model:
 
-* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2``
+* :class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
   is a general purpose optimizer which can be used to wrap any other TensorFlow
   optimizer. It supports optimizer state offloading (see the
   :ref:`optimiser-state-unloading` section).
 
-* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer``
+* :class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer`
   is an optimizer which can be used to wrap `tf.train.GradientDescentOptimizer`
   and `tf.train.MomentumOptimizer` only. Note that this optimizer does **not**
   support optimizer state offloading.
 
 The cross-replica versions of these optimizers can be used with replicated
 graphs, see
-``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2``
+:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2`
 and
-``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer``.
+:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer`.
 
 .. note:: These optimizers need to be used inside of a training loop generated
-  by ``ipu.loops.repeat``, see the :ref:`api-section` for more details.
+  by :func:`~tensorflow.python.ipu.loops.repeat`.
 
 Pipelining
 __________
 
 All pipelined training graphs automatically apply gradient accumulation to the
-model such that the weight update is only computed once all the mini-batches,
-where the number of mini-batches is the ``gradient_accumulation_count``, have
-gone through the whole model pipeline.
+model such that the weight update is only computed once all the mini-batches have
+gone through the whole model pipeline, where the number of mini-batches is the
+``gradient_accumulation_count``.
 
 .. Note:: Since the pipelined models always implement gradient accumulation, no
-  gradient accumulation optimizer should also be used in combination with
-  pipelining.
-
-.. _optimiser-state-unloading:
+  gradient accumulation optimizer should be used in combination with pipelining.
 
 Accumulation data type
 ______________________
@@ -322,13 +319,21 @@ When accumulating gradients over a large number of mini-batches, it can be
 beneficial to perform the accumulation in a data type with higher precision
 (and dynamic range) than that of the gradients. By default, the accumulation is
 performed using the same data type as the corresponding variable, but this can
-be overridden in the different APIs by passing ``gradient_accumulation_dtype``
-(or just ``dtype`` in the ``GradientAccumulationOptimizerV2`` API).
+be overridden by passing ``gradient_accumulation_dtype`` (or just ``dtype`` to
+the ``GradientAccumulationOptimizerV2``).
+
+This argument can be either of these three options:
+
+- `None`: Use an accumulator of the same type as the variable type.
+- A `DType`: Use this type for all the accumulators. For example `tf.float32`.
+- A callable that takes the variable and returns a `DType`: Allows
+  specifying the accumulator type on a per-variable basis. For example, passing
+  ``lambda var: var.dtype`` would have the same effect as passing `None`.
 
 Note that when accumulating the gradients using a different data type than that
-of the variable, an out-of-the box optimizer will not work since there will be a
-data type mismatch between the accumualated gradient and the variable when doing
-the weight update. You can use a custom optimizer to cast the final accumulated
+of the variable, an standard optimizer will not work since there will be a data
+type mismatch between the accumualated gradient and the variable when doing the
+weight update. You can use a custom optimizer to cast the final accumulated
 gradient to the data type of the variable before performing the weight update,
 for example like this with a Keras SGD optimizer:
 
@@ -340,6 +345,7 @@ for example like this with a Keras SGD optimizer:
                              for (g, v) in grads_and_vars]
       return super().apply_gradients(cast_grads_and_vars, name)
 
+.. _optimiser-state-unloading:
 
 Optimizer state offloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -350,24 +356,24 @@ accumulator variables which are only accessed and modified during the weight
 update.
 This means that when gradient accumulation is used, whether through the use of
 pipelining or the
-``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2``
+:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
 optimizer, the optimizer state variables do not need to be stored in the device
 memory during the forward and backward propagation of the model. These variables
 are only required during the weight update and so they are streamed onto the
-device during the weight updated and then streamed back to remote memory after
+device during the weight update and then streamed back to remote memory after
 they have been updated.
 
-This feature is enabled by default for both pipelining and
-when ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` is
-used.
+This feature is enabled by default for both pipelining and when
+:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+is used.
 
 It can be disabled by setting the ``offload_weight_update_variables`` argument
-of ``pipelining_ops.pipeline`` or
-``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` to
-``False``.
+of :func:`~tensorflow.python.ipu.pipelining_ops.pipeline` or
+:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+to ``False``.
 
 This feature requires the machine to be configured with support for
-`Poplar remote buffers` and if the machine does not support it, it is disabled.
+Poplar remote buffers and if the machine does not support it, it is disabled.
 
 Offloading variables into remote memory can reduce maximum memory liveness, but
 it can also increase the computation time of the weight update as more time is

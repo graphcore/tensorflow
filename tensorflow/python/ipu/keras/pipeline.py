@@ -135,6 +135,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             - A `DType`: Use this type for all the accumulators.
             - A callable that takes the variable and returns a `DType`: Allows
               specifying the accumulator type on a per-variable basis.
+
           The gradients passed to `Optimizer.apply_gradients` will have the
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
@@ -608,6 +609,17 @@ class PipelineModel(ipu_model.Model):
     Args:
         gradient_accumulation_count: The number of mini-batches processed by
             the pipeline on each iteration.
+        gradient_accumulation_dtype: The data type used for the gradient
+          accumulation buffer. One of:
+            - `None`: Use an accumulator of the same type as the variable type.
+            - A `DType`: Use this type for all the accumulators.
+            - A callable that takes the variable and returns a `DType`: Allows
+              specifying the accumulator type on a per-variable basis.
+
+          The gradients passed to `Optimizer.apply_gradients` will have the
+          dtype requested here. If that dtype is different from the variable
+          dtype a cast is needed at some point to make them compatible. This can
+          be done by using a custom optimizer.
         batch_serialization_iterations: number of times a loop executes to
         compute a batch on each pipeline stage execution. Currently only
         supported with the `PipelineSchedule.Sequential`.

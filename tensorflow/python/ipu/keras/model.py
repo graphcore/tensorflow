@@ -711,6 +711,7 @@ class IPUSequential(_IpuModelBase):
             - A `DType`: Use this type for all the accumulators.
             - A callable that takes the variable and returns a `DType`: Allows
               specifying the accumulator type on a per-variable basis.
+
           The gradients passed to `Optimizer.apply_gradients` will have the
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
@@ -1006,6 +1007,7 @@ class IPUModel(_IpuModelBase):
             - A `DType`: Use this type for all the accumulators.
             - A callable that takes the variable and returns a `DType`: Allows
               specifying the accumulator type on a per-variable basis.
+
           The gradients passed to `Optimizer.apply_gradients` will have the
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
