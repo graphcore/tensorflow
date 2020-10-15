@@ -107,33 +107,8 @@ class BufferLoadSliceOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
-
-    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
-
-    if (!UseSyntheticData()) {
-      // Get the remote buffer input.
-      TensorOrRemoteBufferVector inputs =
-          FindInstructionInputs(tensor_map, res, inst, 0, seq);
-      CHECK_EQ(inputs.size(), 1);
-      poplar::RemoteBuffer input = inputs[0].AsRemoteBuffer();
-
-      TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
-                          FindInstructionInput(tensor_map, res, inst, 1, seq));
-
-      seq.add(poplar::program::Copy(input, tensor, offset));
-    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-      // Initialize the tensor to a constant value.
-      auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-      TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(output_shape));
-      TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
-    }
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, tensor));
-
-    return seq;
+    // Should have been handled by the deferred visitor.
+    return FailedPrecondition("BufferLoadSlice cannot be generated.");
   }
 };
 REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
