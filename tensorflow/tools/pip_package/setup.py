@@ -47,7 +47,7 @@ DOCLINES = __doc__.split('\n')
 # result for pip.
 # Also update tensorflow/tensorflow.bzl and
 # tensorflow/core/public/version.h
-_VERSION = '2.1.1'
+_VERSION = '2.1.2'
 
 if '--version' in sys.argv:
   version_idx = sys.argv.index('--version')
@@ -66,7 +66,7 @@ REQUIRED_PACKAGES = [
     'keras_applications >= 1.0.8',
     'keras_preprocessing == 1.1.0',
     'networkx >= 2.2',
-    'numpy >= 1.16.0, < 2.0',
+    'numpy >= 1.16.0, < 1.19.0',
     'opt_einsum >= 2.3.2',
     'protobuf >= 3.8.0',
     'tensorboard >= 2.1.0, < 2.2.0',
@@ -81,10 +81,6 @@ REQUIRED_PACKAGES = [
     # functools comes with python3, need to install the backport for python2
     'functools32 >= 3.2.3;python_version<"3"',
     'six >= 1.12.0',
-    # scipy < 1.4.1 causes segfaults due to pybind11
-    # Latest scipy pip for py2 is scipy==1.2.2
-    'scipy == 1.4.1;python_version>="3"',
-    'scipy == 1.2.2;python_version<"3"',
 ]
 
 if sys.byteorder == 'little':
