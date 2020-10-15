@@ -30,6 +30,7 @@ bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
+bool IsWideConstant(const HloInstruction*);
 bool IsWideConstantZero(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
 bool IsFloat(const HloInstruction*);
@@ -84,6 +85,10 @@ bool IsSerializedGradientAccumulation(const HloInstruction*);
  * @returns The unary predicate.
  */
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op);
+
+inline bool IsPoplarInstruction(PoplarOp op, const HloInstruction* inst) {
+  return IsPoplarInstruction(op)(inst);
+}
 }  // namespace poplarplugin
 }  // namespace xla
 

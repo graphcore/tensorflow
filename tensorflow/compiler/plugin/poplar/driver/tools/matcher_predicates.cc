@@ -35,7 +35,7 @@ namespace poplarplugin {
 namespace {
 // TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
 // case.
-bool CheckValidAttributes(const HloScatterInstruction* inst) {
+bool CheckValidMultiUpdateAttributes(const HloScatterInstruction* inst) {
   const Shape operand_shape = inst->operand(0)->shape();
   const Shape indices_shape = inst->operand(1)->shape();
   const Shape updates_shape = inst->operand(2)->shape();
@@ -57,13 +57,14 @@ bool CheckValidAttributes(const HloScatterInstruction* inst) {
          update_window_dims[0] == (updates_shape.rank() - 1);
 }
 
-bool CheckValidAttributesForGather(const HloGatherInstruction* inst) {
+bool CheckValidMultiSliceAttributes(const HloGatherInstruction* inst) {
+  const Shape output_shape = inst->shape();
   const Shape operand_shape = inst->operand(0)->shape();
   const Shape start_indices = inst->operand(1)->shape();
   const auto dim_numbers = inst->gather_dimension_numbers();
   const auto offset_dims = dim_numbers.offset_dims();
-  const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
   const auto start_index_map = dim_numbers.start_index_map();
+  const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
   const auto index_vector_dim = dim_numbers.index_vector_dim();
   const auto slice_sizes = inst->gather_slice_sizes();
 
@@ -72,26 +73,23 @@ bool CheckValidAttributesForGather(const HloGatherInstruction* inst) {
           ? 1
           : start_indices.dimensions(index_vector_dim);
 
-  // Currently we only allow operand rank 2.
+  if (index_dim_size != 1) {
+    return false;
+  }
+
   if (operand_shape.rank() != 2) {
     return false;
   }
 
-  // For this case vector of collapsed dimensions should have size 1.
+  if (slice_sizes.size() != 2) {
+    return false;
+  }
+
   if (collapsed_slice_dims.size() != 1) {
     return false;
   }
-
-  // Allow collapsed axis to be only 0 as multiSlice
-  // would not handle 1 at the moment. Next task also allow 1
-  // and do multiSlice(transpose(operand)).
-  int collapsed_slice_dim = collapsed_slice_dims[0];
-  if (collapsed_slice_dim != 0) {
-    return false;
-  }
-
-  // Non collapsed axis is orthogonal to collapsed one, can be 0 or 1.
-  int non_collapsed_dim = 1 - collapsed_slice_dim;
+  const int64 collapsed_slice_dim = collapsed_slice_dims[0];
+  const int64 non_collapsed_dim = 1 - collapsed_slice_dims[0];
 
   // Non collapsed axis of operand shape should be same as
   // non collapsed axis of slice sizes.
@@ -110,18 +108,24 @@ bool CheckValidAttributesForGather(const HloGatherInstruction* inst) {
     return false;
   }
 
-  // Offset axis must be same as non collapsed axis.
-  if (offset_dims[0] != non_collapsed_dim) {
+  if (output_shape.dimensions(offset_dims[0]) !=
+      slice_sizes[non_collapsed_dim]) {
     return false;
   }
 
-  if (index_dim_size != 1) {
+  std::vector<int64> incremental_start_index_map(start_index_map.size());
+  absl::c_iota(incremental_start_index_map, 0);
+  if (!absl::c_equal(incremental_start_index_map, start_index_map)) {
+    return false;
+  }
+
+  // TODO(T14037): only slicing on the last dimension is currently supported.
+  if (non_collapsed_dim != 1) {
     return false;
   }
 
   return true;
 }
-
 }  // namespace
 
 bool IsRandomNormal(const HloInstruction* inst) {
@@ -425,7 +429,8 @@ bool IsMultiUpdateScatter(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kScatter) {
     const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
     const HloInstruction* root = inst->to_apply()->root_instruction();
-    return Match(root, m::Parameter(1)) && CheckValidAttributes(scatter);
+    return Match(root, m::Parameter(1)) &&
+           CheckValidMultiUpdateAttributes(scatter);
   }
   return false;
 }
@@ -435,7 +440,7 @@ bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
     const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
     const HloInstruction* root = inst->to_apply()->root_instruction();
     return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
-           CheckValidAttributes(scatter);
+           CheckValidMultiUpdateAttributes(scatter);
   }
   return false;
 }
@@ -443,7 +448,7 @@ bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
 bool IsMultiSliceGather(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kGather) {
     const HloGatherInstruction* gather = Cast<HloGatherInstruction>(inst);
-    return CheckValidAttributesForGather(gather);
+    return CheckValidMultiSliceAttributes(gather);
   }
   return false;
 }
@@ -458,8 +463,12 @@ bool IsAnySliceApply(const HloInstruction* inst) {
   return false;
 }
 
+bool IsWideConstant(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "wide_const");
+}
+
 bool IsWideConstantZero(const HloInstruction* inst) {
-  if (IsPopOpsFusion(inst, "wide_const")) {
+  if (IsWideConstant(inst)) {
     const HloInstruction* fusion_root = inst->fused_expression_root();
     return IsConstantZero(fusion_root->operand(0));
   }

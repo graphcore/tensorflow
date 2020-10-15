@@ -34,6 +34,7 @@ limitations under the License.
 #include <popops/codelets.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
+#include <popsparse/codelets.hpp>
 #include <poputil/exceptions.hpp>
 #include <random>
 #include <string>
@@ -64,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_buffers_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
@@ -71,8 +73,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_schedule_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_embedding_notification.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inter_tileset_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/io_tiles_placer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
@@ -97,6 +102,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation_stage_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_input_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_stage_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_tuple_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
@@ -107,9 +113,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/seed_hoisting.h"
@@ -117,6 +124,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
@@ -135,6 +143,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -452,7 +462,7 @@ void setFpBehaviour(poplar::Graph& graph,
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
 StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
-  const int64 value = poplar_executor->GclNumIoTiles();
+  const int64 value = poplar_executor->GetNumIoTiles();
   if (value == 0) {
     return 0;
   }
@@ -470,6 +480,53 @@ StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
   }
 
   return value;
+}
+
+std::vector<unsigned> DisjointTiles(const std::vector<unsigned>& tiles,
+                                    unsigned num_tiles_per_ipu) {
+  CHECK_LE(tiles.size(), num_tiles_per_ipu);
+  CHECK(absl::c_is_sorted(tiles));
+
+  std::vector<unsigned> other_tiles;
+  other_tiles.reserve(num_tiles_per_ipu - tiles.size());
+
+  unsigned i = 0;
+  for (unsigned tile = 0; tile < num_tiles_per_ipu; ++tile) {
+    if (i < tiles.size() && tiles[i] == tile) {
+      ++i;
+    } else {
+      other_tiles.push_back(tile);
+    }
+  }
+
+  CHECK_EQ(other_tiles.size() + tiles.size(), num_tiles_per_ipu);
+  return other_tiles;
+}
+
+struct Tilesets {
+  std::vector<unsigned> compute_tiles;
+  std::vector<unsigned> io_tiles;
+};
+
+absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
+                                        unsigned num_io_tiles,
+                                        unsigned num_tiles_per_ipu) {
+  if (num_io_tiles == 0) {
+    return absl::nullopt;
+  }
+
+  LOG(INFO) << "Reserving " << num_io_tiles << " IO tiles on each IPU.";
+
+  CHECK_LT(num_io_tiles, num_tiles_per_ipu);
+  const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
+
+  const auto compute_tiles =
+      gcl::perIPUTiles(main_graph, num_io_tiles, num_compute_tiles);
+  CHECK_EQ(compute_tiles.size(), num_compute_tiles);
+
+  const auto io_tiles = DisjointTiles(compute_tiles, num_tiles_per_ipu);
+
+  return Tilesets{compute_tiles, io_tiles};
 }
 
 Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
@@ -490,26 +547,16 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         << resources.replication_factor << ".";
   }
 
-  TF_ASSIGN_OR_RETURN(const int num_io_tiles, GetNumIoTiles(poplar_executor));
-
   auto& main_graph = GetMasterGraph(resources);
   const poplar::Target& target = main_graph.getTarget();
+  const auto num_ipus = target.getNumIPUs();
+  const auto tiles_per_ipu = target.getTilesPerIPU();
+
+  TF_ASSIGN_OR_RETURN(const auto num_io_tiles, GetNumIoTiles(poplar_executor));
+  const absl::optional<Tilesets> tilesets =
+      PartitionTiles(main_graph, num_io_tiles, tiles_per_ipu);
+
   if (ShardingEnabled(module)) {
-    auto num_ipus = target.getNumIPUs();
-    auto tiles_per_ipu = target.getTilesPerIPU();
-
-    absl::optional<std::vector<unsigned>> per_ipu_compute_tiles;
-    if (num_io_tiles > 0) {
-      CHECK_LT(num_io_tiles, tiles_per_ipu);
-      const int num_compute_tiles = tiles_per_ipu - num_io_tiles;
-      per_ipu_compute_tiles =
-          gcl::perIPUTiles(main_graph, num_io_tiles, num_compute_tiles);
-      CHECK_EQ(per_ipu_compute_tiles->size(), num_compute_tiles);
-
-      LOG(INFO) << "Reserving " << num_io_tiles
-                << " IO tiles for GCL collective operations on each IPU.";
-    }
-
     IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
     if (order == IpuSelectionOrder::AUTO) {
       order = HasPipeliningWithDefaultSharding(module)
@@ -565,11 +612,14 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       poplar::Graph ipu_graph = main_graph.createVirtualGraph(
           ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu);
 
-      if (per_ipu_compute_tiles.has_value()) {
-        resources.shard_graphs.emplace_back(
-            ipu_graph.createVirtualGraph(*per_ipu_compute_tiles));
+      if (tilesets.has_value()) {
+        resources.shard_compute_graphs.emplace_back(
+            ipu_graph.createVirtualGraph(tilesets->compute_tiles));
+
+        resources.shard_io_graphs.emplace_back(
+            ipu_graph.createVirtualGraph(tilesets->io_tiles));
       } else {
-        resources.shard_graphs.emplace_back(std::move(ipu_graph));
+        resources.shard_compute_graphs.emplace_back(std::move(ipu_graph));
       }
 
       resources.shard_to_ipu_id.push_back(ipu);
@@ -580,12 +630,13 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     for (unsigned hw_id : resources.shard_to_ipu_id) {
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
-  } else {
-    if (num_io_tiles > 0) {
-      LOG(WARNING)
-          << "No IO tiles were reserved for GCL collective operations, even "
-          << "though " << num_io_tiles << " were requested, as virtual graphs "
-          << "(i.e. sharding) is not in use by this TensorFlow model.";
+  } else {  // !ShardingEnabled(module)
+    if (tilesets.has_value()) {
+      resources.compute_graph.emplace(
+          main_graph.createVirtualGraph(tilesets->compute_tiles));
+
+      resources.io_graph.emplace(
+          main_graph.createVirtualGraph(tilesets->io_tiles));
     }
   }
 
@@ -596,7 +647,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   std::stringstream compile_output;
   try {
     main_graph.addCodelets(codelets_src, "-DNDEBUG -O3", compile_output);
-  } catch (const poplar::graph_program_compilation_error) {
+  } catch (const poplar::graph_program_compilation_error&) {
     return xla::InternalError("Failed to compile Poplar TF codelets: %s",
                               compile_output.str());
   }
@@ -604,6 +655,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
+  popsparse::addCodelets(main_graph);
   popfloat::experimental::addCodelets(main_graph);
 
   return Status::OK();
@@ -819,6 +871,7 @@ StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
     std::unique_ptr<HloModule> module,
     perftools::gputools::StreamExecutor* executor,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   return std::move(module);
 }
 
@@ -826,6 +879,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     std::unique_ptr<HloModule> module,
     perftools::gputools::StreamExecutor* stream_exec,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   if (stream_exec == nullptr) {
     return tensorflow::errors::Unknown(
         "NULL stream pointer in poplar compiler");
@@ -974,7 +1028,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
-      poplar_executor->EnableFastMath());
+      poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -1064,6 +1118,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<PipelineResourceUpdateInputOptimizer>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();
     pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                      resources.replication_factor);
@@ -1087,11 +1142,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
-    pipeline.AddPass<ResourceUpdateFixer>();
-    pipeline.AddPass<ResourceUpdateVariablesOffload>(
-        resources.annotations, resources.remote_memory_supported,
-        resources.information.minimum_remote_tensor_size,
-        resources.replication_factor);
     pipeline.AddPass<GradientAccumulationBuffersOffload>(
         resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size);
@@ -1108,8 +1158,26 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       batch_serialization_pass
           .AddPass<PipelineBatchSerializationLoopInserter>();
     }
+    pipeline.AddPass<ResourceUpdateFixer>();
+    pipeline.AddPass<VariablesOffloadAndPartition>(
+        resources.annotations, resources.remote_memory_supported,
+        resources.information.minimum_remote_tensor_size,
+        resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();
+    pipeline.AddPass<ResourceUpdateElementwiseClustering>(
+        resources.replication_factor);
+    {
+      auto inline_fusion = [](const HloInstruction* inst) {
+        return IsReplicatedParameterLoadFusion(inst) ||
+               IsReplicatedParameterStoreFusion(inst);
+      };
+      pipeline.AddPass<FusionInliner>(inline_fusion);
+    }
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(true);
+    pipeline.AddPass<ResourceUpdateCopyInserter>();
+    pipeline.AddPass<HostEmbeddingNotification>();
 
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputeInstructions>(
@@ -1133,6 +1201,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<HostComputeScheduleOptimizer>();
     pipeline.AddPass<InterIpuCopyInserter>();
+    pipeline.AddPass<IoTilesPlacer>(poplar_executor->ShouldPlaceOpsOnIoTiles());
+    pipeline.AddPass<InterTilesetCopyInserter>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
     pipeline.AddPass<CopyInserter>();
 
@@ -1167,11 +1237,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
+    pipeline.AddPass<RemoteParameterParallelCombiner>();
     pipeline.AddPass<AllocationFinder>(
         resources.annotations, resources.always_rearrange_copies_on_host);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
-    pipeline.AddPass<RemoteParameterParallelCombiner>(
-        resources.annotations.tensor_allocation_map);
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
 
@@ -1459,6 +1528,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.recv_infos),
       std::move(resources.annotations.host_embedding_lookup_infos),
       std::move(resources.annotations.host_embedding_update_infos),
+      std::move(resources.annotations.host_embedding_notify_infos),
       std::move(resources.annotations.remote_parameter_infos),
       resources.streams_indices.GetAssignedIds(),
       resources.streams_indices.CheckpointFeedsOrder());
@@ -1472,6 +1542,7 @@ StatusOr<std::vector<std::unique_ptr<Executable>>> PoplarCompiler::Compile(
     std::unique_ptr<HloModuleGroup> module_group,
     std::vector<std::vector<se::StreamExecutor*>> stream_exec,
     se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
   if (module_group->empty()) {
     return std::vector<std::unique_ptr<Executable>>();
   }

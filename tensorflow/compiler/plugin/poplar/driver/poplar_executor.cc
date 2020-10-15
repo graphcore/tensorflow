@@ -44,6 +44,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/send_recv_runtime_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
@@ -319,14 +320,16 @@ PoplarExecutor::PoplarExecutor()
       configured_(false),
       has_cycle_counter_(false),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
+  TENSORFLOW_TRACEPOINT();
   // TODO should this use the time/ms?
   static std::random_device rd;
   seed_generator_.Seed(rd());
 }
 
-PoplarExecutor::~PoplarExecutor() {}
+PoplarExecutor::~PoplarExecutor() { TENSORFLOW_TRACEPOINT(); }
 
 void* PoplarExecutor::Allocate(uint64 size) {
+  TENSORFLOW_TRACEPOINT();
   TensorControl* allocated = new TensorControl(size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
@@ -337,11 +340,13 @@ void* PoplarExecutor::Allocate(uint64 size) {
 
 void* PoplarExecutor::GetSubBuffer(se::DeviceMemoryBase* parent,
                                    uint64 offset_bytes, uint64 size_bytes) {
+  TENSORFLOW_TRACEPOINT();
   TensorControl* tc = reinterpret_cast<TensorControl*>(parent->opaque());
   return tc->data + offset_bytes;
 }
 
 void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
+  TENSORFLOW_TRACEPOINT();
   TensorControl* tc = reinterpret_cast<TensorControl*>(mem->opaque());
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
@@ -353,6 +358,7 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
 
 Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     const SendRecvInfos& send_infos) {
+  TENSORFLOW_TRACEPOINT();
   if (send_infos.empty()) {
     return Status::OK();
   }
@@ -410,6 +416,7 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
 
 Status PoplarExecutor::ConnectRecvCallbacksToRendezvous(
     const SendRecvInfos& recv_infos) {
+  TENSORFLOW_TRACEPOINT();
   for (const SendRecvInfo& recv : recv_infos) {
     VLOG(1) << "Connecting Poplar host->IPU stream to rendezvous key '"
             << recv.rendezvous_key << "' with shape " << recv.shape;
@@ -448,6 +455,7 @@ uint64 DeviceIncarnation(int device_ordinal, int replica) {
 Status PoplarExecutor::ConnectHostEmbeddingLookup(
     const HostEmbeddingInfo& lookup_info,
     HostEmbeddingInterface_* embedding_interface) {
+  TENSORFLOW_TRACEPOINT();
   if (UseSyntheticData()) {
     return Status::OK();
   }
@@ -534,6 +542,7 @@ Status PoplarExecutor::ConnectHostEmbeddingLookup(
 Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
     const HostEmbeddingInfo& update_info,
     HostEmbeddingInterface_* embedding_interface) {
+  TENSORFLOW_TRACEPOINT();
   if (UseSyntheticData()) {
     return Status::OK();
   }
@@ -568,9 +577,35 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
   return Status::OK();
 }
 
+Status PoplarExecutor::ConnectHostEmbeddingNotify(
+    const HostEmbeddingInfo& notify_info,
+    HostEmbeddingInterface_* embedding_interface) {
+  TENSORFLOW_TRACEPOINT();
+  if (UseSyntheticData()) {
+    return Status::OK();
+  }
+
+  if (EnableExperimentalRemoteBufferEmbedding()) {
+    return Status::OK();
+  }
+
+  for (int replica = 0;
+       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+    // Connect the notify callback.
+    current_engine_->connectStreamToCallback(
+        notify_info.stream_handle + notify_info.embedding_id + "_notify",
+        replica, [replica, embedding_interface](void* ptr) {
+          embedding_interface->Notify(replica);
+        });
+  }
+
+  return Status::OK();
+}
+
 Status PoplarExecutor::DisconnectHostEmbeddingLookup(
     const HostEmbeddingInfo& lookup_info,
     HostEmbeddingInterface_* embedding_interface) {
+  TENSORFLOW_TRACEPOINT();
   if (EnableExperimentalRemoteBufferEmbedding()) {
     TF_ASSIGN_OR_RETURN(int token_count, embedding_interface->GetTokenCount());
     TF_ASSIGN_OR_RETURN(int encoding_width,
@@ -630,17 +665,24 @@ Status PoplarExecutor::DisconnectHostEmbeddingUpdate(
   return Status::OK();
 }
 
+Status PoplarExecutor::DisconnectHostEmbeddingNotify(
+    const HostEmbeddingInfo& notify_info,
+    HostEmbeddingInterface_* embedding_interface) {
+  return Status::OK();
+}
+
 namespace {
 class InfeedPrefetchCallback : public poplar::StreamCallback {
  public:
   InfeedPrefetchCallback(InfeedQueue* queue, uint64 num_bytes)
-      : queue_(queue), num_bytes_(num_bytes) {}
+      : queue_(queue), num_bytes_(num_bytes), look_ahead_(0) {}
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
     tensorflow::TensorBuffer* buffer;
     // Try to get a value from the queue.
-    if (queue_->TryPop(buffer)) {
+    if (queue_->TryPop(buffer, look_ahead_)) {
       std::memcpy(dest, buffer->data(), num_bytes_);
+      look_ahead_++;
       return poplar::StreamCallback::Result::Success;
     } else {
       return poplar::StreamCallback::Result::NotAvailable;
@@ -649,19 +691,24 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
   void fetch(void* dest) noexcept override {
     tensorflow::TensorBuffer* buffer;
-    if (!queue_->BlockPop(buffer)) {
+    if (!queue_->BlockPop(buffer, look_ahead_)) {
       LOG(FATAL) << "Infeed dataset iterator out of range. Are you trying to "
                  << "dequeue more elements than are in the dataset?";
     }
 
     std::memcpy(dest, buffer->data(), num_bytes_);
+    look_ahead_++;
   }
 
-  void complete() noexcept override { queue_->AdvanceReadPosition(); }
+  void complete() noexcept override {
+    queue_->AdvanceReadPosition();
+    look_ahead_--;
+  }
 
  private:
   InfeedQueue* queue_;
   const uint64 num_bytes_;
+  std::size_t look_ahead_;
 };
 
 class NullPrefetchCallback : public poplar::StreamCallback {
@@ -702,6 +749,7 @@ class NullPrefetchCallback : public poplar::StreamCallback {
 
 void PoplarExecutor::ConnectInfeedsToStreamCallback(
     const InfeedInfos& infeed_infos) {
+  TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
@@ -742,6 +790,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 
 void PoplarExecutor::ConnectOutfeedToStreamCallback(
     const OutfeedInfos& outfeed_infos) {
+  TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
@@ -782,6 +831,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 
 IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
     const FeedInfo& infeed_info) {
+  TENSORFLOW_TRACEPOINT();
   // Find the iterator.
   auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
   if (itr == infeed_iterators_.end()) {
@@ -877,6 +927,7 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
 
 IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
     const FeedInfo& outfeed_info) {
+  TENSORFLOW_TRACEPOINT();
   auto itr = outfeed_contexts_.find(outfeed_info.config.feed_id());
   if (itr == outfeed_contexts_.end()) {
     LOG(FATAL)
@@ -988,6 +1039,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
 
 void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
                                      const OutfeedInfos& outfeed_infos) {
+  TENSORFLOW_TRACEPOINT();
   CHECK_EQ(io_threads_.size(), 0);
   // Start all the infeeds.
   for (const FeedInfo& info : infeed_infos) {
@@ -1005,11 +1057,13 @@ void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
 }
 
 void PoplarExecutor::StopIOThreads() {
+  TENSORFLOW_TRACEPOINT();
   // Blocks the thread until all the threads have stopped and joined back.
   io_threads_.clear();
 }
 
 void PoplarExecutor::DeferredDeallocation() {
+  TENSORFLOW_TRACEPOINT();
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
 
   const auto new_end =
@@ -1099,18 +1153,21 @@ bool PoplarExecutor::MemcpyDeviceToDevice(se::Stream* stream,
 
 bool PoplarExecutor::HostCallback(se::Stream* stream,
                                   std::function<void()> callback) {
+  TENSORFLOW_TRACEPOINT();
   AsPoplarStream(stream)->EnqueueTask(callback);
   return true;
 }
 
 bool PoplarExecutor::HostCallback(se::Stream* stream,
                                   std::function<Status()> callback) {
+  TENSORFLOW_TRACEPOINT();
   AsPoplarStream(stream)->EnqueueTask(callback);
   return true;
 }
 
 bool PoplarExecutor::CreateStreamDependency(se::Stream* dependent,
                                             se::Stream* other) {
+  TENSORFLOW_TRACEPOINT();
   AsPoplarStream(dependent)->EnqueueTask(
       [other]() { auto ok = other->BlockHostUntilDone(); });
   AsPoplarStream(dependent)->BlockUntilDone();
@@ -1246,6 +1303,7 @@ const bool PoplarExecutor::IpuOptionsConfigured() const { return configured_; }
 bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
 
 Status PoplarExecutor::AttachToPoplarDevice() {
+  TENSORFLOW_TRACEPOINT();
   const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
   if (device_attached_) {
     return InternalError("Already attached to device");
@@ -1326,6 +1384,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
 }
 
 Status PoplarExecutor::CreatePoplarTarget() {
+  TENSORFLOW_TRACEPOINT();
   bool has_user_config = (current_config_.device_config_size() > 0);
 
   if (!PoplarXlaFlags::Get().use_ipu_model) {
@@ -1456,6 +1515,7 @@ Status PoplarExecutor::CreatePoplarTarget() {
 }
 
 Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
+  TENSORFLOW_TRACEPOINT();
   bool has_user_config = (current_config_.device_config_size() > 0);
   if (!DeviceConfigurationsEqual(cfg, current_config_) && has_user_config) {
     XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
@@ -1682,11 +1742,13 @@ bool PoplarExecutor::HaveCachedExecutable(
 }
 
 bool PoplarExecutor::SupportsRemoteBuffers() const {
-  if (!PoplarDeviceIsAttached()) {
-    return false;
-  }
+  CHECK(HasPoplarTarget());
   if (ipu_.TargetOrDie().getTargetType() != poplar::TargetType::IPU) {
     return false;
+  }
+
+  if (!PoplarDeviceIsAttached()) {
+    return current_config_.enable_remote_buffers_without_device();
   }
 
   return ipu_.Device().supportsRemoteBuffers();
@@ -2305,6 +2367,7 @@ StatusOr<bool> PoplarExecutor::CheckMoveHostToDeviceRequired(
 
 void PoplarExecutor::ConnectReplicatedDeviceToHost(
     const std::string& stream_name, TensorControl* tc) {
+  TENSORFLOW_TRACEPOINT();
   void* dest = static_cast<void*>(tc->data);
   const std::size_t size = HostSizeToDeviceSize(tc->size, tc->element_type);
 
@@ -2321,6 +2384,7 @@ void PoplarExecutor::ConnectReplicatedDeviceToHost(
 }
 
 Status PoplarExecutor::MoveDeviceToHost() {
+  TENSORFLOW_TRACEPOINT();
   if (UseSyntheticData()) {
     return Status::OK();
   }
@@ -2411,6 +2475,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 }
 
 Status PoplarExecutor::MoveHostToDevice() {
+  TENSORFLOW_TRACEPOINT();
   if (UseSyntheticData()) {
     return Status::OK();
   }
@@ -2518,6 +2583,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::GetTupleBufferByIndex(
 }
 
 void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
+  TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
@@ -2532,6 +2598,7 @@ void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
 }
 
 void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
+  TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
@@ -2546,6 +2613,7 @@ void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
 }
 
 void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
+  TENSORFLOW_TRACEPOINT();
   for (auto output : outputs_map_) {
     if (output.second.streamed) {
       PostProcessBuffer(output.second.tc);
@@ -2554,6 +2622,7 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
 }
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
+  TENSORFLOW_TRACEPOINT();
   if (current_engine_ != nullptr) {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (engine == current_engine_) {
@@ -2580,6 +2649,7 @@ void PoplarExecutor::CreateInfeedIterator(
     const tensorflow::data::IteratorContext::Params& params,
     tensorflow::FunctionLibraryRuntime* flr,
     tensorflow::data::DatasetBase* dataset) {
+  TENSORFLOW_TRACEPOINT();
   auto& feed_id = config.feed_id();
   if (infeed_iterators_.contains(feed_id)) {
     LOG(FATAL) << "Infeed with id='" << feed_id
@@ -2594,6 +2664,7 @@ void PoplarExecutor::CreateInfeedIterator(
 }
 
 Status PoplarExecutor::DeleteInfeedIterator(const std::string& feed_id) {
+  TENSORFLOW_TRACEPOINT();
   std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
 
   if (io_threads_.size()) {
@@ -2722,6 +2793,7 @@ tensorflow::Rendezvous* PoplarExecutor::GetRendezvous() {
 }
 
 void PoplarExecutor::ConnectSeedCallback() {
+  TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
@@ -2847,6 +2919,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     perftools::gputools::StreamExecutor* executor,
     xla::poplarplugin::PoplarExecutable& executable,
     se::DeviceMemoryAllocator* allocator, const Args& args) {
+  TENSORFLOW_TRACEPOINT();
+
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   const auto& input_output_aliasing_map =
       executable.GetInputOutputAliasingMap();
@@ -3049,6 +3123,14 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
                 .get()));
       }
 
+      for (auto& host_embedding_notify_info :
+           executable.GetHostEmbeddingNotifyInfos()) {
+        TF_RETURN_IF_ERROR(ConnectHostEmbeddingNotify(
+            host_embedding_notify_info,
+            host_embeddings_.at(host_embedding_notify_info.embedding_id)
+                .get()));
+      }
+
       const auto& outfeed_infos = executable.GetOutfeedInfos();
       if (!outfeed_infos.empty()) {
         ConnectOutfeedToStreamCallback(outfeed_infos);
@@ -3148,6 +3230,14 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         TF_RETURN_IF_ERROR(DisconnectHostEmbeddingUpdate(
             host_embedding_update_info,
             host_embeddings_.at(host_embedding_update_info.embedding_id)
+                .get()));
+      }
+
+      for (auto& host_embedding_notify_info :
+           executable.GetHostEmbeddingNotifyInfos()) {
+        TF_RETURN_IF_ERROR(DisconnectHostEmbeddingNotify(
+            host_embedding_notify_info,
+            host_embeddings_.at(host_embedding_notify_info.embedding_id)
                 .get()));
       }
 

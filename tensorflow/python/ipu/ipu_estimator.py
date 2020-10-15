@@ -61,6 +61,7 @@ _INPUT_FN_KEY = "input_fn"
 _BATCH_SIZE_KEY = "batch_size"
 _ASSIGN_ADD_OP = "AssignAddVariableOp"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
+_RESOURCE_UPDATE_OP = "ResourceUpdate"
 _HOST_DEVICE = "/device:CPU:0"
 
 # Keys that cannot be used in the `params` dictionary passed to the
@@ -98,7 +99,7 @@ class IPUEstimatorSpec(
   are needed, an `EstimatorSpec` can be passed to the `IPUEstimator` instead.
 
   `eval_metrics` is a tuple of a (`function`, `tensors`), where `tensors` is
-  either a list of `tf.Tensor`s or a dict from strings to `tf.Tensor`s, that is
+  either a list of `tf.Tensor` or a dict from strings to `tf.Tensor`, that is
   passed to the function. The function runs on the CPU and returns a dict of
   metrics. The tensors are transferred from the IPU to the CPU host and passed
   to the function.
@@ -370,14 +371,27 @@ def _validate_global_step_not_incremented():
 
 
 def _validate_replicated_training_graph():
-  operations = ops.get_default_graph().get_operations()
-  if not any(op.type == _CROSS_REPLICA_SUM_OP for op in operations):
-    raise ValueError(
-        ("This is not a valid replicated training graph because no {} " +
-         "operations were found. Did you remember to use the " +
-         "`tensorflow.python.ipu.`" +
-         "`cross_replica_optimizer.CrossReplicaOptimizer`?"
-         ).format(_CROSS_REPLICA_SUM_OP))
+  def has_cross_replica_sum_op(g):
+    return any(op.type == _CROSS_REPLICA_SUM_OP for op in g.get_operations())
+
+  graph = ops.get_default_graph()
+  if has_cross_replica_sum_op(graph):
+    return
+
+  # Also check inside the resource update `FuncGraph` if there is one.
+  for op in graph.get_operations():
+    if op.type == _RESOURCE_UPDATE_OP:
+      resource_update_graph = graph._get_function(  # pylint: disable=protected-access
+          op.get_attr("to_apply").name).graph
+      if has_cross_replica_sum_op(resource_update_graph):
+        return
+
+  raise ValueError(
+      "This is not a valid replicated training graph because no " +
+      _CROSS_REPLICA_SUM_OP +
+      "operations were found. Did you remember to use the " +
+      "`tensorflow.python.ipu.`" +
+      "`cross_replica_optimizer.CrossReplicaOptimizer`?")
 
 
 def _add_send_to_host_ops(tensors, ipu_device):

@@ -23,6 +23,8 @@ from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import custom_gradient
+from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -84,8 +86,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(954492)
-      report.assert_max_tile_memory(1690)
+      report.assert_total_tile_memory(898276)
+      report.assert_max_tile_memory(1530)
 
       # Entry computation and outlined one.
       self.assertEqual(len(report.tensor_map.computation_names()), 2)
@@ -158,8 +160,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1167740)
-      report.assert_max_tile_memory(3534)
+      report.assert_total_tile_memory(1121320)
+      report.assert_max_tile_memory(3854)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
@@ -240,8 +242,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1129384)
-      report.assert_max_tile_memory(3634)
+      report.assert_total_tile_memory(1090520)
+      report.assert_max_tile_memory(3894)
 
       # Entry computastion and 4 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 5)
@@ -320,7 +322,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(10980622)
-      report.assert_max_tile_memory(9888)
+      report.assert_max_tile_memory(9685)
 
       # Main computation and outlined serialized one.
       self.assertEqual(len(report.tensor_map.computation_names()), 2)
@@ -477,11 +479,48 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/MatMul_1_grad/MatMul/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1324608)
-      report.assert_max_tile_memory(5005)
+      report.assert_total_tile_memory(1278072)
+      report.assert_max_tile_memory(5337)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
+
+  @test_util.deprecated_graph_mode_only
+  def testNoGradient(self):
+    with tu.ipu_session() as sess:
+
+      @ipu.function
+      def func(lhs, rhs):
+        @custom_gradient.custom_gradient
+        def f(a, b):
+          def grad(dy):
+            return [None, dy - b]
+
+          return a, grad
+
+        return f(lhs, rhs)
+
+      def body(a):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          w0 = variable_scope.get_variable(
+              "w0",
+              shape=[64, 64],
+              dtype=np.float32,
+              initializer=init_ops.ones_initializer())
+        a = func(a, w0)
+        return gradients_impl.gradients(a, [w0])
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [64, 64])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a])
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      result = sess.run(res, {x: np.ones(x.shape) for x in [a]})
+      self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
 
 if __name__ == "__main__":

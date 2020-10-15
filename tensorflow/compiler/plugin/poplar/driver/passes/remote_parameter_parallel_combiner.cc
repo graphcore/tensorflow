@@ -69,15 +69,56 @@ std::vector<HloInstruction*> CombineOperands(
     operands.insert(operands.end(), values_to_store.cbegin(),
                     values_to_store.cend());
   } else {
-    LOG(FATAL) << "Unexpected instruction: " << to_combine.front()->ToString();
+    LOG(FATAL) << "Unexpected instruction: " << first_inst->ToString();
   }
 
   return operands;
 }
 
+std::vector<uint64> CombineReplicationFactors(
+    const std::vector<HloInstruction*>& to_combine) {
+  std::vector<uint64> replication_factors(to_combine.size());
+  absl::c_transform(
+      to_combine, replication_factors.begin(), [](const HloInstruction* inst) {
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst)) {
+          return Cast<HloRemoteParameterLoad>(inst)->GetReplicationFactor(0);
+        } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst)) {
+          return Cast<HloRemoteParameterStore>(inst)->GetReplicationFactor(0);
+        } else {
+          LOG(FATAL) << "Unexpected instruction: " << inst->ToString();
+        }
+      });
+  return replication_factors;
+}
+
+StatusOr<HloInstruction*> Combine(
+    const std::vector<HloInstruction*>& to_combine) {
+  const auto operands = CombineOperands(to_combine);
+  const auto replication_factors = CombineReplicationFactors(to_combine);
+
+  auto* first_inst = to_combine.front();
+  HloComputation* comp = first_inst->parent();
+
+  HloInstruction* new_inst = nullptr;
+  if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(first_inst)) {
+    new_inst = comp->AddInstruction(
+        CreateHloRemoteParameterLoad(operands, replication_factors));
+  } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(first_inst)) {
+    new_inst = comp->AddInstruction(
+        CreateHloRemoteParameterStore(operands, replication_factors));
+    CHECK(absl::c_all_of(to_combine, IsLoweredInplace));
+  } else {
+    return FailedPrecondition("Unexpected instruction: %s",
+                              first_inst->ToString().c_str());
+  }
+  first_inst->SetupDerivedInstruction(new_inst);
+  new_inst->set_raw_backend_config_string(
+      first_inst->raw_backend_config_string());
+  return new_inst;
+}
+
 StatusOr<HloInstruction*> CombineAndReplace(
-    const std::vector<HloInstruction*>& to_combine,
-    TensorAllocationMap& allocation_map) {
+    const std::vector<HloInstruction*>& to_combine) {
   CHECK_GE(to_combine.size(), 2);
   HloComputation* comp = to_combine.front()->parent();
 
@@ -87,11 +128,8 @@ StatusOr<HloInstruction*> CombineAndReplace(
                     [](HloInstruction* inst) { return inst->shape(); });
   const auto shape = ShapeUtil::MakeTupleShape(shapes);
 
-  const auto operands = CombineOperands(to_combine);
-
   // Add the new instruction.
-  auto* new_inst = comp->AddInstruction(
-      to_combine.front()->CloneWithNewOperands(shape, operands));
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_inst, Combine(to_combine));
 
   // Combine the sharding information into a tuple.
   std::vector<HloSharding> shardings;
@@ -107,34 +145,7 @@ StatusOr<HloInstruction*> CombineAndReplace(
     auto* gte = comp->AddInstruction(
         HloInstruction::CreateGetTupleElement(inst->shape(), new_inst, i));
     MakeUsedInplace(gte);
-
-    // Update tensor allocation info. Need to handle two cases:
-    // 1) If this instruction was the source of an allocation target.
-    auto itr = allocation_map.find(TensorLocation(inst, 0));
-    if (itr != allocation_map.end()) {
-      auto inserted = allocation_map.emplace(TensorLocation(new_inst, i),
-                                             std::move(itr->second));
-      // The new instruction should not be in the map already.
-      CHECK(inserted.second);
-
-      // Prepend the GTE to the backward tensor transformation path.
-      auto& new_backward_path = inserted.first->second.backward_path;
-      new_backward_path.insert(new_backward_path.begin(), gte);
-
-      // Erase the old entry (with a now moved-from value).
-      allocation_map.erase(itr);
-    }
-
-    // 2) If this instruction was the layout of an allocation target.
-    for (auto& e : allocation_map) {
-      TensorTarget& target = e.second;
-      if (target.layout == inst) {
-        target.layout = new_inst;
-        CHECK(target.layout_output_idx.has_value());
-        CHECK_EQ(*target.layout_output_idx, 0);
-        target.layout_output_idx = i;
-      }
-    }
+    gte->set_sharding(shardings[i]);
 
     // Replace the old inst.
     TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(inst));
@@ -169,10 +180,8 @@ struct DecreasingSizeComparator {
     }
 
     // If the size is the same, order by parameter index.
-    const int64 a_index =
-        Cast<HloParameterInstruction>(a->operand(0))->parameter_number();
-    const int64 b_index =
-        Cast<HloParameterInstruction>(b->operand(0))->parameter_number();
+    const int64 a_index = a->operand(0)->parameter_number();
+    const int64 b_index = b->operand(0)->parameter_number();
     if (a_index != b_index) {
       return a_index > b_index;
     }
@@ -187,8 +196,7 @@ using DecreasingSizeQueue =
                         DecreasingSizeComparator>;
 
 StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
-    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues,
-    TensorAllocationMap& allocation_map) {
+    HloComputation* comp, std::map<int64, DecreasingSizeQueue> shard_queues) {
   std::vector<HloInstruction*> combined;
 
   while (true) {
@@ -219,13 +227,56 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
       continue;
     }
 
-    TF_ASSIGN_OR_RETURN(auto* combined_inst,
-                        CombineAndReplace(to_combine, allocation_map));
+    TF_ASSIGN_OR_RETURN(auto* combined_inst, CombineAndReplace(to_combine));
 
     combined.push_back(combined_inst);
   }
 
+  // Return the instructions in order from smallest to largest. When trying to
+  // schedule them in this order later this can help liveness, since we load the
+  // largest parameters last when other tensors (like gradients for already
+  // updated weights) might not be alive anymore.
+  absl::c_reverse(combined);
+
   return combined;
+}
+
+Status ScheduleAllUsersBefore(HloInstruction* inst, HloInstruction* successor,
+                              HloReachabilityMap* reachability_map,
+                              HloInstructionSet* scheduled_users) {
+  for (auto* user : inst->users()) {
+    if (!reachability_map->IsReachable(successor, user)) {
+      if (scheduled_users->insert(user).second) {
+        TF_RETURN_IF_ERROR(user->AddControlDependencyTo(successor));
+        reachability_map->UpdateReachabilityThroughInstruction(successor);
+        TF_RETURN_IF_ERROR(ScheduleAllUsersBefore(
+            user, successor, reachability_map, scheduled_users));
+      }
+    }
+  }
+
+  return Status::OK();
+}
+
+Status ScheduleAllInputsAfter(HloInstruction* inst, HloInstruction* predecessor,
+                              HloReachabilityMap* reachability_map,
+                              HloInstructionSet* scheduled_inputs) {
+  for (auto* operand : inst->unique_operands()) {
+    if (operand->opcode() == HloOpcode::kParameter) {
+      continue;
+    }
+
+    if (!reachability_map->IsReachable(operand, predecessor)) {
+      if (scheduled_inputs->insert(operand).second) {
+        TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(operand));
+        reachability_map->UpdateReachabilityThroughInstruction(operand);
+        TF_RETURN_IF_ERROR(ScheduleAllInputsAfter(
+            operand, predecessor, reachability_map, scheduled_inputs));
+      }
+    }
+  }
+
+  return Status::OK();
 }
 
 Status AddSchedulingConstraints(
@@ -238,14 +289,48 @@ Status AddSchedulingConstraints(
 
   auto reachability_map = HloReachabilityMap::Build(comp);
 
-  // Schedule load after previous store to reduce liveness if possible
-  // (if there are no conflicting data or control dependencies).
   for (std::size_t i = 1; i < combined_loads.size(); ++i) {
-    auto* prev_store = combined_stores[i - 1];
     auto* load = combined_loads[i];
-    if (!reachability_map->IsReachable(load, prev_store)) {
-      TF_RETURN_IF_ERROR(prev_store->AddControlDependencyTo(load));
-      reachability_map->UpdateReachabilityThroughInstruction(load);
+
+    // To minimize liveness we aim towards having the least amount of overlap.
+    // So first we try to schedule load[i] after store[i - 1], and if this is
+    // not possible, we try to schedule it after store[i - 2] and so forth. A
+    // typical reason why the first single-delay attempt might fail is when
+    // using optimizers that require two offloaded parameters for each weight
+    // update (like LAMB/ADAM that require both the first and second moments).
+    for (std::size_t delay = 1; delay <= i; ++delay) {
+      auto* prev_store = combined_stores[i - delay];
+
+      // If we can successfully schedule the previous store before this load,
+      // we are satisifed with the scheduling constraints for this load and
+      // break out to the next one.
+      if (!reachability_map->IsReachable(load, prev_store)) {
+        TF_RETURN_IF_ERROR(prev_store->AddControlDependencyTo(load));
+        reachability_map->UpdateReachabilityThroughInstruction(load);
+
+        // To minimze liveness, we also try to schedule all users of the
+        // previous load before the current load. This attempts to ensure that
+        // the actual weight update is pushed as early as possible in the
+        // schedule, as soon as the necessary remote parameters are loaded.
+        auto* prev_load = combined_loads[i - delay];
+        HloInstructionSet scheduled_users;
+        TF_RETURN_IF_ERROR(ScheduleAllUsersBefore(
+            prev_load, load, reachability_map.get(), &scheduled_users));
+
+        // In addition, we try to schedule all the inputs needed by these users
+        // after the previous load. This attempts to make sure that there is
+        // as little overlap as possible between the updates of the different
+        // weights. For example, some models will cast all the gradients from
+        // float16 to float32, and this attempts to make sure that is done as
+        // late as possible in the schedule.
+        HloInstructionSet scheduled_inputs;
+        for (auto* user : scheduled_users) {
+          TF_RETURN_IF_ERROR(ScheduleAllInputsAfter(
+              user, prev_load, reachability_map.get(), &scheduled_inputs));
+        }
+
+        break;
+      }
     }
   }
 
@@ -270,12 +355,11 @@ StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
   }
 
   TF_ASSIGN_OR_RETURN(const auto combined_loads,
-                      CombineFromDifferentShards(comp, std::move(shard_loads),
-                                                 allocation_map_));
+                      CombineFromDifferentShards(comp, std::move(shard_loads)));
 
-  TF_ASSIGN_OR_RETURN(const auto combined_stores,
-                      CombineFromDifferentShards(comp, std::move(shard_stores),
-                                                 allocation_map_));
+  TF_ASSIGN_OR_RETURN(
+      const auto combined_stores,
+      CombineFromDifferentShards(comp, std::move(shard_stores)));
 
   // Try to help the scheduler a bit by adding some constraints.
   TF_RETURN_IF_ERROR(

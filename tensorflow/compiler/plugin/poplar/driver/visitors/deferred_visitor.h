@@ -34,6 +34,7 @@ namespace xla {
 namespace poplarplugin {
 struct CompilerResources;
 
+using ReallocateInputsInfo = std::vector<std::vector<bool>>;
 using TensorInputDescription = std::vector<std::vector<bool>>;
 
 // Set of locations in which a tensor allocation is deferred for.
@@ -229,11 +230,22 @@ class DeferredVisitor : public FullVisitor {
    * or not.
    * @param dependent_computations When checking liveness of buffers, those
    * buffers might be also live in other dependent subcomputations.
+   * @param reallocate_inputs When allocating the tensor for a parameter in the
+   * computation, this flag indicates whether the parameter should be
+   * reallocated given its uses in the computation or whether it should preserve
+   * the layout of the input tensor.
    */
   DeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-      const std::string& name, const bool allocate_all_input_tensors = true,
-      const std::vector<const DeferredVisitor*>& dependent_computations = {});
+      const std::string& name, bool allocate_all_input_tensors = true,
+      const std::vector<const DeferredVisitor*>& dependent_computations = {},
+      bool reallocate_inputs = true);
+
+  DeferredVisitor(
+      CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
+      const std::string& name, bool allocate_all_input_tensors,
+      const std::vector<const DeferredVisitor*>& dependent_computations,
+      const ReallocateInputsInfo& reallocate_inputs_info);
 
   DeferredVisitor() = delete;
 
@@ -266,7 +278,9 @@ class DeferredVisitor : public FullVisitor {
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
+  virtual Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs);
 
   poplar::program::Sequence GetSequence(
       bool copy_execution_counters = true) final;
@@ -274,12 +288,21 @@ class DeferredVisitor : public FullVisitor {
   poplar::program::Sequence GetFunctionCall();
 
  protected:
-  // Returns the sequence to be used by the given instruction.
-  virtual StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
-      const HloInstruction* inst);
+  // Signal that we are entering a new variable scope, where zeroing and write
+  // undef need to be tracked.
+  void EnterVariableScope();
+
+  // Signal that we are exiting a variable scope, where zeroing and write
+  // undef need to be tracked. Zeroing and write undef are left to the user of
+  // this function.
+  Status ExitVariableScope();
+
+  Status AddSequenceForInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
   // Get the inputs for a deferred instruction.
-  StatusOr<DeferredArgRBVectors> GetInputsForDeferredInplaceRBInstruction(
+  StatusOr<DeferredArgRBVectors> GetInputsForDeferredRBInstruction(
       const HloInstruction* inst, bool preserve_aliasing = false);
 
   // Handlers which are aware of deferred allocations - can be overriden by
@@ -294,6 +317,9 @@ class DeferredVisitor : public FullVisitor {
 
   // Handler of CreateBuffer which is aware of deferred allocation.
   virtual Status HandleCreateBuffer(HloInstruction* inst);
+
+  // Handler of RemoteParameterLoad which is aware of deferred allocation.
+  virtual Status HandleRemoteParameterLoad(HloInstruction* inst);
 
   // Handler for all custom calls apart from those which support deferred
   // allocation.
@@ -353,8 +379,9 @@ class DeferredVisitor : public FullVisitor {
 
   // Implementation of the PropagateDeferredAllocations which will add tensor
   // copies for any operand which requires it.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst,
-                                      std::vector<bool> add_clone);
+  Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone);
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
@@ -384,14 +411,14 @@ class DeferredVisitor : public FullVisitor {
   // subcomputations.
   TensorInputDescription allocated_tensors_;
 
+  // Whether to reallocate or keep the layout of the input tensors.
+  const ReallocateInputsInfo reallocate_inputs_info_;
+
  private:
   absl::optional<poplar::Function> function_;
 
   const bool allocate_all_input_tensors_;
-  poplar::program::Sequence merged_infeed_sequence;
 };
-
-using ReallocateInputsInfo = std::vector<std::vector<bool>>;
 
 // Similar to DeferredVisitor, but the inputs are used inplace.
 class InplaceDeferredVisitor : public DeferredVisitor {
@@ -422,7 +449,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a layout.
-  Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
+  Status PropagateDeferredAllocations(
+      const HloInstruction* callsite_inst,
+      const DeferredArgRBVectors& callsite_inputs) override;
 
   // If the visitor operator is allowed to reallocate inputs, then copies from
   // the callsite to computation inputs might be required as they are different
@@ -430,9 +459,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   StatusOr<poplar::program::Sequence> GetPreambleCopies();
 
  protected:
-  // Given the flat tensor index, get the sequence the copy should be inserted
-  // into.
-  virtual poplar::program::Sequence& GetSequenceForAliasingCopy();
+  // Add the given sequence to the correct sequence for aliasing copies.
+  virtual void AddSequenceForAliasingCopy(const HloInstruction* inst,
+                                          const poplar::program::Sequence& seq);
 
   // Given an output flat index get the corresponding parameter number and flat
   // index.
@@ -445,7 +474,6 @@ class InplaceDeferredVisitor : public DeferredVisitor {
 
  private:
   const HloInstructionDescription description_;
-  const ReallocateInputsInfo reallocate_inputs_info_;
 };
 
 }  // namespace poplarplugin

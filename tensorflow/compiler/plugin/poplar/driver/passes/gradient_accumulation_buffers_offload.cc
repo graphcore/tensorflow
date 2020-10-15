@@ -167,17 +167,9 @@ StatusOr<bool> GradientAccumulationBuffersOffload::OffloadInPipeline(
   for (HloInstruction* buffer : buffers_to_offload) {
     VLOG(2) << "Replacing buffer " << buffer->ToString()
             << " with a remote memory variant.";
-    HloInstruction* new_buffer;
-    if (buffer->operand_count()) {
-      CHECK_EQ(buffer->operand_count(), 1);
-      new_buffer =
-          pipeline_comp->AddInstruction(CreateGradientAccumulatorCreate(
-              buffer->mutable_operand(0), /*is_remote=*/true));
-    } else {
-      new_buffer = pipeline_comp->AddInstruction(
-          CreateGradientAccumulatorCreate(buffer->shape(),
-                                          /*is_remote=*/true));
-    }
+    HloInstruction* new_buffer = pipeline_comp->AddInstruction(
+        absl::make_unique<HloGradientAccumulatorCreate>(
+            buffer->shape(), buffer->operands(), /*is_remote=*/true));
     buffer->SetupDerivedInstruction(new_buffer);
     TF_RETURN_IF_ERROR(buffer->ReplaceAllUsesWith(new_buffer));
     TF_RETURN_IF_ERROR(pipeline_comp->ForceRemoveInstruction(buffer));

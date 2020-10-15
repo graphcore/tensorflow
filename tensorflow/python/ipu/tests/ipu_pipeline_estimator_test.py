@@ -107,7 +107,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[],
-                                      pipeline_depth=1,
+                                      gradient_accumulation_count=1,
                                       optimizer_function=optimizer_function)
 
     def my_input_fn():
@@ -128,7 +128,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[],
-                                      pipeline_depth=1,
+                                      gradient_accumulation_count=1,
                                       device_mapping=[0, 1, 2, 3, 0],
                                       optimizer_function=optimizer_function)
 
@@ -156,7 +156,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[],
-                                      pipeline_depth=1,
+                                      gradient_accumulation_count=1,
                                       device_mapping=[0, 1, 0],
                                       optimizer_function=optimizer_function)
 
@@ -187,7 +187,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[stage1, stage2],
-                                      pipeline_depth=1)
+                                      gradient_accumulation_count=1)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
@@ -201,10 +201,11 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
   @combinations.generate(
       combinations.combine(
-          pipeline_depth=[4, 8],
+          gradient_accumulation_count=[4, 8],
           iterations_per_loop=[1, 2],
       ))
-  def testTrainWithAnalyticalGradientReference(self, pipeline_depth,
+  def testTrainWithAnalyticalGradientReference(self,
+                                               gradient_accumulation_count,
                                                iterations_per_loop):
     x = 1.5
     y = 1.0
@@ -227,14 +228,15 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         opt = gradient_descent.GradientDescentOptimizer(learning_rate)
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      optimizer_function=optimizer_function,
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          optimizer_function=optimizer_function,
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = [x] * pipeline_depth * iterations_per_loop
-      labels = [y] * pipeline_depth * iterations_per_loop
+      features = [x] * gradient_accumulation_count * iterations_per_loop
+      labels = [y] * gradient_accumulation_count * iterations_per_loop
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       return dataset
 
@@ -255,7 +257,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         step_losses.append(expected_w * x + y)
         # dL(x)/dw = x
         # w := w - learning_rate * x
-        expected_w -= pipeline_depth * learning_rate * x
+        expected_w -= gradient_accumulation_count * learning_rate * x
 
       expected_losses.append(np.mean(step_losses))
       self.assertEqual(expected_w, estimator.get_variable_value("w"))
@@ -266,10 +268,11 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
   @combinations.generate(
       combinations.combine(
-          pipeline_depth=[4, 8],
+          gradient_accumulation_count=[4, 8],
           iterations_per_loop=[1, 2],
       ))
-  def testPredictTensor(self, pipeline_depth, iterations_per_loop):
+  def testPredictTensor(self, gradient_accumulation_count,
+                        iterations_per_loop):
     def my_model_fn(mode):
       self.assertEqual(model_fn_lib.ModeKeys.PREDICT, mode)
 
@@ -282,12 +285,13 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         prediction = partial * partial
         return prediction
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = np.arange(pipeline_depth * iterations_per_loop,
+      features = np.arange(gradient_accumulation_count * iterations_per_loop,
                            dtype=np.int32)
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
@@ -295,7 +299,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     estimator = IPUPipelineEstimator(model_fn=my_model_fn,
                                      config=_make_config(iterations_per_loop))
 
-    num_predictions = pipeline_depth * iterations_per_loop
+    num_predictions = gradient_accumulation_count * iterations_per_loop
     predictions = estimator.predict(input_fn=my_input_fn,
                                     num_predictions=num_predictions)
 
@@ -317,7 +321,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
 
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[stage1, stage2],
-                                      pipeline_depth=4)
+                                      gradient_accumulation_count=4)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
@@ -329,7 +333,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
                                 "must return exactly one prediction tensor"):
       next(estimator.predict(input_fn=my_input_fn))
 
-  def testPredictDict(self, pipeline_depth=4):
+  def testPredictDict(self, gradient_accumulation_count=4):
     def my_model_fn(mode):
       def stage1(features):
         w = variable_scope.get_variable("w", initializer=1)
@@ -340,20 +344,21 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         squared = partial * partial
         return {"squared": squared, "partial": partial}
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = np.arange(pipeline_depth, dtype=np.int32)
+      features = np.arange(gradient_accumulation_count, dtype=np.int32)
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
 
     estimator = IPUPipelineEstimator(model_fn=my_model_fn,
                                      config=_make_config())
 
-    predictions = estimator.predict(input_fn=my_input_fn,
-                                    num_predictions=pipeline_depth)
+    predictions = estimator.predict(
+        input_fn=my_input_fn, num_predictions=gradient_accumulation_count)
 
     for i, out in enumerate(predictions):
       self.assertEqual(i, out["partial"])
@@ -375,7 +380,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[stage1, stage2],
                                       eval_metrics_fn=eval_metrics_fn,
-                                      pipeline_depth=4)
+                                      gradient_accumulation_count=4)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
@@ -400,7 +405,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       return IPUPipelineEstimatorSpec(mode,
                                       computational_stages=[stage1, stage2],
                                       eval_metrics_fn=eval_metrics_fn,
-                                      pipeline_depth=4)
+                                      gradient_accumulation_count=4)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
@@ -414,7 +419,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
   @combinations.generate(combinations.combine(arg_type=[list, dict]))
   def testEvaluate(self, arg_type):
     num_steps = 2
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
 
     def my_model_fn(mode):
       def stage1(features):
@@ -438,12 +443,14 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
             "loss": squared,
         }
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      eval_metrics_fn=eval_metrics_fn,
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          eval_metrics_fn=eval_metrics_fn,
+          gradient_accumulation_count=gradient_accumulation_count)
 
-    features = np.arange(pipeline_depth * num_steps, dtype=np.float32)
+    features = np.arange(gradient_accumulation_count * num_steps,
+                         dtype=np.float32)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
@@ -456,7 +463,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     self.assertEqual(np.mean(features), metrics["mean"])
     self.assertEqual(np.mean(np.square(features)), metrics["loss"])
 
-  def testEvaluateWithStagesMappedToSameIpu(self, pipeline_depth=6):
+  def testEvaluateWithStagesMappedToSameIpu(self,
+                                            gradient_accumulation_count=6):
     def my_model_fn(mode):
       self.assertEqual(mode, model_fn_lib.ModeKeys.EVAL)
 
@@ -485,10 +493,11 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           computational_stages=[stage1, stage2, stage3],
           device_mapping=[0, 1, 0],
           eval_metrics_fn=eval_metrics_fn,
-          pipeline_depth=pipeline_depth)
+          gradient_accumulation_count=gradient_accumulation_count)
 
     num_steps = 2
-    features = np.arange(pipeline_depth * num_steps, dtype=np.float32)
+    features = np.arange(gradient_accumulation_count * num_steps,
+                         dtype=np.float32)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
@@ -506,7 +515,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     x = 1.5
     y = 1.0
     initial_w = 2.0
-    pipeline_depth = 4
+    gradient_accumulation_count = 4
 
     def my_model_fn(mode):
       def stage1(global_step, features, labels):
@@ -532,16 +541,17 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       global_step_input = math_ops.cast(training_util.get_global_step(),
                                         dtype=np.float32)
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      optimizer_function=optimizer_function,
-                                      eval_metrics_fn=eval_metrics_fn,
-                                      inputs=[global_step_input],
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          optimizer_function=optimizer_function,
+          eval_metrics_fn=eval_metrics_fn,
+          inputs=[global_step_input],
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = [x] * pipeline_depth * iterations_per_loop
-      labels = [y] * pipeline_depth * iterations_per_loop
+      features = [x] * gradient_accumulation_count * iterations_per_loop
+      labels = [y] * gradient_accumulation_count * iterations_per_loop
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       return dataset
 

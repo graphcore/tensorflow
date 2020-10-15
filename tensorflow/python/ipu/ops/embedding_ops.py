@@ -166,7 +166,7 @@ class HostEmbeddingOptimizerSpec:
       Currently only supports SGD.
 
   """
-  def __init__(self, learning_rate):
+  def __init__(self, learning_rate, optimizer_name=None):
     """
     Create a HostEmbeddingOptimizerSpec.
 
@@ -175,6 +175,9 @@ class HostEmbeddingOptimizerSpec:
 
     """
     self._learning_rate = learning_rate
+    if optimizer_name is None:
+      optimizer_name = "SGD"
+    self._optimizer_name = optimizer_name
 
   def get_learning_rate(self):
     """
@@ -214,7 +217,7 @@ class HostEmbeddingOptimizerSpec:
         indices,
         embedding_id=name,
         embedding_shape=embedding_tensor.shape,
-        optimizer="SGD",
+        optimizer=self._optimizer_name,
         partition_strategy=partition_strategy,
         learning_rate=self.get_learning_rate())
 
@@ -234,7 +237,7 @@ class HostEmbeddingOptimizerSpec:
 
     """
     return gen_pop_datastream_ops.ipu_host_embedding_register(
-        embedding_tensor, name)
+        embedding_tensor, name, optimizer=self._optimizer_name)
 
   def create_deregister_instruction(self, embedding_tensor, slot_vars, name):
     """
@@ -269,6 +272,19 @@ class HostEmbeddingOptimizerSpec:
 
     """
     return []
+
+
+class HostEmbeddingSGDGAOptimizerSpec(HostEmbeddingOptimizerSpec):
+  def __init__(self, learning_rate, accumulation_factor):
+    if accumulation_factor > 1:
+      super().__init__(learning_rate, "SGD+GA")
+    else:
+      super().__init__(learning_rate)
+
+    self._accumulation_factor = accumulation_factor
+
+  def get_accumulation_factor(self):
+    return self._accumulation_factor
 
 
 class HostEmbedding:
@@ -384,7 +400,7 @@ class HostEmbedding:
     # Keeping the old function just so an exception can be used to inform
     # users of the API change.
     raise NotImplementedError(
-        "HostEmbedding.__call__ is not supported."
+        "HostEmbedding.__call__ is not supported. "
         "Please use the context manager created with HostEmbedding.register.")
 
   @deprecation.deprecated_args(None, "This argument no longer has any effect.",

@@ -113,11 +113,14 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*',
+          'Copy_',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/Cast/convert.*/Cast',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
-          'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
+          'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/',
+          'copy*_host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -521,8 +524,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(1634674)
-      report.assert_max_tile_memory(1551)
+      report.assert_total_tile_memory(1587482)
+      report.assert_max_tile_memory(1511)
 
       # Would fail if there were two batch norms in the graph
       ok = [

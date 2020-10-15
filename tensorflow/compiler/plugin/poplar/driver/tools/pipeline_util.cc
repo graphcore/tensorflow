@@ -202,11 +202,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 }
 
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
-    HloInstruction* pipeline_stage, CallGraph* call_graph) {
-  CHECK(IsAnyPipelineStageOpOrResourceUpdate(pipeline_stage));
-  absl::flat_hash_set<HloComputation*> computations_in_pipeline;
+    HloInstruction* caller, CallGraph* call_graph) {
+  absl::flat_hash_set<HloComputation*> called_computations;
   absl::flat_hash_set<HloComputation*> to_visit;
-  to_visit.insert(pipeline_stage->to_apply());
+  to_visit.insert(caller->to_apply());
   // We keep separate visited as some computations might be called but we do not
   // want to return them.
   absl::flat_hash_set<HloComputation*> visited;
@@ -227,12 +226,11 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     }
     // Both context is not allowed.
     if (node.context() == CallContext::kBoth) {
-      return InternalErrorStrCat(
-          "Detected a computation ", comp->name(),
-          " with CallContext::kBoth inside the PipelineStage ",
-          pipeline_stage->ToString());
+      return InternalErrorStrCat("Detected a computation ", comp->name(),
+                                 " with CallContext::kBoth inside the ",
+                                 caller->ToString());
     }
-    computations_in_pipeline.insert(comp);
+    called_computations.insert(comp);
 
     for (HloInstruction* inst : comp->instructions()) {
       // Visit any called computations.
@@ -240,7 +238,7 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
                    std::inserter(to_visit, to_visit.end()));
     }
   }
-  return computations_in_pipeline;
+  return called_computations;
 }
 
 Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
@@ -491,7 +489,7 @@ StatusOr<HloInstruction*> CreatePipelineStage(
   auto empty_call = pipeline->AddInstruction(HloInstruction::CreateCall(
       stage_comp->root_instruction()->shape(), operands, stage_comp));
   empty_call->set_frontend_attributes(attributes);
-  empty_call->set_backend_config(cfg);
+  TF_RETURN_IF_ERROR(empty_call->set_backend_config(cfg));
   empty_call->set_metadata(metadata);
   return empty_call;
 }
@@ -1959,6 +1957,10 @@ StatusOr<int64> PipelinePath::GetFifoDepth() {
         break;
       case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
         multiplier = 0;
+        break;
+      case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+        CHECK(type_ == Type::kForwardToBackward);
+        multiplier = 1;
         break;
       default:
         return FailedPrecondition("Unsupported pipeline schedule.");

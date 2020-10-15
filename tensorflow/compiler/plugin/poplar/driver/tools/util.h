@@ -128,6 +128,7 @@ StatusOr<std::vector<NativeT>> WideConstToNativeType(
 bool IsInstructionInEntryComputation(const HloInstruction*);
 bool IsPopOpsFusion(const HloComputation*, const std::string& postfix = "");
 bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
+bool IsFusion(const HloInstruction*, const std::string& name);
 bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
@@ -141,10 +142,12 @@ bool IsFunction(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
-int64 GetPipelineDepth(const HloInstruction*);
+int64 GetGradientAccumulationCount(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);
 ThreeState GetPipelineOffloadGradientAccumulationBuffers(const HloInstruction*);
+ThreeState GetPipelinePartitionVariables(const HloInstruction*);
+ThreeState GetPipelineOffloadVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
@@ -197,7 +200,8 @@ HloInstruction* ConvertInstruction(HloInstruction* inst,
 
 HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
-    const string& outlined_computation_name, HloComputation* computation);
+    const string& outlined_computation_name, HloComputation* computation,
+    const std::vector<HloInstruction*>& explicit_parameters = {});
 
 // Helper for storing slice dimensions.
 struct SliceInfo {
@@ -252,6 +256,8 @@ struct HloComputationEquals {
 };
 
 Status CreateDirIfMissing(const std::string& path);
+
+StatusOr<Tileset> GetTileset(const HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla

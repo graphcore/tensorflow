@@ -300,10 +300,10 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
     // Exchange the columns from this replica back to their respective replicas.
     // We also recieve the columns we requested from the other replicas.
-    host_sliceable.tensor = popops::allToAllPersonalizedExchange(
-        graph, host_sliceable.tensor, seq,
-        GetDebugName(inst) + "/exchange_columns",
-        GetReplicatedCollectiveOptions(res));
+    host_sliceable.tensor =
+        gcl::allToAll(graph, host_sliceable.tensor, seq,
+                      GetDebugName(inst) + "/exchange_columns",
+                      GetReplicatedCollectiveOptions(res));
 
     // Dimshuffle and reshape back to the output shape.
     host_sliceable.tensor = host_sliceable.tensor.dimShuffle({1, 0, 2});
@@ -376,7 +376,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                         seq, res, host_embedding_inst, output_shape,
                         tensor_map);
   }
-};  // namespace
+};
 
 REGISTER_POPLAR_OP(HostEmbeddingLookup, HostEmbeddingLookupOp);
 
@@ -557,9 +557,9 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     grads = grads.dimShuffle({1, 0, 2});
 
     // All-To-All exchange the grad columns with their respective replicas.
-    grads = popops::allToAllPersonalizedExchange(
-        graph, grads, seq, GetDebugName(inst) + "/exchange_columns",
-        GetReplicatedCollectiveOptions(res));
+    grads = gcl::allToAll(graph, grads, seq,
+                          GetDebugName(inst) + "/exchange_columns",
+                          GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
@@ -653,6 +653,48 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(HostEmbeddingUpdate, HostEmbeddingUpdateOp);
+
+class HostEmbeddingNotifyOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    if (res.use_verified_transfers) {
+      return FailedPrecondition(
+          "Verified transfers cannot be used with Host embeddings");
+    }
+
+    const HloHostEmbeddingNotifyInstruction* host_embedding_inst =
+        Cast<HloHostEmbeddingNotifyInstruction>(inst);
+
+    poplar::program::Sequence seq;
+
+    // For synthetic data or remote buffers, there's no communication with the
+    // host.
+    if (UseSyntheticData() || res.enable_experimental_remote_buffer_embedding) {
+      return seq;
+    }
+
+    // Add the notify information to the annotations
+    res.annotations.host_embedding_notify_infos.push_back(
+        {inst->name(), host_embedding_inst->EmbeddingId(), {}, {}});
+
+    // Create a poplar FIFO
+    auto notify = graph.addDeviceToHostFIFO(
+        inst->name() + host_embedding_inst->EmbeddingId() + "_notify",
+        poplar::INT, 0);
+
+    // Use a dummy tensor to "copy" to the FIFO
+    poplar::Tensor t = graph.addVariable(poplar::INT, {0});
+    graph.setTileMapping(t, 0);
+    seq.add(poplar::program::Copy(t, notify));
+
+    return seq;
+  }
+};
+
+REGISTER_POPLAR_OP(HostEmbeddingNotify, HostEmbeddingNotifyOp);
 
 }  // namespace
 }  // namespace poplarplugin

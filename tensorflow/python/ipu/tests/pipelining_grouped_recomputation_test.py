@@ -59,7 +59,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -99,7 +99,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 14770, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 14770, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -118,7 +118,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 18
+    gradient_accumulation_count = 18
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -199,8 +199,8 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 40549, True,
+        [stage1, stage2, stage3], lambda: [], [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 40549, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -220,7 +220,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -253,7 +253,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13681, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 13681, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -273,7 +273,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -314,7 +314,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 20354, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 20354, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -330,7 +330,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 8
+    gradient_accumulation_count = 8
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -363,7 +363,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13107, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 13107, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -374,7 +374,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
       dataset = tu.create_single_increasing_dataset(7, shape=[1, 10])
       return dataset.repeat().batch(4, drop_remainder=True)
 
-    pipeline_depth = 6
+    gradient_accumulation_count = 6
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -410,7 +410,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3],
         lambda: [], [],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -435,7 +435,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 16
+    gradient_accumulation_count = 16
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -465,7 +465,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 14502, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 14502, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -482,9 +482,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -527,7 +527,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -550,9 +550,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -593,7 +593,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
@@ -616,9 +616,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.batch(batch_size=2, drop_remainder=True)
 
-    pipeline_depth = 24
+    gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage(x, name):
       with variable_scope.variable_scope(name, use_resource=True):
@@ -653,11 +653,71 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3],
         inputs_fn, [10.01],
         repeat_count,
-        pipeline_depth,
+        gradient_accumulation_count,
         dataset_fn,
         optimizer,
         self,
         21458,
+        recomp=True,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
+
+  @test_util.deprecated_graph_mode_only
+  def testUnmodifiedInput(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(8, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0]
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("s1", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+      return weight + x, label
+
+    def stage2(x, label):
+      x = math_ops.reduce_sum(x, axis=[2])
+      with variable_scope.variable_scope("s2", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w",
+            shape=[4, 8],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+      logits = math_ops.matmul(x, weight)
+      return logits, label
+
+    def stage3(logits, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                      labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3],
+        inputs_fn, [10.01],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        10153,
         recomp=True,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 

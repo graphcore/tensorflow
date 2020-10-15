@@ -72,18 +72,32 @@ uint64 GetShardForOutputIndex(const HloInstruction* inst,
 poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
                                        const HloInstruction* inst,
                                        int flattened_output_tuple_index) {
-  if (inst->has_sharding()) {
-    int device_id = GetShardForOutputIndex(inst, flattened_output_tuple_index);
+  const auto tileset_or_status = GetTileset(inst);
+  TF_CHECK_OK(tileset_or_status.status());
+  const auto tileset = tileset_or_status.ValueOrDie();
 
-    if (device_id >= static_cast<int>(res.shard_graphs.size())) {
-      LOG(FATAL) << "Graph index " << device_id << " out of range on "
-                 << inst->ToString();
+  if (inst->has_sharding()) {
+    const auto device_id =
+        GetShardForOutputIndex(inst, flattened_output_tuple_index);
+
+    if (tileset == TILESET_IO_TILES) {
+      CHECK_LT(device_id, res.shard_io_graphs.size()) << inst->ToString();
+      return res.shard_io_graphs[device_id];
     }
 
-    return res.shard_graphs[device_id];
+    CHECK_EQ(tileset, TILESET_COMPUTE_TILES);
+    CHECK_LT(device_id, res.shard_compute_graphs.size()) << inst->ToString();
+    return res.shard_compute_graphs[device_id];
   }
 
-  return GetMasterGraph(res);
+  if (tileset == TILESET_IO_TILES) {
+    CHECK(res.io_graph.has_value())
+        << "IO tiles not allocated, but requested by " << inst->ToString();
+    return *res.io_graph;
+  }
+
+  CHECK_EQ(tileset, TILESET_COMPUTE_TILES);
+  return res.compute_graph.has_value() ? *res.compute_graph : *res.main_graph;
 }
 
 poplar::Graph& GetGraph(CompilerResources& res, const HloInstruction* inst) {
@@ -699,6 +713,61 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
     deferred_inputs[i] = {inputs[i].begin(), inputs[i].end()};
   }
   return deferred_inputs;
+}
+
+void ZeroRemoteBuffers(CompilerResources& res, poplar::Graph& graph,
+                       const std::vector<poplar::RemoteBuffer>& remote_buffers,
+                       poplar::program::Sequence& sequence) {
+  // Hold onto the constant zeros by type.
+  absl::flat_hash_map<poplar::Type, poplar::Tensor, PoplarTypeHasher> zeros;
+
+  for (auto& remote_buffer : remote_buffers) {
+    // Check if we have a constant zero, to save poplar a little effort.
+    auto itr = zeros.find(remote_buffer.elementType());
+    poplar::Tensor zero;
+    if (itr == zeros.end()) {
+      // Create a const zero tensor.
+      zero = graph.addConstant(remote_buffer.elementType(), {1}, 0);
+      MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
+      zeros[remote_buffer.elementType()] = zero;
+    } else {
+      // Use an existing constant zero.
+      zero = itr->second;
+    }
+
+    // Broadcast up to the number of elements in the remote buffer.
+    zero = zero.broadcast(remote_buffer.numElements(), 0);
+
+    // Copy the zero into the remote buffer.
+    sequence.add(poplar::program::Copy(zero, remote_buffer));
+  }
+}
+
+void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
+                 const std::vector<poplar::Tensor>& tensors,
+                 poplar::program::Sequence& sequence,
+                 const std::string& debug_prefix) {
+  // Keeps track of what types we have seen in a deterministic ordering.
+  std::vector<poplar::Type> seen_types;
+
+  // Keeps track of the input tensors, grouped by type.
+  absl::flat_hash_map<poplar::Type, std::vector<poplar::Tensor>,
+                      PoplarTypeHasher>
+      typed_inputs;
+
+  // Add the tensors to the grouped input, preserving the type order.
+  for (auto& tensor : tensors) {
+    if (!typed_inputs.contains(tensor.elementType())) {
+      seen_types.push_back(tensor.elementType());
+    }
+    typed_inputs[tensor.elementType()].push_back(tensor.flatten());
+  }
+
+  // Concatenate all the inputs of the same type and zero them.
+  for (auto type : seen_types) {
+    poplar::Tensor input = poplar::concat(typed_inputs[type]);
+    popops::zero(graph, input, sequence, debug_prefix);
+  }
 }
 
 }  // namespace poplarplugin

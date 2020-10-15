@@ -116,10 +116,16 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
 //   used in multiple pipeline stages and unifies them into a single buffer.
 class HloGradientAccumulatorCreate : public HloPoplarInstruction {
  public:
-  explicit HloGradientAccumulatorCreate(const Shape& shape,
-                                        bool is_remote = false);
-  explicit HloGradientAccumulatorCreate(HloInstruction* const variable,
-                                        bool is_remote = false);
+  static std::unique_ptr<HloInstruction> CreateFromShapeOnly(
+      const Shape& shape, bool is_remote = false);
+
+  static std::unique_ptr<HloInstruction> CreateFromShapeAndVariable(
+      const Shape& shape, HloInstruction* const variable,
+      bool is_remote = false);
+
+  HloGradientAccumulatorCreate(const Shape& shape,
+                               absl::Span<HloInstruction* const> operands,
+                               bool is_remote = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;

@@ -13,11 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_
 
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -109,12 +110,12 @@ struct CompilerAnnotations;
  *   ROOT t = tuple(gte0, gte1, gte2, ...)
  * }
  */
-class ResourceUpdateVariablesOffload : public HloModulePass {
+class VariablesOffloadAndPartition : public HloModulePass {
  public:
-  ResourceUpdateVariablesOffload(CompilerAnnotations& annotations,
-                                 bool remote_memory_supported,
-                                 int64 minimum_remote_tensor_size,
-                                 int64 replication_factor);
+  VariablesOffloadAndPartition(CompilerAnnotations& annotations,
+                               bool remote_memory_supported,
+                               int64 minimum_remote_tensor_size,
+                               int64 replication_factor);
   absl::string_view name() const override {
     return "resource-update-variables-offload";
   }
@@ -123,8 +124,10 @@ class ResourceUpdateVariablesOffload : public HloModulePass {
 
  private:
   // Optimize an instruction which contains a resource update.
-  StatusOr<bool> Optimize(HloInstruction* call_op,
-                          HloInstruction* resource_update);
+  StatusOr<bool> Optimize(HloInstruction* call_op);
+  StatusOr<ThreeState> ShouldOffloadInPipeline(
+      HloInstruction* const pipeline_op);
+  StatusOr<bool> ShouldPartitionInPipeline(HloInstruction* const pipeline_op);
 
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
@@ -135,4 +138,4 @@ class ResourceUpdateVariablesOffload : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_VARIABLES_OFFLOAD_AND_PARTITION_H_

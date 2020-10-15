@@ -94,6 +94,11 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
       if (user == root) {
         continue;
       }
+      // If the value already has been copied we don't need to add moe copies.
+      if (user->opcode() == HloOpcode::kCopy) {
+        continue;
+      }
+
       CHECK(IsAnyPipelineStageOpOrResourceUpdate(user));
       // Go through each use of the parameter in the user and insert kCopy
       // instructions if necessary.

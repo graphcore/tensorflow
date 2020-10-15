@@ -17,7 +17,7 @@ enum FrontendAttributeId {
   // Type to use to store the partials results.
   PARTIALS_TYPE = 2;
   // Used in pipelining to indicate how many times each stage is executed.
-  PIPELINE_DEPTH = 3;
+  GRADIENT_ACCUMULATION_COUNT = 3;
   // ID of a pipeline stage.
   PIPELINE_STAGE_ID = 4;
   // Used in pipelining to indicate how many times the pipeline should be
@@ -48,6 +48,12 @@ enum FrontendAttributeId {
   // Used in pipelining to indicate whether the gradient accumulation buffers
   // should be offloaded.
   OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS = 15;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be partitioned between replicas.
+  PARTITION_VARIABLES = 16;
+  // Used in pipelining to indicate whether weights used by the forward/backward
+  // stages should be offloaded.
+  OFFLOAD_VARIABLES = 17;
 };
 
 // An enum for helping with setting a state of something, where the state can be
@@ -75,8 +81,14 @@ enum ConvType {
   DepthwiseFilter = 3;
 };
 
+// An enum representing a subset of tiles per IPU.
+enum Tileset {
+  TILESET_COMPUTE_TILES = 0;
+  TILESET_IO_TILES = 1;
+};
+
 // Backend specific HloInstruction config
-// NEXT ID = 10
+// NEXT ID = 11
 message PoplarBackendConfig {
   // Instruction config for a fusion instruction
   message FusionConfig {
@@ -122,18 +134,22 @@ message PoplarBackendConfig {
         Sequential = 2;
       };
 
-      int64 pipeline_depth = 1;
+      int64 gradient_accumulation_count = 1;
       int64 batch_serialization_iterations = 2;
       int64 repeat_count = 3;
       Schedule schedule = 4;
       ThreeState offload_activations = 5;
       ThreeState offload_gradient_accumulation_buffers = 6;
+      ThreeState partition_variables = 7;
+      ThreeState offload_variables = 8;
     }
 
     message CallConfig {
     }
 
     message FunctionConfig {
+      bool keep_input_layouts = 1;
+      bool unique_sharding = 2;
     }
 
     message ResourceUpdateConfig {
@@ -174,4 +190,7 @@ message PoplarBackendConfig {
 
   // Flags to be used by the matmul.
   repeated PoplarOptionFlag matmul_options = 9;
+
+  // The tile subset that should be used by this instruction.
+  Tileset tileset = 10;
 };

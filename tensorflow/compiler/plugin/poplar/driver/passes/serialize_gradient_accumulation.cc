@@ -35,15 +35,29 @@ namespace poplarplugin {
 namespace {
 constexpr char kFusionName[] = "_pop_op_serialized_gradient_accumulation";
 
+HloInstruction* ConvertOperand(HloInstruction* inst, int64 operand_index,
+                               PrimitiveType type) {
+  CHECK_LT(operand_index, inst->operand_count()) << inst->ToString();
+  HloInstruction* convert =
+      MakeConvertToHlo(inst->mutable_operand(operand_index), type);
+  TF_CHECK_OK(inst->ReplaceOperandWith(operand_index, convert));
+  return convert;
+}
+
 Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   HloComputation* comp = inst->parent();
 
   // Convert the GradientAccumulatorAdd into a normal add.
   HloInstruction* accumulator = inst->mutable_operand(0);
   HloInstruction* to_serialize = inst->mutable_operand(1);
+
+  const PrimitiveType accumulator_type = accumulator->shape().element_type();
+  CHECK(primitive_util::IsFloatingPointType(accumulator_type));
+
   TF_ASSIGN_OR_RETURN(
       HloInstruction * add,
       MakeBinaryHlo(HloOpcode::kAdd, accumulator, to_serialize));
+  CHECK_EQ(add->shape().element_type(), accumulator_type) << add->ToString();
   inst->SetupDerivedInstruction(add);
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, add));
   if (add->user_count() != 1) {
@@ -51,6 +65,10 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
         "Expected the gradient accumulation buffer to have a single user.");
   }
   HloInstruction* accumulator_user = add->users()[0];
+
+  // Collect all the convert instructions that we are adding, as they need
+  // to be outlined later.
+  std::vector<HloInstruction*> convert_instructions;
 
   // Try and serialize the gradient accumulation application.
   HloInstruction* output = add;
@@ -83,6 +101,16 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
     HloInstruction* lhs = output->mutable_operand(0);
     HloInstruction* rhs = output->mutable_operand(1);
 
+    // Throughout the accumulation here the lhs and output should have the
+    // correct accumulator type. The rhs may however not be in the correct
+    // type yet if we are accumulating in a different type than the type of
+    // the gradients. This will be handled below in the loop for non-add ops,
+    // and after the loop for add ops as converting these in the loop would
+    // interfere with later pattern matching.
+    CHECK_EQ(lhs->shape().element_type(), accumulator_type) << lhs->ToString();
+    CHECK_EQ(output->shape().element_type(), accumulator_type)
+        << output->ToString();
+
     // Skip if rhs has more than a single user.
     if (rhs->user_count() > 1) {
       output = lhs;
@@ -93,19 +121,44 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       // Case 1:
       // Add(lhs, MultiUpdateAdd(b, ...)) =>
       // MultiUpdateAdd(Add(lhs, b), ...)
-      HloInstruction* b = rhs->mutable_operand(0);
+      HloInstruction* multi_update_add = rhs;
+
+      // Convert the `updates` and `scale` inputs to MultiUpdateAdd.
+      if (multi_update_add->shape().element_type() != accumulator_type) {
+        for (int64 i : {2, 3}) {
+          convert_instructions.push_back(
+              ConvertOperand(multi_update_add, i, accumulator_type));
+        }
+        multi_update_add->mutable_shape()->set_element_type(accumulator_type);
+      }
+
+      HloInstruction* b = multi_update_add->mutable_operand(0);
       TF_RETURN_IF_ERROR(output->ReplaceOperandWith(1, b));
-      TF_RETURN_IF_ERROR(rhs->ReplaceOperandWith(0, output));
-      TF_RETURN_IF_ERROR(output->ReplaceAllUsesWith(rhs));
+      TF_RETURN_IF_ERROR(multi_update_add->ReplaceOperandWith(0, output));
+      TF_RETURN_IF_ERROR(output->ReplaceAllUsesWith(multi_update_add));
 
     } else if (rhs->opcode() == HloOpcode::kConcatenate) {
       // Case 2:
       // Add(lhs, Concat(b, c, ...)) =>
       // SliceApply(SliceApply(lhs, b), c) ...
+      HloInstruction* concat = rhs;
+
+      // Convert all the inputs to Concat.
+      if (concat->shape().element_type() != accumulator_type) {
+        for (int64 i = 0; i < concat->operand_count(); ++i) {
+          convert_instructions.push_back(
+              ConvertOperand(concat, i, accumulator_type));
+        }
+        concat->mutable_shape()->set_element_type(accumulator_type);
+      }
+
       TF_ASSIGN_OR_RETURN(
           HloInstruction * new_output,
-          SliceOptimizer::ConvertToSliceApply(HloOpcode::kAdd, lhs, rhs));
-      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
+          SliceOptimizer::ConvertToSliceApply(HloOpcode::kAdd, lhs, concat));
+
+      TF_RETURN_IF_ERROR(output->ReplaceAllUsesWith(new_output));
+      TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(output));
+
       output = lhs;
 
     } else if (Match(rhs, m::Multiply(m::Concatenate(),
@@ -115,7 +168,21 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       // SliceApplyabY(SliceApplyabY(a, b, d), c, d)
       HloInstruction* mul = rhs;
       HloInstruction* concat = mul->mutable_operand(0);
+
+      // Convert all the inputs to Concat.
+      if (concat->shape().element_type() != accumulator_type) {
+        for (int64 i = 0; i < concat->operand_count(); ++i) {
+          convert_instructions.push_back(
+              ConvertOperand(concat, i, accumulator_type));
+        }
+      }
+
       HloInstruction* scalar = mul->mutable_operand(1)->mutable_operand(0);
+      if (scalar->shape().element_type() != accumulator_type) {
+        scalar = MakeConvertToHlo(scalar, accumulator_type);
+        convert_instructions.push_back(scalar);
+      }
+
       TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
                           SliceOptimizer::ConvertToSliceApplyabY(
                               HloOpcode::kAdd, lhs, concat, scalar));
@@ -132,6 +199,14 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(rhs->ReplaceOperandWith(1, a));
       TF_RETURN_IF_ERROR(output->ReplaceOperandWith(0, rhs));
       TF_RETURN_IF_ERROR(output->ReplaceOperandWith(1, b));
+
+      // Make sure that the add we now moved to the lhs is accumulating in the
+      // correct type, as this will impact type inferece for later iterations.
+      // Converting of the rhs operand is handled below after all the
+      // transformations are performed (we do not do it here as it would
+      // complicate later pattern matching).
+      CHECK(primitive_util::IsFloatingPointType(rhs->shape().element_type()));
+      rhs->mutable_shape()->set_element_type(accumulator_type);
 
     } else if (IsWideConstantZero(rhs)) {
       // Case 5:
@@ -247,8 +322,34 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
     next_inst = next_inst->users()[0];
   }
 
+  // Add any missing converts for the add rhs operands that we left out above.
+  for (auto* inst : to_outline) {
+    if (inst->opcode() == HloOpcode::kAdd) {
+      // The instruction and lhs operand should already have the correct type.
+      CHECK_EQ(inst->shape().element_type(), accumulator_type)
+          << inst->ToString();
+      CHECK_EQ(inst->operand(0)->shape().element_type(), accumulator_type)
+          << inst->ToString();
+
+      // Convert the rhs operand if needed.
+      if (inst->operand(1)->shape().element_type() != accumulator_type) {
+        convert_instructions.push_back(
+            ConvertOperand(inst, 1, accumulator_type));
+      }
+    }
+  }
+
   if (to_outline.size()) {
-    OutlineExpressionFromComputationWithFusion(to_outline, kFusionName, comp);
+    // Insert the convert instructions at the beginning, which gives a valid
+    // topological order, as required by the fusion outlining.
+    to_outline.insert(to_outline.begin(), convert_instructions.cbegin(),
+                      convert_instructions.cend());
+
+    // Make sure that the accumulator is the first argument, as required by the
+    // post serialize pass.
+    auto* fusion = OutlineExpressionFromComputationWithFusion(
+        to_outline, kFusionName, comp, {accumulator});
+    CHECK_EQ(fusion->operand_index(accumulator), 0);
   }
 
   return Status::OK();

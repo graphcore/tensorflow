@@ -86,6 +86,8 @@ Complete example
 ################
 
 .. literalinclude:: distributed_training_example.py
+  :language: python
+  :linenos:
 
 Distributed training with Horovod
 #################################
@@ -137,3 +139,5 @@ Complete Horovod example
 Below is a complete example using Horovod, adapted from the example above.
 
 .. literalinclude:: distributed_training_horovod_example.py
+  :language: python
+  :linenos:

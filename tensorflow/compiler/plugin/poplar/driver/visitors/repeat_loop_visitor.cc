@@ -37,8 +37,7 @@ RepeatLoopVisitor::RepeatLoopVisitor(
     const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, description, name, {},
                              reallocate_inputs_info) {
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.gradient_accumulation_zeroing_sequences.push({});
+  EnterVariableScope();
 }
 
 Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
@@ -53,9 +52,9 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     num_mini_batches_to_accumulate_ =
         GetResourceUpdateBatchesToAccumulate(inst);
 
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
-                            inst, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(
+        DeferredArgRBVectors inputs,
+        GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
     TF_ASSIGN_OR_RETURN(resource_update_sequence_,
                         CreateResourceUpdateOp(resources_, inst, inputs,
@@ -76,11 +75,18 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero());
 
   // Create a sequence for all the zeroing gradient accumulation buffers.
-  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
-  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
-    tensors_zeroing_sequence_.add(zeroing_seq);
+  auto& zeroing_tensors =
+      resources_.gradient_accumulation_zeroing_tensors.top();
+  ZeroTensors(resources_, GetMasterGraph(resources_), zeroing_tensors,
+              tensors_zeroing_sequence_, name_ + "/ZeroAccumulators");
+
+  auto& zeroing_remote_buffers =
+      resources_.gradient_accumulation_zeroing_remote_buffers.top();
+  for (auto zeroing_remote_buffer : zeroing_remote_buffers) {
+    tensors_zeroing_sequence_.add(zeroing_remote_buffer);
   }
-  resources_.gradient_accumulation_zeroing_sequences.pop();
+
+  TF_RETURN_IF_ERROR(ExitVariableScope());
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
@@ -91,24 +97,37 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   return Status::OK();
 }
 
-StatusOr<poplar::program::Sequence*>
-RepeatLoopVisitor::GetSequenceForInstruction(const HloInstruction* inst) {
+Status RepeatLoopVisitor::AddSequenceForInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
   switch (inst->opcode()) {
     case HloOpcode::kGetTupleElement: {
-      return IsResourceUpdate(inst->operand(0)) ? &resource_update_sequence_
-                                                : &sequence;
+      if (IsResourceUpdate(inst->operand(0))) {
+        resource_update_sequence_.add(seq);
+        return Status::OK();
+      }
+      break;
     }
     case HloOpcode::kTuple: {
-      return has_resource_update_ && inst->parent()->root_instruction() == inst
-                 ? &resource_update_sequence_
-                 : &sequence;
+      if (has_resource_update_ && inst->parent()->root_instruction() == inst) {
+        resource_update_sequence_.add(seq);
+        return Status::OK();
+      }
+      break;
     }
-    default: { return InplaceDeferredVisitor::GetSequenceForInstruction(inst); }
+    default:
+      break;
   }
+
+  return InplaceDeferredVisitor::AddSequenceForInstruction(inst, seq);
 }
 
-poplar::program::Sequence& RepeatLoopVisitor::GetSequenceForAliasingCopy() {
-  return has_resource_update_ ? resource_update_sequence_ : sequence;
+void RepeatLoopVisitor::AddSequenceForAliasingCopy(
+    const HloInstruction* inst, const poplar::program::Sequence& seq) {
+  if (has_resource_update_) {
+    resource_update_sequence_.add(seq);
+  } else {
+    InplaceDeferredVisitor::AddSequenceForAliasingCopy(inst, seq);
+  }
 }
 
 poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(

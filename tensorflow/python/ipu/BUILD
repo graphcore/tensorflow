@@ -190,6 +190,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "io_tiles_test",
+    size = "medium",
+    srcs = ["tests/io_tiles_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -322,6 +335,19 @@ tf_py_test(
     name = "host_embedding_lookup_test",
     size = "large",
     srcs = ["tests/host_embedding_lookup_test.py"],
+    additional_deps = [
+        ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "host_embedding_lookup_ga_test",
+    size = "large",
+    srcs = ["tests/host_embedding_lookup_ga_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1025,8 +1051,10 @@ test_suite(
         "functional_ops_test",
         "gcl_test",
         "gradient_accumulation_test",
+        "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
+        "io_tiles_test",
         "ipu_compiler_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",

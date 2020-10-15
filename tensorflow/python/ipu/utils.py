@@ -393,7 +393,7 @@ def create_ipu_config(profiling=False,
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
-  opts.enable_gather_simplifier = False
+  opts.disable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
 
@@ -470,7 +470,7 @@ def set_optimization_options(opts,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
                              minimum_remote_tensor_size=128,
-                             gather_simplifier=False,
+                             gather_simplifier=True,
                              triangular_solve_expander_block_size=0,
                              enable_fast_math=False):
   """Set the IPU options related to performance / optimizations.
@@ -502,7 +502,7 @@ def set_optimization_options(opts,
       These are lowered to stream copies that can be merged by Poplar.
     minimum_remote_tensor_size: The minimum size (in bytes) a tensor has to be
       in order to be consider for being stored in remote memory.
-    gather_simplifier: Will enable more aggressive optimisation for embedding
+    gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
       expander blocks. 0 - implementation defined default.
@@ -524,7 +524,7 @@ def set_optimization_options(opts,
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.minimum_remote_tensor_size = minimum_remote_tensor_size
-  opts.enable_gather_simplifier = gather_simplifier
+  opts.disable_gather_simplifier = not gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
   opts.enable_fast_math = enable_fast_math
@@ -937,19 +937,43 @@ def set_floating_point_behaviour_options(opts,
   return opts
 
 
+def set_io_tile_options(opts, num_io_tiles, place_ops_on_io_tiles=None):
+  """Set the number of tiles reserved for I/O per IPU.
+
+  Args:
+    num_io_tiles: Number of tiles to reserve I/O.
+    place_ops_on_io_tiles: Whether to place TensorFlow I/O operations on the
+      I/O tiles. The value `None` leaves the current value unchanged.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.num_io_tiles = num_io_tiles
+
+  if place_ops_on_io_tiles is not None:
+    if place_ops_on_io_tiles and num_io_tiles == 0:
+      raise ValueError("Cannot place ops on I/O tiles when num_io_tiles == 0")
+    opts.place_ops_on_io_tiles = place_ops_on_io_tiles
+
+  return opts
+
+
+@deprecation.deprecated_args(
+    None, "num_io_tiles is deprecated, use set_io_tile_options instead",
+    "num_io_tiles")
 def set_gcl_options(opts, num_io_tiles=0, gcl_options=None):
   """Set the IPU options for the Graphcore Communication Library.
 
   Args:
-    num_io_tiles: Number of tiles to reserve per IPU for the GCL collective
-      operations.
+    num_io_tiles: Number of tiles to reserve per IPU for the IO operations.
+      Deprecated. Use `set_io_tile_options` instead.
     gcl_options: A dictionary with options for configuring the GCL collective
       operations.
 
   Returns:
     The IpuOptions configuration protobuf.
   """
-  opts.gcl_num_io_tiles = num_io_tiles
+  opts = set_io_tile_options(opts, num_io_tiles)
 
   if gcl_options:
     if not isinstance(gcl_options, dict):
@@ -1221,7 +1245,10 @@ def select_ipus(opts, indices):
   return opts
 
 
-def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
+def set_ipu_connection_type(opts,
+                            connection_type=None,
+                            ipu_version=None,
+                            enable_remote_buffers=False):
   """ Configure when to attach to the device. For example, you can use
       this to compile and cache a program without attaching to an IPU,
       and then later run on a real IPU device without recompiling.
@@ -1242,10 +1269,14 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
     opts: An IpuOptions session control protobuf.
     connection_type: One of `DeviceConnectionType`.
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
-
     ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
                  and 2 for Mk2. Required if the `connection_type`
                  provided is `DeviceConnectionType.NEVER`.
+    enable_remote_buffers: When `connection_type` is
+      `DeviceConnectionType.NEVER` or `DeviceConnectionType.ON_DEMAND`, this
+      argument is used to indicate whether remote buffers are enabled and
+      supported in the system which will eventually be used to execute the
+      compiled programs.
   Returns:
     The IpuOptions configuration protobuf.
   """
@@ -1260,6 +1291,8 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
   if ipu_version is not None:
     opts.ipu_version = ipu_version
     opts.has_ipu_version = True
+
+  opts.enable_remote_buffers_without_device = enable_remote_buffers
 
   return opts
 

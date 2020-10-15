@@ -197,6 +197,7 @@ struct CompilerAnnotations {
 
   HostEmbeddingInfos host_embedding_lookup_infos;
   HostEmbeddingInfos host_embedding_update_infos;
+  HostEmbeddingInfos host_embedding_notify_infos;
 
   RemoteParameterInfos remote_parameter_infos;
 

@@ -7,3 +7,5 @@ while using the ``IPUEstimator``, so the ``model_fn`` should not be
 manually compiled with ``ipu_compiler``.
 
 .. literalinclude:: ipu_estimator_example.py
+  :language: python
+  :linenos:

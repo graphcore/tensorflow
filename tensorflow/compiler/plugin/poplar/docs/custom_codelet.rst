@@ -29,13 +29,14 @@ These operations are added with ``ipu.custom_ops.precompiled_user_op``.
 See :py:func:`tensorflow.python.ipu.custom_ops.precompiled_user_op` for details.
 An example of this is shown below.
 
-The shared object file must contain an undecorated symbol, that should be
+The shared object file must contain an undecorated symbol that should be
 declared as below. It should add vertices to the graph that perform the
 custom operation. The name of the symbol should match the name of the
 operation in the graph. By default these types of operations are called
 ``Build``.
 
 .. code-block:: cpp
+  :linenos:
 
   extern "C"
   poplar::program::Program Build(
@@ -67,6 +68,7 @@ gradient outputs. Gradient builders have their own metadata functions.
 E.g. metadata function name for the example below will be ``Build_grad_metadata``.
 
 .. code-block:: cpp
+  :linenos:
 
   extern "C"
   poplar::program::Program Build_grad(
@@ -111,6 +113,7 @@ the same as the builder function with ``_metadata`` appended. This function
 must have the following signature:
 
 .. code-block:: cpp
+  :linenos:
 
   extern "C"
   void Build_metadata(std::vector<std::int64_t>& allocating_indices,
@@ -158,10 +161,14 @@ modified inplace it has to be assigned back to itself with ``tf.assign``.
 This might look something like the following:
 
 .. literalinclude:: custom_add_inplace.py
+  :language: python
+  :linenos:
 
 And the associated custom op:
 
 .. literalinclude:: custom_add_inplace.cc
+  :language: C
+  :linenos:
 
 
 Elementwise operations
@@ -195,6 +202,7 @@ mapping, the custom operation can provide a function with the following
 signature:
 
 .. code-block:: cpp
+  :linenos:
 
   extern "C" poplar::Tensor Build_allocator(
     poplar::Graph& graph, std::uint32_t operand,
@@ -262,10 +270,14 @@ information, encoded using the JSON data format, about serialization to the C++
 function.
 
 .. literalinclude:: tutorial_attributes_example.cc
+  :language: C
+  :linenos:
 
 Which is then executed with:
 
 .. literalinclude:: tutorial_attributes_example.py
+  :language: python
+  :linenos:
 
 Example
 _______
@@ -274,14 +286,20 @@ This example shows the source file for a rotate operation, which takes three
 vectors and rotates the ``x`` and ``y`` ones by the ``angle`` one:
 
 .. literalinclude:: custom_rotate_op.cc
+  :language: C
+  :linenos:
 
 This is the associated codelet file:
 
 .. literalinclude:: custom_codelet.cpp
+  :language: cpp
+  :linenos:
 
 This is an example of it in use:
 
 .. literalinclude:: tutorial_custom_codelet.py
+  :language: python
+  :linenos:
 
 When compiling the host-size shared object file, it is not necessary to
 include or link against any TensorFlow header or library files. Only the
@@ -296,6 +314,7 @@ the device-side custom operation, must be written. The signature of this
 function should be:
 
 .. code-block:: C++
+  :linenos:
 
   extern "C" void Callback(const std::vector<void*>& data,
                            const std::vector<std::uint32_t>& number_of_elements,
@@ -324,6 +343,7 @@ encodes the arithmetic expression, and the tensor arguments to the operation.
 For instance:
 
 .. code-block:: python
+  :linenos:
 
   def my_custom_op(x, y, z):
       return x * x + y * z
@@ -342,6 +362,7 @@ API Level Versioning
 
 
 .. literalinclude:: custom_rotate_op.cc
+  :linenos:
   :language: C++
   :start-at: // Export the API level symbol
   :end-at: }
@@ -355,7 +376,8 @@ Changes in API Level
 ____________________
 
 API level:
-  1. ``is_stateless`` has been added to metadata function.
-  2. ``attributes`` a string argument has been added to the allocation and the
-     build functions which allows passing of user defined attributes to the
-     operation (and its gradient operation if present).
+
+1. ``is_stateless`` has been added to metadata function.
+2. ``attributes`` a string argument has been added to the allocation and the
+    build functions which allows passing of user defined attributes to the
+    operation (and its gradient operation if present).

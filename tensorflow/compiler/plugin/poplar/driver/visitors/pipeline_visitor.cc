@@ -334,7 +334,12 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   auto copies_end = std::stable_partition(gtes_end, instructions.end(),
                                           HasHloOpcode(HloOpcode::kCopy));
   for (auto itr = gtes_end; itr != copies_end; ++itr) {
-    result[*itr] = get_stage_from_operands(*itr);
+    HloInstruction* copy = *itr;
+    if (copy->user_count() == 1 && IsResourceUpdate(copy->users()[0])) {
+      result[*itr] = get_stage_from_users(*itr);
+    } else {
+      result[*itr] = get_stage_from_operands(*itr);
+    }
   }
 
   // Partition out FIFOs - if the FIFO is an input to a recomputation stage,
@@ -1091,10 +1096,7 @@ PipelineVisitor::PipelineVisitor(
       inst_stage_mapping_(inst_stage_mapping),
       stages_with_recomputation_(stages_with_recomputation),
       num_backward_stages_(num_backward_stages) {
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.gradient_accumulation_zeroing_sequences.push({});
-  // Push a new vector for the write undef sequences onto the stack.
-  res.pipelining_write_undef_sequences.push({});
+  EnterVariableScope();
 }
 
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
@@ -1108,7 +1110,9 @@ PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
                       GetNumberOfBackwardPipelineStages(pipeline), res, inputs,
-                      description, name) {}
+                      description, name) {
+  EnterVariableScope();
+}
 
 Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   const int64 overlap_length =
@@ -1158,50 +1162,67 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
   return program;
 }
 
-StatusOr<poplar::program::Sequence*> PipelineVisitor::GetSequenceForInstruction(
-    const HloInstruction* hlo) {
+Status PipelineVisitor::AddSequenceForInstruction(
+    const HloInstruction* hlo, const poplar::program::Sequence& seq) {
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   switch (hlo->opcode()) {
     case HloOpcode::kCall: {
       if (IsResourceUpdate(hlo)) {
-        return &resource_update_;
+        resource_update_.add(seq);
       } else {
-        return IsPipelineStageRecomputation(hlo)
-                   ? &recomputation_sequences_[stage]
-                   : &program_sequences_[stage];
+        if (IsPipelineStageRecomputation(hlo)) {
+          recomputation_sequences_[stage].add(seq);
+        } else {
+          program_sequences_[stage].add(seq);
+        }
       }
+      return Status::OK();
     }
     case HloOpcode::kGetTupleElement: {
       const HloInstruction* gte_input = hlo->operand(0);
       if (IsResourceUpdate(gte_input)) {
-        return &resource_update_;
+        resource_update_.add(seq);
       } else {
-        return IsPipelineStageRecomputation(gte_input)
-                   ? &recomputation_sequences_[stage]
-                   : &program_sequences_[stage];
+        if (IsPipelineStageRecomputation(gte_input)) {
+          recomputation_sequences_[stage].add(seq);
+        } else {
+          program_sequences_[stage].add(seq);
+        }
       }
+      return Status::OK();
     }
     case HloOpcode::kInfeed: {
-      return &infeed_sequences_[stage];
+      infeed_sequences_[stage].add(seq);
+      return Status::OK();
     }
     case HloOpcode::kParameter: {
-      return &program_sequences_[stage];
+      program_sequences_[stage].add(seq);
+      return Status::OK();
     }
     case HloOpcode::kTuple: {
       CHECK_EQ(hlo->parent()->root_instruction(), hlo);
-      return &resource_update_;
+      resource_update_.add(seq);
+      return Status::OK();
     }
     case HloOpcode::kCustomCall: {
       if (IsCreateBuffer()(hlo)) {
-        return &pipeline_write_undef_sequence_;
+        pipeline_write_undef_sequence_.add(seq);
+        return Status::OK();
       }
       TF_FALLTHROUGH_INTENDED;
     }
     default: {
-      return InternalErrorStrCat("Trying to get a sequence for ",
+      return InternalErrorStrCat("Trying to add a sequence for ",
                                  hlo->ToString(), " which is not supported.");
     }
   }
+}
+
+Status PipelineVisitor::AddSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence&) {
+  return UnimplementedStrCat(
+      "Sequence grouping not implemented in the PipelineVisitor: ",
+      inst->ToString());
 }
 
 Status PipelineVisitor::HandleNotImplemented(HloInstruction* hlo) {
@@ -1226,29 +1247,31 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
   const std::string debug_name = GetDebugName(inst);
 
-  TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                      GetInputsForDeferredInplaceRBInstruction(
-                          inst, /*preserve_aliasing*/ true));
+  TF_ASSIGN_OR_RETURN(
+      DeferredArgRBVectors inputs,
+      GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
   const bool has_recomputation = stages_with_recomputation_.contains(stage);
 
   std::unique_ptr<PipelineStageVisitor> visitor;
   if (has_recomputation) {
     DeferredArgRBVectors visitor_inputs = inputs;
-    // When recomputation is enabled, we need to add clones for inplace inputs
-    // of the pipeline stage (i.e. non parameters/weights), so that we can
-    // reuse the code for the recomputation stage.
-    auto inst_description = HloInstructionDescription(inst);
-    for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-      for (size_t flat_idx = 0; flat_idx != inputs[inplace_idx].size();
-           ++flat_idx) {
-        auto optional_tensor = visitor_inputs[inplace_idx][flat_idx];
+    // When recomputation is enabled, we need to add clones for all non read
+    // only inputs so that we can reuse the sequence between the forward and the
+    // recomputation stage.
+    for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+      const HloInstruction* operand = inst->operand(op_idx);
+      if (IsPipelineStageReadOnlyInput(operand)) {
+        continue;
+      }
+      for (size_t flat_idx = 0; flat_idx != inputs[op_idx].size(); ++flat_idx) {
+        auto optional_tensor = visitor_inputs[op_idx][flat_idx];
         if (optional_tensor) {
           const std::string name =
-              absl::StrCat(debug_name, "/clone/", inplace_idx, "/", flat_idx);
-          VLOG(1) << "Adding a clone for inplace input (" << inplace_idx << ", "
-                  << flat_idx << ").";
-          visitor_inputs[inplace_idx][flat_idx] = graph.clone(
+              absl::StrCat(debug_name, "/clone/", op_idx, "/", flat_idx);
+          VLOG(1) << "Adding a clone for input (" << op_idx << ", " << flat_idx
+                  << ").";
+          visitor_inputs[op_idx][flat_idx] = graph.clone(
               *optional_tensor, name,
               poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         }
@@ -1270,7 +1293,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
 
   TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(visitor.get(), order));
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst));
+  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst, inputs));
 
   // Get the sequence for the stage.
   if (has_recomputation) {
@@ -1427,13 +1450,13 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
 
   if (IsResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
-                            hlo, /*preserve_aliasing*/ true));
-
-    TF_ASSIGN_OR_RETURN(resource_update_,
+    TF_ASSIGN_OR_RETURN(
+        DeferredArgRBVectors inputs,
+        GetInputsForDeferredRBInstruction(hlo, /*preserve_aliasing*/ true));
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
                         CreateResourceUpdateOp(resources_, hlo, inputs,
                                                hlo->shape(), tensor_map));
+    resource_update_.add(seq);
   } else {
     TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
 
@@ -1458,12 +1481,15 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
 
 Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
-
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       CreateCopy(resources_, hlo, GetOutputShape(hlo), tensor_map));
-  copy_sequences_[stage].add(prog);
+  if (hlo->user_count() == 1 && IsResourceUpdate(hlo->users()[0])) {
+    resource_update_.add(prog);
+  } else {
+    TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+    copy_sequences_[stage].add(prog);
+  }
 
   return Status::OK();
 }
@@ -1571,26 +1597,30 @@ Status PipelineVisitor::HandleDeferredAllocationWhile(HloInstruction* hlo) {
 }
 
 Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
-  // Create a sequence for all the zeroing of pipeline tensors (gradient
-  // accumulation).
-  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
-  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
-    pipeline_tensors_zeroing_sequence_.add(zeroing_seq);
+  poplar::Graph& graph = GetMasterGraph(resources_);
+
+  // Create a sequence for all the zeroing gradient accumulation buffers.
+  auto& zeroing_tensors =
+      resources_.gradient_accumulation_zeroing_tensors.top();
+  ZeroTensors(resources_, graph, zeroing_tensors,
+              pipeline_tensors_zeroing_sequence_, name_ + "/ZeroAccumulators");
+
+  auto& zeroing_remote_buffers =
+      resources_.gradient_accumulation_zeroing_remote_buffers.top();
+  for (auto zeroing_remote_buffer : zeroing_remote_buffers) {
+    pipeline_tensors_zeroing_sequence_.add(zeroing_remote_buffer);
   }
-  resources_.gradient_accumulation_zeroing_sequences.pop();
 
   // Create a sequence for all the write undefs of pipeline tensors (FIFOs).
   auto& write_undefs = resources_.pipelining_write_undef_sequences.top();
   for (poplar::program::Sequence& write_undef : write_undefs) {
     pipeline_write_undef_sequence_.add(write_undef);
   }
-  resources_.pipelining_write_undef_sequences.pop();
+
+  TF_RETURN_IF_ERROR(ExitVariableScope());
 
   // Wrap each of the poplar sequences in a poplar function to maximise code
-  // reuse.
-  poplar::Graph& graph = GetMasterGraph(resources_);
-
-  // Transform a given sequence into a poplar function call sequence.
+  // reuse. Transform a given sequence into a poplar function call sequence.
   auto to_function = [&graph](const poplar::program::Sequence& seq) mutable
       -> poplar::program::Sequence {
     auto f = graph.addFunction(seq);
@@ -1613,8 +1643,9 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   return Status::OK();
 }
 
-poplar::program::Sequence& PipelineVisitor::GetSequenceForAliasingCopy() {
-  return resource_update_;
+void PipelineVisitor::AddSequenceForAliasingCopy(
+    const HloInstruction*, const poplar::program::Sequence& seq) {
+  resource_update_.add(seq);
 }
 
 std::unique_ptr<PipelineVisitor> ParallelPipelineVisitor::Create(

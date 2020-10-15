@@ -163,6 +163,11 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertEqual(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
     self.assertEqual(cfg.ipu_version, 1)
     self.assertTrue(cfg.has_ipu_version)
+    self.assertFalse(cfg.enable_remote_buffers_without_device)
+
+    cfg = ipu.utils.create_ipu_config()
+    cfg = ipu.utils.set_ipu_connection_type(cfg, enable_remote_buffers=True)
+    self.assertTrue(cfg.enable_remote_buffers_without_device)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()
@@ -763,7 +768,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
   def testGclOptions(self):
     cfg = ipu.utils.create_ipu_config()
     self.assertEqual(len(cfg.gcl_options), 0)
-    self.assertEqual(cfg.gcl_num_io_tiles, 0)
+    self.assertEqual(cfg.num_io_tiles, 0)
 
     with self.assertRaisesRegex(TypeError,
                                 "`gcl_options` must be a dictionary"):
@@ -773,7 +778,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
                                     num_io_tiles=32,
                                     gcl_options={"maxBytesPerTile": "128"})
 
-    self.assertEqual(cfg.gcl_num_io_tiles, 32)
+    self.assertEqual(cfg.num_io_tiles, 32)
     self.assertEqual(len(cfg.gcl_options), 1)
     self.assertEqual(cfg.gcl_options[0].option, "maxBytesPerTile")
     self.assertEqual(cfg.gcl_options[0].value, "128")

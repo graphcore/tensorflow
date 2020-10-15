@@ -1,18 +1,6 @@
 Tutorial
 --------
 
-TensorFlow is a powerful graph-modelling framework that can be used for the
-development, training and deployment of deep learning models. In the Graphcore
-software stack, TensorFlow sits at the highest level of abstraction. Poplar
-and PopLibs provide a software interface to operations running on the IPU.
-
-.. figure:: figures/Tensorflow_Poplar.png
-    :width: 100%
-    :alt: TensorFlow abstraction
-    :align: center
-
-    TensorFlow abstraction in relation to Poplar and the IPU
-
 For the discussion that follows, it is important to understand the three key
 concepts of *graph*, *session* and *device* as well as their functional
 interdependence.
@@ -70,13 +58,14 @@ the calculations from the separate IPUs to produce a single final result.
 A basic graph
 ~~~~~~~~~~~~~
 
-We begin with the most humble of aspirations: the ability to add.
+We begin with a simple example of adding some floating-point numbers.
 
 .. literalinclude:: tutorial_basic.py
     :language: python
     :linenos:
+    :emphasize-lines: 3,4,8-12,14-17,20-25,28
 
-Let's review the various key sections of the code as they are presented. In
+Let's review the key sections of the code. In
 lines 1-5 are the basic import statements, two of which pertain to the IPU
 specifically. Line 3 imports the IPU API, which will be the main interface
 to set configuration options for running the IPU session. ``ipu_scope`` is a helper
@@ -85,57 +74,24 @@ that the hardware is properly initialised when called by the script).
 
 .. literalinclude:: tutorial_basic.py
     :language: python
+    :linenos:
+    :lineno-start: 8
     :start-at: # Configure arguments for targeting the IPU
     :end-at: ipu.utils.configure_ipu_system
 
-In this section of the code basic configuration options are being defined.
+In this section of the code, basic configuration options are being defined.
 Boolean flags are passed to ``create_ipu_config``, which turn on
 profiling and a text-format report.
 
-* The ``profiling`` parameter enables trace event
-  logging on the IPU. This will monitor operations on the chip, providing
-  detailed data about the session as it runs on
-  hardware.
+* The ``profiling`` parameter enables event
+  logging on the IPU. This will monitor operations on the IPU, providing
+  detailed data about the session as it runs.
 
 * ``use_poplar_text_report`` configures the text format
   of the generated report, making it more readable for debugging purposes.
 
 Because profiling adds code and extra variables to extract the profiling
 information, it can change the performance and memory usage of your program.
-
-Running on the IPU Model simulator
-..................................
-
-You can run the graph on IPU hardware or on an IPU Model running on the host.
-The IPU Model is a simulation of the *behaviour* of the IPU hardware.
-It does not implement every aspect of a real IPU. For example, the
-IPU Model does not support replicated graphs in TensorFlow
-(see :ref:`replicated_graphs`).
-
-When using an IPU Model instead of actual IPU hardware, the runtime operations
-will behave exactly as they would on hardware. However, the profiler will
-*estimate* the performance of operations and the memory use so the profiling
-information will not be as precise as running on hardware.
-By default, the memory use will not include that required for IPU
-code.
-
-If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
-``True`` then Poplar will compile code for the IPU (in addition to the CPU code
-that is actually executed by the host). In this case, the reported
-IPU memory usage will include the memory used for code.
-
-The IPU Model can be a useful tool for debugging OOM-related issues.
-See :ref:`using_the_ipu_model` for more information.
-
-By default, the code will be run on IPU hardware. To run on the
-IPU Model instead, you need to set the environment variable
-``TF_POPLAR_FLAGS='--use_ipu_model'``, for example:
-
-.. code-block:: python
-
-    # Using IPU model instead of IPU hardware
-    if self.base_dictionary['ipu_model']:
-        os.environ['TF_POPLAR_FLAGS'] = '--use_ipu_model'
 
 Selecting hardware to run on
 ............................
@@ -153,6 +109,8 @@ each section targeting a distinct IPU.
     :language: python
     :start-at: with tf.device("cpu"):
     :end-at: pc = tf.placeholder
+    :lineno-start: 14
+    :linenos:
 
 In this section, TensorFlow placeholders are being placed into the CPU part of
 the graph.  These will be used to feed data using a feed dictionary when
@@ -162,6 +120,8 @@ executing ``session.run()``.
     :language: python
     :start-at: def basic_graph(pa, pb, pc):
     :end-at: result = basic_graph(pa, pb, pc)
+    :lineno-start: 20
+    :linenos:
 
 In this section, a graph of operations is created to do simple arithmetic on
 three input tensors.  The ``ipu_scope`` directive is used to ensure that these
@@ -176,7 +136,7 @@ be seen in the console log:
     ...: I tensorflow/compiler/plugin/poplar/driver/executor.cc:660] Device /device:IPU:0 attached to IPU: 0
     [3. 8.]
 
-Beyond summing the vectors correctly, the line directly preceding informs us
+The last line shows the result of adding the vectors. The line before that informs us
 that the targeted device was the IPU, and the index of the IPU that ran
 the graph was IPU 0.
 
@@ -186,47 +146,59 @@ selected to run the graph may not be IPU 0, but could be any of
 the other IPUs that are free and available on the server. This will be covered
 in more detail in :ref:`sharding_a_graph`.
 
-An XLA graph
-~~~~~~~~~~~~
+Running on the IPU Model simulator
+..................................
 
-The previous script introduced a very basic graph that consisted of the
-summation of
-three vectors and published the results of a forward pass. For certain
-applications, it will be necessary to incorporate control flow structures, as in
-conditional ``if`` or ``while`` statements. Certain recurrent
-neural network (RNN) layers and long-short term memory (LSTM) cells have
-conditionals implicitly defined in their source code. In those cases, it will be
-necessary to use the XLA library to define the graph. XLA is an optimised
-linear algebra library that interfaces the graph to a set of optimisation
-parsers that render highly efficient computation sets.
+You can also run the graph on an "IPU Model" running on the host.
+The IPU Model is a simulation of the *behaviour* of the IPU hardware.
+It does not implement every aspect of a real IPU. For example, the
+IPU Model does not support replicated graphs in TensorFlow
+(see :ref:`replicated_graphs`).
 
-Using XLA has certain restrictions, the most pertinent of which for the
-current discussion is that the dimensions of all tensors involved in the
-computational graph must be fully defined at compile time. Dealing with this
-restriction can at times require some meticulous refactoring of placeholders or
-input tensors (especially when dealing with mini-batch processing) but does
-not constitute a significant development overhead.
+When using an IPU Model instead of actual IPU hardware, the runtime operations
+will behave exactly as they would on hardware. However, the profiler will
+*estimate* the performance of operations and memory use, so the profiling
+information will not be as precise as running on hardware.
+By default, the memory use will not include that required for IPU
+code.
 
-The main interface to the XLA library is ``ipu.ipu_compiler.compile()``,
+If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
+``True`` then Poplar will compile code for the IPU (in addition to the CPU code
+that is actually executed by the IPU Model). In this case, the reported
+IPU memory usage will include the memory used for code.
+
+The IPU Model can be a useful tool for debugging OOM-related issues.
+See :ref:`using_the_ipu_model` for more information.
+
+By default, the code will be run on IPU hardware. To run on the
+IPU Model instead, you need to set the environment variable
+``TF_POPLAR_FLAGS='--use_ipu_model'``, for example:
+
+.. code-block:: python
+
+    # Using IPU model instead of IPU hardware
+    if self.base_dictionary['ipu_model']:
+        os.environ['TF_POPLAR_FLAGS'] = '--use_ipu_model'
+
+
+Compiling the graph for the IPU
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+XLA (Accelerated Linear Algebra) is a domain-specific compiler for linear
+algebra that can accelerate TensorFlow models. The Graphcore implementation
+generates code optimised for the IPU.
+
+The main interface to XLA is the ``ipu.ipu_compiler.compile()`` function,
 which will take a graph and a feed dictionary for input tensors, and
-return a tensor set. ``ipu.ipu_compiler.compile`` sits between the graph
+return a tensor set. ``ipu.ipu_compiler.compile()`` sits between the graph
 definition and the session construct, as shown below:
 
-.. figure:: figures/Session_Graph_XLA.png
-    :width: 50%
-    :alt: ``xla.compile`` in relation to a session and graph
-    :align: center
-
-    ``xla.compile`` in relation to a session and graph
-
-In most IPU-specific implementations, it is likely that an
-entire graph will be parsed through ``ipu.ipu_compiler.compile``. However, it is also
-possible to compile only a portion of a graph with XLA and then combine the resulting
-tensor set with another, non-XLA, graph.
-
-Further details about
-XLA compilation are available on the TensorFlow website:
-https://www.tensorflow.org/xla/tutorials/xla_compile.
+.. note::
+    To ensure that your code is executed efficiently on the IPU, you should compile
+    it with ``ipu.ipu_compiler.compile()``. For operations that are to be placed on
+    an IPU, this should be called inside an ``ipu_scope``. However, this is not
+    necessary when using an ``IPUEstimator`` or ``IPUStrategy`` in `TensorFlow 2
+    <https://docs.graphcore.ai/projects/tensorflow-user-guide/en/latest/targetting_tf2.html>`_.
 
 Let's now build on our previous TensorFlow script by adding
 ``ipu.ipu_compiler.compile`` to the session definition.
@@ -234,49 +206,28 @@ Let's now build on our previous TensorFlow script by adding
 .. literalinclude:: tutorial_xla_compile.py
     :language: python
     :linenos:
+    :emphasize-lines: 29,33
 
 The script has now gone from calling ``basic_graph`` directly, to feeding it as
-the graph input to ``ipu.ipu_compiler.compile``. This takes the graph, along with
+the graph input to ``ipu.ipu_compiler.compile()``. This takes the graph, along with
 the corresponding placeholders, as input.
 
-Note that the dimensions of the placeholders fed to ``ipu.ipu_compiler.compile``
-have been defined on the CPU. The *values* of these tensors are not
-defined until the ``session.run`` call.
+Using XLA has certain restrictions, the most relevant of which is that the
+dimensions of all tensors involved in the graph must be fully defined at compile
+time.
 
-In other words, it is only the *dimensions* of the placeholders that are the
-critical information for ``ipu.ipu_compiler.compile`` so that it can parse
-the graph correctly at compile time.
+As a result, the dimensions of the placeholders fed to
+``ipu.ipu_compiler.compile()`` have been defined on the CPU. The *values* of these
+tensors are not defined until the ``session.run()`` call.
 
-Given that this graph and the one in the previous example are the same, it
-is apparent that ``ipu.ipu_compiler.compile`` is not actually required to
-execute the graph. However, if the following code:
+In most IPU-specific implementations, it is likely that an entire graph will be
+parsed through ``ipu.ipu_compiler.compile()``. However, it is also possible to
+compile only a portion of a graph with XLA and then combine the resulting tensor
+set with another, non-XLA, graph.
 
-.. code-block:: python
+Further details about XLA compilation are available on the TensorFlow website:
+https://www.tensorflow.org/xla/.
 
-    def basic_graph(pa, pb, pc):
-        # Do basic addition on tensors
-        o1 = pa + pb
-        o2 = pa + pc
-        simple_graph_output = o1 + o2
-        return simple_graph_output
-
-Were to be replaced with:
-
-.. code-block:: python
-
-    def while_loop_graph(pa):
-            c = tf.constant(0)
-
-            def body_of_while_loop(i):
-                return i+1
-
-            cond = lambda i: i < 10
-            loop = tf.while_loop(cond, body_of_while_loop, [c])
-            square = pa * pa
-            return loop, square, tf.no_op()
-
-Then ``ipu.ipu_compiler.compile`` would be strictly required, because of the use
-of the ``tf.while_loop()`` conditional statement.
 
 .. _sharding_a_graph:
 
@@ -301,10 +252,11 @@ Let's now return to our basic script and add the sharding component.
 .. literalinclude:: tutorial_sharding.py
     :language: python
     :linenos:
+    :emphasize-lines: 9,14,29-38,43
 
 Focusing on the sharding parts of this new script, line 14 uses
-``auto_select_ipus`` to select four separate IPUs for the task. This will allow the
-script to go through the IPUs accessible by the host, determine which
+``auto_select_ipus`` to select four separate IPUs for the task. This will
+go through the IPUs accessible by the host, determine which
 are being utilised and which are free, and then subscribe to those IPUs that are
 available.
 
@@ -319,10 +271,7 @@ distinct shard, using
 
 As a result, shards 0 through 2 perform independent tensor sums, while shard
 3 performs an accumulated sum from the other three shards. In line 43
-we are using ``xla.compile`` to parse the graph.
-
-Note that sharding can
-also be performed without running through the XLA library.
+we are using ``ipu.ipu_compiler.compile()`` to parse the graph.
 
 The output of the session run will be something similar to this:
 
@@ -341,3 +290,73 @@ These are the IPUs selected to host the graph and to process respective shards
 as indexed in the code. See the `IPU Command Line Tools
 <https://docs.graphcore.ai/projects/command-line-tools/>`_ document for
 more information about how IPU IDs are allocated.
+
+Adding variables
+~~~~~~~~~~~~~~~~
+
+Do not add variables using ``tf.Variable([shape], initializer)``, because they will fail
+to obey certain operations, such as ``assign_add``.
+
+Make sure that all variables are added using a variable scope that is marked as
+a resource. This can be done globally, as shown below:
+
+.. code-block:: python
+
+  vscope = tf.get_variable_scope()
+  vscope.set_use_resource(True)
+  ...
+  var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
+  ...
+
+Or it can be done locally, in a specific scope:
+
+.. code-block:: python
+
+  with tf.variable_scope("vs", use_resource=True):
+    var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
+
+Troubleshooting
+...............
+
+If you get an error similar to the following (especially the lines containing
+``VariableV2``) it indicates that a variable has been created which is not a
+resource variable.
+
+.. code-block:: none
+
+    InvalidArgumentError (see above for traceback): Cannot assign a device for operation
+      'InceptionV1/Logits/Conv2d_0c_1x1/biases': Could not satisfy explicit device specification
+      '/device:IPU:0' because no supported kernel for IPU devices is available.
+    Colocation Debug Info:
+    Colocation group had the following types and devices:
+    Const: CPU IPU XLA_CPU
+    Identity: CPU IPU XLA_CPU
+    Fill: CPU IPU XLA_CPU
+    Assign: CPU
+    VariableV2: CPU
+
+Note on the global_step counter
+...............................
+
+More advanced execution control frameworks in TensorFlow use a scalar counter
+called ``global_step`` to count the number of iterations of training which have
+occurred. This counter is serialised along with the model. It allows the model
+to base parameters on the step count, even if the model is run multiple times.
+
+There is an ``add`` operation which adds to the ``global_step`` scalar on each
+training pass.  If the ``global_step`` variable is placed on the IPU device,
+then this increment operation will occur on the IPU too.  This will cause the
+Poplar training engine to be swapped out for the increment engine on each
+training step, causing very poor performance.
+
+To avoid this, use the expression
+``tf.train.get_or_create_global_step()`` in the CPU context before you create any special training
+sessions. This will ensure that the global_step variable is on the CPU.
+
+.. code-block:: python
+
+  with tf.device("cpu"):
+    tf.train.get_or_create_global_step()
+
+  with ipu.scopes.ipu_scope("/device:IPU:0"):
+    out = ipu.ipu_compiler.compile(model_fn, [...])

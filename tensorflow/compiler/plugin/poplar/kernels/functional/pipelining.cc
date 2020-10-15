@@ -264,13 +264,17 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
+                                     &gradient_accumulation_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
                                      &batch_serialization_iterations_));
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("offload_activations", &offload_activations_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_gradient_accumulation_buffers",
                                      &offload_gradient_accumulation_buffers_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_weight_sharding",
+                                     &replicated_weight_sharding_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
     OP_REQUIRES_OK(
@@ -362,9 +366,10 @@ class PipelineOp : public XlaOpKernel {
                             PoplarBackendConfig_CallConfig_Type_Name(
                                 PoplarBackendConfig::CallConfig::Pipeline)));
     // Set the pipeline depth.
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
-                            std::to_string(pipeline_depth_)));
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(GRADIENT_ACCUMULATION_COUNT),
+                 std::to_string(gradient_accumulation_count_)));
     // Set the batch serialization iterations.
     OP_REQUIRES_OK(
         ctx,
@@ -399,6 +404,16 @@ class PipelineOp : public XlaOpKernel {
             outputs,
             FrontendAttributeId_Name(OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS),
             offload_gradient_accumulation_buffers_));
+    // Set the replicated_weight_sharding flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(PARTITION_VARIABLES),
+                       replicated_weight_sharding_));
+    // Set the offload_weights flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
+                       offload_weights_));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -425,13 +440,15 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 pipeline_depth_;
+  int64 gradient_accumulation_count_;
   int64 batch_serialization_iterations_;
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;
   std::string offload_activations_;
   std::string offload_gradient_accumulation_buffers_;
+  std::string replicated_weight_sharding_;
+  std::string offload_weights_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

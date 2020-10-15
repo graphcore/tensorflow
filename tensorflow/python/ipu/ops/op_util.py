@@ -20,6 +20,8 @@ Popnn primitive neural network operators
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
+from tensorflow.python.eager import context
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import math_grad
@@ -28,6 +30,8 @@ from tensorflow.python.util import tf_contextlib
 
 
 def SetMlType(op, ml_type):
+  if context.executing_eagerly():
+    return op
   if ml_type:
     operation = op if isinstance(op, ops.Operation) else op.op
     attrs = xla_data_pb2.FrontendAttributes()
@@ -238,3 +242,18 @@ def gradient_override_scope(training):
     with ops.get_default_graph().as_default() as g:
       with g.gradient_override_map(gradients_override_map()):
         yield
+
+
+def get_accumulator_dtype(variable, dtype_override):
+  """Get the accumulator dtype for the given variable."""
+  if dtype_override is None:
+    return variable.dtype
+
+  # Note that a `DType` is callable, so only try to call it if validation fails.
+  try:
+    return dtypes.as_dtype(dtype_override)
+  except TypeError:
+    if callable(dtype_override):
+      return dtypes.as_dtype(dtype_override(variable))
+    else:
+      raise

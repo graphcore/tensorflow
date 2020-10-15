@@ -41,10 +41,13 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
   const TensorOrRemoteBufferVector& GetLoopState() const;
 
  protected:
-  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
-      const HloInstruction* inst);
+  Status AddSequenceForInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
-  poplar::program::Sequence& GetSequenceForAliasingCopy() override;
+  void AddSequenceForAliasingCopy(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
  private:
   // Sequence which is executed once before the loop starts executing.

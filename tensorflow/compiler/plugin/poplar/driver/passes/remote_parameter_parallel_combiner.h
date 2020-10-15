@@ -31,9 +31,6 @@ namespace poplarplugin {
  */
 class RemoteParameterParallelCombiner : public HloModulePass {
  public:
-  explicit RemoteParameterParallelCombiner(TensorAllocationMap& allocation_map)
-      : allocation_map_(allocation_map) {}
-
   absl::string_view name() const override {
     return "remote-parameter-parallel-combiner";
   }
@@ -41,9 +38,6 @@ class RemoteParameterParallelCombiner : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
   StatusOr<bool> RunOnComputation(HloComputation* comp);
-
- private:
-  TensorAllocationMap& allocation_map_;
 };
 
 }  // namespace poplarplugin

@@ -48,6 +48,12 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
 
   // Convert the paths into FIFOs.
   for (auto& path : paths) {
+    if (schedule ==
+            PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved &&
+        path.GetType() != PipelinePath::Type::kForwardToBackward) {
+      continue;
+    }
+
     const auto& visited_stages = path.GetVisitedStages();
     HloInstruction* stage = path.GetNewConsumerStage();
 
@@ -97,13 +103,9 @@ StatusOr<bool> PipelineCommunicationOptimizer::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
   switch (schedule) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential: {
-      TF_ASSIGN_OR_RETURN(changed, OptimizePipeline(pipeline_op));
-      break;
-    }
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
     case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved: {
-      VLOG(1) << "Interleaved schedule is not supported by the "
-                 "PipelineCommunicationOptimizer pass.";
+      TF_ASSIGN_OR_RETURN(changed, OptimizePipeline(pipeline_op));
       break;
     }
     default: { return FailedPrecondition("Unknown pipeline schedule."); }

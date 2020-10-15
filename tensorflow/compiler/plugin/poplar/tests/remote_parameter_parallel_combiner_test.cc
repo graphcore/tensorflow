@@ -46,12 +46,12 @@ TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoLoads) {
   const auto hlo_string = R"(
 HloModule top
 
-ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
+ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[1]) {
   %arg1 = f32[] parameter(0)
   %arg2 = f32[2] parameter(1)
-  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  ROOT %tuple = (f32[], f32[2]) tuple(%load1, %load2)
+  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %load2 = f32[1] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[1]) tuple(%load1, %load2)
 }
   )";
 
@@ -66,8 +66,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -79,6 +78,8 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
 
   // Check that they were merged.
   EXPECT_EQ(load_inst->operand_count(), 2);
+  EXPECT_EQ(load_inst->GetReplicationFactor(0), 1);
+  EXPECT_EQ(load_inst->GetReplicationFactor(1), 2);
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
@@ -115,8 +116,8 @@ HloModule top
 ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   %arg1 = f32[] parameter(0)
   %arg2 = f32[2] parameter(1)
-  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  %load1 = f32[] custom-call(f32[] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   ROOT %tuple = (f32[], f32[2]) tuple(%load1, %load2)
 }
   )";
@@ -140,8 +141,7 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   TF_CHECK_OK(load1->AddControlDependencyTo(load2));
 
   // Expect that we do nothing.
-  TensorAllocationMap allocation_map;
-  ASSERT_FALSE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_FALSE(RemoteParameterParallelCombiner()
                    .RunOnComputation(module->entry_computation())
                    .ValueOrDie());
 }
@@ -150,14 +150,14 @@ TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoStores) {
   const auto hlo_string = R"(
 HloModule top
 
-ENTRY %top (arg1: f32[], arg2: f32[]) -> (f32[], f32[]) {
+ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   %arg1 = f32[] parameter(0)
-  %arg2 = f32[] parameter(1)
+  %arg2 = f32[2] parameter(1)
   %c1 = f32[] constant(1)
-  %c2 = f32[] constant(2)
-  %store1 = f32[] custom-call(f32[] %arg1, f32[] %c1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  %store2 = f32[] custom-call(f32[] %arg2, f32[] %c2), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  ROOT %tuple = (f32[], f32[]) tuple(%store1, %store2)
+  %c2 = f32[1] constant({2})
+  %store1 = f32[] custom-call(f32[] %arg1, f32[] %c1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %store2 = f32[2] custom-call(f32[2] %arg2, f32[1] %c2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[2]) tuple(%store1, %store2)
 }
   )";
 
@@ -171,9 +171,9 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> (f32[], f32[]) {
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
@@ -186,6 +186,9 @@ ENTRY %top (arg1: f32[], arg2: f32[]) -> (f32[], f32[]) {
 
   // Check that they were merged.
   EXPECT_EQ(store_inst->operand_count(), 4);
+  EXPECT_EQ(store_inst->GetReplicationFactor(0), 1);
+  EXPECT_EQ(store_inst->GetReplicationFactor(1), 2);
+  EXPECT_TRUE(IsLoweredInplace(store_inst));
 
   auto* root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
@@ -227,31 +230,33 @@ TEST_F(RemoteParameterParallelCombinerTest, TestSchedulingConstraints) {
   const auto hlo_string = R"(
 HloModule top
 
-ENTRY %top (arg1: f32[2], arg2: f32[2], arg3: f32[], arg4: f32[]) -> (f32[2], f32[2], f32[], f32[]) {
-  %arg1 = f32[2] parameter(0)
-  %arg2 = f32[2] parameter(1)
-  %arg3 = f32[] parameter(2)
-  %arg4 = f32[] parameter(3)
+ENTRY top {
+  arg1 = f32[] parameter(0)
+  arg2 = f32[] parameter(1)
+  arg3 = f32[2] parameter(2)
+  arg4 = f32[2] parameter(3)
 
-  %const1 = f32[2] constant(1)
-  %const2 = f32[] constant(1)
+  grad1 = f16[] parameter(4)
+  grad2 = f16[2] parameter(5)
+  cast1 = f32[] convert(grad1)
+  cast2 = f32[2] convert(grad2)
 
-  %load1 = f32[2] custom-call(f32[2] %arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  %load3 = f32[] custom-call(f32[] %arg3), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  %load4 = f32[] custom-call(f32[] %arg4), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  load1 = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load2 = f32[] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  load3 = f32[2] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load4 = f32[2] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
-  %add1 = f32[2] add(load1, const1), sharding={maximal device=0}
-  %add2 = f32[2] add(load2, const1), sharding={maximal device=1}
-  %add3 = f32[] add(load3, const2), sharding={maximal device=0}
-  %add4 = f32[] add(load4, const2), sharding={maximal device=1}
+  add1 = f32[] add(load1, cast1), sharding={maximal device=0}
+  add2 = f32[] add(load2, cast1), sharding={maximal device=1}
+  add3 = f32[2] add(load3, cast2), sharding={maximal device=0}
+  add4 = f32[2] add(load4, cast2), sharding={maximal device=1}
 
-  %store1 = f32[2] custom-call(f32[2] %arg1, %add1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  %store2 = f32[2] custom-call(f32[2] %arg2, %add1), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
-  %store3 = f32[] custom-call(f32[] %arg3, %add1), custom_call_target="RemoteParameterStore", sharding={maximal device=0}
-  %store4 = f32[] custom-call(f32[] %arg4, %add1), custom_call_target="RemoteParameterStore", sharding={maximal device=1}
+  store1 = f32[] custom-call(arg1, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  store2 = f32[] custom-call(arg2, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  store3 = f32[2] custom-call(arg3, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  store4 = f32[2] custom-call(arg4, add1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
 
-  ROOT %tuple = (f32[2], f32[2], f32[], f32[]) tuple(%store1, %store2, %store3, %store4)
+  ROOT %tuple = (f32[], f32[], f32[2], f32[2]) tuple(store1, store2, store3, store4)
 }
   )";
 
@@ -265,28 +270,134 @@ ENTRY %top (arg1: f32[2], arg2: f32[2], arg3: f32[], arg4: f32[]) -> (f32[2], f3
 
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
 
-  TensorAllocationMap allocation_map;
-  ASSERT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 
-  const auto* store1 =
+  const auto* store12 =
       module->entry_computation()->root_instruction()->operand(0)->operand(0);
-  EXPECT_EQ(
-      Cast<HloParameterInstruction>(store1->operand(0))->parameter_number(), 0);
-  EXPECT_EQ(
-      Cast<HloParameterInstruction>(store1->operand(1))->parameter_number(), 1);
+  EXPECT_EQ(store12->operand(0)->parameter_number(), 0);
+  EXPECT_EQ(store12->operand(1)->parameter_number(), 1);
 
-  // Check that store1 is scheduled before load2.
-  EXPECT_EQ(store1->control_successors().size(), 1);
+  // Check that store(arg1, arg2) is scheduled before load(arg3, arg4), i.e.
+  // smallest first.
+  EXPECT_EQ(store12->control_successors().size(), 1);
 
-  auto const* load2 =
-      Cast<HloRemoteParameterLoad>(store1->control_successors()[0]);
-  EXPECT_EQ(
-      Cast<HloParameterInstruction>(load2->operand(0))->parameter_number(), 2);
-  EXPECT_EQ(
-      Cast<HloParameterInstruction>(load2->operand(1))->parameter_number(), 3);
+  auto const* load34 =
+      Cast<HloRemoteParameterLoad>(store12->control_successors()[0]);
+  EXPECT_EQ(load34->operand(0)->parameter_number(), 2);
+  EXPECT_EQ(load34->operand(1)->parameter_number(), 3);
+
+  // Check that the cast1 "input computation" has a load predecessor.
+  auto const* cast1 = FindInstruction(module, "cast1");
+  ASSERT_NE(cast1, nullptr);
+  EXPECT_EQ(cast1->control_predecessors().size(), 1);
+  EXPECT_TRUE(is_load(cast1->control_predecessors()[0]));
+}
+
+TEST_F(RemoteParameterParallelCombinerTest,
+       TestSchedulingConstraintsWithTwoMoments) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY top {
+  p0 = f32[] parameter(0)
+  g0 = f32[] parameter(1)
+  m0 = f32[] parameter(2)
+  v0 = f32[] parameter(3)
+
+  p1 = f32[] parameter(4)
+  g1 = f32[] parameter(5)
+  m1 = f32[] parameter(6)
+  v1 = f32[] parameter(7)
+
+  p2 = f32[] parameter(8)
+  g2 = f32[] parameter(9)
+  m2 = f32[] parameter(10)
+  v2 = f32[] parameter(11)
+
+  p3 = f32[] parameter(12)
+  g3 = f32[] parameter(13)
+  m3 = f32[] parameter(14)
+  v3 = f32[] parameter(15)
+
+  m0_loaded = f32[] custom-call(m0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  m0_updated = f32[] add(m0_loaded, g0), sharding={maximal device=0}
+  g0_squared = f32[] multiply(g0, g0), sharding={maximal device=0}
+  v0_loaded = f32[] custom-call(v0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v0_updated = f32[] add(v0_loaded, g0_squared), sharding={maximal device=0}
+  p0_delta = f32[] divide(m0_loaded, v0_loaded), sharding={maximal device=0}
+  p0_updated = f32[] add(p0_delta, p0), sharding={maximal device=0}
+  m0_stored = f32[] custom-call(m0, m0_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v0_stored = f32[] custom-call(v0, v0_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+
+  m1_loaded = f32[] custom-call(m1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  m1_updated = f32[] add(m1_loaded, g1), sharding={maximal device=0}
+  g1_squared = f32[] multiply(g1, g1), sharding={maximal device=0}
+  v1_loaded = f32[] custom-call(v1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v1_updated = f32[] add(v1_loaded, g1_squared), sharding={maximal device=0}
+  p1_delta = f32[] divide(m1_loaded, v1_loaded), sharding={maximal device=0}
+  p1_updated = f32[] add(p1_delta, p1), sharding={maximal device=0}
+  m1_stored = f32[] custom-call(m1, m1_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  v1_stored = f32[] custom-call(v1, v1_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+
+  m2_loaded = f32[] custom-call(m2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  m2_updated = f32[] add(m2_loaded, g2), sharding={maximal device=1}
+  g2_squared = f32[] multiply(g2, g2), sharding={maximal device=1}
+  v2_loaded = f32[] custom-call(v2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v2_updated = f32[] add(v2_loaded, g2_squared), sharding={maximal device=1}
+  p2_delta = f32[] divide(m2_loaded, v2_loaded), sharding={maximal device=1}
+  p2_updated = f32[] add(p2_delta, p2), sharding={maximal device=1}
+  m2_stored = f32[] custom-call(m2, m2_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v2_stored = f32[] custom-call(v2, v2_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+
+  m3_loaded = f32[] custom-call(m3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  m3_updated = f32[] add(m3_loaded, g3), sharding={maximal device=1}
+  g3_squared = f32[] multiply(g3, g3), sharding={maximal device=1}
+  v3_loaded = f32[] custom-call(v3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v3_updated = f32[] add(v3_loaded, g3_squared), sharding={maximal device=1}
+  p3_delta = f32[] divide(m3_loaded, v3_loaded), sharding={maximal device=1}
+  p3_updated = f32[] add(p3_delta, p3), sharding={maximal device=1}
+  m3_stored = f32[] custom-call(m3, m3_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  v3_stored = f32[] custom-call(v3, v3_updated), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+
+  ROOT tuple = (f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[], f32[]) tuple(p0_updated, m0_stored, v0_stored, p1_updated, m1_stored, v1_stored, p2_updated, m2_stored, v2_stored, p3_updated, m3_stored, v3_stored)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
+                  .RunOnComputation(module->entry_computation())
+                  .ValueOrDie());
+
+  int64 num_loads = 0;
+
+  for (auto* s : module->entry_computation()->MakeInstructionPostOrder()) {
+    if (is_load(s)) {
+      ++num_loads;
+
+      // The last two loads should have a store predecessor.
+      if (num_loads > 2) {
+        const auto num_store_predecessors =
+            absl::c_count_if(s->control_predecessors(), is_store);
+        EXPECT_EQ(num_store_predecessors, 1);
+      }
+    }
+  }
+
+  EXPECT_EQ(num_loads, 4);
 }
 
 TEST_F(RemoteParameterParallelCombinerTest, TestPipeline) {
@@ -329,9 +440,9 @@ resource_update {
   bcast2 = f32[1,4,4,2] broadcast(arg3), dimensions={}
   bcast3 = f32[1,4,2,4] broadcast(arg3), dimensions={}
 
-  load0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0), custom_call_target="RemoteParameterLoad"
-  load1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1), custom_call_target="RemoteParameterLoad"
-  load2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2), custom_call_target="RemoteParameterLoad"
+  load0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
 
   load0_t = f32[1,4,2,4] transpose(load0), dimensions={0, 1, 3, 2}
 
@@ -341,9 +452,9 @@ resource_update {
 
   new_arg0_t = f32[1,4,4,2] transpose(new_arg0), dimensions={0, 1, 3, 2}
 
-  store0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0, new_arg0_t), custom_call_target="RemoteParameterStore"
-  store1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1, new_arg1), custom_call_target="RemoteParameterStore"
-  store2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2, new_arg2), custom_call_target="RemoteParameterStore"
+  store0 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg0, new_arg0_t), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  store1 = f32[1,4,4,2] custom-call(f32[1,4,4,2] %arg1, new_arg1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  store2 = f32[1,4,4,1] custom-call(f32[1,4,4,1] %arg2, new_arg2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
 
   ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,1]) tuple(store0, store1, store2)
 }
@@ -401,11 +512,9 @@ ENTRY e {
   CompilerAnnotations annotations(module);
 
   EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  ASSERT_TRUE(RemoteParameterParallelCombiner().Run(module).ValueOrDie());
   EXPECT_TRUE(AllocationFinder(annotations).Run(module).ValueOrDie());
   EXPECT_TRUE(ForwardAllocation(annotations).Run(module).ValueOrDie());
-
-  RemoteParameterParallelCombiner combiner(annotations.tensor_allocation_map);
-  ASSERT_TRUE(combiner.Run(module).ValueOrDie());
 
   const auto pipeline_comp = FindComputation(module, "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
@@ -429,15 +538,25 @@ ENTRY e {
     if (is_load(inst) && inst->operand_count() == 2) {
       found_combined_load = true;
       EXPECT_EQ(inst->shape(), combined_shape);
-
-      // Check that the allocation map was updated.
-      const auto& target0 =
-          annotations.tensor_allocation_map.at(TensorLocation(inst, 0));
-      EXPECT_EQ(target0.tgt->name(), "new_arg0");
-      EXPECT_EQ(target0.backward_path.size(), 2);
-      EXPECT_EQ(target0.backward_path[0]->opcode(),
-                HloOpcode::kGetTupleElement);
-      EXPECT_EQ(target0.backward_path[1]->opcode(), HloOpcode::kTranspose);
+      for (auto user : inst->users()) {
+        EXPECT_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+        if (user->tuple_index() == 0) {
+          const auto& target0 =
+              annotations.tensor_allocation_map.at(TensorLocation(user, 0));
+          EXPECT_EQ(target0.tgt->name(), "new_arg0");
+          EXPECT_EQ(target0.backward_path.size(), 1);
+          EXPECT_EQ(target0.backward_path[0]->opcode(), HloOpcode::kTranspose);
+        } else {
+          EXPECT_EQ(user->tuple_index(), 1);
+          // arg4 should have its layout from arg1 from the new combined load.
+          const auto* arg4 = resource_update_comp->parameter_instruction(4);
+          const auto& target =
+              annotations.tensor_allocation_map.at(TensorLocation(arg4, 0));
+          EXPECT_EQ(target.tgt->name(), "new_arg1");
+          EXPECT_EQ(*target.layout, user);
+          EXPECT_EQ(*target.layout_output_idx, 0);
+        }
+      }
     } else if (is_store(inst) && inst->operand_count() == 4) {
       found_combined_store = true;
       EXPECT_EQ(inst->shape(), combined_shape);
@@ -446,19 +565,6 @@ ENTRY e {
 
   EXPECT_TRUE(found_combined_load);
   EXPECT_TRUE(found_combined_store);
-
-  // arg4 should have its layout from arg1 from the new combined load.
-  const auto* arg4 = resource_update_comp->parameter_instruction(4);
-  const auto& target =
-      annotations.tensor_allocation_map.at(TensorLocation(arg4, 0));
-  EXPECT_EQ(target.tgt->name(), "new_arg1");
-  EXPECT_TRUE(target.layout.has_value());
-  EXPECT_TRUE(target.layout_output_idx.has_value());
-  EXPECT_TRUE(is_load(target.layout.value()));
-  EXPECT_EQ(target.layout.value()->shape().tuple_shapes_size(), 2);
-  EXPECT_EQ(
-      (*target.layout)->operand(*target.layout_output_idx)->parameter_number(),
-      1);
 }
 
 TEST_F(RemoteParameterParallelCombinerTest, TestInterControlDependencies) {
@@ -470,10 +576,10 @@ ENTRY top {
   arg2 = f32[2] parameter(1)
   arg3 = f32[1] parameter(2)
   arg4 = f32[1] parameter(3)
-  load1 = f32[2] custom-call(arg1), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
-  load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", sharding={maximal device=0}
-  load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", sharding={maximal device=1}
+  load1 = f32[2] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load2 = f32[2] custom-call(arg2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
+  load3 = f32[1] custom-call(arg3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  load4 = f32[1] custom-call(arg4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=1}
   ROOT tuple = (f32[2], f32[2]) tuple(load1, load2, load3, load4)
 }
   )";
@@ -504,8 +610,7 @@ ENTRY top {
   module->VerifyOrAddFailure("module should be valid before pass");
 
   // When: Running the pass.
-  TensorAllocationMap allocation_map;
-  EXPECT_TRUE(RemoteParameterParallelCombiner(allocation_map)
+  EXPECT_TRUE(RemoteParameterParallelCombiner()
                   .RunOnComputation(module->entry_computation())
                   .ValueOrDie());
 

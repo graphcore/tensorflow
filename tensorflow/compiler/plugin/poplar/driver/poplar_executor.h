@@ -400,7 +400,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   }
 
   bool EnableGatherSimplifier() const {
-    return current_config_.enable_gather_simplifier();
+    return !current_config_.disable_gather_simplifier();
   }
 
   bool EnableMatmulCombiner() const {
@@ -421,7 +421,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool SupportsRemoteBuffers() const;
 
-  int64 GclNumIoTiles() const { return current_config_.gcl_num_io_tiles(); }
+  int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }
+
+  bool ShouldPlaceOpsOnIoTiles() const {
+    return current_config_.place_ops_on_io_tiles() && GetNumIoTiles() > 0;
+  }
 
   poplar::OptionFlags GclOptions() const { return gcl_options_; }
 
@@ -556,6 +560,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     virtual StatusOr<int> GetEncodingWidth() const = 0;
 
     virtual xla::StatusOr<int> GetElementSize() const = 0;
+
+    virtual Status Notify(int replica) = 0;
   };
 
   template <typename T>
@@ -783,12 +789,18 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ConnectHostEmbeddingUpdateToRendezvous(
       const HostEmbeddingInfo& update_info,
       HostEmbeddingInterface_* embedding_interface);
+  Status ConnectHostEmbeddingNotify(
+      const HostEmbeddingInfo& notify_info,
+      HostEmbeddingInterface_* embedding_interface);
 
   Status DisconnectHostEmbeddingLookup(
       const HostEmbeddingInfo& lookup_info,
       HostEmbeddingInterface_* embedding_interface);
   Status DisconnectHostEmbeddingUpdate(
       const HostEmbeddingInfo& update_info,
+      HostEmbeddingInterface_* embedding_interface);
+  Status DisconnectHostEmbeddingNotify(
+      const HostEmbeddingInfo& notify_info,
       HostEmbeddingInterface_* embedding_interface);
 
   // Connect buffers provided by infeed transfer manager to Poplar

@@ -121,10 +121,13 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
             : false;
     const bool is_buffer_load_slice =
         IsPoplarInstruction(PoplarOp::BufferLoadSlice)(inst);
+    const bool is_inter_tileset_copy =
+        IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst);
 
     if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
         is_rw_user_op || is_recv_from_host || is_gradient_accumulator_create ||
-        is_in_memory_create_buffer || is_buffer_load_slice) {
+        is_in_memory_create_buffer || is_buffer_load_slice ||
+        is_inter_tileset_copy) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
@@ -135,8 +138,7 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
 
   Status HandleFusion(HloInstruction* inst) override {
-    if (IsPopOpsFusion(inst, "wide_const") ||
-        IsPopOpsFusion(inst, "reduction_fp16_input")) {
+    if (IsWideConstant(inst) || IsPopOpsFusion(inst, "reduction_fp16_input")) {
       allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
     }
     return Status::OK();

@@ -47,6 +47,7 @@ StatusOr<bool> PipelineGradientAccumulationOptimizer::OptimizePipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
 
   // There is nothing to optimize if there is no backward stages.

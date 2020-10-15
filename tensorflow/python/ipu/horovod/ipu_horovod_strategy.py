@@ -76,7 +76,7 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
       def model(lr):
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2],
-            pipeline_depth=pipeline_depth,
+            gradient_accumulation_count=gradient_accumulation_count,
             inputs=[lr],
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
@@ -95,7 +95,7 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
 
       _, per_worker_losses = outfeed_queue.dequeue()
 
-      # Mean across the local `pipeline_depth` batches:
+      # Mean across the local `gradient_accumulation_count` batches:
       per_worker_loss = math_ops.reduce_mean(per_worker_losses)
 
       # Global mean across the distributed workers (since it is already

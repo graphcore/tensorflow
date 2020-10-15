@@ -109,17 +109,23 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       int64 iterations) const;
 
  protected:
-  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
-      const HloInstruction* inst);
+  Status AddSequenceForInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
+
+  Status AddSequenceGroupedByInstruction(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
+
+  void AddSequenceForAliasingCopy(
+      const HloInstruction* inst,
+      const poplar::program::Sequence& seq) override;
 
   Status HandleDeferredAllocationCall(HloInstruction* inst) override;
   Status HandleNonDeferredCustomCall(HloInstruction* hlo) override;
   Status HandleDeferredAllocationTuple(HloInstruction* inst) override;
   Status HandleDeferredAllocationWhile(HloInstruction* inst) override;
-
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
-
-  poplar::program::Sequence& GetSequenceForAliasingCopy() override;
 
   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule_;
   std::vector<poplar::program::Sequence> copy_sequences_;

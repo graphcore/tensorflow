@@ -66,6 +66,31 @@ StatusOr<bool> AddCopiesForDuplicateOperands(HloInstruction* inst) {
 
   return changed;
 }
+
+StatusOr<bool> AddCopiesForResourceUpdate(HloInstruction* resource_update) {
+  HloComputation* comp = resource_update->parent();
+  HloInstruction* root = comp->root_instruction();
+  if (root->opcode() != HloOpcode::kTuple) {
+    return false;
+  }
+
+  bool changed = false;
+  for (int64 i = 0; i != resource_update->operand_count(); ++i) {
+    HloInstruction* operand = resource_update->mutable_operand(i);
+    if (root->OperandIndices(operand).empty()) {
+      continue;
+    }
+
+    // Found an operand used by the root tuple - insert a copy to the resource
+    // update.
+    HloInstruction* copy = comp->AddInstruction(HloInstruction::CreateUnary(
+        operand->shape(), HloOpcode::kCopy, operand));
+    operand->SetupDerivedInstruction(copy);
+    TF_RETURN_IF_ERROR(resource_update->ReplaceOperandWith(i, copy));
+    changed = true;
+  }
+  return changed;
+}
 }  // namespace
 
 StatusOr<bool> CopyInserter::Run(HloModule* module) {
@@ -84,6 +109,11 @@ StatusOr<bool> CopyInserter::Run(HloModule* module) {
         VLOG(10) << "Removing duplicate operands in " << inst->ToString();
         TF_ASSIGN_OR_RETURN(bool inst_changed,
                             AddCopiesForDuplicateOperands(inst));
+        changed |= inst_changed;
+      }
+      if (IsResourceUpdate(inst)) {
+        TF_ASSIGN_OR_RETURN(bool inst_changed,
+                            AddCopiesForResourceUpdate(inst));
         changed |= inst_changed;
       }
     }

@@ -29,7 +29,7 @@ Status SetInstructionMLType(HloInstruction* inst, const MLType& type) {
   if (status_or.ok()) {
     auto backend_config = status_or.ValueOrDie();
     backend_config.set_ml_type(type);
-    inst->set_backend_config(backend_config);
+    TF_RETURN_IF_ERROR(inst->set_backend_config(backend_config));
   }
   return status_or.status();
 }

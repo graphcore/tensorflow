@@ -57,7 +57,7 @@ enum PoplarOp {
   Seed = 53;
   BufferLoadSlice = 54;
   BufferStoreSlice = 55;
-  // retired = 56;
+  HostEmbeddingNotify = 56;
   HostEmbeddingLookup = 57;
   HostEmbeddingUpdate = 58;
   StatefulGradientAccumulateWithMomentum = 59;
@@ -68,7 +68,7 @@ enum PoplarOp {
   SendRecvBarrier = 64;
   RemoteParameterLoad = 65;
   RemoteParameterStore = 66;
-  // retired = 67;
+  InterTilesetCopy = 67;
   RecvFromHost = 68;
   SendToHost = 69;
   SliceApply = 70;
@@ -80,6 +80,7 @@ enum PoplarOp {
   GradientAccumulatorSink = 76;
   WeightsTransposeChansFlipXY = 77;
   ExecutionCounter = 78;
+  CopyInto = 79;
 
   // Supported Fusions.
   Conv_biasadd = 200;

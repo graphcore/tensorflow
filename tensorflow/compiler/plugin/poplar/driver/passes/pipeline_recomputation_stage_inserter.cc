@@ -241,7 +241,7 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
                         recomp_stage->backend_config<PoplarBackendConfig>());
     config.mutable_call_config()->set_type(
         PoplarBackendConfig::CallConfig::PipelineStageRecomputation);
-    recomp_stage->set_backend_config(config);
+    TF_RETURN_IF_ERROR(recomp_stage->set_backend_config(config));
     CHECK(IsPipelineStageRecomputation(recomp_stage));
 
     TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,

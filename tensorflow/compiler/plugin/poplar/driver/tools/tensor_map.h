@@ -121,7 +121,6 @@ struct TensorOrRemoteBuffer {
    * unambiguous.
    */
   poplar::Tensor AsTensor() const {
-    // VLOG(0) << (content_type == ContentType::Tensor);
     CHECK(content_type == ContentType::Tensor);
     return tensor;
   }
@@ -131,7 +130,6 @@ struct TensorOrRemoteBuffer {
    * unambiguous.
    */
   poplar::RemoteBuffer AsRemoteBuffer() const {
-    // VLOG(0) << (content_type == ContentType::RemoteBuffer);
     CHECK(content_type == ContentType::RemoteBuffer);
     return remote_buffer;
   }
