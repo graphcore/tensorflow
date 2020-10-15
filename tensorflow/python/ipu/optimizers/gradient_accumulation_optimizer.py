@@ -79,6 +79,7 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
           - A `DType`: Use this type for all the accumulators.
           - A callable that takes the variable and returns a `DType`: Allows
             specifying the accumulator type on a per-variable basis.
+
         The gradients passed to `Optimizer.apply_gradients` will have the dtype
         requested here. If that dtype is different from the variable dtype
         a cast is needed at some point to make them compatible. If you want
@@ -272,10 +273,16 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
       dtype: The data type used for the gradient accumulation buffer. One of:
-        - `None`: Use an accumulator of the same type as the variable type.
-        - A `DType`: Use this type for all the accumulators.
-        - A callable that takes the variable and returns a `DType`: Allows
-          specifying the accumulator type on a per-variable basis.
+          - `None`: Use an accumulator of the same type as the variable type.
+          - A `DType`: Use this type for all the accumulators.
+          - A callable that takes the variable and returns a `DType`: Allows
+            specifying the accumulator type on a per-variable basis.
+
+        The gradients passed to `Optimizer.apply_gradients` will have the dtype
+        requested here. If that dtype is different from the variable dtype
+        a cast is needed at some point to make them compatible. If you want
+        to cast the gradients immediately, you can wrap your optimizer in the
+        `MapGradientOptimizer` with a `tf.cast`.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizerV2".
     """
