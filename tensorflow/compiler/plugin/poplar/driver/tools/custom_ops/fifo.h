@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_FIFO_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_FIFO_H_
 
+#include <memory>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -23,10 +25,12 @@ namespace poplarplugin {
 
 class HloFifoInstruction : public HloPoplarInstruction {
  public:
-  explicit HloFifoInstruction(HloInstruction* operand, int64 depth);
+  explicit HloFifoInstruction(HloInstruction* operand, int64 depth,
+                              bool offload);
 
   const HloInstruction* input() const;
   int64 depth() const;
+  bool offload() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -43,11 +47,12 @@ class HloFifoInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  int64 depth_;
+  const int64 depth_;
+  const bool offload_;
 };
 
-std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
-                                           int64 depth);
+std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand, int64 depth,
+                                           bool offload);
 
 }  // namespace poplarplugin
 }  // namespace xla

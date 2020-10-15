@@ -141,6 +141,7 @@ bool IsResourceUpdate(const HloInstruction*);
 bool IsFunction(const HloInstruction*);
 bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
+bool IsBatchSerializedPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
 int64 GetGradientAccumulationCount(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);

@@ -21,13 +21,18 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth)
-    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Fifo, depth),
-      depth_(depth) {}
+HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth,
+                                       bool offload)
+    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Fifo, depth,
+                           offload),
+      depth_(depth),
+      offload_(offload) {}
 
 const HloInstruction* HloFifoInstruction::input() const { return operand(0); }
 
 int64 HloFifoInstruction::depth() const { return depth_; }
+
+bool HloFifoInstruction::offload() const { return offload_; }
 
 absl::flat_hash_set<int64> HloFifoInstruction::AllocatingIndices() const {
   return {};
@@ -45,20 +50,22 @@ bool HloFifoInstruction::IsPopOpsElementwise() const { return true; }
 std::unique_ptr<HloInstruction> HloFifoInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return absl::make_unique<HloFifoInstruction>(new_operands[0], depth_);
+  return absl::make_unique<HloFifoInstruction>(new_operands[0], depth_,
+                                               offload_);
 }
 
 std::vector<std::string> HloFifoInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back(absl::StrCat("depth=", depth_));
+  attributes.push_back(absl::StrCat("offload=", offload_));
 
   return attributes;
 }
 
-std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
-                                           int64 depth) {
-  return absl::make_unique<HloFifoInstruction>(operand, depth);
+std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand, int64 depth,
+                                           bool offload) {
+  return absl::make_unique<HloFifoInstruction>(operand, depth, offload);
 }
 
 namespace {
@@ -66,8 +73,10 @@ StatusOr<std::unique_ptr<HloInstruction>> HloFifoInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
   TF_ASSIGN_OR_RETURN(int64 depth, attribute_map.GetAttributeAsInt("depth"));
+  TF_ASSIGN_OR_RETURN(bool offload,
+                      attribute_map.GetAttributeAsBool("offload"));
 
-  return CreateFifo(call->mutable_operand(0), depth);
+  return CreateFifo(call->mutable_operand(0), depth, offload);
 }
 
 static HloPoplarInstructionFactory fifo_factory(PoplarOp::Fifo,

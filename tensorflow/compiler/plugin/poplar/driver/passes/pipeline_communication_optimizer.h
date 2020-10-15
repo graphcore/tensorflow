@@ -41,6 +41,8 @@ namespace poplarplugin {
  */
 class PipelineCommunicationOptimizer : public HloModulePass {
  public:
+  explicit PipelineCommunicationOptimizer(bool remote_memory_supported);
+
   absl::string_view name() const override {
     return "pipeline-communication-optimizer";
   }
@@ -50,6 +52,8 @@ class PipelineCommunicationOptimizer : public HloModulePass {
  private:
   // Optimize a pipeline.
   StatusOr<bool> OptimizePipeline(HloInstruction* pipeline_op);
+
+  bool remote_memory_supported_;
 };
 
 }  // namespace poplarplugin

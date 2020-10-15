@@ -200,6 +200,9 @@ class FifoOp : public PoplarOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     auto fifo_inst = Cast<HloFifoInstruction>(inst);
+    const size_t fifo_depth = fifo_inst->depth();
+    const bool fifo_offload = fifo_inst->offload();
+
     poplar::program::Sequence seq;
     const std::string debug_name = GetDebugName(inst);
 
@@ -208,7 +211,7 @@ class FifoOp : public PoplarOpDef {
         FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
 
     // A degenerate case where the fifo is just an identity op.
-    if (fifo_inst->depth() < 1) {
+    if (fifo_depth < 1) {
       for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor output = poputil::duplicate(
             graph, inputs[tuple_idx], seq,
@@ -220,7 +223,7 @@ class FifoOp : public PoplarOpDef {
     }
     // If the FIFO can only store a single buffer then skip the counter creation
     // and use copies.
-    if (fifo_inst->depth() == 1) {
+    if (fifo_depth == 1) {
       for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor input = inputs[tuple_idx];
         // Create the output with the same mapping as the input.
@@ -244,18 +247,29 @@ class FifoOp : public PoplarOpDef {
               poplar::concat(output_flat.slices(flat_dealiased_intervals));
         }
 
-        // Create a buffer of the given depth and the same mapping as the
-        // input.
-        poplar::Tensor buffer = graph.clone(
-            input_flat, absl::StrCat(debug_name, "/buffer/", tuple_idx),
-            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-        TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
+        if (fifo_offload) {
+          poplar::RemoteBuffer buffer = graph.addRemoteBuffer(
+              absl::StrCat(debug_name, "/buffer/", tuple_idx),
+              input.elementType(), input_flat.numElements(), 1, true);
 
-        // Copy the content of the buffer to the output.
-        seq.add(poplar::program::Copy(buffer, output_flat));
+          // Copy the content of the buffer to the output.
+          seq.add(poplar::program::Copy(buffer, output_flat));
 
-        // Copy the input into the buffer.
-        seq.add(poplar::program::Copy(input_flat, buffer));
+          // Copy the input into the buffer.
+          seq.add(poplar::program::Copy(input_flat, buffer));
+        } else {
+          // Create a buffer for swapping the values.
+          poplar::Tensor buffer = graph.clone(
+              input_flat, absl::StrCat(debug_name, "/buffer/", tuple_idx),
+              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+          TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
+
+          // Copy the content of the buffer to the output.
+          seq.add(poplar::program::Copy(buffer, output_flat));
+
+          // Copy the input into the buffer.
+          seq.add(poplar::program::Copy(input_flat, buffer));
+        }
       }
       return seq;
     }
@@ -277,24 +291,42 @@ class FifoOp : public PoplarOpDef {
       std::tie(input_flat, info) =
           GetAliasingInformationAndDealiesedTensor(graph, input_flat);
 
-      // Create a buffer of the given depth and the same mapping as the input.
-      const size_t fifo_depth = fifo_inst->depth();
-      poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
-          graph, input_flat.expand({0}), {0}, {fifo_depth},
-          absl::StrCat(debug_name, "/buffer/", tuple_idx));
-      TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
+      poplar::Tensor output_flat;
+      if (fifo_offload) {
+        // Keep the layout of the input for the output.
+        output_flat = graph.clone(input_flat,
+                                  absl::StrCat(debug_name, "/out/", tuple_idx));
 
-      // Create the output with the same mapping as the input.
-      poplar::Tensor output_flat =
-          popops::dynamicSlice(graph, buffer, counter.reshape({1}), {0}, {1},
-                               seq,
-                               absl::StrCat(debug_name, "/pop/", tuple_idx))
-              .squeeze({0});
+        // Create a remote buffer of the given depth.
+        poplar::RemoteBuffer buffer = graph.addRemoteBuffer(
+            absl::StrCat(debug_name, "/buffer/", tuple_idx),
+            input.elementType(), input_flat.numElements(), fifo_depth, true);
 
-      // Update the buffer with the new value.
-      popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
-                            counter.reshape({1}), {0}, {1}, seq,
-                            absl::StrCat(debug_name, "/push/", tuple_idx));
+        // Copy the content of the buffer to the output.
+        seq.add(
+            poplar::program::Copy(buffer, output_flat, counter.reshape({1})));
+
+        // Copy the input into the buffer.
+        seq.add(
+            poplar::program::Copy(input_flat, buffer, counter.reshape({1})));
+      } else {
+        // Create a buffer of the given depth and the same mapping as the input.
+        poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
+            graph, input_flat.expand({0}), {0}, {fifo_depth},
+            absl::StrCat(debug_name, "/buffer/", tuple_idx));
+        TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
+
+        // Create the output with the same mapping as the input.
+        output_flat = popops::dynamicSlice(
+                          graph, buffer, counter.reshape({1}), {0}, {1}, seq,
+                          absl::StrCat(debug_name, "/pop/", tuple_idx))
+                          .squeeze({0});
+
+        // Update the buffer with the new value.
+        popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
+                              counter.reshape({1}), {0}, {1}, seq,
+                              absl::StrCat(debug_name, "/push/", tuple_idx));
+      }
 
       // Add the aliasing information back in.
       output_flat = AddAliasing(output_flat, info);
@@ -303,7 +335,7 @@ class FifoOp : public PoplarOpDef {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
     }
 
-    IncreaseCounter(graph, counter, fifo_inst->depth(), seq, debug_name);
+    IncreaseCounter(graph, counter, fifo_depth, seq, debug_name);
     return seq;
   }
 };

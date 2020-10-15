@@ -356,6 +356,17 @@ bool CallConfigHasType(const HloInstruction* inst,
   }
   return false;
 }
+int64 PipelineBatchSerializationIterations(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kCall) {
+    PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+    if (cfg.call_config().has_pipeline_config()) {
+      return std::max<int64>(
+          1,
+          cfg.call_config().pipeline_config().batch_serialization_iterations());
+    }
+  }
+  return 1;
+}
 }  // namespace
 
 bool IsRepeatLoop(const HloInstruction* inst) {
@@ -402,6 +413,10 @@ bool IsMultiConv(const HloInstruction* inst) {
 
 bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
+}
+
+bool IsBatchSerializedPipelineOp(const HloInstruction* inst) {
+  return IsPipelineOp(inst) && (PipelineBatchSerializationIterations(inst) > 1);
 }
 
 int64 GetPipelineRepeatCount(const HloInstruction* inst) {

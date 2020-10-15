@@ -29,7 +29,8 @@ namespace poplarplugin {
  */
 class PipelineRecomputationStageInserter : public HloModulePass {
  public:
-  explicit PipelineRecomputationStageInserter(bool allow_recomputation);
+  explicit PipelineRecomputationStageInserter(bool allow_recomputation,
+                                              bool remote_memory_supported);
 
   absl::string_view name() const override {
     return "pipeline_recomputation_stage_inserter";
@@ -42,6 +43,7 @@ class PipelineRecomputationStageInserter : public HloModulePass {
   StatusOr<bool> RecomputePipeline(HloInstruction* pipeline_op);
 
   bool allow_recomputation_;
+  bool remote_memory_supported_;
 };
 
 }  // namespace poplarplugin
