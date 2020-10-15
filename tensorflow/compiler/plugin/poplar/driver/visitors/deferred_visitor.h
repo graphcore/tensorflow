@@ -321,6 +321,9 @@ class DeferredVisitor : public FullVisitor {
   // Handler of RemoteParameterLoad which is aware of deferred allocation.
   virtual Status HandleRemoteParameterLoad(HloInstruction* inst);
 
+  // Handler of BufferLoadSlice which is aware of deferred allocation.
+  virtual Status HandleBufferLoadSlice(HloInstruction* inst);
+
   // Handler for all custom calls apart from those which support deferred
   // allocation.
   virtual Status HandleNonDeferredCustomCall(HloInstruction* inst);
