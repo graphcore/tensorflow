@@ -33,7 +33,7 @@ namespace poplarplugin {
  * of the argument, by following add-dependency and after-all instructions.
  */
 StatusOr<bool> DependencyReplacer::Run(HloModule* module) {
-  for (auto* comp : module->computations()) {
+  for (auto* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
@@ -42,7 +42,7 @@ StatusOr<bool> DependencyReplacer::Run(HloModule* module) {
     do {
       deps.clear();
 
-      for (HloInstruction* inst : comp->instructions()) {
+      for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
         if (inst->opcode() == HloOpcode::kAddDependency &&
             inst->operand(0)->opcode() != HloOpcode::kAddDependency) {
           deps.push_back(inst);
