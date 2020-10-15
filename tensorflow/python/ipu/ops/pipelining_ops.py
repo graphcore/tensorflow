@@ -431,8 +431,6 @@ def pipeline(computational_stages,
       reduce maximum memory liveness, but can also increase the computation time
       as activations have to be copied from/to the device(s).
       When set to `None`, the activations might be offloaded when beneficial.
-      This feature is currently only supported when the pipeline schedule is
-      `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`.
     offload_gradient_accumulation_buffers: When enabled, all the gradient
       accumulation buffers are stored in remote memory. Offloading gradient
       accumulation buffers into remote memory can reduce maximum memory
@@ -512,13 +510,6 @@ def pipeline(computational_stages,
       and pipeline_schedule != PipelineSchedule.Sequential):
     raise NotImplementedError("Batch serialization is only supported with the "
                               "`Sequential` schedule.")
-
-  if offload_activations and (
-      batch_serialization_iterations < 2
-      or pipeline_schedule != PipelineSchedule.Sequential):
-    raise NotImplementedError("Activation offloading is only supported with "
-                              "the `Sequential` schedule and when "
-                              "`batch_serialization_iterations > 1`.")
 
   if device_mapping is None:
     device_mapping = [0] * len(

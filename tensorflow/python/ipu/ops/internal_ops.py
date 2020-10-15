@@ -55,12 +55,13 @@ def remap_deduce(x, name=None):
   return gen_poputil_ops.ipu_remap_deduce(x, name=name)
 
 
-def fifo(x, depth, name=None):
+def fifo(x, depth, offload=False, name=None):
   """Introduces a first-in-first-out queue with a fixed depth.
 
   Args:
     x: The tensor to enqueue.
     depth: The depth of the queue.
+    offload: Whether to offload the queue storage to Poplar remote buffers.
     name: Optional op name.
 
   Returns:
@@ -71,7 +72,7 @@ def fifo(x, depth, name=None):
   if depth < 1:
     return x
 
-  return gen_poputil_ops.ipu_fifo(x, depth=depth, name=name)
+  return gen_poputil_ops.ipu_fifo(x, depth=depth, offload=offload, name=name)
 
 
 def print_tensor(input, name=""):

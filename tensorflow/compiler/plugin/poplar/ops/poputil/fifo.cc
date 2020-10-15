@@ -23,6 +23,7 @@ REGISTER_OP("IpuFifo")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("depth: int")
+    .Attr("offload: bool")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 

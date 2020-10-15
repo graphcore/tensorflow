@@ -134,7 +134,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);
@@ -254,7 +254,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);
@@ -371,7 +371,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);
@@ -488,7 +488,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);
@@ -570,7 +570,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);
@@ -688,7 +688,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
   auto module0 = module.get();
 
-  PipelineCommunicationOptimizer optimizer;
+  PipelineCommunicationOptimizer optimizer(false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
   // Expect changes.
   EXPECT_TRUE(changed);

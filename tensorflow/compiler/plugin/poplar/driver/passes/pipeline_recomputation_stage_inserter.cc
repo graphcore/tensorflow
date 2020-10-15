@@ -20,6 +20,7 @@ limitations under the License.
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
@@ -168,8 +169,9 @@ StatusOr<HloInstruction*> CreateRecomputationStage(
 
 }  // namespace
 PipelineRecomputationStageInserter::PipelineRecomputationStageInserter(
-    bool allow_recomputation)
-    : allow_recomputation_(allow_recomputation) {}
+    bool allow_recomputation, bool remote_memory_supported)
+    : allow_recomputation_(allow_recomputation),
+      remote_memory_supported_(remote_memory_supported) {}
 
 StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
     HloInstruction* pipeline_op) {
@@ -180,6 +182,10 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
   if (stages.backward.empty()) {
     return false;
   }
+  // Get whether any Fifos which will be inserted should be offloaded.
+  TF_ASSIGN_OR_RETURN(const bool offload_fifos,
+                      PipelineFIFOInserter::OffloadFifos(
+                          pipeline_op, remote_memory_supported_));
 
   bool changed = false;
   // Go through all the forward stages (apart from the last one which does not
@@ -260,7 +266,8 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
         // Create the FIFO.
         HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
             operand,
-            fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
+            fifo_depth_multiplier * (stages.forward.size() - stage_id - 1),
+            offload_fifos));
 
         fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
         fifo_inst->set_sharding(operand->sharding());

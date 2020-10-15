@@ -65,9 +65,9 @@ StatusOr<bool> GradientAccumulationBuffersOffload::ShouldOffloadInPipeline(
         return FailedPrecondition(
             "Gradient accumulation buffer offloading has been enabled, however "
             "the current configuration of the IPU devices does not support "
-            "remote memory. Set the `offload_activations` argument of "
-            "`pipelining_ops.pipeline` to `False` to stop seeing this "
-            "message.");
+            "remote memory. Set the `offload_gradient_accumulation_buffers` "
+            "argument of `pipelining_ops.pipeline` to `False` to stop seeing "
+            "this message.");
       }
       return true;
     }
