@@ -39,17 +39,44 @@ namespace poplarplugin {
 
 namespace {
 
+bool IsRemoteLoad(const HloInstruction* inst) {
+  return IsPoplarInstruction(RemoteParameterLoad)(inst) ||
+         IsPoplarInstruction(BufferLoadSlice)(inst);
+}
+
+bool IsRemoteStore(const HloInstruction* inst) {
+  return IsPoplarInstruction(RemoteParameterStore)(inst) ||
+         IsPoplarInstruction(BufferStoreSlice)(inst);
+}
+
 std::vector<HloInstruction*> CombineOperands(
     const std::vector<HloInstruction*>& to_combine) {
   std::vector<HloInstruction*> operands;
 
   const auto* first_inst = to_combine.front();
-  if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(first_inst)) {
+  if (IsPoplarInstruction(RemoteParameterLoad)(first_inst)) {
     for (const auto* inst : to_combine) {
       operands.insert(operands.end(), inst->operands().cbegin(),
                       inst->operands().cend());
     }
-  } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(first_inst)) {
+  } else if (IsPoplarInstruction(BufferLoadSlice)(first_inst)) {
+    std::vector<HloInstruction*> remote_buffers;
+    std::vector<HloInstruction*> offsets;
+    for (const auto* inst : to_combine) {
+      const auto* load_inst = Cast<HloBufferLoadSlice>(inst);
+      remote_buffers.insert(remote_buffers.end(),
+                            load_inst->RemoteBuffers().cbegin(),
+                            load_inst->RemoteBuffers().cend());
+      offsets.insert(offsets.end(), load_inst->Offsets().cbegin(),
+                     load_inst->Offsets().cend());
+    }
+
+    // The new list of operands has all the remote buffers first, then all the
+    // corresponding offsets.
+    operands.insert(operands.end(), remote_buffers.cbegin(),
+                    remote_buffers.cend());
+    operands.insert(operands.end(), offsets.cbegin(), offsets.cend());
+  } else if (IsPoplarInstruction(RemoteParameterStore)(first_inst)) {
     std::vector<HloInstruction*> remote_buffers;
     std::vector<HloInstruction*> values_to_store;
     for (const auto* inst : to_combine) {
@@ -68,6 +95,29 @@ std::vector<HloInstruction*> CombineOperands(
                     remote_buffers.cend());
     operands.insert(operands.end(), values_to_store.cbegin(),
                     values_to_store.cend());
+  } else if (IsPoplarInstruction(BufferStoreSlice)(first_inst)) {
+    std::vector<HloInstruction*> remote_buffers;
+    std::vector<HloInstruction*> values_to_store;
+    std::vector<HloInstruction*> offsets;
+    for (const auto* inst : to_combine) {
+      const auto* store_inst = Cast<HloBufferStoreSlice>(inst);
+      remote_buffers.insert(remote_buffers.end(),
+                            store_inst->RemoteBuffers().cbegin(),
+                            store_inst->RemoteBuffers().cend());
+      values_to_store.insert(values_to_store.end(),
+                             store_inst->ValuesToStore().cbegin(),
+                             store_inst->ValuesToStore().cend());
+      offsets.insert(offsets.end(), store_inst->Offsets().cbegin(),
+                     store_inst->Offsets().cend());
+    }
+
+    // The new list of operands has all the remote buffers first, then all the
+    // corresponding values, and finally the corresponding offsets.
+    operands.insert(operands.end(), remote_buffers.cbegin(),
+                    remote_buffers.cend());
+    operands.insert(operands.end(), values_to_store.cbegin(),
+                    values_to_store.cend());
+    operands.insert(operands.end(), offsets.cbegin(), offsets.cend());
   } else {
     LOG(FATAL) << "Unexpected instruction: " << first_inst->ToString();
   }
@@ -80,9 +130,9 @@ std::vector<uint64> CombineReplicationFactors(
   std::vector<uint64> replication_factors(to_combine.size());
   absl::c_transform(
       to_combine, replication_factors.begin(), [](const HloInstruction* inst) {
-        if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst)) {
+        if (IsPoplarInstruction(RemoteParameterLoad)(inst)) {
           return Cast<HloRemoteParameterLoad>(inst)->GetReplicationFactor(0);
-        } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(inst)) {
+        } else if (IsPoplarInstruction(RemoteParameterStore)(inst)) {
           return Cast<HloRemoteParameterStore>(inst)->GetReplicationFactor(0);
         } else {
           LOG(FATAL) << "Unexpected instruction: " << inst->ToString();
@@ -92,18 +142,24 @@ std::vector<uint64> CombineReplicationFactors(
 }
 
 StatusOr<HloInstruction*> Combine(
-    const std::vector<HloInstruction*>& to_combine) {
+    const std::vector<HloInstruction*>& to_combine, const Shape& shape) {
   const auto operands = CombineOperands(to_combine);
-  const auto replication_factors = CombineReplicationFactors(to_combine);
-
   auto* first_inst = to_combine.front();
   HloComputation* comp = first_inst->parent();
 
+  if (IsPoplarInstruction(BufferLoadSlice)(first_inst) ||
+      IsPoplarInstruction(BufferStoreSlice)(first_inst)) {
+    return comp->AddInstruction(
+        first_inst->CloneWithNewOperands(shape, operands));
+  }
+
+  const auto replication_factors = CombineReplicationFactors(to_combine);
+
   HloInstruction* new_inst = nullptr;
-  if (IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(first_inst)) {
+  if (IsPoplarInstruction(RemoteParameterLoad)(first_inst)) {
     new_inst = comp->AddInstruction(
         CreateHloRemoteParameterLoad(operands, replication_factors));
-  } else if (IsPoplarInstruction(PoplarOp::RemoteParameterStore)(first_inst)) {
+  } else if (IsPoplarInstruction(RemoteParameterStore)(first_inst)) {
     new_inst = comp->AddInstruction(
         CreateHloRemoteParameterStore(operands, replication_factors));
     CHECK(absl::c_all_of(to_combine, IsLoweredInplace));
@@ -129,7 +185,8 @@ StatusOr<HloInstruction*> CombineAndReplace(
   const auto shape = ShapeUtil::MakeTupleShape(shapes);
 
   // Add the new instruction.
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_inst, Combine(to_combine));
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_inst, Combine(to_combine, shape));
+  CHECK_EQ(new_inst->shape(), shape);
 
   // Combine the sharding information into a tuple.
   std::vector<HloSharding> shardings;
@@ -346,10 +403,10 @@ StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
 
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (auto shard = inst->sharding_unique_device()) {
-      if (IsPoplarInstruction(RemoteParameterLoad)(inst)) {
-        shard_loads[*shard].push(Cast<HloRemoteParameterLoad>(inst));
-      } else if (IsPoplarInstruction(RemoteParameterStore)(inst)) {
-        shard_stores[*shard].push(Cast<HloRemoteParameterStore>(inst));
+      if (IsRemoteLoad(inst)) {
+        shard_loads[*shard].push(inst);
+      } else if (IsRemoteStore(inst)) {
+        shard_stores[*shard].push(inst);
       }
     }
   }

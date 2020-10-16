@@ -40,7 +40,9 @@ namespace {
 using RemoteParameterParallelCombinerTest = HloTestBase;
 
 const auto is_load = IsPoplarInstruction(RemoteParameterLoad);
+const auto is_load_slice = IsPoplarInstruction(BufferLoadSlice);
 const auto is_store = IsPoplarInstruction(RemoteParameterStore);
+const auto is_store_slice = IsPoplarInstruction(BufferStoreSlice);
 
 TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoLoads) {
   const auto hlo_string = R"(
@@ -100,6 +102,76 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[1]) {
 
   EXPECT_EQ(param0->parameter_number(), 0);
   EXPECT_EQ(param1->parameter_number(), 1);
+
+  // Check the sharding.
+  EXPECT_TRUE(load_inst->sharding().IsTuple());
+  const auto shardings = load_inst->sharding().tuple_elements();
+  EXPECT_EQ(shardings.size(), 2);
+  EXPECT_EQ(shardings.at(gte0_index).UniqueDevice().value(), 0);
+  EXPECT_EQ(shardings.at(gte1_index).UniqueDevice().value(), 1);
+}
+
+TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoSlicedLoads) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY %top {
+  %buffer1 = f32[] parameter(0)
+  %buffer2 = f32[] parameter(1)
+  %offset1 = s32[] parameter(2)
+  %offset2 = s32[] parameter(3)
+  %load1 = f32[] custom-call(buffer1, offset1), custom_call_target="BufferLoadSlice", sharding={maximal device=0}
+  %load2 = f32[] custom-call(buffer2, offset2), custom_call_target="BufferLoadSlice", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[]) tuple(load1, load2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
+                  .RunOnComputation(module->entry_computation())
+                  .ValueOrDie());
+
+  auto seq = module->entry_computation()->MakeInstructionPostOrder();
+
+  EXPECT_EQ(absl::c_count_if(seq, is_load_slice), 1);
+
+  auto load_inst =
+      Cast<HloBufferLoadSlice>(*absl::c_find_if(seq, is_load_slice));
+
+  // Check that they were merged.
+  EXPECT_EQ(load_inst->operand_count(), 4);
+
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
+  EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
+
+  // Check that the inputs and outputs are wired correctly, irrespective of the
+  // order in which they were combind.
+  const int64 gte0_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
+  const int64 gte1_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
+
+  const auto* buffer0 = load_inst->RemoteBuffers().at(gte0_index);
+  const auto* buffer1 = load_inst->RemoteBuffers().at(gte1_index);
+  EXPECT_EQ(buffer0->parameter_number(), 0);
+  EXPECT_EQ(buffer1->parameter_number(), 1);
+
+  const auto* offset0 = load_inst->Offsets().at(gte0_index);
+  const auto* offset1 = load_inst->Offsets().at(gte1_index);
+  EXPECT_EQ(offset0->parameter_number(), 2);
+  EXPECT_EQ(offset1->parameter_number(), 3);
 
   // Check the sharding.
   EXPECT_TRUE(load_inst->sharding().IsTuple());
@@ -202,19 +274,92 @@ ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
   const int64 gte1_index =
       Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
 
-  const auto* param0 =
-      Cast<HloParameterInstruction>(store_inst->operand(gte0_index));
-  const auto* param1 =
-      Cast<HloParameterInstruction>(store_inst->operand(gte1_index));
+  const auto* buffer0 = store_inst->RemoteBuffers().at(gte0_index);
+  const auto* buffer1 = store_inst->RemoteBuffers().at(gte1_index);
+  EXPECT_EQ(buffer0->parameter_number(), 0);
+  EXPECT_EQ(buffer1->parameter_number(), 1);
 
-  EXPECT_EQ(param0->parameter_number(), 0);
-  EXPECT_EQ(param1->parameter_number(), 1);
+  const auto* const0 = store_inst->ValuesToStore().at(gte0_index);
+  const auto* const1 = store_inst->ValuesToStore().at(gte1_index);
+  EXPECT_EQ(const0->literal().data<float>()[0], 1.0f);
+  EXPECT_EQ(const1->literal().data<float>()[0], 2.0f);
 
-  const auto* const0 =
-      Cast<HloConstantInstruction>(store_inst->operand(2 + gte0_index));
-  const auto* const1 =
-      Cast<HloConstantInstruction>(store_inst->operand(2 + gte1_index));
+  // Check the sharding.
+  EXPECT_TRUE(store_inst->sharding().IsTuple());
+  const auto shardings = store_inst->sharding().tuple_elements();
+  EXPECT_EQ(shardings.size(), 2);
+  EXPECT_EQ(shardings.at(gte0_index).UniqueDevice().value(), 0);
+  EXPECT_EQ(shardings.at(gte1_index).UniqueDevice().value(), 1);
+}
 
+TEST_F(RemoteParameterParallelCombinerTest, TestCombineTwoSlicedStores) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY %top {
+  %buffer1 = f32[] parameter(0)
+  %buffer2 = f32[] parameter(1)
+  %offset1 = f32[] parameter(2)
+  %offset2 = f32[] parameter(3)
+  %value1 = f32[] constant(1)
+  %value2 = f32[] constant(2)
+  %store1 = f32[] custom-call(buffer1, value1, offset1), custom_call_target="BufferStoreSlice", sharding={maximal device=0}
+  %store2 = f32[] custom-call(buffer2, value2, offset2), custom_call_target="BufferStoreSlice", sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[]) tuple(%store1, %store2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+
+  ASSERT_TRUE(RemoteParameterParallelCombiner()
+                  .RunOnComputation(module->entry_computation())
+                  .ValueOrDie());
+
+  auto seq = module->entry_computation()->MakeInstructionPostOrder();
+
+  EXPECT_EQ(absl::c_count_if(seq, is_store_slice), 1);
+
+  auto store_inst =
+      Cast<HloBufferStoreSlice>(*absl::c_find_if(seq, is_store_slice));
+
+  // Check that they were merged.
+  EXPECT_EQ(store_inst->operand_count(), 6);
+  EXPECT_TRUE(IsLoweredInplace(store_inst));
+
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
+  EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
+
+  // Check that the inputs and outputs are wired correctly, irrespective of the
+  // order in which they were combind.
+  const int64 gte0_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
+  const int64 gte1_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
+
+  const auto* buffer0 = store_inst->RemoteBuffers().at(gte0_index);
+  const auto* buffer1 = store_inst->RemoteBuffers().at(gte1_index);
+  EXPECT_EQ(buffer0->parameter_number(), 0);
+  EXPECT_EQ(buffer1->parameter_number(), 1);
+
+  const auto* offset0 = store_inst->Offsets().at(gte0_index);
+  const auto* offset1 = store_inst->Offsets().at(gte1_index);
+  EXPECT_EQ(offset0->parameter_number(), 2);
+  EXPECT_EQ(offset1->parameter_number(), 3);
+
+  const auto* const0 = store_inst->ValuesToStore().at(gte0_index);
+  const auto* const1 = store_inst->ValuesToStore().at(gte1_index);
   EXPECT_EQ(const0->literal().data<float>()[0], 1.0f);
   EXPECT_EQ(const1->literal().data<float>()[0], 2.0f);
 

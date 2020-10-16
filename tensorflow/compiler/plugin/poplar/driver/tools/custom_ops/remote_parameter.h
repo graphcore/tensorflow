@@ -147,8 +147,8 @@ std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
  */
 class HloBufferLoadSlice : public HloPoplarInstruction {
  public:
-  HloBufferLoadSlice(const Shape& shape, HloInstruction* const buffer,
-                     HloInstruction* const offset);
+  HloBufferLoadSlice(const Shape& shape,
+                     absl::Span<HloInstruction* const> rbuffers_and_offsets);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
 
@@ -159,6 +159,9 @@ class HloBufferLoadSlice : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override { return 0; }
 
   bool IsPopOpsElementwise() const override { return false; }
+
+  absl::Span<HloInstruction* const> RemoteBuffers() const;
+  absl::Span<HloInstruction* const> Offsets() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -181,8 +184,9 @@ std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
  */
 class HloBufferStoreSlice : public HloPoplarInstruction {
  public:
-  HloBufferStoreSlice(HloInstruction* const buffer, HloInstruction* const slice,
-                      HloInstruction* const offset);
+  HloBufferStoreSlice(
+      const Shape& shape,
+      absl::Span<HloInstruction* const> rbuffers_values_and_offsets);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
 
@@ -190,9 +194,13 @@ class HloBufferStoreSlice : public HloPoplarInstruction {
     return {};
   }
 
-  uint64 NumberOfInplaceOperands() const override { return 1; }
+  uint64 NumberOfInplaceOperands() const override;
 
   bool IsPopOpsElementwise() const override { return false; }
+
+  absl::Span<HloInstruction* const> RemoteBuffers() const;
+  absl::Span<HloInstruction* const> ValuesToStore() const;
+  absl::Span<HloInstruction* const> Offsets() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
