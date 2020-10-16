@@ -281,17 +281,20 @@ static HloPoplarInstructionFactory create_buffer_factory(
     PoplarOp::CreateBuffer, HloCreateBufferFactoryFunc);
 }  // namespace
 
-HloBufferLoadSlice::HloBufferLoadSlice(const Shape& shape,
-                                       HloInstruction* const buffer,
-                                       HloInstruction* const offset)
-    : HloPoplarInstruction(shape, {buffer, offset}, PoplarOp::BufferLoadSlice) {
+HloBufferLoadSlice::HloBufferLoadSlice(
+    const Shape& shape, absl::Span<HloInstruction* const> rbuffers_and_offsets)
+    : HloPoplarInstruction(shape, rbuffers_and_offsets,
+                           PoplarOp::BufferLoadSlice) {
+  // The first half of the operands are the remote buffers, the second half
+  // are the corresponding offsets to load from.
+  CHECK_GE(rbuffers_and_offsets.size(), 2);
+  CHECK_EQ(rbuffers_and_offsets.size() % 2, 0);
 }
 
 std::unique_ptr<HloInstruction> HloBufferLoadSlice::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK_EQ(operands.size(), 2);
-  return absl::make_unique<HloBufferLoadSlice>(shape, operands[0], operands[1]);
+  return absl::make_unique<HloBufferLoadSlice>(shape, operands);
 }
 
 std::vector<std::string> HloBufferLoadSlice::ExtraPoplarAttributesToStringImpl(
@@ -299,10 +302,19 @@ std::vector<std::string> HloBufferLoadSlice::ExtraPoplarAttributesToStringImpl(
   return {};
 }
 
+absl::Span<HloInstruction* const> HloBufferLoadSlice::RemoteBuffers() const {
+  return absl::MakeSpan(operands()).first(operand_count() / 2);
+}
+
+absl::Span<HloInstruction* const> HloBufferLoadSlice::Offsets() const {
+  return absl::MakeSpan(operands()).last(operand_count() / 2);
+}
+
 std::unique_ptr<HloInstruction> CreateBufferLoadSlice(
     const Shape& shape, HloInstruction* const buffer,
     HloInstruction* const offset) {
-  return absl::make_unique<HloBufferLoadSlice>(shape, buffer, offset);
+  return absl::make_unique<HloBufferLoadSlice>(
+      shape, std::vector<HloInstruction*>{buffer, offset});
 }
 
 namespace {
@@ -316,20 +328,28 @@ static HloPoplarInstructionFactory buffer_load_slice_factory(
     PoplarOp::BufferLoadSlice, HloBufferLoadSliceFactoryFunc);
 }  // namespace
 
-HloBufferStoreSlice::HloBufferStoreSlice(HloInstruction* const buffer,
-                                         HloInstruction* const slice,
-                                         HloInstruction* const offset)
-    : HloPoplarInstruction(buffer->shape(), {buffer, slice, offset},
+HloBufferStoreSlice::HloBufferStoreSlice(
+    const Shape& shape,
+    absl::Span<HloInstruction* const> rbuffers_values_and_offsets)
+    : HloPoplarInstruction(shape, rbuffers_values_and_offsets,
                            PoplarOp::BufferStoreSlice) {
+  // The first third of the operands are the remote buffers, the second
+  // are the corresponding values to store, and the third are the offsets to
+  // store into.
+  CHECK_GE(rbuffers_values_and_offsets.size(), 3);
+  CHECK_EQ(rbuffers_values_and_offsets.size() % 3, 0);
   set_custom_call_has_side_effect(true);
+}
+
+uint64 HloBufferStoreSlice::NumberOfInplaceOperands() const {
+  // The remote buffers are in-place.
+  return RemoteBuffers().size();
 }
 
 std::unique_ptr<HloInstruction> HloBufferStoreSlice::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK_EQ(operands.size(), 3);
-  return absl::make_unique<HloBufferStoreSlice>(operands[0], operands[1],
-                                                operands[2]);
+  return absl::make_unique<HloBufferStoreSlice>(shape, operands);
 }
 
 std::vector<std::string> HloBufferStoreSlice::ExtraPoplarAttributesToStringImpl(
@@ -337,10 +357,24 @@ std::vector<std::string> HloBufferStoreSlice::ExtraPoplarAttributesToStringImpl(
   return {};
 }
 
+absl::Span<HloInstruction* const> HloBufferStoreSlice::RemoteBuffers() const {
+  return absl::MakeSpan(operands()).first(operand_count() / 3);
+}
+
+absl::Span<HloInstruction* const> HloBufferStoreSlice::ValuesToStore() const {
+  return absl::MakeSpan(operands())
+      .subspan(operand_count() / 3, operand_count() / 3);
+}
+
+absl::Span<HloInstruction* const> HloBufferStoreSlice::Offsets() const {
+  return absl::MakeSpan(operands()).last(operand_count() / 3);
+}
+
 std::unique_ptr<HloInstruction> CreateBufferStoreSlice(
     HloInstruction* const buffer, HloInstruction* const slice,
     HloInstruction* const offset) {
-  return absl::make_unique<HloBufferStoreSlice>(buffer, slice, offset);
+  return absl::make_unique<HloBufferStoreSlice>(
+      buffer->shape(), std::vector<HloInstruction*>{buffer, slice, offset});
 }
 
 namespace {

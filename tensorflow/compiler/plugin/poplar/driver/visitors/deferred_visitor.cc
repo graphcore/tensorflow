@@ -1090,58 +1090,67 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  const Shape& shape = inst->shape();
-  TensorLocation input_location(inst, 0);
+  const auto* load_inst = Cast<HloBufferLoadSlice>(inst);
+  const int64 num_outputs = load_inst->RemoteBuffers().size();
 
-  // Function which is called when allocating this tensor.
-  DeferredAllocateFunction allocate_fn =
-      [this,
-       shape](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                        AllocateInput(allocation_location, shape));
-    return tensor;
-  };
+  const auto shapes = FlattenedXlaShape(inst->shape());
+  CHECK_EQ(shapes.size(), num_outputs);
 
-  // Function which is called after the tensor has been created - this
-  // function copies the values from the buffer into the tensor.
-  DeferredPostProcessFunction post_process_fn =
-      [this, inst, shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+  for (size_t i = 0; i < shapes.size(); i++) {
+    const Shape shape = shapes[i];
+    TensorLocation input_location(inst, i);
 
-    if (!UseSyntheticData()) {
-      poplar::program::Sequence seq;
+    // Function which is called when allocating this tensor.
+    DeferredAllocateFunction allocate_fn =
+        [this, shape](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                          AllocateInput(allocation_location, shape));
+      return tensor;
+    };
 
-      // Get the remote buffer input.
-      TensorOrRemoteBufferVector inputs =
-          FindInstructionInputs(tensor_map, resources_, inst, 0, seq);
-      CHECK_EQ(inputs.size(), 1);
-      poplar::RemoteBuffer input = inputs[0].AsRemoteBuffer();
+    // Function which is called after the tensor has been created - this
+    // function copies the values from the buffer into the tensor.
+    DeferredPostProcessFunction post_process_fn =
+        [this, inst, i, num_outputs,
+         shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor offset,
-          FindInstructionInput(tensor_map, resources_, inst, 1, seq));
+      if (!UseSyntheticData()) {
+        poplar::program::Sequence seq;
 
-      seq.add(poplar::program::Copy(input, tensor, offset));
+        // Get the remote buffer input.
+        TensorOrRemoteBufferVector inputs =
+            FindInstructionInputs(tensor_map, resources_, inst, i, seq);
+        CHECK_EQ(inputs.size(), 1);
+        poplar::RemoteBuffer input = inputs[0].AsRemoteBuffer();
 
-      // Add grouped such that all copies from the same instruction are
-      // grouped together in the sequence, allowing Poplar to merge them.
-      TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
-    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-      // Initialize the tensor to a constant value.
-      auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-      TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-      TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
-    }
+        TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
+                            FindInstructionInput(tensor_map, resources_, inst,
+                                                 num_outputs + i, seq));
 
-    return tensor;
-  };
-  const bool allocate_now =
-      HasTensorAllocationTarget(input_location, resources_);
+        seq.add(poplar::program::Copy(input, tensor, offset));
 
-  TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
-  TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
-      allocate_now, input_location, std::move(allocate_fn),
-      std::move(post_process_fn)));
+        // Add grouped such that all copies from the same instruction are
+        // grouped together in the sequence, allowing Poplar to merge them.
+        TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
+      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+        // Initialize the tensor to a constant value.
+        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
+        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
+      }
+
+      return tensor;
+    };
+    const bool allocate_now =
+        HasTensorAllocationTarget(input_location, resources_);
+
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        allocate_now, input_location, std::move(allocate_fn),
+        std::move(post_process_fn)));
+  }
 
   return Status::OK();
 }
