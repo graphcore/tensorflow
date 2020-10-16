@@ -174,7 +174,7 @@ class IPUModelTest(test.TestCase):
   @test_util.run_v2_only
   def testModelBadLayers(self):
     with self.assertRaisesRegex(ValueError,
-                                "may only contain lists of Keras Layers."):
+                                "of Layers may only contain Keras Layers."):
       ipu.keras.Sequential([[
           keras.layers.Dense(8),
           keras.layers.Dense(8),
@@ -196,7 +196,7 @@ class IPUModelTest(test.TestCase):
 
     with self.assertRaisesRegex(
         ValueError,
-        "Optimizer must be a native Tensorflow optimizers, or Keras V2"):
+        "Optimizer must be a native Tensorflow optimizer, or a Keras V2"):
       opt = keras.optimizers.SGD(lr=0.001)
       p.compile(opt, 'mse')
 

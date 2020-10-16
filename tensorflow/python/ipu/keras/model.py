@@ -73,9 +73,9 @@ def _validate_args(kwargs, fn):
         "Labels should be provided by the 'x' DataSet containing a tuple.")
 
   if 'batch_size' in kwargs:
-    raise ValueError("Do not specify `batch_size` in IPU Keras models. "
-                     "Use the DataSet.batch() method to apply batching "
-                     "at the input dataset level.")
+    raise ValueError("Do not specify `batch_size` in IPU Keras models."
+                     " Use the Dataset.batch() method to apply batching"
+                     " at the input dataset level.")
 
   bad_args = list(filter(lambda x: x in kwargs, blacklist))
   if bad_args:
@@ -212,8 +212,7 @@ class _IpuModelBase(KerasModel):
 
     # Round the shard count to the next power of two
     self.shard_count = 2**int(math.ceil(math.log(shard_count) / math.log(2)))
-    self.got_replication_factor = False
-    self.replication_factor = -1
+    self._replication_factor = None
 
   def build(self, input_shape):
     pass
@@ -233,8 +232,8 @@ class _IpuModelBase(KerasModel):
               **kwargs):
     if isinstance(optimizer, optimizers.Optimizer):
       raise ValueError(
-          "Optimizer must be a native Tensorflow optimizers, or Keras V2 "
-          "optimizers, found in tensorflow.keras.optimizer_v2.")
+          "Optimizer must be a native Tensorflow optimizer, or a Keras V2"
+          " optimizer found in tensorflow.keras.optimizer_v2.")
 
     if not isinstance(loss_weights, (list, type(None))):
       raise ValueError("loss_weights can only be specified as a list.")
@@ -252,12 +251,12 @@ class _IpuModelBase(KerasModel):
                                               loss_weights=loss_weights,
                                               **kwargs)
 
-  # This method should be overriden in child classes that are capable of
+  # This method should be overridden in child classes that are capable of
   # handling models with multiple outputs. The problem is that in _add_loss,
   # ordinarily a new metric would be created with a new training endpoint,
   # however this involves the creation of weights. This is problematic for
   # graph execution (variables cannot be created in a tf.function decorated
-  # function). So, this method should be overriden to return instance lifetime
+  # function). So, this method should be overridden to return instance lifetime
   # metrics that are created outside of the training loop.
   def _get_output_loss_metrics(self):
     raise NotImplementedError(
@@ -345,8 +344,8 @@ class _IpuModelBase(KerasModel):
     # Other optimizer types are not supported
     else:
       raise ValueError(
-          "Only Keras optimizer_v2.Optimizer and Tensorflow native "
-          "training.Optimizer subclasses are supported.")
+          "Only Keras optimizer_v2.Optimizer and Tensorflow native"
+          " training.Optimizer subclasses are supported.")
 
   @trackable.no_automatic_dependency_tracking
   def _do_internal(self, mode, ds, size, epochs, verbose, callbacks,
@@ -380,8 +379,8 @@ class _IpuModelBase(KerasModel):
       if not steps_per_epoch:
         if size is None:
           raise ValueError(
-              "When using an infinitely repeating dataset, you must provide "
-              "the number of steps per epoch (steps_per_epoch).")
+              "When using an infinitely repeating dataset, you must provide"
+              " the number of steps per epoch (steps_per_epoch).")
         else:
           steps_per_epoch = size // self.accumulation_count
 
@@ -395,27 +394,27 @@ class _IpuModelBase(KerasModel):
     if verify_dataset_length and steps_per_epoch:
       if mini_batches_per_epoch > dataset_length:
         raise ValueError(
-            "Steps per epoch times accumulation count (%d x %d) is greater "
-            "than the number of samples in the dataset (%d)." %
+            "Steps per epoch times accumulation count (%d x %d) is greater"
+            " than the number of samples in the dataset (%d)." %
             (steps_per_epoch, self.accumulation_count, dataset_length))
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
     if mini_batches_per_epoch % self.accumulation_count != 0:
       raise ValueError(
-          self.__class__.__name__ + " requires the number of batches in the "
-          "dataset (%d) to be a multiple of the accumulated batch size (%d)" %
+          self.__class__.__name__ + " requires the number of batches in the"
+          " dataset (%d) to be a multiple of the accumulated batch size (%d)" %
           (mini_batches_per_epoch, self.accumulation_count))
     steps_per_epoch = mini_batches_per_epoch / (self.accumulation_count *
-                                                self._get_replication_factor())
+                                                self.replication_factor)
     if not steps_per_run:
       steps_per_run = steps_per_epoch
 
     if steps_per_epoch % steps_per_run != 0:
       raise ValueError(
-          self.__class__.__name__ + " requires the number of steps per "
-          "execution of the on device training loop 'steps_per_run' (%d) "
-          "to be a multiple of the number of steps in the epoch (%d)." %
+          self.__class__.__name__ + " requires the number of steps per"
+          " execution of the on device training loop 'steps_per_run' (%d)"
+          " to be a multiple of the number of steps in the epoch (%d)." %
           (mini_batches_per_epoch, steps_per_epoch))
 
     outer_loop_count = int(steps_per_epoch / steps_per_run)
@@ -443,10 +442,10 @@ class _IpuModelBase(KerasModel):
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
           ds,
           "infeed",
-          replication_factor=self._get_replication_factor(),
+          replication_factor=self.replication_factor,
           prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-          "outfeed", replication_factor=self._get_replication_factor())
+          "outfeed", replication_factor=self.replication_factor)
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -514,11 +513,11 @@ class _IpuModelBase(KerasModel):
         results = self.outfeed.dequeue()
         results = map(lambda x: x.numpy(), results)
         results = zip(*results)
-        if self._get_replication_factor() > 1:
+        if self.replication_factor > 1:
           # "Transpose" all the outfeed elements.
           def gen(results):
             for t in results:
-              for i in range(self._get_replication_factor()):
+              for i in range(self.replication_factor):
                 yield tuple(x[i] for x in t)
 
           results = gen(results)
@@ -573,9 +572,9 @@ class _IpuModelBase(KerasModel):
 
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
-                       self.__class__.__name__ + ".fit(). Use the "
-                       "DataSet.batch() method to apply batching at the input "
-                       "dataset level.")
+                       self.__class__.__name__ + ".fit(). Use the"
+                       " Dataset.batch() method to apply batching at the input"
+                       " dataset level.")
 
     ds, size = _get_dataset_and_count(x, y, batch_size)
 
@@ -601,7 +600,7 @@ class _IpuModelBase(KerasModel):
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
                        self.__class__.__name__ + ".evaluate(). Use the "
-                       "DataSet.batch() method to apply batching at the input "
+                       "Dataset.batch() method to apply batching at the input "
                        "dataset level.")
 
     ds, size = _get_dataset_and_count(x, y, batch_size)
@@ -626,7 +625,7 @@ class _IpuModelBase(KerasModel):
     if batch_size and isinstance(x, dataset_ops.DatasetV2):
       raise ValueError("Do not specify `batch_size` in " +
                        self.__class__.__name__ + ".predict(). Use the "
-                       "DataSet.batch() method to apply batching at the input "
+                       "Dataset.batch() method to apply batching at the input "
                        "dataset level.")
 
     ds, size = _get_dataset_and_count(x, None, batch_size)
@@ -637,8 +636,9 @@ class _IpuModelBase(KerasModel):
     return self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose, callbacks,
                              0, steps, steps_per_run, prefetch_depth, **kwargs)
 
-  def _get_replication_factor(self):
-    if not self.got_replication_factor:
+  @property
+  def replication_factor(self):
+    if not self._replication_factor:
       strategy = distribution_strategy_context.get_strategy()
       device_string = strategy.extended.non_slot_devices(None)
       current_device = tf_device.DeviceSpec.from_string(device_string)
@@ -648,19 +648,18 @@ class _IpuModelBase(KerasModel):
                          " can only be used on an IPU device.")
 
       num_ipus = utils.get_num_of_ipus_in_device(device_string)
-      self.replication_factor = int(num_ipus / self.shard_count)
-      self.got_replication_factor = True
+      self._replication_factor = int(num_ipus / self.shard_count)
 
-    return self.replication_factor
+    return self._replication_factor
 
 
 class IPUSequential(_IpuModelBase):
-  """A Keras Sequential class specifically targetting the IPU.  This is
+  """A Keras Sequential class specifically targeting the IPU. This is
   similar to the Keras Sequential model class, but it also supports the
   accumulation of gradient deltas, and an on-device training loop.
 
-  There are some limitations with the Sequential compared to the standard
-  Keras Sequential.
+  There are some limitations with this Sequential class compared to the
+  standard Keras Sequential class.
 
   - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
@@ -720,12 +719,12 @@ class IPUSequential(_IpuModelBase):
     super().__init__(accumulation_count=accumulation_count, shard_count=1)
 
     if not isinstance(layers, list):
-      raise ValueError("An IPU Sequential must take a list of Layers.")
+      raise ValueError("IPU Sequential requires a list of Layers.")
 
     for s in layers:
       if not isinstance(s, Layer):
-        raise ValueError("An IPU Sequential may only contain lists of Keras "
-                         "Layers.")
+        raise ValueError("An IPU Sequential's list of Layers may only contain"
+                         " Keras Layers.")
 
     self.accumulation_count = accumulation_count
     self.accumulation_dtype = accumulation_dtype
@@ -749,7 +748,7 @@ class IPUSequential(_IpuModelBase):
     This provides the same functionality as the Keras Sequential ``compile``
     method.
 
-    Certain features are not supported by the IPU Sequential:
+    Certain features are not supported by the IPU Sequential class:
     - sample_weight_mode
     - weighted_metrics
     - target_tensors
@@ -951,12 +950,12 @@ class IPUSequential(_IpuModelBase):
 
 
 class IPUModel(_IpuModelBase):
-  """A Keras Model class specifically targetting the IPU.  This is
+  """A Keras Model class specifically targeting the IPU.  This is
   similar to the Keras Model class, but it also supports the accumulation of
   gradient deltas, and an on-device training loop.
 
-  There are some limitations with the Model compared to the standard Keras
-  Model.
+  There are some limitations with the IPU Model class compared to the standard
+  Keras Model class.
 
   - Keras V1 optimizers cannot be used.
   - Loss weightings can only be specified as a list, not a callable.
@@ -994,8 +993,8 @@ class IPUModel(_IpuModelBase):
                accumulation_dtype=None,
                **kwargs):
     """
-    Creates a Keras model, optimized to run on the IPU. Needs to pass in
-    ``inputs`` and ``outputs`` as either arguments or keyword arguments.
+    Creates a Keras model, optimized to run on the IPU. ``inputs`` and
+    ``outputs`` must be passed in as either arguments or keyword arguments.
 
     Args:
         accumulation_count: The number of mini-batches to process
@@ -1020,8 +1019,7 @@ class IPUModel(_IpuModelBase):
     self.accumulation_dtype = accumulation_dtype
 
     # Signature detection
-    if (len(args) == 2 or len(args) == 1 and 'outputs' in kwargs
-        or 'inputs' in kwargs and 'outputs' in kwargs):
+    if len(args) == 2 - sum(['inputs' in kwargs, 'outputs' in kwargs]):
       self._init_network(*args, **kwargs)
     else:
       raise ValueError("Model was not provided with 'inputs' and 'outputs'")
@@ -1038,9 +1036,9 @@ class IPUModel(_IpuModelBase):
   @trackable.no_automatic_dependency_tracking
   def _init_network(self, inputs, outputs, name=None, **kwargs):
     generic_utils.validate_kwargs(
-        kwargs, {'trainable'},
-        'Functional models may only specify `name` and `trainable` keyword '
-        'arguments during initialization. Got an unexpected argument:')
+        kwargs, {"trainable"},
+        "Functional models may only specify `name` and `trainable` keyword"
+        " arguments during initialization. Got an unexpected argument:")
     # Normalize and set self.inputs, self.outputs.
     if isinstance(inputs, list) and len(nest.flatten(inputs)) == 1:
       inputs = inputs[0]
@@ -1051,7 +1049,7 @@ class IPUModel(_IpuModelBase):
     self.inputs = nest.flatten(inputs)
     self.outputs = nest.flatten(outputs)
 
-    if any(not hasattr(tensor, '_keras_history') for tensor in self.outputs):
+    if not all(hasattr(tensor, '_keras_history') for tensor in self.outputs):
       base_layer_utils.create_keras_history(self._nested_outputs)
 
     self._base_init(name=name, **kwargs)
@@ -1060,7 +1058,7 @@ class IPUModel(_IpuModelBase):
     self._input_layers = []
     self._output_layers = []
 
-    # Store the output coordinates to map the a node in the graph to an output.
+    # Store the output coordinates to map a node in the graph to an output.
     self._output_coordinates = []
 
     # Build self._output_layers:
@@ -1160,11 +1158,8 @@ class IPUModel(_IpuModelBase):
     argspec = self._layer_call_argspecs[layer].args
     if 'training' in argspec:
       kwargs.setdefault('training', training)
-      if (type(kwargs['training']) is ops.Tensor and  # pylint: disable=unidiomatic-typecheck
-          any([
-              kwargs['training'] is x
-              for x in backend._GRAPH_LEARNING_PHASES.values()  # pylint: disable=protected-access
-          ])):
+      if (isinstance(kwargs['training'], ops.Tensor)
+          and kwargs['training'] in backend._GRAPH_LEARNING_PHASES.values()):  # pylint: disable=protected-access
         kwargs['training'] = training  # Materialize placeholder.
 
     # Map Keras tensors in kwargs to their computed value.
@@ -1195,7 +1190,7 @@ class IPUModel(_IpuModelBase):
         assert tensor_index == 0
 
       assert str(
-          id(output)) in tensor_dict, 'Could not compute output ' + str(output)
+          id(output)) in tensor_dict, "Could not compute output " + str(output)
       tensor = tensor_dict[str(id(output))]
       output_tensors.append(tensor)
 
