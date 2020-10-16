@@ -400,17 +400,18 @@ class XlaOpsShapeInferenceTest(xla_test.XLATestCase, parameterized.TestCase):
         xla.dot_general(a, b, dim_nums)
 
   def testDotShapeInference(self):
-    a = array_ops.placeholder(np.float32, shape=(1, 2, 3, 4))
-    b = array_ops.placeholder(np.float32, shape=(4, 3, 2, 1))
+    with self.session():
+      a = array_ops.placeholder(np.float32, shape=(1, 2, 3, 4))
+      b = array_ops.placeholder(np.float32, shape=(4, 3, 2, 1))
 
-    dim_nums = xla_data_pb2.DotDimensionNumbers()
-    dim_nums.lhs_contracting_dimensions.append(1)
-    dim_nums.rhs_contracting_dimensions.append(2)
-    dim_nums.lhs_batch_dimensions.append(3)
-    dim_nums.rhs_batch_dimensions.append(0)
+      dim_nums = xla_data_pb2.DotDimensionNumbers()
+      dim_nums.lhs_contracting_dimensions.append(1)
+      dim_nums.rhs_contracting_dimensions.append(2)
+      dim_nums.lhs_batch_dimensions.append(3)
+      dim_nums.rhs_batch_dimensions.append(0)
 
-    c = xla.dot_general(a, b, dim_nums)
-    self.assertEqual(c.shape, tensor_shape.TensorShape([4, 1, 3, 3, 1]))
+      c = xla.dot_general(a, b, dim_nums)
+      self.assertEqual(c.shape, tensor_shape.TensorShape([4, 1, 3, 3, 1]))
 
 
 if __name__ == '__main__':
