@@ -96,6 +96,15 @@ StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction* inst) {
       return popops::expr::UnaryOpType::TANH;
     case HloOpcode::kIsFinite:
       return popops::expr::UnaryOpType::IS_FINITE;
+    case HloOpcode::kCustomCall: {
+      if (IsPoplarInstruction(PoplarOp::Square, inst)) {
+        return popops::expr::UnaryOpType::SQUARE;
+      }
+      if (IsPoplarInstruction(PoplarOp::Inverse, inst)) {
+        return popops::expr::UnaryOpType::INVERSE;
+      }
+      TF_FALLTHROUGH_INTENDED;
+    }
     default:
       break;
   }

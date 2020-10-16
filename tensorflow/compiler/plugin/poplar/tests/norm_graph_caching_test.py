@@ -524,15 +524,16 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(1587482)
-      report.assert_max_tile_memory(1511)
+      report.assert_total_tile_memory(1538330)
+      report.assert_max_tile_memory(1463)
 
       # Would fail if there were two batch norms in the graph
       ok = [
           '__seed*',
           'host-exchange-local-copy',
           'Copy_',
-          'moments/SquaredDifference/multiply',
+          'moments/SquaredDifference/square',
+          'moments/SquaredDifference/subtract',
           'a/batch-norm-inference',
           'add/add*/Add',
       ]

@@ -162,6 +162,7 @@ cc_library(
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
+        "driver/passes/elementwise_simplifier.cc",
         "driver/passes/embeddings_gradient_optimizer.cc",
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
@@ -253,6 +254,7 @@ cc_library(
         "driver/tools/custom_ops/group_norm_grad.cc",
         "driver/tools/custom_ops/group_norm_stats.cc",
         "driver/tools/custom_ops/gru.cc",
+        "driver/tools/custom_ops/elementwise.cc",
         "driver/tools/custom_ops/execution_counter.cc",
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
@@ -324,6 +326,7 @@ cc_library(
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
+        "driver/passes/elementwise_simplifier.h",
         "driver/passes/embeddings_gradient_optimizer.h",
         "driver/passes/expression_outliner.h",
         "driver/passes/f16_constant_folding.h",
@@ -410,6 +413,7 @@ cc_library(
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/copy_into.h",
         "driver/tools/custom_ops/dropout_hlo.h",
+        "driver/tools/custom_ops/elementwise.h",
         "driver/tools/custom_ops/execution_counter.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
@@ -1308,6 +1312,20 @@ cc_library(
 xla_test(
     name = "poplar_algebraic_simplifier_test",
     srcs = ["tests/poplar_algebraic_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "elementwise_simplifier_test",
+    srcs = ["tests/elementwise_simplifier_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4605,6 +4623,7 @@ test_suite(
         "dynamic_slice_layout_test",
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
+        "elementwise_simplifier_test",
         "embeddings_gradient_optimizer_test",
         "executable_cache_test",
         "execution_counter_util_test",
