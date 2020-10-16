@@ -35,6 +35,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -50,6 +51,9 @@ class ParallelMapTester : public DfsHloVisitorWithDefault {
 
   Status DefaultAction(HloInstruction* inst) override {
     if (inst->IsElementwise()) {
+      return Status::OK();
+    } else if (IsPoplibsHloCustomOp(inst) &&
+               Cast<HloPoplarInstruction>(inst)->IsPopOpsElementwise()) {
       return Status::OK();
     } else if (inst->opcode() == HloOpcode::kParameter) {
       return Status::OK();

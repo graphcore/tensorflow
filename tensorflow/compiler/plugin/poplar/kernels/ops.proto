@@ -81,6 +81,8 @@ enum PoplarOp {
   WeightsTransposeChansFlipXY = 77;
   ExecutionCounter = 78;
   CopyInto = 79;
+  Square = 80;
+  Inverse = 81;
 
   // Supported Fusions.
   Conv_biasadd = 200;

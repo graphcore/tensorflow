@@ -561,7 +561,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           'vs/gradients/vs/Square_grad/Mul/fusion*/Op/Multiply',
           'vs/bias_add/fusion/Op/Add',
           'vs/Sum/reduce',
-          'vs/Square/multiply*/Op/Multiply',
+          'vs/Square/square*/Op/Square',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
