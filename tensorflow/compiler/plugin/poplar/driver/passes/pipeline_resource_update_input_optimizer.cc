@@ -86,9 +86,7 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
         // Check whether there is an elementwise user - if there is then this
         // can be lowered directly into the resource update iff any other inputs
         // are constant.
-        if (parameter->user_count() == 1) {
-          HloInstruction* user = parameter->users()[0];
-
+        for (HloInstruction* user : parameter->users()) {
           if (user->IsElementwise() && user->operand_count() < 3) {
             int64 modifier_operand_idx = user->operand_index(parameter);
 
@@ -107,6 +105,7 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
               output_idx = state_root->operand_index(user);
               elementwise_modifier =
                   ElementwiseModifierInfo{user, modifier_operand_idx};
+              break;
             }
           }
         }
