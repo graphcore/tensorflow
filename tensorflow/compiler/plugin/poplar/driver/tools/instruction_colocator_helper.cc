@@ -308,7 +308,6 @@ class SendToHostColocatorHelper : public InstructionColocatorHelper {
     for (auto* old_send : old_sends) {
       CHECK_EQ(old_send->operand_count(), 1);
       CHECK_EQ(old_send->RendezvousKeys().size(), 1);
-      CHECK_EQ(old_send->ConcatReplicas(), first_send->ConcatReplicas());
       new_shapes.push_back(old_send->shape());
       new_operands.push_back(old_send->mutable_operand(0));
       new_rendezvous_keys.push_back(old_send->RendezvousKeys()[0]);
@@ -335,14 +334,6 @@ class SendToHostColocatorHelper : public InstructionColocatorHelper {
     }
 
     return std::vector<HloInstruction*>{new_send};
-  }
-
- protected:
-  bool CanColocateExtra(const HloInstruction* a,
-                        const HloInstruction* b) const override {
-    auto* a_cast = Cast<HloSendToHostInstruction>(a);
-    auto* b_cast = Cast<HloSendToHostInstruction>(b);
-    return a_cast->ConcatReplicas() == b_cast->ConcatReplicas();
   }
 };
 

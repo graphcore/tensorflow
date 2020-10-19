@@ -379,9 +379,7 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
 
   for (const SendRecvInfo& send : send_infos) {
     VLOG(1) << "Connecting Poplar IPU->host stream to rendezvous key '"
-            << send.rendezvous_key << "' with shape " << send.shape
-            << " and replication handling "
-            << (send.concat_replicas ? "'Concat'" : "'First'");
+            << send.rendezvous_key << "' with shape " << send.shape;
 
     tensorflow::TensorShape shape;
     TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(send.shape, &shape));
@@ -398,12 +396,8 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     // `this` which holds a refcount of it should outlive the engine.
     auto* rendezvous = GetRendezvous();
 
-    auto callback_creator =
-        send.concat_replicas ? SendConcatenatedCallbackCreator(
-                                   shape, type, key, rendezvous, num_replicas)
-                             : SendFromFirstReplicaCallbackCreator(
-                                   shape, type, key, rendezvous, num_replicas,
-                                   can_avoid_buffer_copy);
+    auto callback_creator = SendFromFirstReplicaCallbackCreator(
+        shape, type, key, rendezvous, num_replicas, can_avoid_buffer_copy);
 
     for (int64 replica_id = 0; replica_id < num_replicas; ++replica_id) {
       current_engine_->connectStreamToCallback(send.stream_handle, replica_id,

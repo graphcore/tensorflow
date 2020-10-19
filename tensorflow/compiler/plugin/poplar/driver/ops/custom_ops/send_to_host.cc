@@ -59,7 +59,7 @@ class SendToHostOp : public PoplarOpDef {
 
       const Shape& shape = inst->operand(i)->shape();
       res.annotations.send_infos.emplace_back(stream.handle(), rendezvous_key,
-                                              shape, send->ConcatReplicas());
+                                              shape);
     }
 
     return seq;
