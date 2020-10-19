@@ -698,9 +698,9 @@ class PipelineModel(ipu_model.Model):
       batch_serialization_iterations
     super().__init__(*args, accumulation_count=accumulation_count, **kwargs)
 
-    # Assign stages to nodes.
-    self.stages = self._assign_node_stages()
-    self._stage_node_ids = self._get_per_stage_node_ids()
+    # Mutable attributes will be seen as trainable and e.g. added as Layers.
+    # Define them inside this function if you don't want them tracked.
+    self._pipeline_init_network()
 
     # Compute shard count.
     shard_count = max(
@@ -728,6 +728,12 @@ class PipelineModel(ipu_model.Model):
       offload_gradient_accumulation_buffers
     self.replicated_weight_sharding = replicated_weight_sharding
     self.offload_weights = offload_weights
+
+  @trackable.no_automatic_dependency_tracking
+  def _pipeline_init_network(self):
+    # Assign stages to nodes.
+    self.stages = self._assign_node_stages()
+    self._stage_node_ids = self._get_per_stage_node_ids()
 
   def _assign_node_stages(self):
     # Get stages for each layer - used for mapping to nodes below.

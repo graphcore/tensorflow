@@ -14,6 +14,7 @@
 # ==============================================================================
 
 from functools import partial
+import re
 
 import numpy as np
 
@@ -27,6 +28,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.keras.engine import training_utils
+from tensorflow.python.keras.utils import vis_utils
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
@@ -942,6 +944,41 @@ class IPUPipelineTest(test.TestCase):
       # The result is the tuple of concatenated output tensors
       self.assertEqual(type(result), tuple)
       self.assertEqual(result[0].shape, (96, 2))
+
+  @test_util.run_v2_only
+  def testModelToDot(self):
+    # This test is conditional on both `pydot` and `graphviz` being installed
+    if vis_utils.check_pydot():
+      strategy = ipu.ipu_strategy.IPUStrategy()
+      with strategy.scope():
+        # Initialize pipeline model
+        input_layer = keras.layers.Input(shape=(32))
+        x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
+        m = ipu.keras.PipelineModel(inputs=input_layer,
+                                    outputs=x,
+                                    gradient_accumulation_count=8)
+
+        # Figure out expected layer labels and shapes
+        _maybe_unpack = lambda x: x[0] if isinstance(x, list) else x
+        _shape_to_str = lambda s: str(_maybe_unpack(s)).replace("None", "?")
+        expected_nodes = {}
+        for l in m.layers:
+          expected_nodes[l.__class__.__name__] = [
+              _shape_to_str(l.input_shape),
+              _shape_to_str(l.output_shape)
+          ]
+
+        # Create the dot graph and extract node labels, shapes with regex
+        dot_graph = vis_utils.model_to_dot(m, show_shapes=True)
+        dot_nodes = {}
+        for node in dot_graph.get_nodes():
+          label = node.get_label()
+          if label:
+            layer_name = label.split('\n')[0].split(' ')[1]
+            dot_nodes[layer_name] = re.findall(r"(\(.*?\))", label)
+
+        # The model layers and dot nodes should be the same
+        self.assertDictEqual(expected_nodes, dot_nodes)
 
 
 if __name__ == '__main__':
