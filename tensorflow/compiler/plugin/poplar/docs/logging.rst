@@ -336,9 +336,14 @@ can be useful when developing graphs for the IPU.
 ``TF_CPP_MIN_VLOG_LEVEL`` is an environment variable that enables the logging of
 the main C++ backend.  Setting ``TF_CPP_MIN_VLOG_LEVEL=1`` will show a lot of
 output.  Included in this is the compilation and execution of the IPU code.
-The output of ``TF_CPP_MIN_VLOG_LEVEL`` can be overwhelming. ``TF_CPP_VMODULE``
-provides a mechanism to reduce the logging to certain translation units (source
-files).  This combination is quite useful:
+The output of ``TF_CPP_MIN_VLOG_LEVEL`` can be overwhelming. If only the Poplar
+backend specific files are of interest, setting ``TF_POPLAR_VLOG_LEVEL=1`` will
+filter the logging such that only those files produce outputs. Note that
+increasing the ``VLOG_LEVEL`` of either of those environment variables will
+increase the verbosity of the logs.
+
+``TF_CPP_VMODULE`` provides a mechanism to reduce the logging to certain
+translation units (source files).  This combination is quite useful:
 
 .. code-block:: python
 
