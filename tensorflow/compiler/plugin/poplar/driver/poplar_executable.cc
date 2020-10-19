@@ -250,8 +250,10 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   RemoteParameterInfos remote_parameter_infos;
   for (const auto& remote_parameter : proto.remote_parameters()) {
-    remote_parameter_infos.emplace(
-        RemoteParameterInfo{remote_parameter.parameter_number()});
+    remote_parameter_infos.emplace(RemoteParameterInfo{
+        remote_parameter.parameter_number(),
+        remote_parameter.is_replica_partitioned(),
+        remote_parameter.buffer_name(), remote_parameter.buffer_offset()});
   }
 
   // Load the additional Poplar engine options that we need to restore.
@@ -494,6 +496,10 @@ Status ExportInternal(
     auto* remote_parameter = proto.add_remote_parameters();
     remote_parameter->set_parameter_number(
         remote_parameter_info.parameter_number);
+    remote_parameter->set_is_replica_partitioned(
+        remote_parameter_info.is_replica_partitioned);
+    remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
+    remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
   }
 
   for (const auto key_id_mapping : mappings) {

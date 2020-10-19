@@ -116,15 +116,19 @@ StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
 
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t);
 
+absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
+    int64 parameter_number, const RemoteParameterInfos& remote_parameter_infos);
 bool IsRemoteParameter(int64 parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos);
 bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res);
-bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res);
+bool IsRemoteParameter(const HloInstruction* inst,
+                       const CompilerResources& res);
 
 bool IsReplicaPartitioned(int64 parameter_number,
                           const RemoteParameterInfos& remote_parameter_infos);
 bool IsReplicaPartitioned(int64 parameter_number, const CompilerResources& res);
-bool IsReplicaPartitioned(HloInstruction* inst, const CompilerResources& res);
+bool IsReplicaPartitioned(const HloInstruction* inst,
+                          const CompilerResources& res);
 
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
 

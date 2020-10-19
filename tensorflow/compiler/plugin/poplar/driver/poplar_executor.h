@@ -603,8 +603,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     unsigned int ref_count = 0;
     bool on_device = false;
-    bool in_remote_memory = false;
-    bool replica_partitioned = false;
+    absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
     std::string input_handle;
     std::string output_handle;
     ConversionFn output_convertor;
@@ -621,23 +620,20 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     TensorControl* tc;
     ConversionFn fn;
     bool streamed;
-    bool remote_parameter;
-    bool replica_partitioned;
+    absl::optional<RemoteParameterInfo> remote_parameter_info;
 
     InputDef() {}
     InputDef(TensorControl* tc, ConversionFn fn, bool streamed,
-             bool remote_parameter, bool replica_partitioned)
+             absl::optional<RemoteParameterInfo> remote_parameter_info)
         : tc(tc),
           fn(fn),
           streamed(streamed),
-          remote_parameter(remote_parameter),
-          replica_partitioned(replica_partitioned) {}
+          remote_parameter_info(remote_parameter_info) {}
     InputDef(const InputDef& other)
         : tc(other.tc),
           fn(other.fn),
           streamed(other.streamed),
-          remote_parameter(other.remote_parameter),
-          replica_partitioned(other.replica_partitioned) {}
+          remote_parameter_info(other.remote_parameter_info) {}
   };
   using InputPairList = std::vector<InputDef>;
   using ArgsHandleMap = std::map<std::string, InputDef>;
@@ -657,8 +653,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static void FlattenedDeviceMemoryList(
       InputPairList&, const xla::Shape&, void*,
-      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter,
-      bool is_replica_partitioned);
+      const InputOutputAliasingMap::InputInfo&,
+      absl::optional<RemoteParameterInfo>);
 
   static void FlattenedOutputDeviceMemoryList(
       OutputPairList&, const xla::Shape&, void*,
