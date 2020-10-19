@@ -49,14 +49,6 @@ class PoplarTensorBufferView : public tensorflow::TensorBuffer {
   std::size_t size_;
 };
 
-tensorflow::TensorShape ConcatenatedShape(const tensorflow::TensorShape& shape,
-                                          int64 factor) {
-  tensorflow::TensorShape concat_shape(shape);
-  CHECK_GT(shape.dims(), 0);
-  concat_shape.set_dim(0, shape.dim_size(0) * factor);
-  return concat_shape;
-}
-
 }  // namespace
 
 std::function<poplar::StreamCallbackHandle(int64)>
@@ -93,67 +85,6 @@ SendFromFirstReplicaCallbackCreator(const tensorflow::TensorShape& shape,
     } else {
       // Discard the output from the remaining replicas.
       return [](void*) {};
-    }
-  };
-}
-
-std::function<poplar::StreamCallbackHandle(int64)>
-SendConcatenatedCallbackCreator(const tensorflow::TensorShape& shape,
-                                tensorflow::DataType type,
-                                tensorflow::Rendezvous::ParsedKey key,
-                                tensorflow::Rendezvous* rendezvous,
-                                int64 num_replicas) {
-  // We create one shared tensor and reuse it every time to avoid allocating
-  // in the callback. This should be safe since every Send op must be
-  // matched by a corresponding Recv op in the same graph, so the tensor
-  // must be consumed before the next execution of the graph. We verify this
-  // assumption before sending by checking that we are the only owner.
-  // All the lambdas must capture the shared_ptr to make sure it is alive.
-  auto tensor = std::make_shared<tensorflow::Tensor>(
-      type, ConcatenatedShape(shape, num_replicas));
-
-  const int64 num_bytes_per_replica =
-      shape.num_elements() * tensorflow::DataTypeSize(type);
-
-  auto* tensor_buf = tensorflow::DMAHelper::buffer(tensor.get());
-  CHECK_EQ(tensor_buf->size(), num_bytes_per_replica * num_replicas);
-  CHECK(tensor_buf->RefCountIsOne());
-
-  // Keep one additional reference for each callback.
-  for (int64 i = 0; i < num_replicas; ++i) {
-    tensor_buf->Ref();
-  }
-
-  // Since the callbacks for the replicas are invoked by Poplar sequentially
-  // in replica index order, we can send the tensor from the last replica.
-  // Verify this assumption by slightly abusing the refcount to count the
-  // number of callbacks invoked.
-  return [=](int64 replica_id) -> poplar::StreamCallbackHandle {
-    char* dst = tensor_buf->base<char>() + replica_id * num_bytes_per_replica;
-    if (replica_id < num_replicas - 1) {
-      return [tensor, tensor_buf, dst, num_bytes_per_replica](void* src) {
-        std::memcpy(dst, src, num_bytes_per_replica);
-        tensor_buf->Unref();
-      };
-    } else {
-      return [tensor, tensor_buf, dst, num_bytes_per_replica, num_replicas,
-              rendezvous, key](void* src) {
-        std::memcpy(dst, src, num_bytes_per_replica);
-        tensor_buf->Unref();
-
-        // Check that this was the last callback to be invoked, and that
-        // the tensor was consumed from the previous iteration.
-        CHECK(tensor_buf->RefCountIsOne());
-
-        // Sending here increases the refcount until it is consumed.
-        rendezvous->Send(key, tensorflow::Rendezvous::Args{}, *tensor,
-                         /*is_dead=*/false);
-
-        // Prepare the refcount for the next iteration.
-        for (int64 i = 0; i < num_replicas; ++i) {
-          tensor_buf->Ref();
-        }
-      };
     }
   };
 }

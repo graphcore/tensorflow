@@ -29,8 +29,7 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
  public:
   explicit HloSendToHostInstruction(
       absl::Span<HloInstruction* const> inputs, const Shape shape,
-      const std::vector<std::string>& rendezvous_keys,
-      bool concat_replicas = false);
+      const std::vector<std::string>& rendezvous_keys);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -41,8 +40,6 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
   bool IsPopOpsElementwise() const override;
 
   const std::vector<std::string>& RendezvousKeys() const;
-
-  bool ConcatReplicas() const;
 
   std::unique_ptr<HloInstruction> CloneWithNewOperandsAndRendezvousKeys(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -58,7 +55,6 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   std::vector<std::string> rendezvous_keys_;
-  bool concat_replicas_;
 };
 
 std::unique_ptr<HloInstruction> CreateSendToHost(HloInstruction* input,

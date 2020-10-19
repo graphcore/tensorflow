@@ -58,10 +58,6 @@ class IpuSendToHostOp : public XlaOpKernel {
     rendezvous_key_ =
         Rendezvous::CreateKey(send_device, send_device_incarnation, recv_device,
                               tensor_name, FrameAndIter{0, 0});
-
-    string replica_handling;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("replica_handling", &replica_handling));
-    concat_replicas_ = replica_handling == "Concat";
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -72,18 +68,12 @@ class IpuSendToHostOp : public XlaOpKernel {
     const xla::XlaOp input = ctx->Input(0);
     const TensorShape input_shape = ctx->InputShape(0);
 
-    if (concat_replicas_ && input_shape.dims() == 0) {
-      ctx->CtxFailure(errors::InvalidArgument("Cannot concatenate scalars"));
-      return;
-    }
-
     const DataType dtype = ctx->input_type(0);
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, input_shape, &xla_shape));
 
     xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attributes;
     attributes.AddAttribute("rendezvous_key", rendezvous_key_);
-    attributes.AddAttribute("concat_replicas", concat_replicas_);
 
     const xla::XlaOp send_to_host = xla::CustomCall(
         ctx->builder(), PoplarOp_Name(PoplarOp::SendToHost), {input},
@@ -92,7 +82,6 @@ class IpuSendToHostOp : public XlaOpKernel {
 
  private:
   string rendezvous_key_;
-  bool concat_replicas_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IpuSendToHostOp);
 };
