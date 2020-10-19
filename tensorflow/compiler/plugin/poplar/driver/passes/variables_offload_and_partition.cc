@@ -282,6 +282,8 @@ struct OffloadedResourceInfo {
   HloInstruction* input_in_call;
   // Users inside of the call of the resource variable.
   std::vector<OffloadedResourceUse> users;
+  // The stream name for this input.
+  std::string stream_name;
 
   // Only populated for Modified type. Output from the call in entry
   // computation.
@@ -458,6 +460,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     offload_info.call_operand_idx = call_operand_idx;
     offload_info.input_to_call = call_input;
     offload_info.input_in_call = call_parameter;
+    offload_info.stream_name = input_info.Handles().at(0);
 
     if (input_info.IsResourceNotModified()) {
       // Needs to be used by the root tuple at the same index as the operand
@@ -717,7 +720,8 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     }
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(RemoteParameterInfo{
-        offload_info.entry_param_number, replication_factor > 1});
+        offload_info.entry_param_number, replication_factor > 1,
+        offload_info.stream_name, 0});
     changed = true;
   }
 

@@ -29,6 +29,9 @@ message HostEmbeddingConfig {
 
 message RemoteParameterConfig {
   int64 parameter_number = 1;
+  bool is_replica_partitioned = 2;
+  string buffer_name = 3;
+  int64 buffer_offset = 4;
 }
 
 message KeyIdMapping {

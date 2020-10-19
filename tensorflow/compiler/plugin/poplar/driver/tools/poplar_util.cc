@@ -309,10 +309,20 @@ void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t) {
   popops::zero(GetMasterGraph(res), t, res.preamble_sequence, "ZeroVar");
 }
 
+absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
+    int64 parameter_number,
+    const RemoteParameterInfos& remote_parameter_infos) {
+  auto itr = remote_parameter_infos.find(RemoteParameterInfo{parameter_number});
+  if (itr != remote_parameter_infos.end()) {
+    return *itr;
+  }
+  return absl::nullopt;
+}
+
 bool IsRemoteParameter(int64 parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos) {
-  return remote_parameter_infos.find(RemoteParameterInfo{parameter_number}) !=
-         remote_parameter_infos.end();
+  return FindRemoteParameterInfo(parameter_number, remote_parameter_infos)
+      .has_value();
 }
 
 bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res) {
@@ -320,8 +330,10 @@ bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res) {
                            res.annotations.remote_parameter_infos);
 }
 
-bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res) {
+bool IsRemoteParameter(const HloInstruction* inst,
+                       const CompilerResources& res) {
   return IsInstructionInEntryComputation(inst) &&
+         inst->opcode() == HloOpcode::kParameter &&
          IsRemoteParameter(inst->parameter_number(), res);
 }
 
@@ -343,8 +355,10 @@ bool IsReplicaPartitioned(int64 parameter_number,
                               res.annotations.remote_parameter_infos);
 }
 
-bool IsReplicaPartitioned(HloInstruction* inst, const CompilerResources& res) {
+bool IsReplicaPartitioned(const HloInstruction* inst,
+                          const CompilerResources& res) {
   return IsInstructionInEntryComputation(inst) &&
+         inst->opcode() == HloOpcode::kParameter &&
          IsReplicaPartitioned(inst->parameter_number(), res);
 }
 

@@ -1975,21 +1975,20 @@ Status PoplarExecutor::GetCompilerEvents(
 void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList& list, const xla::Shape& shape, void* base,
     const InputOutputAliasingMap::InputInfo& input_info,
-    bool is_remote_parameter, bool is_replica_partitioned) {
+    absl::optional<RemoteParameterInfo> remote_parameter_info) {
   TensorControl* tc = static_cast<TensorControl*>(base);
   if (shape.IsTuple()) {
     void** ptrs = reinterpret_cast<void**>(tc->data);
     for (unsigned int t = 0; t < xla::ShapeUtil::TupleElementCount(shape);
          t++) {
       void* ptr = ptrs[t];
-      FlattenedDeviceMemoryList(
-          list, xla::ShapeUtil::GetTupleElementShape(shape, t), ptr, input_info,
-          is_remote_parameter, is_replica_partitioned);
+      FlattenedDeviceMemoryList(list,
+                                xla::ShapeUtil::GetTupleElementShape(shape, t),
+                                ptr, input_info, remote_parameter_info);
     }
   } else {
     list.push_back(InputDef(tc, GetInputConversionFunction(shape),
-                            input_info.IsStreaming(), is_remote_parameter,
-                            is_replica_partitioned));
+                            input_info.IsStreaming(), remote_parameter_info));
   }
 }
 
@@ -2016,15 +2015,13 @@ void PoplarExecutor::UpdateArgsHandleMap(
   for (unsigned int a = 0; a < inputs_info.size(); a++) {
     const auto& input_info = inputs_info[a];
     InputPairList bufs;
-    const bool is_remote_parameter =
-        IsRemoteParameter(a, executable.GeRemoteParameterInfos());
-    const bool is_replica_partitioned =
-        IsReplicaPartitioned(a, executable.GeRemoteParameterInfos());
+    auto remote_parameter_info =
+        FindRemoteParameterInfo(a, executable.GeRemoteParameterInfos());
     FlattenedDeviceMemoryList(bufs, shapes[a],
                               const_cast<void*>(args[a].opaque()), input_info,
-                              is_remote_parameter, is_replica_partitioned);
+                              remote_parameter_info);
     for (unsigned i = 0; i < bufs.size(); i++) {
-      InputDef input = bufs[i];
+      InputDef& input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
@@ -2038,14 +2035,13 @@ void PoplarExecutor::UpdateArgsHandleMap(
           TensorControl* tc =
               reinterpret_cast<TensorControl*>(allocated.opaque());
           std::memcpy(tc->data, input.tc->data, input.tc->size);
-          input = InputDef(tc, input.fn, input.streamed, input.remote_parameter,
-                           input.replica_partitioned);
+          input.tc = tc;
         }
         modified_resources.insert(input.tc);
       }
 
       input.tc->element_type = shapes[a].element_type();
-      args_map_[input_handle] = input;
+      args_map_.emplace(input_handle, input);
     }
   }
 }
@@ -2397,12 +2393,18 @@ Status PoplarExecutor::MoveDeviceToHost() {
     for (const auto& tc : allocations_) {
       // Set up streams
       if (tc->on_device == true && !tc->output_handle.empty()) {
-        if (tc->in_remote_memory) {
+        if (tc->in_memory_remote_parameter_info) {
           // We currently only get one copy of the buffer.
           // Note that only resource variables are on device, hence they must
           // have the input handle set too.
           CHECK(tc->input_handle.size());
-          if (tc->replica_partitioned) {
+
+          const std::string buffer_name =
+              tc->in_memory_remote_parameter_info->buffer_name;
+          const int64 buffer_offset =
+              tc->in_memory_remote_parameter_info->buffer_offset;
+
+          if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
             const std::size_t size =
                 HostSizeToDeviceSize(tc->size, tc->element_type);
             // Pad the per-replica length up.
@@ -2419,15 +2421,15 @@ Status PoplarExecutor::MoveDeviceToHost() {
               const std::size_t replica_length =
                   std::min(length, size - offset);
 
-              current_engine_->copyFromRemoteBuffer(
-                  tc->input_handle, buffer.get(), 0, replica_id);
+              current_engine_->copyFromRemoteBuffer(buffer_name, buffer.get(),
+                                                    buffer_offset, replica_id);
 
               std::memcpy(tc->data + offset, buffer.get(), replica_length);
             }
           } else {
             const unsigned replica_id = 0;
-            current_engine_->copyFromRemoteBuffer(tc->input_handle, tc->data, 0,
-                                                  replica_id);
+            current_engine_->copyFromRemoteBuffer(buffer_name, tc->data,
+                                                  buffer_offset, replica_id);
           }
         } else {
           ConnectReplicatedDeviceToHost(tc->output_handle, tc);
@@ -2462,8 +2464,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
         PostProcessBuffer(tc);
       }
 
-      tc->in_remote_memory = false;
-      tc->replica_partitioned = false;
+      tc->in_memory_remote_parameter_info = absl::nullopt;
       tc->on_device = false;
       tc->output_handle.clear();
       tc->input_handle.clear();
@@ -2491,10 +2492,16 @@ Status PoplarExecutor::MoveHostToDevice() {
       if (!arg.second.streamed) {
         buf = PreProcessBuffer(arg.second);
 
-        if (arg.second.remote_parameter) {
-          tc->in_remote_memory = true;
-          tc->replica_partitioned = arg.second.replica_partitioned;
-          if (arg.second.replica_partitioned) {
+        if (arg.second.remote_parameter_info) {
+          tc->in_memory_remote_parameter_info.emplace(
+              *arg.second.remote_parameter_info);
+
+          const std::string buffer_name =
+              tc->in_memory_remote_parameter_info->buffer_name;
+          const int64 buffer_offset =
+              tc->in_memory_remote_parameter_info->buffer_offset;
+
+          if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
             const std::size_t size =
                 HostSizeToDeviceSize(tc->size, tc->element_type);
             // Pad the per-replica length up.
@@ -2521,19 +2528,18 @@ Status PoplarExecutor::MoveHostToDevice() {
                           length - replica_length);
 
               // Copy the padded buffer to the remote buffer.
-              current_engine_->copyToRemoteBuffer(buffer.get(), arg.first, 0,
-                                                  replica_id);
+              current_engine_->copyToRemoteBuffer(buffer.get(), buffer_name,
+                                                  buffer_offset, replica_id);
             }
           } else {
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
-              current_engine_->copyToRemoteBuffer(buf, arg.first, 0,
-                                                  replica_id);
+              current_engine_->copyToRemoteBuffer(buf, buffer_name,
+                                                  buffer_offset, replica_id);
             }
           }
         } else {
-          tc->in_remote_memory = false;
-          tc->replica_partitioned = false;
+          tc->in_memory_remote_parameter_info = absl::nullopt;
           current_engine_->connectStream(arg.first, buf);
         }
 
