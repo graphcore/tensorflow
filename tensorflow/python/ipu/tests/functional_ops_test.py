@@ -144,13 +144,9 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       # There would be multiple non-linearities(grads) if the function was not
       # cached.
       ok = [
-          'MatMul/dot*/Conv_1',
-          'add/add*/Op/Add',
-          'Sigmoid/sigmoid/Nonlinearity',
-          'sub/subtract*/Op/Subtract',
-          '__seed',
-          '[cC]opy',
-          'SparseSoftmaxCrossEntropyWithLogits',
+          'MatMul/dot*/Conv_1', 'add/add*/Op/Add',
+          'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract',
+          '__seed', '[cC]opy', 'SparseSoftmaxCrossEntropyWithLogits',
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
           'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
@@ -158,10 +154,11 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/fusion/AddTo',
           'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
+          'gradients/MatMul_grad/MatMul_1/dot', '/Transpose'
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1121320)
-      report.assert_max_tile_memory(3854)
+      report.assert_total_tile_memory(1293984)
+      report.assert_max_tile_memory(4191)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
@@ -240,10 +237,13 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'GradientDescent/update_2/bias/ResourceApplyGradientDescent/fusion.3/AddTo',
           'GradientDescent/update_2/w/ResourceApplyGradientDescent/fusion.2/AddTo',
           '[cC]opy',
+          '/Transpose',
+          'gradients/matmul_grad/MatMul/dot',
+          'gradients/matmul_grad/MatMul_1/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1090520)
-      report.assert_max_tile_memory(3894)
+      report.assert_total_tile_memory(1242264)
+      report.assert_max_tile_memory(4234)
 
       # Entry computastion and 4 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 5)
@@ -477,10 +477,11 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
           'gradients/MatMul_1_grad/MatMul/dot',
+          'gradients/MatMul_grad/MatMul_1/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1278072)
-      report.assert_max_tile_memory(5337)
+      report.assert_total_tile_memory(1337000)
+      report.assert_max_tile_memory(5419)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
