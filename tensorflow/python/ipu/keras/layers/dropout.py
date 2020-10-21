@@ -25,36 +25,25 @@ from tensorflow.python.ops import array_ops
 
 
 class Dropout(Layer):
-  """Base class for implementing XLA and Popnn compatible Dropout layer.
+  """Dropout layer optimized for running on the IPU.
+
+  The Dropout layer randomly sets input units to 0 with a frequency of `rate`
+  at each step during training. Inputs not set to 0 are scaled up by
+  `1/(1 - rate)` such that the expected sum is unchanged.
+
+  Note that the Dropout layer only applies when `training` is set to True, so
+  no values are dropped during inference.
+
+  Args:
+    rate: Float between 0 and 1. Fraction of the input units to drop.
+    noise_shape: 1D integer tensor representing the shape of the binary
+      dropout mask that will be multiplied with the input.
+    seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy
+      array or Python list/tuple) containing a pair of 32-bit integers that will
+      be used to seed the random number generator that generates the dropout
+      mask.
   """
   def __init__(self, rate=0.5, noise_shape=None, seed=None, **kwargs):
-    """Creates a Dropout layer.
-
-    The Dropout layer randomly sets input units to 0 with a frequency of `rate`
-    at each step during training time. Inputs not set to 0 are scaled up by
-    `1/(1 - rate)` such that the expected sum is unchanged.
-
-    Note that the Dropout layer only applies when `training` is set to True such
-    that no values are dropped during inference.
-
-    Args:
-      rate: Float between 0 and 1. Fraction of the input units to drop.
-      noise_shape: 1D integer tensor representing the shape of the binary
-        dropout mask that will be multiplied with the input.
-      seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy
-        array or Python list/tuple), representing the random seed that will be
-        used to create the distribution for dropout.
-
-    Call arguments:
-      inputs: Input tensor (of any rank).
-      training: Python boolean indicating whether the layer should behave
-        in training mode (adding dropout) or in inference mode (doing
-        nothing).
-
-    Returns:
-      A `Tensor` which has some nodes set to zero, as randomly selected based on
-      other parameters.
-    """
     super(Dropout, self).__init__(**kwargs)
     self.built = False
     self.seed = seed
@@ -67,6 +56,20 @@ class Dropout(Layer):
 
   # pylint: disable=arguments-differ
   def call(self, inputs, training=None):
+    """ Perform dropout.
+
+    Args:
+      inputs: Input tensor (of any rank).
+      training: Python boolean indicating whether the layer should behave
+        in training mode (adding dropout) or in inference mode (doing
+        nothing).
+
+    Returns:
+      In training mode, a tensor which has some nodes set to zero, as randomly
+      selected based on other parameters. In inference mode, a tensor that is
+      identical to the input tensor.
+    """
+
     if training is None:
       training = K.learning_phase()
 
