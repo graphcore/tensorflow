@@ -76,7 +76,7 @@ class _PopnnRNN(Layer):
     self._return_sequences = return_sequences
     self._time_major = time_major
     self._stateful = stateful
-    # Init input_size to None, which will be set after build().
+    # Initialize input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
 
@@ -114,7 +114,7 @@ class _PopnnRNN(Layer):
     raise ValueError("This method needs to be overridden.")
 
   def _build(self, input_shape):
-    """Create variables of the Popnn RNN.
+    """Create variables of the Popnn RNN layer.
 
     It can be called manually before `__call__()` or automatically through
     `__call__()`. In the former case, any subsequent `__call__()` will skip
@@ -225,8 +225,8 @@ class _PopnnRNN(Layer):
 
 class PopnnLSTM(_PopnnRNN):
   # pylint:disable=line-too-long
-  """Popnn implementation of Long Short-Term Memory layer - Hochreiter 1997,
-  optimized for the IPU.
+  """Popnn implementation of Long Short-Term Memory layer (Hochreiter and
+  Schmidhuber 1997), optimized for the IPU.
 
   Note that the Keras equivalent uses the `hard_sigmoid` as the default
   recurrent activation, however this version uses `sigmoid` as the default.
@@ -242,18 +242,18 @@ class PopnnLSTM(_PopnnRNN):
       Default: sigmoid (`sigmoid`).
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
-    use_bias: Boolean, whether the layer uses a bias vector.
+    use_bias: Boolean. If True then the layer will use a bias vector.
     kernel_initializer: Initializer for the `kernel` weights matrix,
-      used for the linear transformation of the inputs..
+      used for the linear transformation of the inputs.
     recurrent_initializer: Initializer for the `recurrent_kernel`
       weights matrix,
       used for the linear transformation of the recurrent state.
     bias_initializer: Initializer for the bias vector.
     unit_forget_bias: Boolean.
-      If True, add 1 to the bias of the forget gate at initialization.
+      If True then add 1 to the bias of the forget gate at initialization.
       Setting it to true will also force `bias_initializer="zeros"`.
-      This is recommended in [Jozefowicz et
-        al.](http://www.jmlr.org/proceedings/papers/v37/jozefowicz15.pdf).
+      This is recommended in `Jozefowicz et al
+      <http://www.jmlr.org/proceedings/papers/v37/jozefowicz15.pdf>`_.
     kernel_regularizer: Unsupported - Regularizer function applied to
       the `kernel` weights matrix.
     recurrent_regularizer: Unsupported - Regularizer function applied to
@@ -261,7 +261,7 @@ class PopnnLSTM(_PopnnRNN):
     bias_regularizer: Unsupported - Regularizer function applied to the bias
       vector.
     activity_regularizer: Unsupported - Regularizer function applied to
-      the output of the layer (its "activation")..
+      the output of the layer (its "activation").
     kernel_constraint: Unsupported - Constraint function applied to
       the `kernel` weights matrix.
     recurrent_constraint: Unsupported - Constraint function applied to
@@ -278,18 +278,20 @@ class PopnnLSTM(_PopnnRNN):
       Fraction of the units to drop for
       the linear transformation of the recurrent state.
     implementation: Unsupported - Implementation mode.
-    return_sequences: Boolean. Whether to return the last output.
-      in the output sequence, or the full sequence.
-    return_state: Boolean. Whether to return the last state
-      in addition to the output.
+    return_sequences: Boolean. If True then the full output sequence will be
+      returned.
+      If False then only the last output in the output sequence will be
+      returned.
+    return_state: Boolean. If True then the last state will be returned
+      in addition to the last output or output sequence.
     go_backwards: Unsupported - Boolean (default False).
-      If True, process the input sequence backwards and return the
+      If True process the input sequence backwards and return the
       reversed sequence.
-    stateful: Unsupported - Boolean (default False). If True, the last state
+    stateful: Boolean (default False). If True the last state
       for each sample at index i in a batch will be used as initial
       state for the sample of index i in the following batch.
     unroll: Unsupported - Boolean (default False).
-      If True, the network will be unrolled,
+      If True the network will be unrolled,
       else a symbolic loop will be used.
       Unrolling can speed-up a RNN,
       although it tends to be more memory-intensive.
@@ -299,22 +301,13 @@ class PopnnLSTM(_PopnnRNN):
     partials_dtype: the type used by Popnn to perform partial calculations.
       Either tf.float16 or tf.float32.
     time_major: The shape format of the `inputs` and `outputs` tensors.
-      If True, the inputs and outputs will be in shape
-      `(timesteps, batch, ...)`, whereas in the False case, it will be
+      If True the shape of the inputs and outputs will be
+      `(timesteps, batch, ...)`, otherwise the shape will be
       `(batch, timesteps, ...)`. Using `time_major = True` is a bit more
       efficient because it avoids transposes at the beginning and end of the
       RNN calculation. However, most TensorFlow data is batch-major, so by
       default this function accepts input and emits output in batch-major
       form.
-
-  Call arguments:
-    inputs: A 3D tensor.
-    training: Python boolean indicating whether the layer should behave in
-      training mode or in inference mode. This argument is passed to the cell
-      when calling it. This is only relevant if `dropout` or
-      `recurrent_dropout` is used.
-    initial_state: List of initial state tensors to be passed to the first
-      call of the cell.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_LSTM
@@ -423,7 +416,7 @@ class PopnnLSTM(_PopnnRNN):
     self.unit_forget_bias = unit_forget_bias
 
   def build(self, input_shape):
-    """Create variables of the PopnnLSTM.
+    """Create variables of the PopnnLSTM layer.
 
     It can be called manually before `__call__()` or automatically through
     `__call__()`. In the former case, any subsequent `__call__()` will skip
@@ -462,20 +455,21 @@ class PopnnLSTM(_PopnnRNN):
     """Runs the forward step for the LSTM layer.
 
     Args:
-      inputs: 3-D tensor with shape [batch_size, seq_len, input_size]. If the
-              time_major parameter is set to True, then the shape should
+      inputs: 3D tensor with shape [batch_size, seq_len, input_size]. If the
+              time_major parameter is set to True then the shape should
               be [seq_len, batch_size, input_size].
+      training: Set to False to use the layer in inference mode. This is only
+        relevant if `dropout` or `recurrent_dropout` is set.
       initial_state: An `LSTMStateTuple` of state tensors, each shaped
         `[batch_size, num_units]`. If not provided, the state is initialized to
         zeros.
-      training: whether this operation will be used in training or inference.
 
     Returns:
-      output: When `return_sequences` is set, then LSTM returns a tensor of
-              shape [batch_size, seq_len, num_units], otherwise it returns
-              a tensor of shape [batch_size, num_units].
-      output_state: The output state of the last cell, when the parameter
-                    `return_state` is set to True.
+      If `return_sequences` is True the LSTM layer returns a tensor of
+      shape [batch_size, seq_len, num_units] otherwise it returns
+      a tensor of shape [batch_size, num_units].
+      If `return_state` is True then the output state of the last cell is also
+      returned.
 
     """
     if training is None:
@@ -488,7 +482,7 @@ class PopnnLSTM(_PopnnRNN):
       raise ValueError("inputs tensor must be 3D")
 
     if not self._time_major:
-      # Shuffle from Keras [B, S, N] to Poplibs [S, B, N]
+      # Shuffle from Keras [B, S, N] to PopLibs [S, B, N]
       inputs = array_ops.transpose(inputs, [1, 0, 2])
 
     batch_size = array_ops.shape(inputs)[1]
@@ -536,7 +530,7 @@ class PopnnLSTM(_PopnnRNN):
       self.add_update(updates)
 
     if not self._time_major:
-      # Convert output from Poplibs [S, B, N] to Keras [B, S, N]
+      # Convert output from PopLibs [S, B, N] to Keras [B, S, N]
       output = array_ops.transpose(output, [1, 0, 2])
 
     if not self._return_sequences:
@@ -556,7 +550,7 @@ class PopnnLSTM(_PopnnRNN):
       batch_size: an int
 
     Returns:
-      a tuple of Python arrays.
+      A tuple of Python arrays.
     """
     return ([batch_size, self.num_units], [batch_size, self.num_units])
 
@@ -569,13 +563,14 @@ class PopnnLSTM(_PopnnRNN):
 
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
-  """Popnn implementation of the Gated Recurrent Unit - Cho et al. 2014,
+  """Popnn implementation of the Gated Recurrent Unit (Cho et al. 2014),
   optimized for the IPU.
 
-  There are two variants of the GRU implementation. The default one is based on
-  [v3](https://arxiv.org/abs/1406.1078v3) and has reset gate applied to hidden
-  state before matrix multiplication. The other one is based on
-  [original](https://arxiv.org/abs/1406.1078v1) and has the order reversed.
+  There are two variants of the GRU implementation. The default is based on
+  `v3 <https://arxiv.org/abs/1406.1078v3>`_ and has reset gate applied to hidden
+  state before matrix multiplication. The other is based on the
+  `original version <https://arxiv.org/abs/1406.1078v1>`_ and has the order
+  reversed.
   The first one is the default behaviour for this implementation, however the
   Keras equivalent can use the second variant. To use this variant,
   set `'reset_after'=True` (currently unsupported).
@@ -594,7 +589,7 @@ class PopnnGRU(_PopnnRNN):
       Default: sigmoid (`sigmoid`).
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
-    use_bias: Boolean, whether the layer uses a bias vector.
+    use_bias: Boolean. If True then the layer will use a bias vector.
     kernel_initializer: Initializer for the `kernel` weights matrix,
       used for the linear transformation of the inputs.
     recurrent_initializer: Initializer for the `recurrent_kernel`
@@ -607,7 +602,7 @@ class PopnnGRU(_PopnnRNN):
     bias_regularizer:  Unsupported - Regularizer function applied to the bias
       vector.
     activity_regularizer:  Unsupported - Regularizer function applied to
-      the output of the layer (its "activation")..
+      the output of the layer (its "activation").
     kernel_constraint:  Unsupported - Constraint function applied to
       the `kernel` weights matrix.
     recurrent_constraint:  Unsupported - Constraint function applied to
@@ -624,25 +619,27 @@ class PopnnGRU(_PopnnRNN):
       Fraction of the units to drop for
       the linear transformation of the recurrent state.
     implementation:  Unsupported - Implementation mode.
-    return_sequences: Boolean. Whether to return the last output
-      in the output sequence, or the full sequence.
-    return_state: Boolean. Whether to return the last state
-      in addition to the output.
+    return_sequences: Boolean. If True then the full output sequence will be
+      returned.
+      If False then only the last output in the output sequence will be
+      returned.
+    return_state: Boolean. If True then the last state will be returned
+      in addition to the last output or output sequence.
     go_backwards:  Unsupported - Boolean (default False).
-      If True, process the input sequence backwards and return the
+      If True process the input sequence backwards and return the
       reversed sequence.
-    stateful:  Unsupported - Boolean (default False). If True, the last state
+    stateful:  Boolean (default False). If True the last state
       for each sample at index i in a batch will be used as initial
       state for the sample of index i in the following batch.
     unroll:  Unsupported - Boolean (default False).
-      If True, the network will be unrolled,
+      If True the network will be unrolled,
       else a symbolic loop will be used.
       Unrolling can speed-up a RNN,
       although it tends to be more memory-intensive.
       Unrolling is only suitable for short sequences.
     time_major: The shape format of the `inputs` and `outputs` tensors.
-      If True, the inputs and outputs will be in shape
-      `(timesteps, batch, ...)`, whereas in the False case, it will be
+      If True the shape of the inputs and outputs will be
+      `(timesteps, batch, ...)`, otherwise the shape will be
       `(batch, timesteps, ...)`. Using `time_major = True` is a bit more
       efficient because it avoids transposes at the beginning and end of the
       RNN calculation. However, most TensorFlow data is batch-major, so by
@@ -655,15 +652,6 @@ class PopnnGRU(_PopnnRNN):
     reset_after:  Unsupported - GRU convention (whether to apply reset gate
       after or before matrix multiplication). False = "before" (default),
       True = "after".
-
-  Call arguments:
-    inputs: A 3D tensor.
-    training: Python boolean indicating whether the layer should behave in
-      training mode or in inference mode. This argument is passed to the cell
-      when calling it. This is only relevant if `dropout` or
-      `recurrent_dropout` is used.
-    initial_state: List of initial state tensors to be passed to the first
-      call of the cell.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -771,7 +759,7 @@ class PopnnGRU(_PopnnRNN):
                                    **kwargs)
 
   def build(self, input_shape):
-    """Create variables of the PopnnGRU.
+    """Create variables of the PopnnGRU layer.
 
     It can be called manually before `__call__()` or automatically through
     `__call__()`. In the former case, any subsequent `__call__()` will skip
@@ -790,19 +778,20 @@ class PopnnGRU(_PopnnRNN):
     """Runs the forward step for the GRU layer.
 
     Args:
-      inputs: 3-D tensor with shape [batch_size, seq_len, input_size]. If the
+      inputs: 3D tensor with shape [batch_size, seq_len, input_size]. If the
               time_major parameter is True, the the shape should be
               [seq_len, batch_size, input_size].
+      training: Set to False to use the layer in inference mode.
+        This is only relevant if `dropout` or `recurrent_dropout` is used.
       initial_state: Initial state tensor, shaped `[batch_size, num_units]`
         If not provided, the state is initialized to zeros.
-      training: whether this operation will be used in training or inference.
 
     Returns:
-      output: When `return_sequences` is set, then GRU returns a tensor of
-              shape [batch_size, seq_len, num_units], otherwise it returns
-              a tensor of shape [batch_size, num_units].
-      output_state: The output state of the last cell, when the parameter
-                    `return_state` is set to True.
+      If `return_sequences` is True then the GRU layer returns a tensor of
+      shape [batch_size, seq_len, num_units], otherwise it returns
+      a tensor of shape [batch_size, num_units].
+      If `return_state` is set to True then the output state of the last cell
+      is also returned.
 
     Raises:
       ValueError: if initial_state is not valid.
@@ -818,7 +807,7 @@ class PopnnGRU(_PopnnRNN):
       raise ValueError("inputs tensor must be 3D")
 
     if not self._time_major:
-      # Shuffle from Keras [B, S, N] to Poplibs [S, B, N]
+      # Shuffle from Keras [B, S, N] to PopLibs [S, B, N]
       inputs = array_ops.transpose(inputs, [1, 0, 2])
 
     batch_size = array_ops.shape(inputs)[1]
@@ -860,7 +849,7 @@ class PopnnGRU(_PopnnRNN):
       self.add_update(updates)
 
     if not self._time_major:
-      # Convert output from Poplibs [S, B, N] to Keras [B, S, N]
+      # Convert output from PopLibs [S, B, N] to Keras [B, S, N]
       output = array_ops.transpose(output, [1, 0, 2])
 
     if not self._return_sequences:
