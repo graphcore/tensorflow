@@ -120,9 +120,11 @@ ENTRY %top {
   %buffer2 = f32[] parameter(1)
   %offset1 = s32[] parameter(2)
   %offset2 = s32[] parameter(3)
+  %buffer3 = f32[] parameter(4)
   %load1 = f32[] custom-call(buffer1, offset1), custom_call_target="BufferLoadSlice", sharding={maximal device=0}
   %load2 = f32[] custom-call(buffer2, offset2), custom_call_target="BufferLoadSlice", sharding={maximal device=1}
-  ROOT %tuple = (f32[], f32[]) tuple(load1, load2)
+  %load3 = f32[] custom-call(buffer3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=2}
+  ROOT %tuple = (f32[], f32[], f32[]) tuple(load1, load2, load3)
 }
   )";
 
@@ -155,6 +157,9 @@ ENTRY %top {
   EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
   EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
+
+  // Check that the regular load was left alone.
+  EXPECT_TRUE(is_load(root->operand(2)));
 
   // Check that the inputs and outputs are wired correctly, irrespective of the
   // order in which they were combind.
