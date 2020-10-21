@@ -70,10 +70,14 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
     // Ignore inplace field.
     backend_config_a.set_is_inplace(false);
     backend_config_b.set_is_inplace(false);
-    // Ignore ML field - this means we will reuse the function with whatever
-    // ML type it was generated with.
-    backend_config_a.set_ml_type(MLType::NONE);
-    backend_config_b.set_ml_type(MLType::NONE);
+    // Reset the MLType if only one of the operations doesn't have an MLType
+    // associated with it.
+    if (backend_config_a.ml_type() != backend_config_b.ml_type() &&
+        (backend_config_a.ml_type() == MLType::NONE ||
+         backend_config_b.ml_type() == MLType::NONE)) {
+      backend_config_a.set_ml_type(MLType::NONE);
+      backend_config_b.set_ml_type(MLType::NONE);
+    }
     return protobuf_util::ProtobufEquals(backend_config_a, backend_config_b);
   };
   return a->Identical(*b, compare_operands, compare_comps, false,
