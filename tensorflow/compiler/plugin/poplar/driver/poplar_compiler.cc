@@ -1415,9 +1415,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     try {
       VLOG(1) << "Begin compiling Poplar engine " << module->name();
 
-      map_json = GetTensorMappingJson(module->name(), main_graph,
-                                      resources.tensor_maps);
-
       auto progress_logging = [](int progress, int total) {
         float progress_percent = std::floor(
             100.0f * static_cast<float>(progress) / static_cast<float>(total));
@@ -1507,6 +1504,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
       TF_ASSIGN_OR_RETURN(auto inst_info,
                           GetInstructionCompilationInfo(module, resources));
+
+      map_json = GetTensorMappingJson(module->name(), main_graph,
+                                      resources.tensor_maps);
 
       poplar_executor->AddCompileEndEventRecord(
           module->name(), report_stream.str(), graph_stream.str(), map_json,
