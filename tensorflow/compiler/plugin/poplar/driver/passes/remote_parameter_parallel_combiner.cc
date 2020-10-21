@@ -39,16 +39,6 @@ namespace poplarplugin {
 
 namespace {
 
-bool IsRemoteLoad(const HloInstruction* inst) {
-  return IsPoplarInstruction(RemoteParameterLoad)(inst) ||
-         IsPoplarInstruction(BufferLoadSlice)(inst);
-}
-
-bool IsRemoteStore(const HloInstruction* inst) {
-  return IsPoplarInstruction(RemoteParameterStore)(inst) ||
-         IsPoplarInstruction(BufferStoreSlice)(inst);
-}
-
 std::vector<HloInstruction*> CombineOperands(
     const std::vector<HloInstruction*>& to_combine) {
   std::vector<HloInstruction*> operands;
@@ -394,18 +384,16 @@ Status AddSchedulingConstraints(
   return Status::OK();
 }
 
-}  // namespace
-
-StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
-    HloComputation* comp) {
+StatusOr<bool> RunForOpTypes(HloComputation* comp, PoplarOp load_op_type,
+                             PoplarOp store_op_type) {
   std::map<int64, DecreasingSizeQueue> shard_loads;
   std::map<int64, DecreasingSizeQueue> shard_stores;
 
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (auto shard = inst->sharding_unique_device()) {
-      if (IsRemoteLoad(inst)) {
+      if (IsPoplarInstruction(load_op_type, inst)) {
         shard_loads[*shard].push(inst);
-      } else if (IsRemoteStore(inst)) {
+      } else if (IsPoplarInstruction(store_op_type, inst)) {
         shard_stores[*shard].push(inst);
       }
     }
@@ -423,6 +411,24 @@ StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
       AddSchedulingConstraints(comp, combined_loads, combined_stores));
 
   return !combined_loads.empty() || !combined_stores.empty();
+}
+
+}  // namespace
+
+StatusOr<bool> RemoteParameterParallelCombiner::RunOnComputation(
+    HloComputation* comp) {
+  bool changed = false;
+
+  TF_ASSIGN_OR_RETURN(
+      bool changed_regular,
+      RunForOpTypes(comp, RemoteParameterLoad, RemoteParameterStore));
+  changed |= changed_regular;
+
+  TF_ASSIGN_OR_RETURN(bool changed_sliced,
+                      RunForOpTypes(comp, BufferLoadSlice, BufferStoreSlice));
+  changed |= changed_sliced;
+
+  return changed;
 }
 
 StatusOr<bool> RemoteParameterParallelCombiner::Run(HloModule* module) {
