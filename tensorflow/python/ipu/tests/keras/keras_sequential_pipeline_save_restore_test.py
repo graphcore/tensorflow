@@ -41,28 +41,25 @@ def test_dataset(length=None, batch_size=1):
 
 
 def fixed_weight_pipeline():
-  input_layer = keras.Input(shape=(32))
-
-  with ipu.keras.PipelineStage(0):
-    layer0 = keras.layers.Dense(
-        4,
-        name="layer0",
-        kernel_initializer=keras.initializers.Constant(0.1),
-        bias_initializer=keras.initializers.Constant(0.0))
-    output_layer = layer0(input_layer)
-
-  with ipu.keras.PipelineStage(1):
-    layer1 = keras.layers.Dense(
-        2,
-        name="layer1",
-        kernel_initializer=keras.initializers.Constant(0.1),
-        bias_initializer=keras.initializers.Constant(0.0))
-    output_layer = layer1(output_layer)
-
-  return input_layer, output_layer
+  return [
+      [
+          keras.layers.Dense(
+              4,
+              name="layer0",
+              kernel_initializer=keras.initializers.Constant(0.1),
+              bias_initializer=keras.initializers.Constant(0.0)),
+      ],
+      [
+          keras.layers.Dense(
+              2,
+              name="layer1",
+              kernel_initializer=keras.initializers.Constant(0.1),
+              bias_initializer=keras.initializers.Constant(0.0)),
+      ],
+  ]
 
 
-class IPUPipelineTest(test.TestCase):
+class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testCanSaveWeights(self):
 
@@ -74,10 +71,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -103,10 +98,8 @@ class IPUPipelineTest(test.TestCase):
 
     # Restore the weights and check that they are back to the trained
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -143,10 +136,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -163,10 +154,8 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
 
       # Create a new model and train (should restore from checkpoint)
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -187,10 +176,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
+      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
+                                            gradient_accumulation_count=24)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
