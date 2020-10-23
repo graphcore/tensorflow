@@ -1696,6 +1696,106 @@ ENTRY e {
                                  comp0, comp1, comp2, stage_1_fwd));
 }
 
+using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
+std::string GetHlo(pipeline_config::Schedule schedule,
+                   pipeline_config::RecomputationMode recomputation_mode) {
+  constexpr absl::string_view hlo_format = R"(
+HloModule top
+
+stage {
+  param = f32[1,4,4,2] parameter(0)
+  ROOT t = (f32[1,4,4,2]) tuple(param)
+}
+
+pipeline {
+  weights0 = f32[1,4,4,2] parameter(0)
+  stage_0 = (f32[1,4,4,2]) call(weights0), to_apply=stage, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0
+  stage_1 = (f32[1,4,4,2]) call(stage_0_0), to_apply=stage, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  ROOT t = () tuple()
+}
+
+ENTRY e {
+  weights = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  ROOT pipeline_inst = () call(weights), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":\"%s\",\"recomputationMode\":\"%s\"}}}"
+}
+)";
+  return absl::StrFormat(
+      hlo_format, pipeline_config::Schedule_Name(schedule),
+      pipeline_config::RecomputationMode_Name(recomputation_mode));
+}
+
+struct PipelineUtilTestRecomputationModeSpec {
+  pipeline_config::Schedule schedule;
+  pipeline_config::RecomputationMode recomputation_mode;
+  bool valid;
+  pipeline_config::RecomputationMode expected_recomputation_mode;
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const PipelineUtilTestRecomputationModeSpec& spec) {
+  return os << "{ schedule: " << pipeline_config::Schedule_Name(spec.schedule)
+            << ", recomputation_mode: "
+            << pipeline_config::RecomputationMode_Name(spec.recomputation_mode)
+            << ", valid: " << spec.valid << ", expected_recomputation_mode: "
+            << pipeline_config::RecomputationMode_Name(
+                   spec.expected_recomputation_mode)
+            << "}";
+}
+
+class GetPipelineRecomputationModeTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<
+          PipelineUtilTestRecomputationModeSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    GetPipelineRecomputationModeTestCases, GetPipelineRecomputationModeTest,
+    ::testing::ValuesIn(std::vector<PipelineUtilTestRecomputationModeSpec>{
+        // Interleaved
+        {pipeline_config::Interleaved, pipeline_config::Auto, true,
+         pipeline_config::Recompute_then_backpropagate},
+        {pipeline_config::Interleaved,
+         pipeline_config::Recompute_then_backpropagate, true,
+         pipeline_config::Recompute_then_backpropagate},
+        {pipeline_config::Interleaved,
+         pipeline_config::Recompute_and_backpropagate_interleaved, false,
+         pipeline_config::Auto},
+        // Grouped
+        {pipeline_config::Grouped, pipeline_config::Auto, true,
+         pipeline_config::Recompute_then_backpropagate},
+        {pipeline_config::Grouped,
+         pipeline_config::Recompute_then_backpropagate, true,
+         pipeline_config::Recompute_then_backpropagate},
+        {pipeline_config::Grouped,
+         pipeline_config::Recompute_and_backpropagate_interleaved, true,
+         pipeline_config::Recompute_and_backpropagate_interleaved},
+        // Sequential
+        {pipeline_config::Sequential, pipeline_config::Auto, true,
+         pipeline_config::Recompute_and_backpropagate_interleaved},
+        {pipeline_config::Sequential,
+         pipeline_config::Recompute_then_backpropagate, false,
+         pipeline_config::Auto},
+        {pipeline_config::Sequential,
+         pipeline_config::Recompute_and_backpropagate_interleaved, true,
+         pipeline_config::Recompute_and_backpropagate_interleaved},
+    }));
+
+TEST_P(GetPipelineRecomputationModeTest, DoIt) {
+  auto param = GetParam();
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(
+      GetHlo(param.schedule, param.recomputation_mode), config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  HloInstruction* pipeline = FindInstruction(module0, "pipeline_inst");
+  auto schedule = GetPipelineRecomputationMode(pipeline);
+  if (param.valid) {
+    EXPECT_TRUE(schedule.ok());
+    EXPECT_EQ(schedule.ValueOrDie(), param.expected_recomputation_mode);
+  } else {
+    EXPECT_FALSE(schedule.ok());
+  }
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

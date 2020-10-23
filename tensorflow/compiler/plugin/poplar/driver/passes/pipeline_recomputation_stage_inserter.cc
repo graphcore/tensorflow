@@ -348,10 +348,11 @@ StatusOr<bool> PipelineRecomputationStageInserter::Run(HloModule* module) {
   }
   CHECK_EQ(pipeline_ops.size(), 1);
 
-  TF_ASSIGN_OR_RETURN(const auto schedule,
-                      GetPipelineSchedule(pipeline_ops[0]));
-  if (schedule == PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
-    VLOG(2) << "The Sequential pipeline does not insert recomputation stages";
+  // Check whether this is the requested method of recomputation.
+  TF_ASSIGN_OR_RETURN(const auto recomputation_mode,
+                      GetPipelineRecomputationMode(pipeline_ops[0]));
+  if (recomputation_mode != PoplarBackendConfig::CallConfig::PipelineConfig::
+                                Recompute_then_backpropagate) {
     return false;
   }
 

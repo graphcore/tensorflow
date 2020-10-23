@@ -277,6 +277,8 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("recomputation_mode", &recomputation_mode_));
     OP_REQUIRES_OK(
         ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
   }
@@ -414,6 +416,11 @@ class PipelineOp : public XlaOpKernel {
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
                        offload_weights_));
+    // Set the recomputation_mode flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(RECOMPUTATION_MODE),
+                       recomputation_mode_));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -449,6 +456,7 @@ class PipelineOp : public XlaOpKernel {
   std::string offload_gradient_accumulation_buffers_;
   std::string replicated_weight_sharding_;
   std::string offload_weights_;
+  std::string recomputation_mode_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

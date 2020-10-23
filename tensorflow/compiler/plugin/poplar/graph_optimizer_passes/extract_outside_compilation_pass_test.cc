@@ -278,6 +278,7 @@ TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
             .Attr("offload_gradient_accumulation_buffers", "THREESTATE_FALSE")
             .Attr("replicated_weight_sharding", "THREESTATE_FALSE")
             .Attr("offload_weights", "THREESTATE_FALSE")
+            .Attr("recomputation_mode", "Auto")
             .Attr("to_apply", to_apply)
             .Finalize(&g, &pipeline_node));
 

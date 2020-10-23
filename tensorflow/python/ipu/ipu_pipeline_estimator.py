@@ -42,6 +42,7 @@ class IPUPipelineEstimatorSpec(
         'optimizer_function',
         'device_mapping',
         'pipeline_schedule',
+        'recomputation_mode',
         'offload_weight_update_variables',
         'inputs',
     ])):
@@ -61,6 +62,7 @@ class IPUPipelineEstimatorSpec(
               optimizer_function=None,
               device_mapping=None,
               pipeline_schedule=None,
+              recomputation_mode=None,
               offload_weight_update_variables=None,
               inputs=None):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
@@ -105,6 +107,9 @@ class IPUPipelineEstimatorSpec(
       pipeline_schedule: the scheduling algorithm to use for pipeline lowering.
         Must be of type
         :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
+      recomputation_mode: the recomputation mode to use for training pipeline
+        models. Must be of type
+        :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
       offload_weight_update_variables: If True, any `tf.Variable` which is
         only used by the weight update of the pipeline (for example the
         accumulator variable when using the `tf.MomentumOptimizer`), will be
@@ -151,6 +156,7 @@ class IPUPipelineEstimatorSpec(
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         pipeline_schedule=pipeline_schedule,
+        recomputation_mode=recomputation_mode,
         offload_weight_update_variables=offload_weight_update_variables,
         inputs=inputs)
 
@@ -186,6 +192,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           optimizer_function=spec.optimizer_function,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
+          recomputation_mode=spec.recomputation_mode,
           outfeed_loss=True,
           offload_weight_update_variables=spec.offload_weight_update_variables,
           name="ipu_pipeline_estimator_train")
@@ -221,6 +228,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
+          recomputation_mode=spec.recomputation_mode,
           name="ipu_pipeline_estimator_eval")
 
     return evaluation_pipeline
@@ -258,6 +266,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
+          recomputation_mode=spec.recomputation_mode,
           name="ipu_pipeline_estimator_predict")
 
     return prediction_pipeline
