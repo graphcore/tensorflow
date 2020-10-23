@@ -34,6 +34,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 namespace {
 // Returns whether the instruction is a gradient accumulation creator.
 bool IsGradientAccumulatorCreate(const HloInstruction* inst) {
@@ -973,23 +974,79 @@ InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
   return hoisting_map;
 }
 
-StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
-GetPipelineSchedule(const HloInstruction* pipeline_op) {
+StatusOr<pipeline_config::Schedule> GetPipelineSchedule(
+    const HloInstruction* pipeline_op) {
   TF_ASSIGN_OR_RETURN(auto backend_config,
                       pipeline_op->backend_config<PoplarBackendConfig>());
 
   return backend_config.call_config().pipeline_config().schedule();
 }
 
+StatusOr<pipeline_config::RecomputationMode> GetPipelineRecomputationMode(
+    const HloInstruction* pipeline_op) {
+  TF_ASSIGN_OR_RETURN(auto schedule, GetPipelineSchedule(pipeline_op));
+  TF_ASSIGN_OR_RETURN(auto backend_config,
+                      pipeline_op->backend_config<PoplarBackendConfig>());
+  auto recomputation_mode =
+      backend_config.call_config().pipeline_config().recomputation_mode();
+  switch (recomputation_mode) {
+    case pipeline_config::Auto: {
+      switch (schedule) {
+        case pipeline_config::Grouped:
+        case pipeline_config::Interleaved: {
+          return pipeline_config::Recompute_then_backpropagate;
+        }
+        case pipeline_config::Sequential: {
+          return pipeline_config::Recompute_and_backpropagate_interleaved;
+        }
+        default:
+          return FailedPrecondition("Unsupported pipeline schedule.");
+      }
+      break;
+    }
+    case pipeline_config::Recompute_then_backpropagate: {
+      switch (schedule) {
+        case pipeline_config::Grouped:
+        case pipeline_config::Interleaved: {
+          return recomputation_mode;
+        }
+        default: {
+          return UnimplementedStrCat(
+              "Pipeline schedule ", pipeline_config::Schedule_Name(schedule),
+              " does not support 'Recompute_then_backpropagate' recomputation "
+              "mode.");
+        }
+      }
+      break;
+    }
+    case pipeline_config::Recompute_and_backpropagate_interleaved: {
+      switch (schedule) {
+        case pipeline_config::Grouped:
+        case pipeline_config::Sequential: {
+          return recomputation_mode;
+        }
+        default: {
+          return UnimplementedStrCat(
+              "Pipeline schedule ", pipeline_config::Schedule_Name(schedule),
+              " does not support 'Recompute_and_backpropagate_interleaved' "
+              "recomputation mode.");
+        }
+      }
+      break;
+    }
+    default: { return FailedPrecondition("Unsupported RecomputationMode"); }
+  }
+}
+
 StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op) {
   TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
 
   switch (schedule) {
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+    case pipeline_config::Grouped:
       return 2;
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+    case pipeline_config::Interleaved:
       return 1;
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
+    case pipeline_config::Sequential:
       return 0;
     default:
       return FailedPrecondition("Unsupported pipeline schedule.");
@@ -1866,10 +1923,9 @@ PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
   return std::move(analysis);
 }
 
-PipelinePath::PipelinePath(
-    HloInstruction* new_consumer, uint64 stage_idx, uint64 input_idx,
-    uint64 output_idx,
-    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule)
+PipelinePath::PipelinePath(HloInstruction* new_consumer, uint64 stage_idx,
+                           uint64 input_idx, uint64 output_idx,
+                           pipeline_config::Schedule schedule)
     : visited_stages_({stage_idx}),
       inputs_path_({input_idx}),
       outputs_path_({output_idx}),
@@ -1927,8 +1983,7 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
     fifo_depth_ = end_stage_idx - num_backward_stages;
     type_ = Type::kForwardToBackward;
     return true;
-  } else if (schedule_ ==
-             PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+  } else if (schedule_ == pipeline_config::Sequential) {
     // Handle case (4).
     fifo_depth_ = 0;
     type_ = Type::kAny;
@@ -1951,14 +2006,14 @@ StatusOr<int64> PipelinePath::GetFifoDepth() {
     // We need to take schedule into account.
     uint64 multiplier = 1;
     switch (schedule_) {
-      case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+      case pipeline_config::Grouped:
         CHECK(type_ != Type::kAny);
         multiplier = type_ == Type::kForwardToBackward ? 2 : 1;
         break;
-      case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
+      case pipeline_config::Sequential:
         multiplier = 0;
         break;
-      case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+      case pipeline_config::Interleaved:
         CHECK(type_ == Type::kForwardToBackward);
         multiplier = 1;
         break;
@@ -1984,8 +2039,7 @@ HloInstruction* PipelinePath::GetOldConsumerStage() const {
 PipelinePath::Type PipelinePath::GetType() const { return type_; }
 
 StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
-    PipelineStages& stages,
-    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule) {
+    PipelineStages& stages, pipeline_config::Schedule schedule) {
   const uint64 num_stages = stages.forward.size() + stages.backward.size();
   // Set up stages in last to first order.
   std::vector<HloInstruction*> stages_last_to_first(num_stages);
@@ -2135,8 +2189,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
           // We stop as soon as possible to avoid creating parallel FIFOs - this
           // doesn't apply in the sequential schedule as it doesn't insert
           // FIFOs.
-          if (schedule !=
-              PoplarBackendConfig::CallConfig::PipelineConfig::Sequential) {
+          if (schedule != pipeline_config::Sequential) {
             break;
           }
         }

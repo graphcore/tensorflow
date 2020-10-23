@@ -23,15 +23,15 @@ limitations under the License.
 #include "tensorflow/compiler/xla/util.h"
 
 namespace xla {
-
 namespace poplarplugin {
+using pipeline_config = PoplarBackendConfig::CallConfig::PipelineConfig;
 namespace {
 StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
                                    const FrontendAttributeId id) {
   std::string id_string = FrontendAttributeId_Name(id);
   auto itr = attributes.map().find(id_string);
   if (itr == attributes.map().end()) {
-    return xla::FailedPrecondition("Expected an attribute %s.", id_string);
+    return FailedPrecondition("Expected an attribute %s.", id_string);
   }
   return itr->second;
 }
@@ -39,7 +39,16 @@ StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
 StatusOr<ThreeState> ParseThreeState(const std::string& value) {
   ThreeState parsed;
   if (!ThreeState_Parse(value, &parsed)) {
-    return xla::FailedPrecondition("Could not parse the ThreeState value.");
+    return FailedPrecondition("Could not parse the ThreeState value.");
+  }
+  return parsed;
+}
+
+StatusOr<pipeline_config::RecomputationMode> ParseRecomputationMode(
+    const std::string& value) {
+  pipeline_config::RecomputationMode parsed;
+  if (!pipeline_config::RecomputationMode_Parse(value, &parsed)) {
+    return FailedPrecondition("Could not parse the RecomputationMode value.");
   }
   return parsed;
 }
@@ -61,7 +70,7 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           bool type_parsed = PoplarBackendConfig_CallConfig_Type_Parse(
               call_config_type_attribute->second, &type);
           if (!type_parsed) {
-            return xla::FailedPrecondition("Could not parse the call type.");
+            return FailedPrecondition("Could not parse the call type.");
           }
           auto* call_config = poplar_config.mutable_call_config();
           call_config->set_type(type);
@@ -135,6 +144,14 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                   ParseThreeState(offload_gradient_accumulation_buffers_str));
               pipeline_config->set_offload_gradient_accumulation_buffers(
                   offload_gradient_accumulation_buffers);
+
+              // Set the recomputation mode flag.
+              TF_ASSIGN_OR_RETURN(std::string recomputation_mode_str,
+                                  GetAttribute(attributes, RECOMPUTATION_MODE));
+              TF_ASSIGN_OR_RETURN(
+                  auto recomputation_mode,
+                  ParseRecomputationMode(recomputation_mode_str));
+              pipeline_config->set_recomputation_mode(recomputation_mode);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:

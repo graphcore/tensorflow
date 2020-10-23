@@ -534,6 +534,8 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         21458,
         recomp=True,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
+        recomputation_mode=pipelining_ops.RecomputationMode.
+        RecomputeAndBackpropagateInterleaved,
         device_mapping=[0, 1, 2, 0])
 
   @test_util.deprecated_graph_mode_only

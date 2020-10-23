@@ -113,6 +113,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                batch_serialization_iterations=1,
                device_mapping=None,
                pipeline_schedule=None,
+               recomputation_mode=None,
                forward_propagation_stages_poplar_options=None,
                backward_propagation_stages_poplar_options=None,
                weight_update_poplar_options=None,
@@ -149,8 +150,12 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             `computational_stages[i]` should reside on.
             This can be used to make sure computational stages which share
             tf.Variable`s are resident on the same IPU.
-        pipeline_schedule: Which scheduling algorithm to use for pipeline
-            lowering. Defaults to `PipelineSchedule.Grouped`.
+        pipeline_schedule: the scheduling algorithm to use for pipeline
+            lowering. Must be of type
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
+        recomputation_mode: the recomputation mode to use for training pipeline
+            models. Must be of type
+            :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
         forward_propagation_stages_poplar_options: If provided, a list of
             length equal to the number of computational stages. Each element is
             a PipelineStageOptions object which allows for fine grain control
@@ -242,6 +247,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     self.batch_serialization_iterations = batch_serialization_iterations
     self.device_mapping = device_mapping
     self.pipeline_schedule = pipeline_schedule
+    self.recomputation_mode = recomputation_mode
     self.forward_propagation_stages_poplar_options = \
       forward_propagation_stages_poplar_options
     self.backward_propagation_stages_poplar_options = \
@@ -353,6 +359,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
         optimizer_function=opt,
         device_mapping=self.device_mapping,
         pipeline_schedule=self.pipeline_schedule,
+        recomputation_mode=self.recomputation_mode,
         forward_propagation_stages_poplar_options=self.
         forward_propagation_stages_poplar_options,
         backward_propagation_stages_poplar_options=self.
@@ -591,6 +598,7 @@ class PipelineModel(ipu_model.Model):
                batch_serialization_iterations=1,
                device_mapping=None,
                pipeline_schedule=None,
+               recomputation_mode=None,
                forward_propagation_stages_poplar_options=None,
                backward_propagation_stages_poplar_options=None,
                weight_update_poplar_options=None,
@@ -629,8 +637,12 @@ class PipelineModel(ipu_model.Model):
             `computational_stages[i]` should reside on.
             This can be used to make sure computational stages which share
             tf.Variable`s are resident on the same IPU.
-        pipeline_schedule: Which scheduling algorithm to use for pipeline
-            lowering. Defaults to `PipelineSchedule.Grouped`.
+        pipeline_schedule: the scheduling algorithm to use for pipeline
+            lowering. Must be of type
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
+        recomputation_mode: the recomputation mode to use for training pipeline
+            models. Must be of type
+            :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
         forward_propagation_stages_poplar_options: If provided, a list of
             length equal to the number of computational stages. Each element is
             a PipelineStageOptions object which allows for fine grain control of
@@ -716,6 +728,7 @@ class PipelineModel(ipu_model.Model):
     self.batch_serialization_iterations = batch_serialization_iterations
     self.device_mapping = device_mapping
     self.pipeline_schedule = pipeline_schedule
+    self.recomputation_mode = recomputation_mode
     self.forward_propagation_stages_poplar_options = \
       forward_propagation_stages_poplar_options
     self.backward_propagation_stages_poplar_options = \
@@ -881,6 +894,7 @@ class PipelineModel(ipu_model.Model):
         optimizer_function=opt,
         device_mapping=self.device_mapping,
         pipeline_schedule=self.pipeline_schedule,
+        recomputation_mode=self.recomputation_mode,
         forward_propagation_stages_poplar_options=self.
         forward_propagation_stages_poplar_options,
         backward_propagation_stages_poplar_options=self.

@@ -197,6 +197,9 @@ InlineComputation(HloInstruction* caller, HloComputation* comp_to_inline,
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
 GetPipelineSchedule(const HloInstruction* pipeline_op);
 
+StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::RecomputationMode>
+GetPipelineRecomputationMode(const HloInstruction* pipeline_op);
+
 // Compute the fifo depth multiplier for the given schedule of a pipeline
 // operation.
 StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op);

@@ -196,7 +196,8 @@ class PipelineTester(object):
                       recomp,
                       schedule,
                       device_mapping=None,
-                      batch_serialization_iterations=1):
+                      batch_serialization_iterations=1,
+                      recomputation_mode=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -222,6 +223,7 @@ class PipelineTester(object):
               infeed_queue=infeed_queue,
               outfeed_queue=outfeed_queue,
               pipeline_schedule=schedule,
+              recomputation_mode=recomputation_mode,
               device_mapping=device_mapping)
 
       with ops.device("/device:IPU:0"):
@@ -275,7 +277,8 @@ class PipelineTester(object):
                               recomp=False,
                               schedule=None,
                               device_mapping=None,
-                              batch_serialization_iterations=1):
+                              batch_serialization_iterations=1,
+                              recomputation_mode=None):
 
     if batch_serialization_iterations > 1:
       assert device_mapping is None
@@ -288,7 +291,7 @@ class PipelineTester(object):
         stages, inputs_fn, input_values, repeat_count,
         gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
         expected_max_tile_memory, recomp, schedule, device_mapping,
-        batch_serialization_iterations)
+        batch_serialization_iterations, recomputation_mode)
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
@@ -311,7 +314,8 @@ class PipelineTester(object):
                                    recomp=False,
                                    schedule=None,
                                    device_mapping=None,
-                                   batch_serialization_iterations=1):
+                                   batch_serialization_iterations=1,
+                                   recomputation_mode=None):
     if batch_serialization_iterations > 1:
       assert device_mapping is None
       device_mapping = [0] * len(stages)
@@ -320,7 +324,7 @@ class PipelineTester(object):
         stages, inputs_fn, input_values, repeat_count,
         gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
         expected_max_tile_memory, recomp, schedule, device_mapping,
-        batch_serialization_iterations)
+        batch_serialization_iterations, recomputation_mode)
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)

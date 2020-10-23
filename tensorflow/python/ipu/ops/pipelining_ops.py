@@ -18,7 +18,7 @@ Pipelining operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 from google.protobuf import json_format
 
@@ -69,6 +69,43 @@ class PipelineSchedule(IntEnum):
   Grouped = 0
   Interleaved = 1
   Sequential = 2
+
+
+class RecomputationMode(Enum):
+  """When working with pipeline models for training, recomputation might be
+  required in order to reduce the number of activations being stored on the
+  device at any given time.
+
+  This Enum class is used to control the recomputation implementation, with the
+  following approaches supported:
+
+  * `AUTO`: automatically try and select the best recomputation strategy based
+    on the provided model and pipeline schedule.
+  * `RECOMPUTE_THEN_BACKPROPAGATE`: first recompute all the activations and then
+    perform backpropagation. This mode allows for better code reuse as the
+    corresponding forward propagation and the recomputation operations can share
+    the exact same code. This recomputation mode is supported by
+    `PipelineSchedule.Grouped` and `PipelineSchedule.Interleaved` pipeline
+    schedules.
+    This is the default recomputation mode for `PipelineSchedule.Grouped` and
+    `PipelineSchedule.Interleaved` pipeline schedules.
+  * `RECOMPUTE_AND_BACKPROPAGATE_INTERLEAVED`: recompute and backpropagate
+    operations are interleaved together. This mode can help reduce the maximum
+    liveness compared to `RECOMPUTE_THEN_BACKPROPAGATE` as the backpropagation
+    operations can be scheduled as soon as possible, however less code reuse
+    will be possible. This recomputation mode is supported by
+    `PipelineSchedule.Grouped` and `PipelineSchedule.Sequential` pipeline
+    schedules.
+    This is the default recomputation mode for the
+    `PipelineSchedule.Interleaved` pipeline schedule.
+  """
+  # pylint: disable=line-too-long
+  Auto = backend_config_pb2.PoplarBackendConfig.CallConfig.PipelineConfig.Auto
+  RecomputeThenBackpropagate = \
+    backend_config_pb2.PoplarBackendConfig.CallConfig.PipelineConfig.Recompute_then_backpropagate
+  RecomputeAndBackpropagateInterleaved = \
+    backend_config_pb2.PoplarBackendConfig.CallConfig.PipelineConfig.RecomputationMode.Recompute_and_backpropagate_interleaved
+  # pylint: enable=line-too-long
 
 
 class OptimizerFunctionOutput:
@@ -171,6 +208,7 @@ def pipeline(computational_stages,
              optimizer_function=None,
              device_mapping=None,
              pipeline_schedule=None,
+             recomputation_mode=None,
              forward_propagation_stages_poplar_options=None,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
@@ -396,6 +434,8 @@ def pipeline(computational_stages,
       `tf.Variable` are resident on the same IPU.
     pipeline_schedule: Which scheduling algorithm to use for pipeline
       lowering. Defaults to `PipelineSchedule.Grouped`.
+    recomputation_mode: Which recomputation mode to use for training pipeline
+      models. Defaults to `RecomputationMode.Auto`.
     forward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
       PipelineStageOptions object which allows for fine grain control of the
@@ -511,6 +551,13 @@ def pipeline(computational_stages,
       and pipeline_schedule != PipelineSchedule.Sequential):
     raise NotImplementedError("Batch serialization is only supported with the "
                               "`Sequential` schedule.")
+
+  if recomputation_mode is None:
+    recomputation_mode = RecomputationMode.Auto
+
+  if not isinstance(recomputation_mode, RecomputationMode):
+    raise TypeError("The given recomputation_mode is not a member of the "
+                    "RecomputationMode enumeration.")
 
   if device_mapping is None:
     device_mapping = [0] * len(
@@ -766,6 +813,8 @@ def pipeline(computational_stages,
           batch_serialization_iterations=batch_serialization_iterations,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
+          recomputation_mode=backend_config_pb2.PoplarBackendConfig.CallConfig.
+          PipelineConfig.RecomputationMode.Name(recomputation_mode.value),
           pipeline_poplar_config=json_format.MessageToJson(
               pipeline_poplar_config),
           offload_activations=offload_activations,
