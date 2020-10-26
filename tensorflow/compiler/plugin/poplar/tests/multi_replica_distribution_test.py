@@ -65,7 +65,7 @@ class MultiReplicaDistributionTest(test_util.TensorFlowTestCase):  # pylint: dis
 
     with session.Session() as sess:
       config = ipu.utils.create_ipu_config()
-      config = ipu.utils.auto_select_ipus(config, 1)
+      config = ipu.utils.select_ipus(config, indices=[rank])
 
       config = ipu.utils.set_experimental_multi_replica_distribution_options(
           config, process_count=size, process_index=rank)

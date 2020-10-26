@@ -183,14 +183,16 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   // Remove elements which do not contribute to a difference in the
   // compiled executable.  We hash the device characteristics independently
   // so there is no need to do any device selection state.
-  hashable_config.mutable_profiling()->set_enable_poplar_reports_text(false);
-  hashable_config.mutable_profiling()->set_report_every_nth_execution(0);
-  hashable_config.mutable_profiling()->set_enable_ipu_trace_events(false);
-  hashable_config.mutable_profiling()->set_enable_poplar_reports_cbor(false);
-  hashable_config.mutable_profiling()->set_report_directory(std::string());
-  hashable_config.mutable_profiling()->set_max_report_size(0);
-  hashable_config.set_device_connection_type(IpuDeviceConnectionType::ALWAYS);
+  hashable_config.mutable_profiling()->clear_enable_poplar_reports_text();
+  hashable_config.mutable_profiling()->clear_report_every_nth_execution();
+  hashable_config.mutable_profiling()->clear_enable_ipu_trace_events();
+  hashable_config.mutable_profiling()->clear_enable_poplar_reports_cbor();
+  hashable_config.mutable_profiling()->clear_report_directory();
+  hashable_config.mutable_profiling()->clear_max_report_size();
+  hashable_config.clear_device_connection_type();
   hashable_config.mutable_device_config()->Clear();
+  hashable_config.clear_multi_replica_process_count();
+  hashable_config.clear_multi_replica_process_index();
 
   std::string config_proto_str;
   tensorflow::SerializeToStringDeterministic(hashable_config,

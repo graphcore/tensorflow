@@ -192,6 +192,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     std::unique_ptr<HloModule> hlo_module,
     std::unique_ptr<HloProfilePrinterData> profile_printer,
     std::unique_ptr<HloProfileIndexMap> profile_index_map,
+    absl::optional<RuntimeReplicaOptions> runtime_replica_options,
     const ModuleFilenames& filenames) {
   TENSORFLOW_TRACEPOINT();
   PoplarExecutableProto proto;
@@ -200,7 +201,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
                                      filenames.CachedEngineFilename(), &proto));
 
   // Load metadata
-  int replication_factor = proto.replication_factor();
+  const uint32 replication_factor = proto.replication_factor();
 
   InfeedInfos infeeds;
   for (const auto& infeed : proto.infeeds()) {
@@ -257,9 +258,18 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   }
 
   // Load the additional Poplar engine options that we need to restore.
-  poplar::OptionFlags opts;
+  poplar::OptionFlags engine_options;
   for (const auto& flag : proto.option_flags()) {
-    opts.set(flag.option(), flag.value());
+    engine_options.set(flag.option(), flag.value());
+  }
+
+  // Also set run-time replica engine options for multi-replica distribution, as
+  // these are not serialized to allow for using the same serialized executable
+  // across processes.
+  if (runtime_replica_options.has_value()) {
+    SetRuntimeReplicaOptions(
+        &engine_options, runtime_replica_options->process_index,
+        runtime_replica_options->process_count, replication_factor);
   }
 
   VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
@@ -288,7 +298,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
             << poplar_executable_filename;
     std::ifstream file(poplar_executable_filename, std::ios::binary);
     auto poplar_executable = poplar::Executable::deserialize(file);
-    engine.reset(new poplar::Engine(std::move(poplar_executable), opts));
+    engine.reset(
+        new poplar::Engine(std::move(poplar_executable), engine_options));
   } catch (const std::exception& e) {
     const std::string origin =
         "[Deserialize][File: " + poplar_executable_filename + "] ";

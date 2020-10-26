@@ -784,5 +784,22 @@ void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
   }
 }
 
+void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
+                              int64 process_index, int64 process_count,
+                              int64 global_replication_factor) {
+  CHECK_GT(process_count, 0);
+  CHECK_GE(process_index, 0);
+  CHECK_LT(process_index, process_count);
+  CHECK_EQ(global_replication_factor % process_count, 0);
+
+  const int64 num_runtime_replica = global_replication_factor / process_count;
+  const int64 first_runtime_replica = process_index * num_runtime_replica;
+
+  option_flags->set("target.firstRuntimeReplica",
+                    std::to_string(first_runtime_replica));
+  option_flags->set("target.numberRuntimeReplica",
+                    std::to_string(num_runtime_replica));
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

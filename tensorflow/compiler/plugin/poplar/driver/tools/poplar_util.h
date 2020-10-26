@@ -198,6 +198,10 @@ struct PoplarTypeHasher {
   }
 };
 
+void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
+                              int64 process_index, int64 process_count,
+                              int64 global_replication_factor);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
