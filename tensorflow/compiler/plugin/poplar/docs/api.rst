@@ -166,6 +166,7 @@ It is also possible to access the operators via the
   :members:
   :special-members: __init__
   :imported-members:
+  :exclude-members: deprecated_args, Enum, IntEnum
 
 .. The following are all PopLibs ops
 
