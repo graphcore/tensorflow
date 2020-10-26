@@ -21,13 +21,12 @@ limitations under the License.
 #include <vector>
 
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/platform/default/integral_types.h"
 
 using tensorflow::int64;
 
 namespace xla {
-class HloInstruction;
-
 namespace poplarplugin {
 
 template <typename Key, typename Value, typename Pair>
@@ -79,8 +78,8 @@ struct TensorLocation {
   int64 flattened_output_tuple_index;
   bool operator<(const TensorLocation& other) const {
     // Standard pair comparison:
-    return instruction < other.instruction ||
-           (!(other.instruction < instruction) &&
+    return HloPtrComparator()(instruction, other.instruction) ||
+           (!HloPtrComparator()(other.instruction, instruction) &&
             flattened_output_tuple_index < other.flattened_output_tuple_index);
   }
 };

@@ -177,6 +177,7 @@ DeferredAllocations::GetNotAllocatedLocations() const {
   for (auto pair : to_allocate_locations_) {
     input_locations.push_back(pair.first);
   }
+  absl::c_sort(input_locations);
   return input_locations;
 }
 
