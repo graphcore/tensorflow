@@ -139,10 +139,16 @@ class PoplarExecutable : public Executable {
     return checkpoint_feeds_order_;
   }
 
+  struct RuntimeReplicaOptions {
+    int64 process_index;
+    int64 process_count;
+  };
+
   static StatusOr<PoplarExecutable*> Deserialize(
       std::unique_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
       std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
+      absl::optional<RuntimeReplicaOptions> runtime_replica_options,
       const ModuleFilenames& filenames);
 
   static Status Serialize(const ModuleFilenames& filenames,
