@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <sys/file.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
@@ -172,6 +173,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/random/random.h"
 #include "tensorflow/core/platform/cpu_info.h"
+#include "tensorflow/core/platform/posix/error.h"
 #include "tensorflow/core/public/version.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
 
@@ -846,6 +848,42 @@ void AddPipelineOptimizerPass(HloPassPipeline& pipeline) {
   pass.AddPass<HloCSE>(true);
 }
 
+/* RAII class used for locking the executable cache for a given file.
+ * The idea is that when multiple processes are compiling the same executable
+ * and have set the executable cache path to the same directory, they will
+ * attempt to lock the same file. Only one of them will acquire the lock, and
+ * then perform the compilation, serialize the result to disk, and finally
+ * unlock the file. The other processes will then acquire the lock (one by one)
+ * and find the serialized executable, skipping compilation.
+ */
+struct ExecutableCacheLock {
+ public:
+  static StatusOr<std::unique_ptr<ExecutableCacheLock>> CreateAndAcquire(
+      const std::string& filepath) {
+    const int fd = ::open(filepath.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+      return tensorflow::IOError("Failed to open " + filepath, errno);
+    }
+
+    VLOG(1) << "Acquiring lock for " << filepath;
+    if (::flock(fd, LOCK_EX) == -1) {
+      return tensorflow::IOError("Failed to lock " + filepath, errno);
+    }
+
+    VLOG(1) << "Acquired lock for " << filepath;
+
+    // Using plain new to be able to keep constructor private.
+    return std::unique_ptr<ExecutableCacheLock>(new ExecutableCacheLock(fd));
+  }
+
+  ~ExecutableCacheLock() { ::close(fd_); }
+
+ private:
+  explicit ExecutableCacheLock(int fd) : fd_(fd) {}
+  int fd_;
+  TF_DISALLOW_COPY_AND_ASSIGN(ExecutableCacheLock);
+};
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -895,9 +933,16 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     opt_flags.set("autoReport.directory", module->name());
   }
 
+  std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
+
   const ModuleFilenames filenames =
       poplar_executor->GetModuleFilenames(*module);
   if (poplar_executor->HaveExecutableCache()) {
+    TF_RETURN_IF_ERROR(poplar_executor->CreateExecutableCacheDirIfMissing());
+    TF_ASSIGN_OR_RETURN(executable_cache_lock,
+                        ExecutableCacheLock::CreateAndAcquire(
+                            filenames.CompilationLockFilename()));
+
     if (poplar_executor->HaveCachedExecutable(filenames)) {
       absl::optional<PoplarExecutable::RuntimeReplicaOptions>
           runtime_replica_options = absl::nullopt;
@@ -1423,22 +1468,19 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar::Executable exec =
           poplar::compileGraph(main_graph, progs, opt_flags, progress_logging);
 
-      if (poplar_executor->HaveExecutableCache()) {
-        if (!poplar_executor->HaveCachedExecutable(filenames)) {
-          TF_RETURN_IF_ERROR(
-              poplar_executor->CreateExecutableCacheDirIfMissing());
+      // If we have the lock, serialize the result to the executable cache.
+      if (executable_cache_lock) {
+        // Serialize some additional options that Poplar does not serialize
+        // on its own.
+        poplar::OptionFlags options_to_serialize =
+            poplar_executor->GetReportExecutionFlags();
 
-          // Serialize some additional options that Poplar does not serialize
-          // on its own.
-          poplar::OptionFlags options_to_serialize =
-              poplar_executor->GetReportExecutionFlags();
-
-          TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-              filenames, exec, resources.annotations, replication_factor,
-              options_to_serialize, resources.streams_indices.GetAssignedIds(),
-              resources.streams_indices.CheckpointFeedsOrder()));
-        }
+        TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+            filenames, exec, resources.annotations, replication_factor,
+            options_to_serialize, resources.streams_indices.GetAssignedIds(),
+            resources.streams_indices.CheckpointFeedsOrder()));
       }
+
       if (poplar_executor->EnableSerialization()) {
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());

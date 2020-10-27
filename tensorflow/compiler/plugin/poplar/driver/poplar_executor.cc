@@ -1826,6 +1826,11 @@ std::string ModuleFilenames::CachedEngineFilename() const {
                                   basename_ + ".xla_engine");
 }
 
+std::string ModuleFilenames::CompilationLockFilename() const {
+  return tensorflow::io::JoinPath(PoplarXlaFlags::Get().executable_cache_path,
+                                  basename_ + ".compile_lock");
+}
+
 ModuleFilenames PoplarExecutor::GetModuleFilenames(
     const HloModule& module) const {
   return ModuleFilenames(module, poplar_device_hash_, SerializationFolder());
