@@ -184,6 +184,7 @@ It is also possible to access the operators via the
 
 .. automodule:: tensorflow.python.ipu.rnn_ops
   :members:
+  :special-members: __init__
   :imported-members:
 
 .. Popops
