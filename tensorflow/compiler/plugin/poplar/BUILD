@@ -774,30 +774,6 @@ cc_library(
 )
 
 cc_library(
-    name = "rearrange_function_arguments",
-    srcs = [
-        "kernels/functional/rearrange_function_arguments.cc",
-    ],
-    hdrs = [
-        "kernels/functional/rearrange_function_arguments.h",
-    ],
-    linkstatic = 1,
-    deps = [
-        "//tensorflow/compiler/tf2xla:tf2xla_util",
-        "//tensorflow/compiler/tf2xla/ops:xla_ops",
-        "//tensorflow/compiler/xla:status_macros",
-        "//tensorflow/core:core_cpu",
-        "//tensorflow/core:core_cpu_internal",
-        "//tensorflow/core:framework",
-        "//tensorflow/core:graph",
-        "//tensorflow/core:lib",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/types:optional",
-    ],
-    alwayslink = True,
-)
-
-cc_library(
     name = "common_shape_fns",
     srcs = ["ops/common_shape_fns.cc"],
     hdrs = ["ops/common_shape_fns.h"],
@@ -876,7 +852,6 @@ cc_library(
         ":custom_kernels_util",
         ":dataset_exporters_kernel",
         ":driver",
-        ":rearrange_function_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",

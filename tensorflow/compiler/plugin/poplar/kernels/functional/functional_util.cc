@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/kernels/functional/functional_util.h"
 
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -101,8 +102,8 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
         // Use the xla::Shape for the input instead of ctx->InputShape. This
         // is necessary for forwarding shapes of DT_VARIANTs, e.g.
         // TensorLists.
-        TF_ASSIGN_OR_RETURN(xla::Shape shape, builder->GetShape(ctx->Input(i)));
-        arg.shape = shape;
+        TF_ASSIGN_OR_RETURN(arg.shape, builder->GetShape(ctx->Input(i)));
+        arg.type = type;
         if (IsTensorListInput(ctx, i)) {
           // arg.initialized == false means that the element_shape of the list
           // was not available at the time of building the list so an empty list
@@ -147,6 +148,89 @@ xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
     }
   }
   return inputs;
+}
+
+FunctionBaseOp::FunctionBaseOp(OpKernelConstruction* ctx,
+                               bool evaluate_constants)
+    : XlaOpKernel(ctx), evaluate_constants_(evaluate_constants) {
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types_));
+}
+
+void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
+  auto builder = ctx->builder();
+  // First get all the arguments.
+  int num_resource_args = 0;
+  auto arguments_or = poplarplugin::GetXlaArguments(
+      ctx, input_types_, &num_resource_args, evaluate_constants_);
+  OP_REQUIRES_OK(ctx, arguments_or.status());
+  std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
+
+  VLOG(2) << "Building function " << ctx->op_kernel().name() << " with "
+          << input_types_.size() << " inputs including " << num_resource_args
+          << " resources.";
+
+  XlaCompiler::CompileOptions compile_options =
+      poplarplugin::GetDefaultCompileOptions();
+  compile_options.return_updated_values_for_all_resources = false;
+
+  // Compile the computation.
+  XlaCompiler::CompilationResult result;
+  OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
+                          compile_options, *to_apply_, arguments, &result));
+
+  // Get the non constant XLA arguments.
+  auto inputs_or =
+      poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
+  OP_REQUIRES_OK(ctx, inputs_or.status());
+  std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
+
+  auto outputs = xla::Call(builder, *result.computation, inputs);
+  // Set the config type of the call.
+  OP_REQUIRES_OK(ctx, SetConfig(builder, outputs));
+
+  // Set non resource variable outputs and make sure to set constant outputs
+  // as constant.
+  int non_const_outputs = 0;
+  std::map<int, XlaResource*> output_index_to_resource;
+  for (size_t i = 0; i != output_types_.size(); ++i) {
+    const XlaCompiler::OutputDescription& output = result.outputs[i];
+
+    if (output.type == DT_RESOURCE) {
+      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(output.input_index,
+                                                &output_index_to_resource[i]));
+    } else if (output.is_constant) {
+      ctx->SetConstantOutput(i, result.outputs[i].constant_value);
+    } else {
+      ctx->SetOutput(i, xla::GetTupleElement(outputs, non_const_outputs++));
+    }
+  }
+
+  // Set up the modified resources.
+  for (size_t i = 0; i < result.resource_updates.size(); ++i) {
+    const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
+    XlaResource* resource;
+    OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
+    int pos = non_const_outputs + i;
+    OP_REQUIRES(
+        ctx, update.modified,
+        errors::Internal("Expected the resource output to be modified."));
+    OP_REQUIRES_OK(ctx,
+                   resource->SetFromPack(
+                       arguments[update.input_index].tensor_array_gradients,
+                       xla::GetTupleElement(outputs, pos), builder));
+
+    VLOG(2) << "Variable: pos: " << pos << " name: " << resource->name()
+            << " modified: " << update.modified
+            << " type: " << DataTypeString(update.type)
+            << " shape: " << update.shape.DebugString();
+  }
+
+  // Set the resource outputs *after* they were updated.
+  for (auto pair : output_index_to_resource) {
+    ctx->SetResourceOutput(pair.first, pair.second);
+  }
 }
 }  // namespace poplarplugin
 }  // namespace tensorflow

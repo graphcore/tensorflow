@@ -18,6 +18,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/graph/graph.h"
 
@@ -37,6 +38,23 @@ xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
     XlaOpKernelContext* ctx,
     const std::vector<XlaCompiler::Argument>& arguments,
     const std::vector<int>& input_mapping);
+
+// Base kernal class for implementing functional ops which do not output
+// resources unless modified from the called computations.
+class FunctionBaseOp : public XlaOpKernel {
+ public:
+  FunctionBaseOp(OpKernelConstruction* ctx, bool evaluate_constants);
+  void Compile(XlaOpKernelContext* ctx) override;
+
+ protected:
+  virtual Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) = 0;
+
+ private:
+  const bool evaluate_constants_;
+  const NameAttrList* to_apply_;
+  DataTypeVector input_types_;
+  DataTypeVector output_types_;
+};
 }  // namespace poplarplugin
 }  // namespace tensorflow
 

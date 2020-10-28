@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/functional/functional_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/functional/rearrange_function_arguments.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
 #include "tensorflow/compiler/tf2xla/kernels/tensor_list_utils.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
@@ -31,100 +30,32 @@ using namespace xla::poplarplugin;
 
 namespace tensorflow {
 namespace {
-class PipelineStageOp : public XlaOpKernel {
+class PipelineStageOp : public poplarplugin::FunctionBaseOp {
  public:
   explicit PipelineStageOp(OpKernelConstruction* ctx, bool is_forward = true)
-      : XlaOpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types_));
+      : poplarplugin::FunctionBaseOp(ctx, /*evaluate_constants=*/true) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("stage_id", &stage_id_));
     call_config_type_ =
         is_forward ? PoplarBackendConfig::CallConfig::PipelineStage
                    : PoplarBackendConfig::CallConfig::PipelineStageBackward;
   }
 
-  void Compile(XlaOpKernelContext* ctx) override {
-    auto builder = ctx->builder();
-    // First get all the arguments.
-    int num_resource_args = 0;
-    auto arguments_or =
-        poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
-    OP_REQUIRES_OK(ctx, arguments_or.status());
-    std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
-
-    VLOG(2) << "Building PipelineStage (" << ctx->op_kernel().name()
-            << ") function with " << input_types_.size() << " inputs including "
-            << num_resource_args << " resources.";
-    XlaCompiler::CompileOptions compile_options =
-        poplarplugin::GetDefaultCompileOptions();
-    compile_options.return_updated_values_for_all_resources = false;
-
-    // Compile the computation.
-    XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                            compile_options, *to_apply_, arguments, &result));
-
-    // Get the non constant XLA arguments.
-    auto inputs_or =
-        poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
-    OP_REQUIRES_OK(ctx, inputs_or.status());
-    std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
-
-    auto outputs = xla::Call(builder, *result.computation, inputs);
+  Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) override {
     // Set the config type of the call.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
-                 PoplarBackendConfig_CallConfig_Type_Name(call_config_type_)));
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
+        PoplarBackendConfig_CallConfig_Type_Name(call_config_type_)));
 
     // Set the stage id.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PIPELINE_STAGE_ID),
-                       std::to_string(stage_id_)));
-
-    // Set non resource variable outputs and make sure to set constant outputs
-    // as constant.
-    int non_const_outputs = 0;
-    for (size_t i = 0; i != output_types_.size(); ++i) {
-      const XlaCompiler::OutputDescription& output = result.outputs[i];
-
-      if (output.is_constant) {
-        ctx->SetConstantOutput(i, result.outputs[i].constant_value);
-      } else {
-        ctx->SetOutput(i, xla::GetTupleElement(outputs, non_const_outputs++));
-      }
-    }
-
-    // Set up the modified resources.
-    for (size_t i = 0; i < result.resource_updates.size(); ++i) {
-      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
-      XlaResource* resource;
-      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
-      int pos = non_const_outputs + i;
-      OP_REQUIRES(
-          ctx, update.modified,
-          errors::Internal("Expected the resource output to be modified."));
-      OP_REQUIRES_OK(ctx,
-                     resource->SetFromPack(
-                         arguments[update.input_index].tensor_array_gradients,
-                         xla::GetTupleElement(outputs, pos), builder));
-
-      VLOG(2) << "Variable: pos: " << pos << " name: " << resource->name()
-              << " modified: " << update.modified
-              << " type: " << DataTypeString(update.type)
-              << " shape: " << update.shape.DebugString();
-    }
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, FrontendAttributeId_Name(PIPELINE_STAGE_ID),
+        std::to_string(stage_id_)));
+    return Status::OK();
   }
 
  private:
-  const NameAttrList* to_apply_;
-  DataTypeVector input_types_;
-  DataTypeVector output_types_;
   PoplarBackendConfig_CallConfig_Type call_config_type_;
   int64 stage_id_;
-
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageOp);
 };
 REGISTER_IPU_OP("PipelineStage", PipelineStageOp);
@@ -170,18 +101,6 @@ class ResourceUpdateOp : public XlaOpKernel {
             << ") function with " << input_types_.size() << " inputs including "
             << num_resource_args << " resources.";
 
-    // Rewrite the ResourceUpdate function such that arguments to
-    // ResourceUpdate ops are rearranged and resource variables
-    // moved to the back.
-    NameAttrList new_to_apply;
-    OP_REQUIRES_OK(
-        ctx,
-        RearrangeFunctionArguments(
-            [&ctx](const NameAttrList& function, const FunctionBody** fbody) {
-              return ctx->compiler()->FindFunctionBody(function, fbody);
-            },
-            new_to_apply, *to_apply_, ctx->compiler()->local_flib_def()));
-
     XlaCompiler::CompileOptions compile_options =
         poplarplugin::GetDefaultCompileOptions();
     compile_options.return_updated_values_for_all_resources = true;
@@ -189,7 +108,7 @@ class ResourceUpdateOp : public XlaOpKernel {
     // Compile the computation.
     XlaCompiler::CompilationResult result;
     OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                            compile_options, new_to_apply, arguments, &result));
+                            compile_options, *to_apply_, arguments, &result));
 
     // Get the non constant XLA arguments.
     auto inputs_or =
@@ -296,17 +215,6 @@ class PipelineOp : public XlaOpKernel {
             << ") function with " << input_types_.size() << " inputs including "
             << num_resource_args << " resources.";
 
-    // Rewrite the Pipeline function such that arguments to PipelineStage ops
-    // are rearranged and resource variables moved to the back.
-    NameAttrList new_to_apply;
-    OP_REQUIRES_OK(
-        ctx,
-        RearrangeFunctionArguments(
-            [&ctx](const NameAttrList& function, const FunctionBody** fbody) {
-              return ctx->compiler()->FindFunctionBody(function, fbody);
-            },
-            new_to_apply, *to_apply_, ctx->compiler()->local_flib_def()));
-
     XlaCompiler::CompileOptions compile_options =
         poplarplugin::GetDefaultCompileOptions();
     compile_options.return_updated_values_for_all_resources = true;
@@ -314,7 +222,7 @@ class PipelineOp : public XlaOpKernel {
     // Compile the computation.
     XlaCompiler::CompilationResult result;
     OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                            compile_options, new_to_apply, arguments, &result));
+                            compile_options, *to_apply_, arguments, &result));
 
     // Get the non constant XLA arguments.
     auto inputs_or =
