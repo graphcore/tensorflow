@@ -231,13 +231,13 @@ class PopnnLSTM(_PopnnRNN):
     """Creates a PopnnLSTM model from model spec.
 
     Args:
-      num_units: the number of units within the RNN model.
+      num_units: the number of units within the LSTM model.
       dtype: tf.float16 or tf.float32
       partials_dtype: the type used by Popnn to perform partial calculations.
         Either tf.float16 or tf.float32.
       seed: A Python integer. Used to create the default Glorot uniform
         initializer weights_initializer.
-      weights_initializer: starting value to initialize the weight
+      weights_initializer: starting value to initialize the weights
         (default is Glorot uniform initializer).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
@@ -272,22 +272,22 @@ class PopnnLSTM(_PopnnRNN):
     """Runs the forward step for the LSTM model.
 
     Args:
-      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      inputs: 3D tensor with shape [time_len, batch_size, input_size].
       initial_state: An `LSTMStateTuple` of state tensors, each shaped
         `[batch_size, num_units]`. If not provided, the state is
         initialized to zeros.
         DEPRECATED a tuple of tensor (input_h_state, input_c_state)
         each of shape [batch_size, num_units].
-      training: whether this operation will be used in training or inference.
+      training: Set to False to use the LSTM model in inference mode.
 
     Returns:
-      tuple of output and output states:
+      A tuple of output and output states.
 
       * output: a tensor of shape [time_len, batch_size, num_units].
       * output_states: An `LSTMStateTuple` of the same shape and structure as
-          initial_state. If the initial state used the deprecated behaviour of
-          not passing `LSTMStateTuple`, then a tuple
-          (output_h_state, output_c_state) is returned.
+        initial_state. If the initial state used the deprecated behaviour of
+        not passing `LSTMStateTuple`, then a tuple
+        (output_h_state, output_c_state) is returned.
 
     Raises:
       ValueError: if initial_state is not valid.
@@ -336,7 +336,7 @@ class PopnnLSTM(_PopnnRNN):
       batch_size: an int
 
     Returns:
-      a tuple of python arrays.
+      a tuple of Python arrays.
     """
     return ([batch_size, self.num_units], [batch_size, self.num_units])
 
@@ -362,16 +362,16 @@ class PopnnLSTM(_PopnnRNN):
 
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
-  """XLA compatible, time-major Popnn implementation of an GRU layer.
+  """XLA compatible, time-major Popnn implementation of a GRU layer.
 
   Below is a typical workflow:
 
   .. code-block:: python
 
     with tf.Graph().as_default():
-      lstm = PopnnGRU(num_units, ...)
+      gru = PopnnGRU(num_units, ...)
 
-      outputs, output_state = lstm(inputs, initial_state, training=True)
+      outputs, output_state = gru(inputs, initial_state, training=True)
 
   """
   # pylint:enable=line-too-long
@@ -389,13 +389,13 @@ class PopnnGRU(_PopnnRNN):
     """Creates a PopnnGRU model from model spec.
 
     Args:
-      num_units: the number of units within the RNN model.
+      num_units: the number of units within the GRU model.
       dtype: tf.float16 or tf.float32
       partials_dtype: the type used by Popnn to perform partial calculations.
         Either tf.float16 or tf.float32.
       seed: A Python integer. Used to create the default Glorot uniform
         initializer weights_initializer.
-      weights_initializer: starting value to initialize the weight
+      weights_initializer: starting value to initialize the weights
         (default is Glorot uniform initializer).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
@@ -430,14 +430,16 @@ class PopnnGRU(_PopnnRNN):
     """Runs the forward step for the GRU model.
 
     Args:
-      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      inputs: 3D tensor with shape [time_len, batch_size, input_size].
       initial_state: Initial state tensor, shaped `[batch_size, num_units]`. If
         not provided, the state is initialized to zeros.
-      training: whether this operation will be used in training or inference.
+      training: Set to False to use the GRU model in inference mode.
 
     Returns:
-      output: a tensor of shape [time_len, batch_size, num_units].
-      output_state: The output state of the last cell.
+      A tuple of output and output_state.
+
+      * output: a tensor of shape [time_len, batch_size, num_units].
+      * output_state: The output state of the last cell.
 
     Raises:
       ValueError: if initial_state is not valid.
@@ -466,7 +468,7 @@ class PopnnGRU(_PopnnRNN):
       batch_size: an int
 
     Returns:
-      A python array.
+      A Python array.
     """
     return [batch_size, self.num_units]
 
