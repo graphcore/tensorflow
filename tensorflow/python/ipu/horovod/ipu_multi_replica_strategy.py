@@ -16,6 +16,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import reduce_util
+from tensorflow.python.distribute import values
 from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.ipu import utils as ipu_utils
@@ -79,6 +80,10 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
 
   def _reduce_to(self, reduce_op, value, destinations):
     del destinations
+
+    if isinstance(value, values.DistributedValues):
+      assert len(value.values) == 1
+      value = value.values[0]
 
     if not _is_current_device_ipu():
       # If not on IPU, use Horovod for the reduction.
