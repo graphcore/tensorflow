@@ -49,6 +49,8 @@ static bool OpFilter(KernelDef* kdef) {
       kdef->op() == "ResourceUpdate" || kdef->op() == "MultiConv") {
     AddDtypeToKernelDefConstraint("Tin", DT_RESOURCE, kdef);
     AddDtypeToKernelDefConstraint("Tout", DT_RESOURCE, kdef);
+    AddDtypeToKernelDefConstraint("Tin", DT_VARIANT, kdef);
+    AddDtypeToKernelDefConstraint("Tout", DT_VARIANT, kdef);
   }
 
   return true;

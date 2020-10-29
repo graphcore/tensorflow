@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/functional/functional_util.h"
 
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -64,10 +65,6 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
       }
       arg.kind = XlaCompiler::Argument::kResource;
       arg.resource_kind = resource->kind();
-      if (arg.resource_kind == XlaResource::kTensorArray) {
-        return errors::Unimplemented(
-            "Tensor arrays are currently not supported: ", arg.name);
-      }
 
       arg.type = resource->type();
       arg.shape = resource->shape();
@@ -150,6 +147,52 @@ xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
   return inputs;
 }
 
+Status CompileFunction(XlaOpKernelContext* ctx,
+                       const XlaCompiler::CompileOptions& options,
+                       const NameAttrList& fn_name_attrs,
+                       std::vector<XlaCompiler::Argument>& args,
+                       XlaCompiler::CompilationResult* result) {
+  auto builder = ctx->builder();
+  TF_RETURN_IF_ERROR(
+      ctx->compiler()->CompileFunction(options, fn_name_attrs, args, result));
+
+  bool has_tensor_array_gradients = false;
+  for (const auto& update : result->resource_updates) {
+    XlaResource* resource;
+    TF_RETURN_IF_ERROR(ctx->GetResourceInput(update.input_index, &resource));
+    XlaCompiler::Argument& arg = args[update.input_index];
+
+    // Add any TensorArray gradients touched by the computation to the enclosing
+    // graph.
+    for (const std::string& grad_source :
+         update.tensor_array_gradients_accessed) {
+      VLOG(5) << "TensorArray " << resource->name() << " accessed gradient "
+              << grad_source;
+      XlaResource* gradient;
+      TF_RETURN_IF_ERROR(resource->GetOrCreateTensorArrayGradient(
+          grad_source, builder, &gradient));
+    }
+
+    // Add all of the TensorArray gradients to the argument. For simplicity,
+    // we always pass all known gradients.
+    for (const auto& gradient : resource->tensor_array_gradients()) {
+      arg.tensor_array_gradients.insert(gradient.first);
+    }
+    if (!resource->tensor_array_gradients().empty()) {
+      has_tensor_array_gradients = true;
+    }
+  }
+
+  if (has_tensor_array_gradients) {
+    // Recompile with the new arguments.
+    *result = {};
+    TF_RETURN_IF_ERROR(
+        ctx->compiler()->CompileFunction(options, fn_name_attrs, args, result));
+  }
+
+  return Status::OK();
+}
+
 FunctionBaseOp::FunctionBaseOp(OpKernelConstruction* ctx,
                                bool evaluate_constants)
     : XlaOpKernel(ctx), evaluate_constants_(evaluate_constants) {
@@ -177,8 +220,8 @@ void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
 
   // Compile the computation.
   XlaCompiler::CompilationResult result;
-  OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                          compile_options, *to_apply_, arguments, &result));
+  OP_REQUIRES_OK(ctx, CompileFunction(ctx, compile_options, *to_apply_,
+                                      arguments, &result));
 
   // Get the non constant XLA arguments.
   auto inputs_or =
@@ -200,6 +243,9 @@ void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
     if (output.type == DT_RESOURCE) {
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(output.input_index,
                                                 &output_index_to_resource[i]));
+    } else if (output.is_tensor_list) {
+      ctx->SetTensorListOutput(
+          i, xla::GetTupleElement(outputs, non_const_outputs++));
     } else if (output.is_constant) {
       ctx->SetConstantOutput(i, result.outputs[i].constant_value);
     } else {
@@ -227,7 +273,8 @@ void FunctionBaseOp::Compile(XlaOpKernelContext* ctx) {
             << " shape: " << update.shape.DebugString();
   }
 
-  // Set the resource outputs *after* they were updated.
+  // Set the resource outputs *after* they were updated to make sure to get the
+  // latest SSA value.
   for (auto pair : output_index_to_resource) {
     ctx->SetResourceOutput(pair.first, pair.second);
   }

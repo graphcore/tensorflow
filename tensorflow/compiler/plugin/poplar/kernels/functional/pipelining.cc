@@ -107,8 +107,9 @@ class ResourceUpdateOp : public XlaOpKernel {
 
     // Compile the computation.
     XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                            compile_options, *to_apply_, arguments, &result));
+    OP_REQUIRES_OK(
+        ctx, poplarplugin::CompileFunction(ctx, compile_options, *to_apply_,
+                                           arguments, &result));
 
     // Get the non constant XLA arguments.
     auto inputs_or =
@@ -221,8 +222,9 @@ class PipelineOp : public XlaOpKernel {
 
     // Compile the computation.
     XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
-                            compile_options, *to_apply_, arguments, &result));
+    OP_REQUIRES_OK(
+        ctx, poplarplugin::CompileFunction(ctx, compile_options, *to_apply_,
+                                           arguments, &result));
 
     // Get the non constant XLA arguments.
     auto inputs_or =

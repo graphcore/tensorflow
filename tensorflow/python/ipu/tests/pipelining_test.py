@@ -29,6 +29,7 @@ from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -1446,6 +1447,103 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         self,
         14415,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithLoop(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=4, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return value, math_ops.cast(label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      return x, label
+
+    def stage2(x, label):
+      x = control_flow_ops.while_loop(lambda i, _: i < 10,
+                                      lambda i, x: (i + 1, x * x), (0, x),
+                                      maximum_iterations=5)[1]
+
+      return x, label
+
+    def stage3(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3], inputs_fn, [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 11326)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithTensorArray(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=4, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return value, math_ops.cast(label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      return x, label
+
+    def stage2(x, label):
+      ta = tensor_array_ops.TensorArray(dtype=np.float32, size=4)
+
+      def body(i, tx):
+        tx = tx.write(i, math_ops.cast(i * 2, np.float32))
+        return i + 1, tx
+
+      ta = control_flow_ops.while_loop(lambda i, _: i < 4,
+                                       body, (0, ta),
+                                       maximum_iterations=5)[1]
+      return x * ta.stack(), label
+
+    def stage3(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3], inputs_fn, [], repeat_count,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 11326)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithEmbeddingOptimization(self):
