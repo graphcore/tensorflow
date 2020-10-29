@@ -22,6 +22,9 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu.horovod import ipu_multi_replica_strategy
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 
@@ -86,6 +89,33 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
         # There should be one allreduce sum of the values.
         self.assertEqual(sess.run(value_allreduced), hvd.size() * 2.0)
+
+  @test_util.deprecated_graph_mode_only
+  def test_strategy_with_sync_on_read_variable(self):
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+
+    with strategy.scope():
+
+      def per_replica_fn(x):
+        w0 = variable_scope.get_variable(
+            name="w0",
+            initializer=hvd.rank() + 1,
+            synchronization=variable_scope.VariableSynchronization.ON_READ,
+            aggregation=variable_scope.VariableAggregation.MEAN)
+        self.assertIsInstance(w0, IPUSyncOnReadVariable)
+        return w0.assign_add(x)
+
+      inputs = array_ops.placeholder(dtype=np.int32, shape=())
+      assign_add_op = strategy.experimental_run_v2(per_replica_fn,
+                                                   args=[inputs])
+
+      with session.Session() as sess:
+        sess.run(variables.global_variables_initializer())
+        # Both should have initial value from first worker
+        self.assertEqual([1.0], sess.run(variables.global_variables()))
+        sess.run(assign_add_op, feed_dict={inputs: hvd.rank() + 1})
+        # mean(1 + 1, 1 + 2) = 2.5
+        self.assertEqual([2.5], sess.run(variables.global_variables()))
 
 
 if __name__ == "__main__":
