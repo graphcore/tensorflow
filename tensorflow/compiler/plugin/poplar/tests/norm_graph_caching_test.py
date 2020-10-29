@@ -530,8 +530,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       # Would fail if there were two batch norms in the graph
       ok = [
           '__seed*',
-          'host-exchange-local-copy',
-          'Copy_',
+          '*[cC]opy',
           'moments/SquaredDifference/square',
           'moments/SquaredDifference/subtract',
           'a/batch-norm-inference',

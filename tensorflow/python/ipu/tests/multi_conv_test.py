@@ -299,7 +299,7 @@ class MultiConvTest(test_util.TensorFlowTestCase):
         'ipu/Mean*/reduce*/Reduce',
         'ipu/add',
         '__seed/set/setMasterSeed',
-        'Copy_',
+        '[cC]opy',
     ]
     _compare_ipu_to_cpu(self,
                         body,
