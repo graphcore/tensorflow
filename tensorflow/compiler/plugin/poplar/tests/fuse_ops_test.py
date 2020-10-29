@@ -255,7 +255,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       ok = [
-          '__seed*', 'Copy_*', 'MaxPool/max-pool*/maxPool2x2/',
+          '__seed*', '[cC]opy*', 'MaxPool/max-pool*/maxPool2x2/',
           'MaxPoolGrad/max-pool-grad*/maxPool2x2'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -417,7 +417,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       # pylint: disable=line-too-long
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
+          '__seed*', '[cC]opy_', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
           'vs/conv2d_1/BiasAdd/fusion.2/Op/Add',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.3/ReduceFinalStage/IntermediateToOutput/Reduce',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
@@ -596,8 +596,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
 
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_', 'matmul/dot*/Conv',
-          'add/fusion/Op/Add'
+          '__seed*', 'host-exchange-local-copy', '[cC]opy_',
+          'matmul/dot*/Conv', 'add/fusion/Op/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -627,7 +627,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', '[cC]opy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d/BiasAdd',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/Relu/relu/Nonlinearity'
@@ -767,7 +767,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'host-exchange-local-copy-*/OnTileCopy-0',
           '/negate/Op/Negate',
           'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
-          'Copy_*/OnTileCopy',
+          '[cC]opy*/OnTileCopy',
           'vs/Gather*/multi-slice',
           'vs/add/add*/Add',
           'vs/Sum/reduce*/Reduce',
@@ -831,7 +831,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'host-exchange-local-copy-*/OnTileCopy-0',
           '/negate/Op/Negate',
           'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
-          'Copy_*/OnTileCopy-0',
+          '[cC]opy*/OnTileCopy',
           'vs/Gather*/multi-slice',
           'vs/add/add*/Add',
           'vs/Sum/reduce*/Reduce',

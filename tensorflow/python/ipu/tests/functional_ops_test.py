@@ -83,7 +83,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
-          'Copy_',
+          '[cC]opy',
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(898276)
@@ -149,7 +149,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
-          'Copy_',
+          '[cC]opy',
           'SparseSoftmaxCrossEntropyWithLogits',
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
@@ -239,7 +239,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'GradientDescent/update_1/w/ResourceApplyGradientDescent/fusion.4/AddTo',
           'GradientDescent/update_2/bias/ResourceApplyGradientDescent/fusion.3/AddTo',
           'GradientDescent/update_2/w/ResourceApplyGradientDescent/fusion.2/AddTo',
-          'Copy_',
+          '[cC]opy',
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1090520)
@@ -318,7 +318,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'slice_8*/add.*/Op/Add',
           'slice_9*/add.*/Op/Add',
           '__seed',
-          'Copy_',
+          '[cC]opy',
       ]
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(10980622)
@@ -361,7 +361,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Relu/relu/Nonlinearity',
           'Relu/relu.*/Nonlinearity',
           '__seed',
-          'Copy_',
+          '[cC]opy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -464,7 +464,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Sigmoid/sigmoid/Nonlinearity',
           'sub/subtract*/Op/Subtract',
           '__seed',
-          'Copy_',
+          '[cC]opy',
           'Transpose',
           'Transpose/PreArrange-0',
           'SparseSoftmaxCrossEntropyWithLogits',
