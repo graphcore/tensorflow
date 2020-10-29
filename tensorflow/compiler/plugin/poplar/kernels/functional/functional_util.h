@@ -39,6 +39,14 @@ xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
     const std::vector<XlaCompiler::Argument>& arguments,
     const std::vector<int>& input_mapping);
 
+// Same as XlaCompiler::CompileFunction, but will recompile if there are any
+// TensorArray gradients which have been accessed.
+Status CompileFunction(XlaOpKernelContext* ctx,
+                       const XlaCompiler::CompileOptions& options,
+                       const NameAttrList& fn_name_attrs,
+                       std::vector<XlaCompiler::Argument>& args,
+                       XlaCompiler::CompilationResult* result);
+
 // Base kernal class for implementing functional ops which do not output
 // resources unless modified from the called computations.
 class FunctionBaseOp : public XlaOpKernel {
