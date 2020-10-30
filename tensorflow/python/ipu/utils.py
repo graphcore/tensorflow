@@ -391,6 +391,7 @@ def create_ipu_config(profiling=False,
   # Default initialize IpuOptions() attributes here.
   opts.creator_id = config_pb2.IpuOptionsCreator.IPU_UTILS
   opts.ipu_model_config.compile_ipu_code = True
+  opts.ipu_model_config.ipu_model_version = "ipu1"
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
   opts.disable_gather_simplifier = False
@@ -859,13 +860,18 @@ def set_report_options(opts,
   return opts
 
 
-def set_ipu_model_options(opts, compile_ipu_code=True, tiles_per_ipu=None):
+def set_ipu_model_options(opts,
+                          compile_ipu_code=True,
+                          tiles_per_ipu=None,
+                          ipu_model_version=None):
   """Set the IPU Model options.
 
   Args:
     compile_ipu_code: Whether or not to actually compile real IPU code for
       modelling.
     tiles_per_ipu: The number of tiles per IPU Model device.
+    ipu_module_version: Specify the ipu version to be used by the IPU Model.
+      Options are "ipu1" or "ipu2", `None` defaults to "ipu1".
 
   Returns:
     The IpuOptions configuration protobuf, with IPU model options set.
@@ -873,6 +879,9 @@ def set_ipu_model_options(opts, compile_ipu_code=True, tiles_per_ipu=None):
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
   if tiles_per_ipu:
     opts.ipu_model_config.tiles_per_ipu = tiles_per_ipu
+  if ipu_model_version is None:
+    ipu_model_version = "ipu1"
+  opts.ipu_model_config.ipu_model_version = ipu_model_version
 
   return opts
 

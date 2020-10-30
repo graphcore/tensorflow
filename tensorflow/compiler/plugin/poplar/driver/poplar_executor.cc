@@ -1598,7 +1598,18 @@ Status PoplarExecutor::CreatePoplarTarget() {
           "Multi-replica distribution is not supported with the IPU model");
     }
 
-    poplar::IPUModel model;
+    const absl::flat_hash_set<std::string> valid_model_versions = {"ipu1",
+                                                                   "ipu2"};
+    std::string user_model_version =
+        current_config_.ipu_model_config().ipu_model_version();
+
+    if (!valid_model_versions.contains(user_model_version)) {
+      LOG(WARNING) << "Unknown IPU Model version '" << user_model_version
+                   << "'. Defaulting to 'ipu1'";
+      user_model_version = "ipu1";
+    }
+
+    poplar::IPUModel model(user_model_version.c_str());
     model.numIPUs = num_ipus;
 
     model.compileIPUCode =
