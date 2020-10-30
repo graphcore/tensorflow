@@ -25,6 +25,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import deprecation
+from tensorflow.python.util import nest
 
 
 class IPUOutfeedMode(Enum):
@@ -205,11 +206,26 @@ class IPUOutfeedQueue:
     if self.enqueued:
       raise ValueError("An outfeed can only be enqueued once.")
 
-    self._structure = _OutfeedStructure(tensors, self._replication_factor)
+    # Serialize the tensor structure and make sure all inputs are Tensor like.
+    flat_tensors = nest.flatten(tensors)
+    flat_tensors = ops.convert_n_to_tensor(flat_tensors)
+
+    self._flat_types = [t.dtype for t in flat_tensors]
+    self._flat_shapes = [t.get_shape() for t in flat_tensors]
+
+    if self._replication_factor > 1:
+      self._flat_shapes = [
+          tensor_shape.TensorShape([replication_factor]).concatenate(shape)
+          for shape in self._flat_shapes
+      ]
+
+    # Pack the tensor dtypes to represent the output structure.
+    self._structure = nest.pack_sequence_as(tensors, self._flat_types)
+
     with ops.device(self._device_str):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
-          self._structure.to_tensor_list(tensors),
-          output_shapes=self._structure.flat_shapes,
+          flat_tensors,
+          output_shapes=self._flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
           feed_id=self._feed_name,
           replication_factor=self._replication_factor,
@@ -378,14 +394,13 @@ class IPUOutfeedQueue:
     with ops.device('cpu'):
       outfeed_dequeue = \
         gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
-            output_types=self._structure.flat_types,
-            output_shapes=self._structure.flat_shapes,
+            output_types=self._flat_types,
+            output_shapes=self._flat_shapes,
             outfeed_mode=self._outfeed_mode.value,
             feed_id=self._feed_name,
             device_ordinal=self._device_ordinal,
             replication_factor=self._replication_factor)
-
-    return self._structure.from_tensor_list(outfeed_dequeue)
+    return nest.pack_sequence_as(self._structure, outfeed_dequeue)
 
   @property
   def deleter(self):
@@ -399,110 +414,3 @@ class IPUOutfeedQueue:
     """
     return gen_pop_datastream_ops.ipu_delete_outfeed(
         feed_id=self._feed_name, device_ordinal=self._device_ordinal)
-
-
-class _OutfeedStructure:
-  """ An internal class used for storing the structure of the IPUOutfeedQueue.
-  """
-  def __init__(self, tensors, replication_factor):
-    self._singular = False
-    self._tuple = False
-    self._list = False
-    self._dict = False
-    self._dict_keys = []
-
-    flat_types = []
-    flat_shapes = []
-    # Create the data structure depending on the input type.
-    if isinstance(tensors, ops.Tensor):
-      self._singular = True
-      flat_types = [tensors.dtype]
-      flat_shapes = [tensors.get_shape()]
-
-    elif isinstance(tensors, (tuple, list)):
-      self._tuple = isinstance(tensors, tuple)
-      self._list = isinstance(tensors, list)
-      # We require all the elements to be tensors.
-      if not self._check_list_of_all_type(ops.Tensor, tensors):
-        raise ValueError("""\
-Expected all values in the outfeed tuple to be TensorFlow tensors.""")
-      for tensor in tensors:
-        flat_types.append(tensor.dtype)
-        flat_shapes.append(tensor.get_shape())
-
-    elif isinstance(tensors, dict):
-      self._dict = True
-      # We require all the keys to be strings.
-      if not self._check_list_of_all_type(str, tensors.keys()):
-        raise ValueError("""\
-Expected all keys in the outfeed dictionary to be strings.""")
-      # We require all the values to be tensors.
-      if not self._check_list_of_all_type(ops.Tensor, tensors.values()):
-        raise ValueError("""\
-Expected all values in the outfeed dictionary to be TensorFlow tensors.""")
-      for key in tensors:
-        tensor = tensors[key]
-        self._dict_keys.append(key)
-        flat_types.append(tensor.dtype)
-        flat_shapes.append(tensor.get_shape())
-
-    else:
-      raise ValueError("""\
-IPUOutfeedQueue Enqueue input needs to be either:
-* TensorFlow tensor
-* Tuple of TensorFlow tensors
-* Dictionary of strings to TensorFlow tensors""")
-
-    # We add an extra dimension when the replication factor is greater than 1.
-    if replication_factor > 1:
-      flat_shapes = [
-          tensor_shape.TensorShape([replication_factor]).concatenate(shape)
-          for shape in flat_shapes
-      ]
-
-    self._flat_structure = {
-        "output_shapes": flat_shapes,
-        "output_types": flat_types,
-    }
-
-  @staticmethod
-  def _check_list_of_all_type(type, list):
-    return all(isinstance(x, type) for x in list)
-
-  @property
-  def flat_structure(self):
-    return self._flat_structure
-
-  @property
-  def flat_shapes(self):
-    return self._flat_structure["output_shapes"]
-
-  @property
-  def flat_types(self):
-    return self._flat_structure["output_types"]
-
-  def to_tensor_list(self, tensors):
-    if self._singular:
-      return [tensors]
-    if self._tuple or self._list:
-      return list(tensors)
-    if self._dict:
-      return list(tensors.values())
-    raise ValueError("Can't be reached")
-
-  def from_tensor_list(self, flat_tensors):
-    # We require the input to be a list of flat_tensors.
-    if (not isinstance(flat_tensors, list)
-        or not self._check_list_of_all_type(ops.Tensor, flat_tensors)):
-      raise ValueError("""\
-Expected flat_tensors to be a list of TensorFlow tensors.""")
-
-    if self._singular:
-      return flat_tensors[0]
-    if self._tuple:
-      return tuple(flat_tensors)
-    if self._list:
-      return flat_tensors
-    if self._dict:
-      return dict(zip(self._dict_keys, flat_tensors))
-    raise ValueError("Can't be reached")
