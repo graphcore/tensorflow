@@ -497,7 +497,19 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return x, label
 
     def stage2(x, label):
-      x = x**2
+      with variable_scope.variable_scope("vs2", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w1",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
       return x, label
 
     def stage3(x, label):

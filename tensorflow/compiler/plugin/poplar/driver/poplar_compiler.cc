@@ -1113,6 +1113,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<SeedHoisting>>();
     pipeline.AddPass<PipelineRecomputation>(
         poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
