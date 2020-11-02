@@ -168,7 +168,7 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
     }
   }
 
-  // Make sure each input shape is an array(tensor).
+  // Make sure each input shape is an array(tensor) - i.e. prevent token shapes.
   const bool all_shapes_allowed =
       absl::c_all_of(inputs, [](const HloInstruction* inst) {
         return absl::c_all_of(ShapeUtil::GetLeafShapes(inst->shape()),
@@ -227,14 +227,19 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
   // lowered into the backward pipeline stage.
   HloComputation* pipeline_comp = fwd_stage->parent();
 
+  // Keep track of inputs to the cluster.
+  absl::flat_hash_set<HloInstruction*> cluster_inputs;
+
   // Get the cluster inputs which were previously added as outputs of the
   // forward stage.
   const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
                             cluster_info.inputs.size();
   for (int64 i = 0; i != cluster_info.inputs.size(); ++i) {
+    HloInstruction* input = cluster_info.inputs[i];
     TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                         MakeGetTupleElementHlo(fwd_stage, start_index + i));
-    context.MapInstruction(cluster_info.inputs[i], gte);
+    context.MapInstruction(input, gte);
+    cluster_inputs.insert(input);
   }
 
   std::vector<HloInstruction*> to_lower;
@@ -256,8 +261,13 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
   // uses of the fwd stage with the outputs of the recomputation cluster.
   std::map<int64, HloInstruction*> replacements;
   for (int64 i = 0; i != oi_info.fwd_outputs.size(); ++i) {
-    HloInstruction* new_output =
-        context.GetInstruction(oi_info.fwd_outputs.at(i));
+    HloInstruction* output = oi_info.fwd_outputs.at(i);
+    // Do not replace cluster inputs.
+    if (cluster_inputs.contains(output)) {
+      continue;
+    }
+
+    HloInstruction* new_output = context.GetInstruction(output);
     replacements.emplace(oi_info.bwd_input_idices.at(i), new_output);
   }
 

@@ -729,8 +729,8 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   // Replace uses of parameters with lowered instruction. Note that this does
   // not remove parameters.
   for (auto& pair : replace_parameter_with_lowered_instruction) {
-    int64 param_numer = pair.first;
-    HloInstruction* parameter = parameter_instructions.at(param_numer);
+    int64 param_number = pair.first;
+    HloInstruction* parameter = parameter_instructions.at(param_number);
     HloInstruction* inst_to_lower = pair.second;
     HloInstruction* lowered = lowered_insts.at(inst_to_lower);
     VLOG(3) << "Replacing the use of parameter " << parameter->ToString()
