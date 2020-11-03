@@ -110,6 +110,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_checkpoint_remover.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_input_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_parameter_parallel_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
@@ -1113,6 +1115,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<SeedHoisting>>();
     pipeline.AddPass<PipelineRecomputation>(
         poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<RecomputationCheckpointRemover>();
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ComputationFlattener>();
@@ -1215,6 +1218,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HostEmbeddingNotification>();
 
     // Passes below this point need to respect control dependencies.
+    pipeline.AddPass<RecomputationInputRemover>();
     pipeline.AddPass<RecomputeInstructions>(
         poplar_executor->RecomputationEnabled());
     if (poplar_executor->RecomputationEnabled()) {

@@ -49,3 +49,9 @@ def _pipeline_grad(op, *grads):
       " If you are trying to generate the gradients of operations inside the"
       " pipeline, use the `optimizer_stage` (see"
       " tensorflow.python.ipu.pipelining_ops.pipeline for more information).")
+
+
+@ops.RegisterGradient("RecomputationCheckpoint")
+def _recomputation_checkpoint(_op, grads):
+  """Gradients for the RecomputationCheckpoint op."""
+  return grads

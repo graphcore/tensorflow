@@ -197,6 +197,8 @@ cc_library(
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
         "driver/passes/recompute_instructions.cc",
+        "driver/passes/recomputation_checkpoint_remover.cc",
+        "driver/passes/recomputation_input_remover.cc",
         "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
@@ -359,6 +361,8 @@ cc_library(
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/post_serialize_gradient_accumulation.h",
+        "driver/passes/recomputation_checkpoint_remover.h",
+        "driver/passes/recomputation_input_remover.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
@@ -2955,6 +2959,36 @@ xla_test(
 )
 
 xla_test(
+    name = "recomputation_checkpoint_remover_test",
+    size = "small",
+    srcs = ["tests/recomputation_checkpoint_remover_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "recomputation_input_remover_test",
+    size = "small",
+    srcs = ["tests/recomputation_input_remover_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "fusion_inliner_test",
     srcs = ["tests/fusion_inliner_test.cc"],
     backends = ["poplar"],
@@ -4706,6 +4740,8 @@ test_suite(
         "poplar_algebraic_simplifier_test",
         "poplar_executable_runner_test",
         "post_serialize_gradient_accumulation_test",
+        "recomputation_checkpoint_remover_test",
+        "recomputation_input_remover_test",
         "recomputation_test",
         "recompute_suggestion_test",
         "reduce_test",

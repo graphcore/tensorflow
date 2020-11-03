@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/ops/common_shape_fns.h"
+#include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -98,4 +99,10 @@ output: A list of tensors returned by computing to_apply on a device.
 to_apply: A function which takes 'inputs' and computes the gradient pipeline
   stage on the IPU.
 )doc");
+
+REGISTER_OP("RecomputationCheckpoint")
+    .Input("inputs: dtype")
+    .Output("output: dtype")
+    .Attr("dtype: type")
+    .SetShapeFn(shape_inference::UnchangedShape);
 }  // namespace tensorflow

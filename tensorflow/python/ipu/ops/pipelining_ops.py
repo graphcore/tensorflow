@@ -38,6 +38,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 from tensorflow.python.util.deprecation import deprecated_args
+from tensorflow.python.util import nest
 
 
 class PipelineSchedule(IntEnum):
@@ -925,3 +926,31 @@ def _pipeline_stage(func,
 
     return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
         func_graph.structured_outputs, outputs)
+
+
+def recomputation_checkpoint(tensors, name=None):
+  """Operation for checkpointing values in a computational pipeline stage.
+  When recomputation is enabled, these values  will not be recomputed and they
+  will be stored in memory instead.
+
+  This operation can reduce memory liveness peaks when using recomputation if
+  there are too many activations which need to be recomputed before the
+  backpropagation operations can be executed.
+
+  This operation should be used with the
+  'RecomputationMode.Recompute_and_backpropagate_interleaved' pipeliening
+  recomputation mode.
+
+  Args:
+    tensors: A 'Tensor' or a structure of tensors which should be checkpointed.
+    name: name of this operation.
+
+  Returns:
+    A 'Tensor' or a structure of tensors which matches shape and type of
+    'tensors'.
+  """
+  inputs = nest.flatten(tensors, expand_composites=True)
+  outputs = [
+      gen_functional_ops.recomputation_checkpoint(x, name=name) for x in inputs
+  ]
+  return nest.pack_sequence_as(tensors, outputs, expand_composites=True)

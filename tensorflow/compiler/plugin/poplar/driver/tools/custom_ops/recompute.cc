@@ -107,6 +107,58 @@ std::unique_ptr<HloInstruction> CreateBlockRecompute(HloInstruction* operand) {
   return absl::make_unique<HloBlockRecomputeInstruction>(operand);
 }
 
+HloRecomputationCheckpointInstruction::HloRecomputationCheckpointInstruction(
+    HloInstruction* const operand)
+    : HloPoplarInstruction(operand->shape(), {operand},
+                           PoplarOp::RecomputationCheckpoint) {}
+
+std::unique_ptr<HloInstruction>
+HloRecomputationCheckpointInstruction::CloneWithNewOperandsImpl(
+    const Shape&, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  CHECK_EQ(new_operands.size(), 1);
+  return absl::make_unique<HloRecomputationCheckpointInstruction>(
+      new_operands[0]);
+}
+
+std::vector<std::string>
+HloRecomputationCheckpointInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateRecomputationCheckpoint(
+    HloInstruction* const operand) {
+  return absl::make_unique<HloRecomputationCheckpointInstruction>(operand);
+}
+
+HloRecomputationInputInstruction::HloRecomputationInputInstruction(
+    HloInstruction* const checkpointed_input, HloInstruction* const old_input)
+    : HloPoplarInstruction(checkpointed_input->shape(),
+                           {checkpointed_input, old_input},
+                           PoplarOp::RecomputationInput) {}
+
+std::unique_ptr<HloInstruction>
+HloRecomputationInputInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  CHECK_EQ(new_operands.size(), 2);
+  return absl::make_unique<HloRecomputationInputInstruction>(new_operands[0],
+                                                             new_operands[1]);
+}
+
+std::vector<std::string>
+HloRecomputationInputInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateRecomputationInput(
+    HloInstruction* const checkpointed_input, HloInstruction* const old_input) {
+  return absl::make_unique<HloRecomputationInputInstruction>(checkpointed_input,
+                                                             old_input);
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>>
 HloSuggestRecomputeInstructionFactoryFunc(HloCustomCallInstruction* call) {
@@ -123,6 +175,23 @@ HloBlockRecomputeInstructionFactoryFunc(HloCustomCallInstruction* call) {
 
 static HloPoplarInstructionFactory block_factory(
     PoplarOp::BlockRecompute, HloBlockRecomputeInstructionFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloRecomputationCheckpointFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateRecomputationCheckpoint(call->mutable_operand(0));
+}
+
+static HloPoplarInstructionFactory recomputation_checkpoint_factory(
+    PoplarOp::RecomputationCheckpoint, HloRecomputationCheckpointFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloRecomputationInputFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateRecomputationInput(call->mutable_operand(0),
+                                  call->mutable_operand(1));
+}
+
+static HloPoplarInstructionFactory recomputation_input_factory(
+    PoplarOp::RecomputationInput, HloRecomputationInputFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

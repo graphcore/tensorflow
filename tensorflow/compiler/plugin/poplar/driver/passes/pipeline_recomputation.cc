@@ -22,8 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -37,8 +36,11 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-
 namespace {
+bool IsRecomputationCheckpoint(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::RecomputationCheckpoint, inst);
+}
+
 // Helper struct for storing information about which forward stage outputs are
 // used as backward stage inputs and the corresponding output instructions.
 struct OutputToInputInfo {
@@ -97,6 +99,8 @@ StatusOr<OutputToInputInfo> GetForwardOutputsUsed(
 struct ClusterInfo {
   // Stores the inputs to the cluster.
   std::vector<HloInstruction*> inputs;
+  // Stores the recomputation checkpoint instructions which become inputs.
+  std::vector<HloInstruction*> recomputation_checkpoints;
   // All the instructions which can be recomputed - stored in post order.
   std::vector<HloInstruction*> instructions;
 };
@@ -111,6 +115,7 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
   // build a cluster of instructions which can be recomputed inside of the
   // backward stage.
   std::vector<HloInstruction*> inputs;
+  std::vector<HloInstruction*> recomputation_checkpoints;
   std::vector<HloInstruction*> instructions;
 
   // Walk through the cluster to create a post order.
@@ -154,6 +159,21 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
         } else {
           instructions.push_back(inst);
         }
+
+        // Store which instructions are checkpoints.
+        if (IsRecomputationCheckpoint(inst)) {
+          const bool has_root_user = absl::c_count(inst->users(), root);
+          if (has_root_user) {
+            VLOG(2) << "Skipping checkpoint " << inst->ToString()
+                    << " as it is a stage output.";
+          } else if (inst->operand(0)->opcode() == HloOpcode::kParameter) {
+            VLOG(2) << "Skipping checkpoint " << inst->ToString()
+                    << " as it is a stage input.";
+          } else {
+            recomputation_checkpoints.push_back(inst);
+          }
+        }
+
         itr->second = kVisited;
       } else {
         CHECK_EQ(itr->second, kVisited);
@@ -185,24 +205,30 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
   for (const HloInstruction* inst : inputs) {
     VLOG(2) << "* " << inst->ToString();
   }
+  VLOG(2) << "Cluster recomputation checkpoints are:";
+  for (const HloInstruction* inst : recomputation_checkpoints) {
+    VLOG(2) << "* " << inst->ToString();
+  }
   VLOG(2) << "Cluster is:";
   for (const HloInstruction* inst : instructions) {
     VLOG(2) << "* " << inst->ToString();
   }
 
-  return ClusterInfo{inputs, instructions};
+  return ClusterInfo{inputs, recomputation_checkpoints, instructions};
 }
 
-Status AddNewOutputsToStage(
-    HloInstruction* const stage,
-    const std::vector<HloInstruction*>& outputs_to_add) {
+Status AddNewOutputsToStage(HloInstruction* const stage,
+                            const ClusterInfo& cluster_info) {
   HloComputation* comp = stage->to_apply();
   HloInstruction* old_root = comp->root_instruction();
   CHECK_EQ(old_root->opcode(), HloOpcode::kTuple);
 
   HloInstruction::InstructionVector new_outputs = old_root->operands();
-  new_outputs.insert(new_outputs.end(), outputs_to_add.begin(),
-                     outputs_to_add.end());
+  new_outputs.insert(new_outputs.end(), cluster_info.inputs.begin(),
+                     cluster_info.inputs.end());
+  new_outputs.insert(new_outputs.end(),
+                     cluster_info.recomputation_checkpoints.begin(),
+                     cluster_info.recomputation_checkpoints.end());
 
   HloInstruction* new_root =
       comp->AddInstruction(HloInstruction::CreateTuple(new_outputs));
@@ -221,6 +247,10 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
                                  HloInstruction* bwd_stage,
                                  const ClusterInfo& cluster_info,
                                  const OutputToInputInfo& oi_info) {
+  const int64 num_inputs = cluster_info.inputs.size();
+  const int64 num_recomputed_inputs =
+      cluster_info.recomputation_checkpoints.size();
+
   HloCloneContext context(fwd_stage->GetModule());
 
   // The recomputation cluster is added to the pipeline computation and then
@@ -232,26 +262,54 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
 
   // Get the cluster inputs which were previously added as outputs of the
   // forward stage.
-  const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
-                            cluster_info.inputs.size();
-  for (int64 i = 0; i != cluster_info.inputs.size(); ++i) {
-    HloInstruction* input = cluster_info.inputs[i];
-    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
-                        MakeGetTupleElementHlo(fwd_stage, start_index + i));
-    context.MapInstruction(input, gte);
-    cluster_inputs.insert(input);
+  {
+    const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
+                              num_inputs - num_recomputed_inputs;
+    for (int64 i = 0; i != num_inputs; ++i) {
+      HloInstruction* input = cluster_info.inputs[i];
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(fwd_stage, start_index + i));
+      context.MapInstruction(input, gte);
+      cluster_inputs.insert(input);
+    }
+  }
+
+  // Get the checkpointed inputs.
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> recomputed_inputs;
+  {
+    const int64 start_index = ShapeUtil::TupleElementCount(fwd_stage->shape()) -
+                              num_recomputed_inputs;
+    for (int64 i = 0; i != num_recomputed_inputs; ++i) {
+      HloInstruction* input = cluster_info.recomputation_checkpoints[i];
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(fwd_stage, start_index + i));
+      context.MapInstruction(input, gte);
+      recomputed_inputs[input] = gte;
+    }
   }
 
   std::vector<HloInstruction*> to_lower;
   to_lower.reserve(cluster_info.instructions.size());
   for (HloInstruction* old_inst : cluster_info.instructions) {
-    std::vector<HloInstruction*> new_operands(old_inst->operand_count());
-    absl::c_transform(old_inst->operands(), new_operands.begin(),
-                      [&context](HloInstruction* old_operand) {
-                        return context.GetInstruction(old_operand);
-                      });
-    HloInstruction* new_inst = pipeline_comp->AddInstruction(
-        old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+    HloInstruction* new_inst;
+    if (recomputed_inputs.contains(old_inst)) {
+      // Convert valid recomputation checkpoint instruction into recomputation
+      // input instruction.
+      CHECK(IsRecomputationCheckpoint(old_inst));
+      HloInstruction* checkpointed_input = recomputed_inputs.at(old_inst);
+      HloInstruction* old_input =
+          context.GetInstruction(old_inst->mutable_operand(0));
+      new_inst = pipeline_comp->AddInstruction(
+          CreateRecomputationInput(checkpointed_input, old_input));
+    } else {
+      std::vector<HloInstruction*> new_operands(old_inst->operand_count());
+      absl::c_transform(old_inst->operands(), new_operands.begin(),
+                        [&context](HloInstruction* old_operand) {
+                          return context.GetInstruction(old_operand);
+                        });
+      new_inst = pipeline_comp->AddInstruction(
+          old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+    }
 
     context.MapInstruction(old_inst, new_inst);
     to_lower.push_back(new_inst);
@@ -316,8 +374,9 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       continue;
     }
 
-    // Make all the cluster inputs as outputs of the forward pipeline stage.
-    TF_RETURN_IF_ERROR(AddNewOutputsToStage(fwd_stage, cluster_info.inputs));
+    // Make all the cluster inputs/recomputation checkpoints as outputs of the
+    // forward pipeline stage.
+    TF_RETURN_IF_ERROR(AddNewOutputsToStage(fwd_stage, cluster_info));
 
     // Lower the recomputation cluster into the backward stage.
     TF_RETURN_IF_ERROR(
