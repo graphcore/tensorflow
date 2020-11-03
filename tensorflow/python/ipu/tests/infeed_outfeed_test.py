@@ -921,6 +921,41 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
   @test_util.deprecated_graph_mode_only
+  def testOutfeedNonTensorOutputs(self):
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        feed_name=next_feed_id())
+
+    def body1():
+      with variable_scope.variable_scope("", use_resource=True):
+        w = variable_scope.get_variable(
+            "w",
+            dtype=np.float32,
+            shape=[1],
+            initializer=init_ops.constant_initializer(2.0))
+      outfeed = outfeed_queue.enqueue({101: 1, 2020: w})
+      return outfeed
+
+    def net():
+      r = ipu.loops.repeat(5, body1)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(net, inputs=[])
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(res)
+      outfed = sess.run(outfeed)
+
+      for i in range(5):
+        self.assertAllClose(outfed[101][i], 1)
+        self.assertAllClose(outfed[2020][i], [2.0])
+
+  @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
