@@ -63,6 +63,7 @@ REQUIRED_PACKAGES = [
     'enum34 >= 1.1.6;python_version<"3.4"',
     'gast == 0.2.2',
     'google_pasta >= 0.1.6',
+    'h5py < 3.0.0',
     'keras_applications >= 1.0.8',
     'keras_preprocessing == 1.1.0',
     'networkx >= 2.2',
