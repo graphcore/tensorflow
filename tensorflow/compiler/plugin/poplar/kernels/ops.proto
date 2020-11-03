@@ -83,6 +83,8 @@ enum PoplarOp {
   CopyInto = 79;
   Square = 80;
   Inverse = 81;
+  RecomputationCheckpoint = 82;
+  RecomputationInput = 83;
 
   // Supported Fusions.
   Conv_biasadd = 200;

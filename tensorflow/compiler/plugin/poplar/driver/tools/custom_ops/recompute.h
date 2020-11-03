@@ -73,6 +73,68 @@ class HloBlockRecomputeInstruction : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateBlockRecompute(HloInstruction* operand);
 
+// An instruction used to indicate that the input value should be checkpointed
+// instead of recomputed. When used in pipelining, the input operand will be
+// passed directly as an input to the recomputation/backward operations without
+// the need of recomputing its predecessors.
+class HloRecomputationCheckpointInstruction : public HloPoplarInstruction {
+ public:
+  explicit HloRecomputationCheckpointInstruction(HloInstruction* const operand);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 0; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateRecomputationCheckpoint(
+    HloInstruction* const operand);
+
+// An instruction used to indicate the recomputation predecessors of a
+// checkpointed input. Used in pipelining to make sure any predecessors of
+// `old_input` are executed after all possible successors of
+// `checkpointed_input`.
+class HloRecomputationInputInstruction : public HloPoplarInstruction {
+ public:
+  explicit HloRecomputationInputInstruction(
+      HloInstruction* const checkpointed_input,
+      HloInstruction* const old_input);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+
+  uint64 NumberOfInplaceOperands() const override { return 0; }
+
+  bool IsPopOpsElementwise() const override { return false; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateRecomputationInput(
+    HloInstruction* const checkpointed_input, HloInstruction* const old_input);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

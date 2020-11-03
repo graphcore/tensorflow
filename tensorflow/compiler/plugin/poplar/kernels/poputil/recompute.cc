@@ -97,4 +97,33 @@ class PoputilBlockRecomputeOp : public XlaOpKernel, IpuOpKernel {
 REGISTER_XLA_OP(Name("IpuBlockRecompute").Device(DEVICE_IPU_XLA_JIT),
                 PoputilBlockRecomputeOp);
 
+class RecomputationCheckpointOp : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit RecomputationCheckpointOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {}
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    xla::XlaBuilder* b = ctx->builder();
+
+    const DataType dtype = output_type(0);
+    auto input = ctx->Input(0);
+    auto shape = ctx->InputShape(0);
+
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
+
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::RecomputationCheckpoint),
+                        {input}, xla_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(RecomputationCheckpointOp);
+};
+
+REGISTER_XLA_OP(Name("RecomputationCheckpoint").Device(DEVICE_IPU_XLA_JIT),
+                RecomputationCheckpointOp);
+
 }  // namespace tensorflow

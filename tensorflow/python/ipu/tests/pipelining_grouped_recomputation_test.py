@@ -735,6 +735,74 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         recomp=True,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineRecomputationCheckpoint(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def get_weight(name):
+      return variable_scope.get_variable(
+          name,
+          shape=[4, 4],
+          dtype=np.float32,
+          initializer=init_ops.ones_initializer())
+
+    def get_stage(x):
+      w0 = get_weight("w0")
+      w1 = get_weight("w1")
+      x = math_ops.matmul(x, w0)
+      x = nn.relu(x)
+      x = pipelining_ops.recomputation_checkpoint(x)
+      x = math_ops.matmul(x, w1)
+      x = nn.relu(x)
+      return x
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("s1", use_resource=True):
+        return get_stage(x), label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("s2", use_resource=True):
+        return get_stage(x), label
+
+    def stage3(x, label):
+      logits = math_ops.reduce_mean(x, axis=[1])
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                      labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3],
+        inputs_fn, [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        recomp=True,
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        recomputation_mode=pipelining_ops.RecomputationMode.
+        RecomputeAndBackpropagateInterleaved)
+
 
 if __name__ == "__main__":
   googletest.main()
