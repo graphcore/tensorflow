@@ -96,7 +96,7 @@ bool IsNotDependencyOfPeers(HloInstruction* inplace,
 // A function which is used to decide whether the instruction is inplace
 // get tuple element type given our backend implementation of these ops in
 // Poplar.
-bool IsInplaceGetTupleElement(HloInstruction* inst) {
+bool ConvertToInplaceGetTupleElement(HloInstruction* inst) {
   // An instruction is inplace get tuple element (GTE) if:
   // 1. It has an inplace GTE type, and
   // 2. All other users of operand 0 (peers) are GTEs and there is no other
@@ -125,8 +125,8 @@ bool IsInplaceGetTupleElement(HloInstruction* inst) {
 // A function which is used to decide whether the instruction is inplace
 // read-write type given our backend implementation of these ops in Poplar and
 // the current reachability graph.
-bool IsInplaceReadWrite(HloInstruction* inst,
-                        HloReachabilityMap* reachability_map) {
+bool ConvertToInplaceReadWrite(HloInstruction* inst,
+                               HloReachabilityMap* reachability_map) {
   // An instruction is inplace read/write if:
   // 1. It has an inplace read/write type, and
   // 2. For each inplace operand instruction, instruction is not a dependency
@@ -176,9 +176,9 @@ bool IsInplaceReadWrite(HloInstruction* inst,
 // A function which is used to decide whether the instruction is inplace
 // read-only type given our backend implementation of these ops in Poplar and
 // the current reachability graph.
-bool IsInplaceReadOnly(HloInstruction* inst,
-                       HloReachabilityMap* reachability_map,
-                       InplaceWorkList& worklist) {
+bool ConvertToInplaceReadOnly(HloInstruction* inst,
+                              HloReachabilityMap* reachability_map,
+                              InplaceWorkList& worklist) {
   // For read only instructions, not only do we need to consider whether `inst`
   // is inplace read/only, but we also need to consider the indirect source of
   // inst and all the indirect consumers of it.
@@ -727,22 +727,33 @@ const std::string HloInstructionDescription::ToString() const {
   return str_stream.str();
 }
 
-bool HloInstructionDescription::IsInplace(HloInstruction* inst,
-                                          HloReachabilityMap* reachability_map,
-                                          InplaceWorkList& worklist) {
+bool HloInstructionDescription::ConvertToInplace(
+    HloInstruction* inst, HloReachabilityMap* reachability_map,
+    InplaceWorkList& worklist) {
   auto inst_description = HloInstructionDescription(inst);
+  bool converted;
   switch (inst_description.GetType()) {
     case HloInstructionType::kInplaceGetTupleElement: {
-      return IsInplaceGetTupleElement(inst);
+      converted = ConvertToInplaceGetTupleElement(inst);
+      break;
     }
     case HloInstructionType::kInplaceReadWrite: {
-      return IsInplaceReadWrite(inst, reachability_map);
+      converted = ConvertToInplaceReadWrite(inst, reachability_map);
+      break;
     }
     case HloInstructionType::kInplaceReadOnly: {
-      return IsInplaceReadOnly(inst, reachability_map, worklist);
+      converted = ConvertToInplaceReadOnly(inst, reachability_map, worklist);
+      break;
     }
-    default: { return false; }
+    default: {
+      converted = false;
+      break;
+    }
   }
+  if (converted) {
+    MakeUsedInplace(inst);
+  }
+  return converted;
 }
 
 absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst) {
