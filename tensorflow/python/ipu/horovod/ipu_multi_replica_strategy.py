@@ -47,14 +47,17 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
   the initial values of variables to all processes, or when a
   reduction is requested with a CPU as the current device.
   """
-  def __init__(self, ipu_device="/device:IPU:0"):
+  def __init__(self,
+               ipu_device="/device:IPU:0",
+               add_ipu_cross_replica_reductions=True):
     # We create an empty cluster here since we will not be using gRPC for communication.
     # All the communication is delegated to either GCL or Horovod (MPI) below.
     cluster_resolver = cluster_resolver_lib.SimpleClusterResolver(
         server_lib.ClusterSpec({}))
 
     super().__init__(
-        IPUMultiReplicaExtended(self, cluster_resolver, ipu_device))
+        IPUMultiReplicaExtended(self, cluster_resolver, ipu_device,
+                                add_ipu_cross_replica_reductions))
 
   def update_ipu_config(self, config):
     """Update the given IPU configuration with the multi-replica
@@ -71,12 +74,14 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
 
 
 class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
-  def __init__(self, container_strategy, cluster_resolver, ipu_device):
+  def __init__(self, container_strategy, cluster_resolver, ipu_device,
+               add_ipu_cross_replica_reductions):
     super().__init__(container_strategy,
                      cluster_resolver,
                      ipu_device,
                      variables_on_host=False)
     self._num_workers = size()
+    self._add_ipu_cross_replica_reductions = add_ipu_cross_replica_reductions
 
   def _reduce_to(self, reduce_op, value, destinations):
     del destinations
@@ -89,7 +94,10 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
       # If not on IPU, use Horovod for the reduction.
       return hvd_allreduce(value, op=_to_horovod_op(reduce_op))
 
-    # On IPU we do a compiled reduction with GCL.
+    # On the IPU, do reduction with GCL if requested.
+    if not self._add_ipu_cross_replica_reductions:
+      return value
+
     if reduce_op not in (reduce_util.ReduceOp.SUM, reduce_util.ReduceOp.MEAN):
       raise ValueError("Unsupported reduce op: {}".format(reduce_op))
 

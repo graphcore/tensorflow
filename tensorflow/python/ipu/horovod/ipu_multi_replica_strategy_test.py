@@ -91,6 +91,30 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
         self.assertEqual(sess.run(value_allreduced), hvd.size() * 2.0)
 
   @test_util.deprecated_graph_mode_only
+  def test_strategy_without_ipu_reduction(self):
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy(
+        add_ipu_cross_replica_reductions=False)
+
+    with strategy.scope():
+
+      v = variables.Variable(initial_value=1.0, dtype=np.float32)
+
+      def per_replica_fn(x):
+        y = v * x
+
+        replica_context = distribution_strategy_context.get_replica_context()
+
+        # Since IPU reductions are disabled, this should be an identity op.
+        y_out = replica_context.all_reduce(ReduceOp.SUM, y)
+        self.assertEqual(y_out.op.type, "IdentityN")
+        self.assertEqual(y_out.op.inputs[0], y)
+        return y_out
+
+      # It is sufficient to test the TF graph construction.
+      strategy.experimental_run_v2(per_replica_fn,
+                                   args=[constant_op.constant(2.0)])
+
+  @test_util.deprecated_graph_mode_only
   def test_strategy_with_sync_on_read_variable(self):
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
 
