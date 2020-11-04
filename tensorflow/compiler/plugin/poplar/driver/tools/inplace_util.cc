@@ -263,7 +263,7 @@ bool IsInplaceReadOnly(HloInstruction* inst,
     absl::flat_hash_map<HloInstruction*, uint64> inplace_read_write_users;
 
     // All the non inplace uses of any cluster nodes.
-    absl::flat_hash_set<HloInstruction*> not_inplace_users;
+    HloInstructionSet not_inplace_users;
 
     std::queue<HloInstruction*> to_visit;
     absl::flat_hash_set<HloInstruction*> visited;
