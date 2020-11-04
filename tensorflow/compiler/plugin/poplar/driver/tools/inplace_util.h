@@ -64,9 +64,9 @@ class HloInstructionDescription {
   // Checks if the type is kInplaceReadWrite or kInplaceReadOnly.
   bool IsInplaceType() const;
 
-  static bool IsInplace(HloInstruction* inst,
-                        HloReachabilityMap* reachability_map,
-                        InplaceWorkList& worklist);
+  static bool ConvertToInplace(HloInstruction* inst,
+                               HloReachabilityMap* reachability_map,
+                               InplaceWorkList& worklist);
 
   const std::string ToString() const;
 

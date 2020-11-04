@@ -236,9 +236,8 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         auto& inplace_instruction_candidates =
             inplace_priority_candidates_pair.second;
         for (auto* inst : inplace_instruction_candidates) {
-          if (HloInstructionDescription::IsInplace(inst, reachability_map.get(),
-                                                   worklist_)) {
-            MakeUsedInplace(inst);
+          if (HloInstructionDescription::ConvertToInplace(
+                  inst, reachability_map.get(), worklist_)) {
             changed = true;
             VLOG(1) << "Inplacing " << inst->ToString();
           }
