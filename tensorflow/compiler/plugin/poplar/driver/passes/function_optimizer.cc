@@ -97,7 +97,7 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
   TF_RETURN_IF_ERROR(ConvertAllUsersToGTEs(function).status());
 
   // Find all the gtes.
-  absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>> gtes;
+  absl::flat_hash_map<int64, HloInstructionSet> gtes;
   for (HloInstruction* user : function->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gtes[user->tuple_index()].insert(user);
