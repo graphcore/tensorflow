@@ -226,6 +226,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       }
     }
 
+    absl::flat_hash_set<HloInstruction*> converted;
     // Because we are using a map, we first inplace GTEs, then Read/Write and
     // then Read-Only.
     for (auto type_candidates_pair : inplace_candidates) {
@@ -236,8 +237,10 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         auto& inplace_instruction_candidates =
             inplace_priority_candidates_pair.second;
         for (auto* inst : inplace_instruction_candidates) {
-          if (HloInstructionDescription::ConvertToInplace(
+          if (!converted.contains(inst) &&
+              HloInstructionDescription::ConvertToInplace(
                   inst, reachability_map.get(), worklist_)) {
+            converted.insert(inst);
             changed = true;
             VLOG(1) << "Inplacing " << inst->ToString();
           }
