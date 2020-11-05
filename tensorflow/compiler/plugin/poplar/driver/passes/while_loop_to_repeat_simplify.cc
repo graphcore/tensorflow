@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 
 #include <map>
+#include <set>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -218,8 +219,8 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
   // Also hoist out all the constants.
   // A map of scalar values which we know the value of after the loop has
   // completed.
-  absl::flat_hash_map<int64, HloInstruction*> gte_to_final_value;
-  absl::flat_hash_set<int64> dead_gtes;
+  std::map<int64, HloInstruction*> gte_to_final_value;
+  std::set<int64> dead_gtes;
 
   // Go through all the other scalar counters in the while loop and try and
   // determine their values given the number of iterations. A value can be
