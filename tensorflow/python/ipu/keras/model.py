@@ -1133,12 +1133,11 @@ class IPUModel(_IpuModelBase):
         if all(
             str(id(tensor)) in computed_set
             for tensor in nest.flatten(node.input_tensors)):
-
-          self._post_order_node_execution.append(node)
-          # Update computed_set.
-          computed_set.update(
-              [str(id(x)) for x in nest.flatten(node.output_tensors)])
-
+          if not node in self._post_order_node_execution:
+            self._post_order_node_execution.append(node)
+            # Update computed_set.
+            computed_set.update(
+                [str(id(x)) for x in nest.flatten(node.output_tensors)])
     assert len(self._post_order_node_execution) == len(self._network_nodes)
 
   def _execute_layer_node(self, node, training, tensor_dict):

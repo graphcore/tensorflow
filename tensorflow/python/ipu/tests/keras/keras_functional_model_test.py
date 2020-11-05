@@ -1104,6 +1104,66 @@ class IPUModelModelTest(test.TestCase):
     for t_cpu, t_ipu in zip(cpu_out, ipu_out):
       self.assertAllClose(t_ipu, t_cpu)
 
+  @test_util.run_v2_only
+  def testTrainMultipleInputMultipleOutput(self):
+    # 3 inputs, 2 outputs.
+    def data_fn():
+      x1 = np.ones((64, 32), dtype=np.float32)
+      x2 = np.ones((64, 32), dtype=np.float32)
+      x3 = np.ones((64, 32), dtype=np.float32)
+
+      y1 = np.ones((64, 1), dtype=np.float32)
+      y2 = np.ones((64, 1), dtype=np.float32)
+
+      return ((x1, x2, x3), (y1, y2))
+
+    # Intentional skip from input to middle of model.
+    def model_fn():
+      input_1 = keras.Input(32)
+      input_2 = keras.Input(32)
+      input_3 = keras.Input(32)
+
+      init = keras.initializers.Constant(1)
+
+      dense_1 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_1)
+      dense_2 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_2)
+
+      cat = keras.layers.Concatenate()([dense_1, dense_2, input_3])
+
+      dense_3 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+      dense_4 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+
+      return ((input_1, input_2, input_3), (dense_3, dense_4))
+
+    # IPU Test.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      model = ipu.keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+
+      out = model.fit(*data_fn(), batch_size=4)
+
+    # CPU Test.
+    cpu_model = keras.Model(*model_fn())
+    cpu_model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+
+    cpu_out = cpu_model.fit(*data_fn(), batch_size=4)
+
+    # Comparison.
+    self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
+
 
 if __name__ == '__main__':
   test.main()
