@@ -54,7 +54,7 @@ std::vector<HloInstruction*> OrderInnerPipelineFunctions(
 Status ReplaceOutputUses(HloInstruction* stage,
                          std::map<int64, std::set<int64>> duplicate_outputs) {
   // Get all the GTEs by tuple index.
-  absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>> gte_users;
+  absl::flat_hash_map<int64, HloInstructionSet> gte_users;
   for (HloInstruction* user : stage->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gte_users[user->tuple_index()].insert(user);
