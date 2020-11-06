@@ -931,6 +931,61 @@ class IPUSequentialPipelineTest(test.TestCase):
                          length=48),
             epochs=1)
 
+  @test_util.run_v2_only
+  def testPredictReplaceableLayers(self):
+    def f():
+      C = keras.initializers.Constant(0.1)
+      return [
+          [
+              # Test Embedding.
+              keras.layers.Embedding(10, 2, embeddings_initializer=C),
+              keras.layers.Dense(2, kernel_initializer=C),
+
+              # Test Dropout.
+              keras.layers.Dropout(0.5),
+              keras.layers.Dense(20, kernel_initializer=C),
+          ],
+
+          # Test LSTM.
+          [
+              keras.layers.LSTM(5,
+                                kernel_initializer=C,
+                                recurrent_initializer=C),
+
+              # Test Layer Norm.
+              keras.layers.LayerNormalization(),
+              keras.layers.Dense(20, kernel_initializer=C),
+              keras.layers.Reshape((10, 2)),
+
+              # Test GRU.
+              keras.layers.GRU(5,
+                               kernel_initializer=C,
+                               recurrent_initializer=C)
+          ]
+      ]
+
+    # Create some test data.
+    data = np.ones((96, 10), dtype=np.int32)
+    # Compute IPU model output, uses layer replacement.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compute output with substituition.
+      m = ipu.keras.SequentialPipelineModel(f(),
+                                            gradient_accumulation_count=8,
+                                            layer_replacement=True)
+      ipu_out = m.predict(data, batch_size=4)
+
+      # Compute output with no substitution.
+      m_no_sub = ipu.keras.SequentialPipelineModel(
+          f(), gradient_accumulation_count=8)
+      no_sub_out = m_no_sub.predict(data, batch_size=4)
+
+    self.assertAllClose(ipu_out, no_sub_out)
+
 
 if __name__ == '__main__':
   test.main()

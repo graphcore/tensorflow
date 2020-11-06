@@ -980,6 +980,58 @@ class IPUPipelineTest(test.TestCase):
         # The model layers and dot nodes should be the same
         self.assertDictEqual(expected_nodes, dot_nodes)
 
+  @test_util.run_v2_only
+  def testPredictReplaceableLayers(self):
+    def f():
+      C = keras.initializers.Constant(0.1)
+      input_layer = keras.layers.Input(10)
+
+      with ipu.keras.PipelineStage(0):
+        # Test Embedding.
+        x = keras.layers.Embedding(10, 2,
+                                   embeddings_initializer=C)(input_layer)
+        x = keras.layers.Dense(2, kernel_initializer=C)(x)
+
+        # Test Dropout.
+        x = keras.layers.Dropout(0.5)(x)
+        x = keras.layers.Dense(20, kernel_initializer=C)(x)
+
+      with ipu.keras.PipelineStage(1):
+        # Test LSTM.
+        x = keras.layers.LSTM(5, kernel_initializer=C)(x)
+
+        # Test Layer Norm.
+        x = keras.layers.LayerNormalization()(x)
+        x = keras.layers.Dense(20, kernel_initializer=C)(x)
+        x = keras.layers.Reshape((10, 2))(x)
+
+        # Test GRU.
+        x = keras.layers.GRU(5, kernel_initializer=C)(x)
+
+      return input_layer, x
+
+    # Create some test data.
+    data = np.ones((96, 10), dtype=np.int32)
+
+    # Compute IPU model output, uses layer replacement.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compute output with substitution.
+      m = ipu.keras.PipelineModel(*f(),
+                                  gradient_accumulation_count=8,
+                                  layer_replacement=True)
+      ipu_out = m.predict(data, batch_size=4)
+
+      # Compute output without substitution.
+      m_no_sub = ipu.keras.PipelineModel(*f(), gradient_accumulation_count=8)
+      no_sub_out = m_no_sub.predict(data, batch_size=4)
+
+    self.assertAllClose(ipu_out, no_sub_out)
+
 
 if __name__ == '__main__':
   test.main()

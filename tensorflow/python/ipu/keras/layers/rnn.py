@@ -21,6 +21,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import rand_ops
+from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import initializers
@@ -40,7 +41,7 @@ POPNN_GRU_NUM_GATES = 3
 __all__ = ["PopnnLSTM", "PopnnGRU"]
 
 
-class _PopnnRNN(Layer):
+class _PopnnRNN(ipu_layer.IPULayer):
   """Base class for implementing XLA and Popnn compatible RNN layers.
   """
   def __init__(self,
@@ -192,7 +193,7 @@ class _PopnnRNN(Layer):
                            shape=self.canonical_bias_shapes)
 
   # pylint: disable=unused-argument
-  def call(self, inputs, training=None, initial_state=None):
+  def call(self, inputs, mask=None, training=None, initial_state=None):
     raise ValueError("This method needs to be overridden.")
 
   # pylint: disable=unused-argument
@@ -313,35 +314,71 @@ class PopnnLSTM(_PopnnRNN):
   _rnn_mode = POPNN_LSTM
   _num_gates_per_layer = POPNN_LSTM_NUM_GATES
 
-  def __init__(self,
-               units,
-               activation='tanh',
-               recurrent_activation='sigmoid',
-               use_bias=True,
-               kernel_initializer='glorot_uniform',
-               recurrent_initializer='orthogonal',
-               bias_initializer='zeros',
-               unit_forget_bias=True,
-               kernel_regularizer=None,
-               recurrent_regularizer=None,
-               bias_regularizer=None,
-               activity_regularizer=None,
-               kernel_constraint=None,
-               recurrent_constraint=None,
-               bias_constraint=None,
-               dropout=0.,
-               dropout_seed=None,
-               recurrent_dropout=0.,
-               implementation=1,
-               return_sequences=False,
-               return_state=False,
-               go_backwards=False,
-               stateful=False,
-               unroll=False,
-               partials_dtype=dtypes.float32,
-               seed=None,
-               time_major=False,
-               **kwargs):
+  def __init__(
+      self,
+      units,
+      activation='tanh',
+      recurrent_activation='sigmoid',
+      use_bias=True,
+      kernel_initializer='glorot_uniform',
+      recurrent_initializer='orthogonal',
+      bias_initializer='zeros',
+      unit_forget_bias=True,
+      kernel_regularizer=None,
+      recurrent_regularizer=None,
+      bias_regularizer=None,
+      activity_regularizer=None,
+      kernel_constraint=None,
+      recurrent_constraint=None,
+      bias_constraint=None,
+      dropout=0.,
+      dropout_seed=None,
+      recurrent_dropout=0.,
+      implementation=2,  # For upstream API compatability, set to 1 below.
+      return_sequences=False,
+      return_state=False,
+      go_backwards=False,
+      stateful=False,
+      unroll=False,
+      partials_dtype=dtypes.float32,
+      seed=None,
+      time_major=False,
+      **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(units,
+                                  activation=activation,
+                                  recurrent_activation=recurrent_activation,
+                                  use_bias=use_bias,
+                                  kernel_initializer=kernel_initializer,
+                                  recurrent_initializer=recurrent_initializer,
+                                  bias_initializer=bias_initializer,
+                                  unit_forget_bias=unit_forget_bias,
+                                  kernel_regularizer=kernel_regularizer,
+                                  recurrent_regularizer=recurrent_regularizer,
+                                  bias_regularizer=bias_regularizer,
+                                  activity_regularizer=activity_regularizer,
+                                  kernel_constraint=kernel_constraint,
+                                  recurrent_constraint=recurrent_constraint,
+                                  bias_constraint=bias_constraint,
+                                  dropout=dropout,
+                                  dropout_seed=dropout_seed,
+                                  recurrent_dropout=recurrent_dropout,
+                                  implementation=implementation,
+                                  return_sequences=return_sequences,
+                                  return_state=return_state,
+                                  go_backwards=go_backwards,
+                                  stateful=stateful,
+                                  unroll=unroll,
+                                  partials_dtype=partials_dtype,
+                                  seed=seed,
+                                  time_major=time_major,
+                                  **kwargs)
+
+    if implementation == 2:
+      implementation = 1
+
+    if recurrent_activation == 'hard_sigmoid':
+      recurrent_activation = 'sigmoid'
 
     if activation != 'tanh':
       raise ValueError(
@@ -451,7 +488,7 @@ class PopnnLSTM(_PopnnRNN):
                            initializer=bias_initializer,
                            shape=self.canonical_bias_shapes)
 
-  def call(self, inputs, training=None, initial_state=None):
+  def call(self, inputs, mask=None, training=None, initial_state=None):
     """Runs the forward step for the LSTM layer.
 
     Args:
@@ -472,6 +509,8 @@ class PopnnLSTM(_PopnnRNN):
       returned.
 
     """
+    self._check_unsupported(mask, "mask", "call")
+
     if training is None:
       training = K.learning_phase()
 
@@ -657,35 +696,71 @@ class PopnnGRU(_PopnnRNN):
   _rnn_mode = POPNN_GRU
   _num_gates_per_layer = POPNN_GRU_NUM_GATES
 
-  def __init__(self,
-               units,
-               activation='tanh',
-               recurrent_activation='sigmoid',
-               use_bias=True,
-               kernel_initializer='glorot_uniform',
-               recurrent_initializer='orthogonal',
-               bias_initializer='zeros',
-               kernel_regularizer=None,
-               recurrent_regularizer=None,
-               bias_regularizer=None,
-               activity_regularizer=None,
-               kernel_constraint=None,
-               recurrent_constraint=None,
-               bias_constraint=None,
-               dropout=0.,
-               dropout_seed=None,
-               recurrent_dropout=0.,
-               implementation=1,
-               return_sequences=False,
-               return_state=False,
-               go_backwards=False,
-               stateful=False,
-               unroll=False,
-               reset_after=True,
-               seed=None,
-               partials_dtype=dtypes.float32,
-               time_major=False,
-               **kwargs):
+  def __init__(
+      self,
+      units,
+      activation='tanh',
+      recurrent_activation='sigmoid',
+      use_bias=True,
+      kernel_initializer='glorot_uniform',
+      recurrent_initializer='orthogonal',
+      bias_initializer='zeros',
+      kernel_regularizer=None,
+      recurrent_regularizer=None,
+      bias_regularizer=None,
+      activity_regularizer=None,
+      kernel_constraint=None,
+      recurrent_constraint=None,
+      bias_constraint=None,
+      dropout=0.,
+      dropout_seed=None,
+      recurrent_dropout=0.,
+      implementation=2,  # For upstream API compatability, set to 1 below.
+      return_sequences=False,
+      return_state=False,
+      go_backwards=False,
+      stateful=False,
+      unroll=False,
+      reset_after=True,
+      seed=None,
+      partials_dtype=dtypes.float32,
+      time_major=False,
+      **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(units,
+                                  activation=activation,
+                                  recurrent_activation=recurrent_activation,
+                                  use_bias=use_bias,
+                                  kernel_initializer=kernel_initializer,
+                                  recurrent_initializer=recurrent_initializer,
+                                  bias_initializer=bias_initializer,
+                                  kernel_regularizer=kernel_regularizer,
+                                  recurrent_regularizer=recurrent_regularizer,
+                                  bias_regularizer=bias_regularizer,
+                                  activity_regularizer=activity_regularizer,
+                                  kernel_constraint=kernel_constraint,
+                                  recurrent_constraint=recurrent_constraint,
+                                  bias_constraint=bias_constraint,
+                                  dropout=dropout,
+                                  dropout_seed=dropout_seed,
+                                  recurrent_dropout=recurrent_dropout,
+                                  implementation=implementation,
+                                  return_sequences=return_sequences,
+                                  return_state=return_state,
+                                  go_backwards=go_backwards,
+                                  stateful=stateful,
+                                  unroll=unroll,
+                                  reset_after=reset_after,
+                                  seed=seed,
+                                  partials_dtype=partials_dtype,
+                                  time_major=time_major,
+                                  **kwargs)
+
+    if implementation == 2:
+      implementation = 1
+
+    if recurrent_activation == 'hard_sigmoid':
+      recurrent_activation = 'sigmoid'
 
     if activation != 'tanh':
       raise ValueError("IPU custom GRU layer does not support activation.")
@@ -779,7 +854,7 @@ class PopnnGRU(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, training=None, initial_state=None):
+  def call(self, inputs, mask=None, training=None, initial_state=None):
     """Runs the forward step for the GRU layer.
 
     Args:
@@ -802,6 +877,8 @@ class PopnnGRU(_PopnnRNN):
       ValueError: if initial_state is not valid.
 
     """
+    self._check_unsupported(mask, "mask", "call")
+
     if training is None:
       training = K.learning_phase()
 

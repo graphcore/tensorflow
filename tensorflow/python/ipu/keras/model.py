@@ -36,6 +36,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.keras.layer_replacement import IPULayerReplacer
 from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as cbks
@@ -217,7 +218,11 @@ class _KerasOptimizerWrapper(Optimizer):
 
 class _IpuModelBase(KerasModel):
   """Base class for IPU Keras models"""
-  def __init__(self, accumulation_count, shard_count, **kwargs):
+  def __init__(self,
+               accumulation_count,
+               shard_count,
+               layer_replacement=False,
+               **kwargs):
     name = kwargs.pop("name", None)
     super(_IpuModelBase, self).__init__(dtype=None, name=name)
 
@@ -235,6 +240,8 @@ class _IpuModelBase(KerasModel):
     # Round the shard count to the next power of two
     self.shard_count = 2**int(math.ceil(math.log(shard_count) / math.log(2)))
     self._replication_factor = None
+
+    self._layer_replacer = IPULayerReplacer() if layer_replacement else None
 
   def build(self, input_shape):
     pass
@@ -717,7 +724,8 @@ class IPUSequential(_IpuModelBase):
   def __init__(self,
                layers=None,
                accumulation_count=1,
-               accumulation_dtype=None):
+               accumulation_dtype=None,
+               layer_replacement=False):
     """
     Creates a Keras model, optimized to run on the IPU.
 
@@ -737,8 +745,12 @@ class IPUSequential(_IpuModelBase):
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
           be done by using a custom optimizer.
+        layer_replacement: If enabled (True), Keras layers will be substituted
+          with IPU Keras implementations, when possible.
     """
-    super().__init__(accumulation_count=accumulation_count, shard_count=1)
+    super().__init__(accumulation_count=accumulation_count,
+                     shard_count=1,
+                     layer_replacement=layer_replacement)
 
     if not isinstance(layers, list):
       raise ValueError("IPU Sequential requires a list of Layers.")
@@ -1013,6 +1025,7 @@ class IPUModel(_IpuModelBase):
                *args,
                accumulation_count=1,
                accumulation_dtype=None,
+               layer_replacement=False,
                **kwargs):
     """
     Creates a Keras model, optimized to run on the IPU. ``inputs`` and
@@ -1033,9 +1046,12 @@ class IPUModel(_IpuModelBase):
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
           be done by using a custom optimizer.
+        layer_replacement: If enabled (True), Keras layers will be substituted
+          with IPU Keras implementations, when possible.
     """
     super().__init__(accumulation_count=accumulation_count,
                      shard_count=1,
+                     layer_replacement=layer_replacement,
                      **kwargs)
 
     self.accumulation_dtype = accumulation_dtype
@@ -1045,6 +1061,11 @@ class IPUModel(_IpuModelBase):
       self._init_network(*args, **kwargs)
     else:
       raise ValueError("Model was not provided with 'inputs' and 'outputs'")
+
+    # Substitute layers for IPU equivelants if enabled.
+    if self._layer_replacer:
+      for layer in self._layers:
+        layer = self._layer_replacer(layer)
 
     # Create an output loss metric for each output if there is more than
     # one model output.

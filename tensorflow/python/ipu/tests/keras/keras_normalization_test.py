@@ -14,7 +14,6 @@
 # ==============================================================================
 """Tests for IPU Norm layers."""
 
-
 import numpy as np
 
 from tensorflow.python.eager import def_function
@@ -300,7 +299,7 @@ class LayerTest(test.TestCase):
     outputs = keras_layer(inputs,
                           center=False,
                           scale=False,
-                          channels_axis=channels_axis,
+                          axis=channels_axis,
                           training=True)
 
     # Implementation detail - in Poplibs group norm, the groups are not

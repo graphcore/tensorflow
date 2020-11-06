@@ -122,6 +122,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                offload_gradient_accumulation_buffers=None,
                replicated_weight_sharding=None,
                offload_weights=None,
+               layer_replacement=False,
                **kwargs):
     """
     Creates a pipelined model.
@@ -217,6 +218,8 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             When set to `None` the variables will be placed in either
             in-processor or remote memory automatically based on the current
             best placement strategy.
+        layer_replacement: If enabled (True), Keras layers will be substituted
+          with IPU Keras implementations, when possible.
         name: Optional name for the pipeline operation.
     """
 
@@ -237,7 +240,10 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
         device_mapping if device_mapping else range(len(stages))) + 1
     accumulation_count = gradient_accumulation_count * \
       batch_serialization_iterations
-    super().__init__(accumulation_count, shard_count, **kwargs)
+    super().__init__(accumulation_count,
+                     shard_count,
+                     layer_replacement=layer_replacement,
+                     **kwargs)
 
     self.gradient_accumulation_count = gradient_accumulation_count
     self.gradient_accumulation_dtype = gradient_accumulation_dtype
@@ -267,6 +273,10 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
       l.build(s)
       s = l.compute_output_shape(s)
     self.built = True
+
+    if self._layer_replacer:
+      for l in self.layers:
+        l = self._layer_replacer(l)
 
   @trackable.no_automatic_dependency_tracking
   def compile(self,
@@ -607,6 +617,7 @@ class PipelineModel(ipu_model.Model):
                offload_gradient_accumulation_buffers=None,
                replicated_weight_sharding=None,
                offload_weights=None,
+               layer_replacement=False,
                **kwargs):
     """
     Creates a pipelined model (defined via the Keras Functional API).
@@ -704,11 +715,16 @@ class PipelineModel(ipu_model.Model):
             When set to `None` the variables will be placed in either
             in-processor or remote memory automatically based on the current
             best placement strategy.
+        layer_replacement: If enabled (True), Keras layers will be substituted
+          with IPU Keras implementations, when possible.
         name: Optional name for the pipeline operation.
     """
     accumulation_count = gradient_accumulation_count * \
       batch_serialization_iterations
-    super().__init__(*args, accumulation_count=accumulation_count, **kwargs)
+    super().__init__(*args,
+                     accumulation_count=accumulation_count,
+                     layer_replacement=layer_replacement,
+                     **kwargs)
 
     # Mutable attributes will be seen as trainable and e.g. added as Layers.
     # Define them inside this function if you don't want them tracked.

@@ -20,6 +20,7 @@ Embedding Keras layer
 from functools import reduce
 from operator import mul
 
+from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras.engine.base_layer import Layer
@@ -27,7 +28,7 @@ from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
 
 
-class Embedding(Layer):
+class Embedding(ipu_layer.IPULayer):
   """
   This is designed to be a replacement for the typical use cases of the
   Keras Embedding layer.
@@ -51,13 +52,36 @@ class Embedding(Layer):
                input_dim,
                output_dim,
                embeddings_initializer='uniform',
+               embeddings_regularizer=None,
+               activity_regularizer=None,
+               embeddings_constraint=None,
+               mask_zero=False,
+               input_length=None,
                **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(
+        input_dim,
+        output_dim,
+        embeddings_initializer=embeddings_initializer,
+        embeddings_regularizer=embeddings_regularizer,
+        activity_regularizer=activity_regularizer,
+        embeddings_constraint=embeddings_constraint,
+        mask_zero=mask_zero,
+        input_length=input_length,
+        **kwargs)
+
     kwargs['autocast'] = False
     super(Embedding, self).__init__(**kwargs)
 
     self.input_dim = input_dim
     self.output_dim = output_dim
     self.embeddings_initializer = initializers.get(embeddings_initializer)
+
+    self._check_unsupported(embeddings_regularizer, 'embeddings_regularizer')
+    self._check_unsupported(activity_regularizer, 'activity_regularizer')
+    self._check_unsupported(embeddings_constraint, 'embeddings_constraint')
+    self._check_unsupported(mask_zero, 'mask_zero')
+    self._check_unsupported(input_length, 'input_length')
 
   @tf_utils.shape_type_conversion
   def build(self, input_shape):

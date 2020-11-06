@@ -1008,6 +1008,54 @@ class IPUModelTest(test.TestCase):
                                                "Unsupported datatype double"):
         m.fit(input_x, input_y, batch_size=2)
 
+  @test_util.run_v2_only
+  def testPredictReplaceableLayers(self):
+    def f():
+      C = keras.initializers.Constant(0.1)
+      return [
+          # Test Embedding.
+          keras.layers.Embedding(10, 2, embeddings_initializer=C),
+          keras.layers.Dense(2, kernel_initializer=C),
+
+          # Test Dropout.
+          keras.layers.Dropout(0.5),
+          keras.layers.Dense(20, kernel_initializer=C),
+
+          # Test LSTM.
+          keras.layers.LSTM(5, kernel_initializer=C, recurrent_initializer=C),
+
+          # Test Layer Norm.
+          keras.layers.LayerNormalization(),
+          keras.layers.Dense(20, kernel_initializer=C),
+          keras.layers.Reshape((10, 2)),
+
+          # Test GRU.
+          keras.layers.GRU(5, kernel_initializer=C, recurrent_initializer=C)
+      ]
+
+    # Create some test data.
+    data = np.ones((96, 10), dtype=np.int32)
+
+    # Compute IPU model output, uses layer replacement.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(f(),
+                               accumulation_count=8,
+                               layer_replacement=True)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Fit the weights to the dataset
+      ipu_out = m.predict(data, batch_size=4)
+
+    # Compute output with vanilla keras model.
+    m_cpu = keras.Sequential(f())
+    cpu_out = m_cpu.predict(data, batch_size=4)
+
+    self.assertAllClose(np.squeeze(ipu_out), np.squeeze(cpu_out))
+
 
 if __name__ == '__main__':
   test.main()

@@ -581,6 +581,9 @@ class RNN(Layer):
       self.reset_states()
     self.built = True
 
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_input_shape(input_shape)
+
   @staticmethod
   def _validate_state_spec(cell_state_sizes, init_state_specs):
     """Validate the state spec between the initial_state and the state_size.
@@ -2017,6 +2020,32 @@ class GRU(RNN):
                unroll=False,
                reset_after=False,
                **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(units,
+                                  activation=activation,
+                                  recurrent_activation=recurrent_activation,
+                                  use_bias=use_bias,
+                                  kernel_initializer=kernel_initializer,
+                                  recurrent_initializer=recurrent_initializer,
+                                  bias_initializer=bias_initializer,
+                                  kernel_regularizer=kernel_regularizer,
+                                  recurrent_regularizer=recurrent_regularizer,
+                                  bias_regularizer=bias_regularizer,
+                                  activity_regularizer=activity_regularizer,
+                                  kernel_constraint=kernel_constraint,
+                                  recurrent_constraint=recurrent_constraint,
+                                  bias_constraint=bias_constraint,
+                                  dropout=dropout,
+                                  recurrent_dropout=recurrent_dropout,
+                                  implementation=implementation,
+                                  return_sequences=return_sequences,
+                                  return_state=return_state,
+                                  go_backwards=go_backwards,
+                                  stateful=stateful,
+                                  unroll=unroll,
+                                  reset_after=reset_after,
+                                  **kwargs)
+
     if implementation == 0:
       logging.warning('`implementation=0` has been deprecated, '
                       'and now defaults to `implementation=1`.'
@@ -2651,6 +2680,32 @@ class LSTM(RNN):
                stateful=False,
                unroll=False,
                **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(units,
+                                  activation=activation,
+                                  recurrent_activation=recurrent_activation,
+                                  use_bias=use_bias,
+                                  kernel_initializer=kernel_initializer,
+                                  recurrent_initializer=recurrent_initializer,
+                                  bias_initializer=bias_initializer,
+                                  unit_forget_bias=unit_forget_bias,
+                                  kernel_regularizer=kernel_regularizer,
+                                  recurrent_regularizer=recurrent_regularizer,
+                                  bias_regularizer=bias_regularizer,
+                                  activity_regularizer=activity_regularizer,
+                                  kernel_constraint=kernel_constraint,
+                                  recurrent_constraint=recurrent_constraint,
+                                  bias_constraint=bias_constraint,
+                                  dropout=dropout,
+                                  recurrent_dropout=recurrent_dropout,
+                                  implementation=implementation,
+                                  return_sequences=return_sequences,
+                                  return_state=return_state,
+                                  go_backwards=go_backwards,
+                                  stateful=stateful,
+                                  unroll=unroll,
+                                  **kwargs)
+
     if implementation == 0:
       logging.warning('`implementation=0` has been deprecated, '
                       'and now defaults to `implementation=1`.'

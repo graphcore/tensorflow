@@ -1164,6 +1164,57 @@ class IPUModelModelTest(test.TestCase):
     # Comparison.
     self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
 
+  @test_util.run_v2_only
+  def testPredictReplaceableLayers(self):
+    def f():
+      C = keras.initializers.Constant(0.1)
+
+      input_layer = keras.layers.Input(10)
+      # Test Embedding.
+      x = keras.layers.Embedding(10, 2, embeddings_initializer=C)(input_layer)
+      x = keras.layers.Dense(2, kernel_initializer=C)(x)
+
+      # Test Dropout.
+      x = keras.layers.Dropout(0.5)(x)
+      x = keras.layers.Flatten()(x)
+      x = keras.layers.Dense(20, kernel_initializer=C)(x)
+      x = keras.layers.Reshape((10, 2))(x)
+
+      # Test LSTM.
+      x = keras.layers.LSTM(5, kernel_initializer=C)(x)
+
+      # Test Layer Norm.
+      x = keras.layers.LayerNormalization()(x)
+      x = keras.layers.Flatten()(x)
+      x = keras.layers.Dense(20, kernel_initializer=C)(x)
+      x = keras.layers.Reshape((10, 2))(x)
+
+      # Test GRU.
+      x = keras.layers.GRU(5, kernel_initializer=C)(x)
+
+      return input_layer, x
+
+    # Create some test data.
+    data = np.ones((96, 10), dtype=np.int32)
+
+    # Compute IPU model output, uses layer replacement.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Model(*f(), accumulation_count=8, layer_replacement=True)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Fit the weights to the dataset
+      ipu_out = m.predict(data, batch_size=4)
+
+    # Compute output with vanilla keras model.
+    m_cpu = keras.Model(*f())
+    cpu_out = m_cpu.predict(data, batch_size=4)
+
+    self.assertAllClose(ipu_out, cpu_out)
+
 
 if __name__ == '__main__':
   test.main()

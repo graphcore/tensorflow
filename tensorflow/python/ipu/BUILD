@@ -113,9 +113,11 @@ py_library(
         "ipu_session_run_hooks.py",
         "ipu_strategy.py",
         "keras/__init__.py",
+        "keras/layer_replacement.py",
         "keras/layers/__init__.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
+        "keras/layers/ipu_layer.py",
         "keras/layers/math.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
@@ -394,6 +396,20 @@ tf_py_test(
     name = "keras_sequential_pipeline_save_restore_test",
     size = "large",
     srcs = ["tests/keras/keras_sequential_pipeline_save_restore_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+tf_py_test(
+    name = "keras_layer_replacement_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_layer_replacement_test.py"],
     additional_deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

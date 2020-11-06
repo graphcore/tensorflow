@@ -98,6 +98,17 @@ class Embedding(Layer):
                mask_zero=False,
                input_length=None,
                **kwargs):
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(input_dim,
+                                  output_dim,
+                                  embeddings_initializer=embeddings_initializer,
+                                  embeddings_regularizer=embeddings_regularizer,
+                                  activity_regularizer=activity_regularizer,
+                                  embeddings_constraint=embeddings_constraint,
+                                  mask_zero=mask_zero,
+                                  input_length=input_length,
+                                  **kwargs)
+              
     if 'input_shape' not in kwargs:
       if input_length:
         kwargs['input_shape'] = (input_length,)
@@ -146,6 +157,9 @@ class Embedding(Layer):
           regularizer=self.embeddings_regularizer,
           constraint=self.embeddings_constraint)
     self.built = True
+
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_input_shape(input_shape)
 
   def compute_mask(self, inputs, mask=None):
     if not self.mask_zero:

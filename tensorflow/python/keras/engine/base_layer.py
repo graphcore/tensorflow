@@ -263,6 +263,25 @@ class Layer(module.Module):
         stage = strategy._pipeline_stage
         self._pipeline_stage = stage
 
+  def _maybe_store_args_kwargs(self, *args, **kwargs):
+    """
+    Stores initialization args for substitution of Keras layers with IPU
+    Keras layers.
+    """
+    strategy = ds_context.get_strategy()
+    if strategy:
+      self._stored_init_args = args
+      self._stored_init_kwargs = kwargs
+
+  def _maybe_store_input_shape(self, input_shape):
+    """
+    Stores input shape(s) for substitution of Keras layers with IPU
+    Keras layers. Used for weight copying.
+    """
+    strategy = ds_context.get_strategy()
+    if strategy:
+      self._stored_input_shape = input_shape
+
   def build(self, input_shape):
     """Creates the variables of the layer (optional, for subclass implementers).
 

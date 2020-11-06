@@ -18,6 +18,7 @@ Normalization Keras layers
 """
 
 from tensorflow.python.framework import dtypes
+from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
@@ -27,7 +28,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
 
 # We implement all three algorithms through a common generic group norm algorithm.
-class GroupNorm(Layer):
+class GroupNorm(ipu_layer.IPULayer):
   """Group normalization layer optimized for running on the IPU.
 
   This layer is used like the standard Keras BatchNormalization layer.
@@ -235,7 +236,7 @@ class InstanceNorm(GroupNorm):
     return super(InstanceNorm, self).call(inputs, training)
 
 
-class LayerNorm(GroupNorm):
+class LayerNormalization(GroupNorm):
   """Layer normalization layer optimized for use on the IPU.
 
   This layer is used like the standard Keras BatchNormalization layer.
@@ -261,18 +262,24 @@ class LayerNorm(GroupNorm):
   """
   def __init__(self,
                dtype=dtypes.float32,
-               channels_axis=-1,
+               axis=-1,
+               epsilon=1e-3,
                center=True,
                scale=True,
-               epsilon=1e-3,
-               beta_initializer=None,
-               gamma_initializer=None,
-               name=None):
-    super(LayerNorm, self).__init__(
+               beta_initializer='zeros',
+               gamma_initializer='ones',
+               beta_regularizer=None,
+               gamma_regularizer=None,
+               beta_constraint=None,
+               gamma_constraint=None,
+               trainable=True,
+               name=None,
+               **kwargs):
+    super(LayerNormalization, self).__init__(
         dtype=dtype,
         # We set this in the build function, once we know what the shape is.
         groups=0,
-        channels_axis=channels_axis,
+        channels_axis=axis,
         center=center,
         scale=scale,
         epsilon=epsilon,
@@ -280,11 +287,33 @@ class LayerNorm(GroupNorm):
         gamma_initializer=gamma_initializer,
         name=name)
 
+    # For Keras -> IPU Keras layer substitution.
+    self._maybe_store_args_kwargs(axis=axis,
+                                  epsilon=epsilon,
+                                  center=center,
+                                  scale=scale,
+                                  beta_initializer=beta_initializer,
+                                  gamma_initializer=gamma_initializer,
+                                  beta_regularizer=beta_regularizer,
+                                  gamma_regularizer=gamma_regularizer,
+                                  beta_constraint=beta_constraint,
+                                  gamma_constraint=gamma_constraint,
+                                  trainable=trainable,
+                                  name=name)
+
+    self._check_unsupported(beta_regularizer, "beta_regularizer")
+    self._check_unsupported(gamma_regularizer, "gamma_regularizer")
+    self._check_unsupported(beta_constraint, "beta_constraint")
+    self._check_unsupported(gamma_constraint, "gamma_constraint")
+
   def build(self, input_shape):
     # Change the groups based on the input shape.
     self.groups = input_shape[self.channels_axis]
-    super(LayerNorm, self).build(input_shape)
+    super(LayerNormalization, self).build(input_shape)
 
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
-    return super(LayerNorm, self).call(inputs, training)
+    return super(LayerNormalization, self).call(inputs, training)
+
+
+LayerNorm = LayerNormalization
