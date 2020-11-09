@@ -2967,6 +2967,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "computation_flattener_test",
+    size = "small",
+    srcs = ["tests/computation_flattener_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4592,6 +4605,7 @@ test_suite(
         "cholesky_test",
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
+        "computation_flattener_test",
         "conditional_test",
         "constant_nan_test",
         "constant_slice_folding_test",
