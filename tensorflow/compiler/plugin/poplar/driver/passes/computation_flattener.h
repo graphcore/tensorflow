@@ -37,6 +37,7 @@ class ComputationFlattener : public HloModulePass {
  private:
   Status FlattenNode(const CallGraphNode&);
   Status GenerateFunctionSet(const CallGraphNode&);
+  Status FindRecomputableComputations(const HloModule*);
 
   // This set tracks computations based on being identical despite being
   // different computations.  During the descison to inline, this set is used
@@ -44,6 +45,10 @@ class ComputationFlattener : public HloModulePass {
   std::unordered_multiset<const HloComputation*, HloComputationHash,
                           HloComputationEquals>
       all_function_comps_;
+
+  // Some computations might be recomputed later and therefore they should not
+  // be inlined.
+  absl::flat_hash_set<const HloComputation*> recomputable_computations_;
 };
 
 }  // namespace poplarplugin

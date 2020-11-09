@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -26,9 +27,43 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+Status ComputationFlattener::FindRecomputableComputations(
+    const HloModule* module) {
+  // Functions in forward pipeline stages when training will be recomputed -
+  // mark them as recomputable and therefore should not be inlined.
+  TF_ASSIGN_OR_RETURN(auto pipelines, GetPipelines(module));
+  for (HloInstruction* pipeline : pipelines) {
+    TF_ASSIGN_OR_RETURN(const auto recomputation_mode,
+                        GetPipelineRecomputationMode(pipeline));
+    if (recomputation_mode != PoplarBackendConfig::CallConfig::PipelineConfig::
+                                  Recompute_and_backpropagate_interleaved) {
+      continue;
+    }
+
+    HloComputation* pipeline_computation = pipeline->to_apply();
+    TF_ASSIGN_OR_RETURN(PipelineStages stages,
+                        GetPipelineStages(pipeline_computation));
+
+    // Skip non training pipelines.
+    if (stages.backward.empty()) {
+      continue;
+    }
+
+    for (auto fwd_stage : stages.forward) {
+      HloComputation* comp = fwd_stage->to_apply();
+      for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+        if (IsFunction(inst)) {
+          recomputable_computations_.insert(inst->to_apply());
+        }
+      }
+    }
+  }
+  return Status::OK();
+}
+
 Status ComputationFlattener::FlattenNode(const CallGraphNode& node) {
-  if (node.caller_callsites().size() == 1 &&
-      !IsPopOpsFusion(node.computation())) {
+  const HloComputation* computation = node.computation();
+  if (node.caller_callsites().size() == 1 && !IsPopOpsFusion(computation)) {
     CallSite call_site = node.caller_callsites()[0];
     HloInstruction* call_op = call_site.instruction();
 
@@ -46,16 +81,17 @@ Status ComputationFlattener::FlattenNode(const CallGraphNode& node) {
         break;
       }
       case PoplarBackendConfig::CallConfig::Function: {
-        if (all_function_comps_.count(node.computation()) == 1) {
+        if (!recomputable_computations_.contains(computation) &&
+            all_function_comps_.count(computation) == 1) {
           // Inline functions if they are called from a single site.
-          VLOG(1) << "Inlining function " << node.computation()->name()
+          VLOG(1) << "Inlining function " << computation->name()
                   << " because it is only called from one call site.";
           inline_computation = true;
 
-        } else if (node.computation()->HasSideEffect()) {
+        } else if (computation->HasSideEffect()) {
           // Inline function calls if they have side effect.
           LOG(INFO)
-              << "Inlining function " << node.computation()->name()
+              << "Inlining function " << computation->name()
               << " because it contains stateful operations which means that "
                  "the Poplar function cannot be reused.";
           inline_computation = true;
@@ -98,6 +134,8 @@ Status ComputationFlattener::GenerateFunctionSet(const CallGraphNode& node) {
 }
 
 StatusOr<bool> ComputationFlattener::Run(HloModule* module) {
+  TF_RETURN_IF_ERROR(FindRecomputableComputations(module));
+
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
 
   TF_RETURN_IF_ERROR(call_graph->VisitNodes(
