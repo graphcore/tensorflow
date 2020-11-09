@@ -71,8 +71,11 @@ class InterTilesetCopyOp : public PoplarOpDef {
                                      const std::string& name,
                                      const TensorTarget& tensor_target,
                                      const TensorMap& tensor_map) override {
-    // Sanity check that we are allocating on IO tiles.
-    CHECK_EQ(graph.getTarget().getNumTiles(), res.num_io_tiles);
+    const auto* copy_inst = Cast<HloInterTilesetCopy>(tensor_target.tgt);
+    if (copy_inst->IsCopyToIoTiles()) {
+      // Sanity check that we are allocating on IO tiles.
+      CHECK_EQ(graph.getTarget().getNumTiles(), res.num_io_tiles);
+    }
 
     const int64 input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
