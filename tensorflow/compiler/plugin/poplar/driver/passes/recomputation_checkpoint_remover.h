@@ -30,7 +30,7 @@ namespace poplarplugin {
 class RecomputationCheckpointRemover : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "pipeline-recomputation-scheduling";
+    return "recomputation-checkpoint-remover";
   }
 
   StatusOr<bool> Run(HloModule* module) override;
