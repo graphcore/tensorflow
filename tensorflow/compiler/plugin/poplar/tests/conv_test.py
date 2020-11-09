@@ -345,10 +345,9 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.parse_log()
 
       ok = [
-          '__seed*',
-          'Copy_',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/*Transpose',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_3x3',
+          '__seed*', 'copy*OnTileCopy-',
+          'DepthwiseConv2dNativeBackpropInput/fusion/Conv_3x3/Convolve',
+          'DepthwiseConv2dNativeBackpropInput/fusion/Conv_3x3/WeightsTranspose'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
