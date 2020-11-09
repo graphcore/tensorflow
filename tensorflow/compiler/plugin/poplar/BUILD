@@ -50,6 +50,16 @@ tf_proto_library(
 )
 
 tf_proto_library(
+    name = "threestate",
+    srcs = [
+        "driver/threestate.proto",
+    ],
+    cc_api_version = 2,
+    j2objc_api_version = 1,
+    make_default_target_header_only = True,
+)
+
+tf_proto_library(
     name = "pipeline_config",
     srcs = [
         "driver/pipeline_config.proto",
@@ -73,6 +83,7 @@ tf_proto_library(
     make_default_target_header_only = True,
     protodeps = [
         ":option_flag",
+        ":threestate",
     ],
 )
 
@@ -86,6 +97,7 @@ xla_proto_library(
     deps = [
         ":option_flag_cc",
         ":pipeline_config_cc",
+        ":threestate_cc",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:protos_all_cc",
     ],
@@ -480,6 +492,7 @@ cc_library(
         ":hash",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
+        ":threestate_cc_impl",
         ":xla_backend_protos",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",

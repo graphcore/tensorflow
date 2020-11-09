@@ -16,6 +16,7 @@
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.python import ipu
@@ -187,35 +188,32 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           attributes1.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.ThreeState.Name(backend_config_pb2.THREESTATE_ON))
+          threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON))
       self.assertIsNone(attributes1.map.get("attr_b"))
       self.assertEqual(
           attributes2.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.ThreeState.Name(
-              backend_config_pb2.THREESTATE_OFF))
+          threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF))
       self.assertEqual(attributes2.map.get("attr_b"), "b")
       self.assertEqual(
           attributes3.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.ThreeState.Name(backend_config_pb2.THREESTATE_ON))
+          threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON))
       self.assertIsNone(attributes3.map.get("attr_b"))
       self.assertEqual(
           attributes4.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.ThreeState.Name(
-              backend_config_pb2.THREESTATE_OFF))
+          threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF))
 
       self.assertIsNone(attributes4.map.get("attr_b"))
       self.assertEqual(
           attributes5.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
-          backend_config_pb2.ThreeState.Name(
-              backend_config_pb2.THREESTATE_UNDEFINED))
+          threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED))
       self.assertIsNone(attributes5.map.get("attr_b"))
 
   @test_util.deprecated_graph_mode_only

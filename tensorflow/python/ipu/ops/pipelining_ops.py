@@ -24,6 +24,7 @@ from google.protobuf import json_format
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.ipu import functional_ops
@@ -609,13 +610,11 @@ def pipeline(computational_stages,
 
   def bool_to_three_state(value, default=None):
     if value is None:
-      return default if default else backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_UNDEFINED)
+      return default if default else threestate_pb2.ThreeState.Name(
+          threestate_pb2.THREESTATE_UNDEFINED)
     elif value:
-      return backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_ON)
-    return backend_config_pb2.ThreeState.Name(
-        backend_config_pb2.THREESTATE_OFF)
+      return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
+    return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
 
   # Convert some of the binary options into three states.
   offload_weight_update_variables = bool_to_three_state(

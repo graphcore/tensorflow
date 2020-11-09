@@ -17,7 +17,7 @@ Optimizer wrappers which perform local gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
@@ -100,15 +100,12 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
       if value is None:
         return default
       elif value:
-        return backend_config_pb2.ThreeState.Name(
-            backend_config_pb2.THREESTATE_ON)
-      return backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_OFF)
+        return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
+      return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
 
     self._offload_weight_update_variables = bool_to_three_state(
         offload_weight_update_variables,
-        backend_config_pb2.ThreeState.Name(
-            backend_config_pb2.THREESTATE_UNDEFINED))
+        threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED))
     self._replicated_optimizer_state_sharding = bool_to_three_state(
         replicated_optimizer_state_sharding,
         self._offload_weight_update_variables)

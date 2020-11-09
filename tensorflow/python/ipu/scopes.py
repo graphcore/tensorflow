@@ -25,6 +25,7 @@ from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops.variable_scope import variable_scope
 from tensorflow.python.util import tf_contextlib
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.xla.python_api import types
 
 FRONTEND_ATTRIBUTES_NAME = "_XlaFrontendAttributes"
@@ -207,11 +208,9 @@ def stochastic_rounding(override):
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
           backend_config_pb2.STOCHASTIC_ROUNDING),
-      backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_ON if override else backend_config_pb2.
-          THREESTATE_OFF),
-      backend_config_pb2.ThreeState.Name(
-          backend_config_pb2.THREESTATE_UNDEFINED)):
+      threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON if override
+                                     else threestate_pb2.THREESTATE_OFF),
+      threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED)):
     yield
 
 
