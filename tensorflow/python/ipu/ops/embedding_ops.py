@@ -96,7 +96,7 @@ def embedding_lookup(params,
 
     @custom_gradient.custom_gradient
     def serialized_embedding_lookup(table, indices):
-      @functional_ops.function
+      @functional_ops.outlined_function
       def func(sliced_table, indices, min_idx, max_idx):
         # Do a serialized embedding lookup by adjusting the indices.
         adjusted_indices = indices - min_idx

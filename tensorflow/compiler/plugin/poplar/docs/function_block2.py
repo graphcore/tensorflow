@@ -9,7 +9,7 @@ def model(batch):
   def func(a, variable_scope_name):
     # The inner function is an IPU function which captures the variable scope
     # name using Python closures to create scopes.
-    @ipu.function
+    @ipu.outlined_function
     def f(a):
       with tf.variable_scope(variable_scope_name, use_resource=True):
         w = tf.get_variable(

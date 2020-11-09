@@ -26,15 +26,16 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 
 
-def function(func, name=None):
+def outlined_function(func, name=None):
   """
-  A function is a block of organized, reusable code which is used to perform a
-  single action. Functions provide better modularity for your application and a
-  high degree of code reusing which can decrease the memory usage at the expense
-  of passing the arguments around.
+  An outlined function is a block of organized, reusable code which is used to
+  perform a single action. Functions provide better modularity for your
+  application and a high degree of code reusing which can decrease the memory
+  usage at the expense of passing the arguments around.
 
   Functions can be used by models constrained by memory which have common
   structures or to serialize some large operations.
@@ -81,6 +82,11 @@ def function(func, name=None):
       return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
   return func_wrapper
+
+
+@deprecation.deprecated(None, "Use `ipu.outlined_function(...)`.")
+def function(func, name=None):
+  return outlined_function(func, name)
 
 
 class _InvalidCaptureException(Exception):

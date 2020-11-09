@@ -5,7 +5,7 @@ tf.disable_v2_behavior()
 
 
 def model(batch):
-  @ipu.function
+  @ipu.outlined_function
   def func(a):
     with tf.variable_scope("vs", use_resource=True):
       w = tf.get_variable(

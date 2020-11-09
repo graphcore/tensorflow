@@ -40,7 +40,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     with tu.ipu_session() as sess:
 
       def func(a, b, name):
-        @ipu.function
+        @ipu.outlined_function
         def outlined_func(a, b):
           with variable_scope.variable_scope(name, use_resource=True):
             w = variable_scope.get_variable(
@@ -96,7 +96,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testFunctionTraining(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(lhs, rhs, a):
         x = math_ops.matmul(lhs, rhs)
         x = x + a
@@ -171,7 +171,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
     with tu.ipu_session() as sess:
 
       def matmul_with_bias(x, scope_name):
-        @ipu.function
+        @ipu.outlined_function
         def func(x):
           with variable_scope.variable_scope(scope_name, use_resource=True):
             w = variable_scope.get_variable(
@@ -191,7 +191,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
         return func(x)
 
       def cached_func(x, scope_name):
-        @ipu.function
+        @ipu.outlined_function
         def func(x):
           x = matmul_with_bias(x, scope_name)
           x = math_ops.sigmoid(x)
@@ -252,7 +252,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testFunctionSerializedLookup(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(table, indices, min_idx, max_idx):
         # Do a serialized embedding lookup by adjusting the indices.
         adjusted_indices = indices - min_idx
@@ -331,7 +331,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testFunctionsNoMatch(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(a):
         return nn.relu(a)
 
@@ -372,7 +372,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testSingleFunctionElided(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(a):
         return nn.relu(a)
 
@@ -407,7 +407,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testFunctionTrainingConstants(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(lhs, rhs, a):
         # Number of splits needs to be passed to the grad function.
         rhs_1, rhs_2 = array_ops.split(rhs, 2, -1)
@@ -489,7 +489,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testNoGradient(self):
     with tu.ipu_session() as sess:
 
-      @ipu.function
+      @ipu.outlined_function
       def func(lhs, rhs):
         @custom_gradient.custom_gradient
         def f(a, b):

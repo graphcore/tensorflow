@@ -148,7 +148,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
         assert lhs_shape[1] == rhs_shape[0]
         assert (lhs_shape[0] % num_splits) == 0
 
-        @ipu.function
+        @ipu.outlined_function
         def inner_func(lhs_, rhs_):
           return math_ops.matmul(lhs_, rhs_)
 

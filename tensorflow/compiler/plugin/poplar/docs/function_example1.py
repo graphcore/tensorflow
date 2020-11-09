@@ -47,7 +47,7 @@ def body(x):
 
   # The model has some repeated structure to it, and we manually convert it into
   # an IPU function
-  @ipu.function
+  @ipu.outlined_function
   def func(a, b):
     x = tf.matmul(a, b)
     x = normalization_ops.layer_norm(x)
