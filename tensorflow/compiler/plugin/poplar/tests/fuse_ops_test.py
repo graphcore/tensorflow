@@ -417,7 +417,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       # pylint: disable=line-too-long
       ok = [
-          '__seed*', '[cC]opy_', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
+          '__seed*', 'copy*/OnTileCopy-', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
           'vs/conv2d_1/BiasAdd/fusion.2/Op/Add',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.3/ReduceFinalStage/IntermediateToOutput/Reduce',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
@@ -426,11 +426,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/conv2d/BiasAdd/fusion*/Op/Add',
           'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv2d*/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Transpose',
-          'gradients/vs/conv2d*/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve',
-          'gradients/vs/conv2d*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
-          'gradients/vs/conv2d*/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d*/Conv2D_grad/Conv2DBackpropInput/fusion*/*Transpose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Transpose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Transpose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/fusion*/*Transpose',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
       # pylint: enable=line-too-long
