@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "tensorflow/compiler/xla/xla_data.proto";
 import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/threestate.proto";
 
 package xla.poplarplugin;
 
@@ -57,14 +58,6 @@ enum FrontendAttributeId {
   // Used in pipelining to indicate the recomputation mode.
   RECOMPUTATION_MODE = 18;
 };
-
-// An enum for helping with setting a state of something, where the state can be
-// on, off or automatic/not set/undefined.
-enum ThreeState {
-  THREESTATE_OFF = 0;
-  THREESTATE_ON = 1;
-  THREESTATE_UNDEFINED = 2;
-}
 
 // An enum representing the "Machine Learning" type of the instruction.
 enum MLType {
