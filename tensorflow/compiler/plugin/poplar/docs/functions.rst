@@ -1,12 +1,12 @@
-IPU Functions
--------------
-A function is a block of organized, reusable code which is used to perform a
-single action. Functions provide better modularity for your application and a
-high degree of code reusing which can decrease the memory usage as only one copy
-of the code needs to be compiled. Using functions however can increase the
-amount of computations as the function inputs need to be copied to the correct
-function argument locations and the function outputs need to be returned as
-well.
+IPU Outlined Functions
+----------------------
+An outlined function is a block of organized, reusable code which is used to
+perform a single action. Functions provide better modularity for your
+application and a high degree of code reusing which can decrease the memory
+usage as only one copy of the code needs to be compiled. Using functions however
+can increase the amount of computations as the function inputs need to be copied
+to the correct function argument locations and the function outputs need to be
+returned as well.
 
 If the provided function contains any stateful operations, such as stateful
 random number generation, then the function cannot be reused and it will be
@@ -16,7 +16,7 @@ Note that the function code is only reusable for calls on the same IPUs. This
 means that benefits of function calls will only be seen if the function calls
 are made from the same shard, or a pipeline stage mapped to the same IPU.
 
-IPU functions should not be confused with `tf.function` which creates a
+IPU outlined functions should not be confused with `tf.function` which creates a
 TensorFlow graph, whereas the IPU function creates a Poplar function which can
 be used inside of `tf.function`.
 

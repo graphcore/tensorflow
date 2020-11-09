@@ -54,7 +54,7 @@ def body(x):
   SLICE_SIZE = x_shape[0] // NUM_SPLITS
 
   # An IPU function which works on the part of x
-  @ipu.function
+  @ipu.outlined_function
   def func(partial_x, w):
     partial = tf.matmul(partial_x, w)
     partial_result = tf.reduce_mean(partial, axis=1)

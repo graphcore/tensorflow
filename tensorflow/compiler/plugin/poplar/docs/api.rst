@@ -17,7 +17,7 @@ For example, this will not work:
   import tensorflow as tf
   cfg = tf.python.ipu.create_ipu_config(...)
 
-.. Note automodule:: tensorflow.python.ipu only imports ipu.function
+.. Note automodule:: tensorflow.python.ipu only imports ipu.outlined_function
 
 .. automodule:: tensorflow.python.ipu
   :members:

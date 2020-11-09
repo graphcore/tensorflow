@@ -71,7 +71,8 @@ from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
-# Expose functional_ops.function as ipu.function
+# Expose functional_ops.function as ops.outlined_function
 from tensorflow.python.ipu.ops.functional_ops import function
+from tensorflow.python.ipu.ops.functional_ops import outlined_function
 
 # pylint: enable=wildcard-import,unused-import

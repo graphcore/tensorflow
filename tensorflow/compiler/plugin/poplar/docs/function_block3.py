@@ -5,7 +5,7 @@ tf.disable_v2_behavior()
 
 
 def model(batch):
-  @ipu.function
+  @ipu.outlined_function
   def func(lhs, rhs):
     x = tf.matmul(lhs, rhs)
     return x
