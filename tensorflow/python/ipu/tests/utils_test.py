@@ -19,6 +19,7 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IpuDeviceConnectionType, IpuExecutionProfileType
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
@@ -89,8 +90,14 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertTrue(cfg.floating_point_behaviour.flags_set)
 
     self.assertFalse(cfg.enable_matmul_combiner)
-    cfg = ipu.utils.set_optimization_options(cfg, combine_matmuls=True)
+    self.assertEqual(cfg.remote_buffer_merging_mode,
+                     threestate_pb2.THREESTATE_OFF)
+    cfg = ipu.utils.set_optimization_options(cfg,
+                                             combine_matmuls=True,
+                                             merge_remote_buffers=True)
     self.assertTrue(cfg.enable_matmul_combiner)
+    self.assertEqual(cfg.remote_buffer_merging_mode,
+                     threestate_pb2.THREESTATE_ON)
 
     cfg = ipu.utils.set_optimization_options(
         cfg, triangular_solve_expander_block_size=42)

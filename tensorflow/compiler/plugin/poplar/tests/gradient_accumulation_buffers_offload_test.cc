@@ -109,13 +109,13 @@ pipeline {
   pipeline_stage_2_bwd = (f16[128]) call(pipeline_stage_2.0, pipeline_stage_1.0), to_apply=stage_2_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   pipeline_stage_2_bwd.0 = f16[128] get-tuple-element(pipeline_stage_2_bwd), index=0
 
-  pipeline_accumulator_1 = f32[128] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate"
+  pipeline_accumulator_1 = f32[128] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
   pipeline_stage_1_bwd = (f16[128], f16[128], f32[128]) call(pipeline_stage_2_bwd.0, pipeline_stage_1.0, pipeline_accumulator_1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   pipeline_stage_1_bwd.0 = f16[128] get-tuple-element(pipeline_stage_1_bwd), index=0
   pipeline_stage_1_bwd.1 = f16[128] get-tuple-element(pipeline_stage_1_bwd), index=1
   pipeline_stage_1_bwd.2 = f32[128] get-tuple-element(pipeline_stage_1_bwd), index=2
 
-  pipeline_accumulator_0 = f32[128] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate"
+  pipeline_accumulator_0 = f32[128] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate", backend_config="{}"
   pipeline_stage_0_bwd = (f32[128]) call(pipeline_stage_1_bwd.0, pipeline_stage_0.0, pipeline_accumulator_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   pipeline_stage_0_bwd.0 = f32[128] get-tuple-element(pipeline_stage_0_bwd), index=0
 

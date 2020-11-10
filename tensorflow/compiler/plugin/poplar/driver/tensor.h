@@ -189,19 +189,6 @@ Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
                              int64 n, poplar::RemoteBuffer rbuffer);
 
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer,
-                             bool is_replica_partitioned);
-
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer,
-                             int64 slice_dimension);
-
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer,
-                             bool is_replica_partitioned,
-                             int64 slice_dimension);
-
 /* This returns a [range) which correspond to the flat tuple indices of output
  * tensors.
  */

@@ -2119,7 +2119,7 @@ void PoplarExecutor::UpdateArgsHandleMap(
     const auto& input_info = inputs_info[a];
     InputPairList bufs;
     auto remote_parameter_info =
-        FindRemoteParameterInfo(a, executable.GeRemoteParameterInfos());
+        FindRemoteParameterInfo(a, executable.GetRemoteParameterInfos());
     FlattenedDeviceMemoryList(bufs, shapes[a],
                               const_cast<void*>(args[a].opaque()), input_info,
                               remote_parameter_info);
@@ -2624,7 +2624,8 @@ Status PoplarExecutor::MoveHostToDevice() {
 
               // Copy the replica-local region into the tmp buffer (with
               // padding).
-              std::memcpy(buffer.get(), buf + offset, replica_length);
+              std::memcpy(buffer.get(), static_cast<char*>(buf) + offset,
+                          replica_length);
 
               // Zero the padding
               std::memset(buffer.get() + replica_length, 0,

@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_remote_buffer_info.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -114,7 +115,9 @@ std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
  */
 class HloCreateBuffer : public HloPoplarInstruction {
  public:
-  explicit HloCreateBuffer(const Shape& shape, bool is_remote);
+  explicit HloCreateBuffer(
+      const Shape& shape, bool is_remote,
+      absl::optional<HloRemoteBufferInfo> remote_buffer_info);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -126,6 +129,11 @@ class HloCreateBuffer : public HloPoplarInstruction {
 
   bool IsRemoteBuffer() const { return is_remote_; }
 
+  absl::optional<HloRemoteBufferInfo> RemoteBufferInfo() const;
+
+  std::unique_ptr<HloInstruction> CloneWithRemoteBufferInfo(
+      const HloRemoteBufferInfo& info) const;
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -136,6 +144,7 @@ class HloCreateBuffer : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   const bool is_remote_;
+  const absl::optional<HloRemoteBufferInfo> remote_buffer_info_;
 };
 
 std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,

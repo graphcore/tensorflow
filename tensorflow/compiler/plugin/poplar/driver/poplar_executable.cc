@@ -254,7 +254,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     remote_parameter_infos.emplace(RemoteParameterInfo{
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
-        remote_parameter.buffer_name(), remote_parameter.buffer_offset()});
+        remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
+        remote_parameter.num_merged()});
   }
 
   // Load the additional Poplar engine options that we need to restore.
@@ -478,7 +479,7 @@ Status ExportInternal(
     poplar_opt->set_value(flag.second);
   }
 
-  for (const auto lookup : annotations.host_embedding_lookup_infos) {
+  for (const auto& lookup : annotations.host_embedding_lookup_infos) {
     auto* lookup_proto = proto.add_lookups();
     lookup_proto->set_stream_handle(lookup.stream_handle);
     lookup_proto->set_embedding_id(lookup.embedding_id);
@@ -487,7 +488,7 @@ Status ExportInternal(
         lookup.activations_shape.ToProto();
   }
 
-  for (const auto update : annotations.host_embedding_update_infos) {
+  for (const auto& update : annotations.host_embedding_update_infos) {
     auto* update_proto = proto.add_updates();
     update_proto->set_stream_handle(update.stream_handle);
     update_proto->set_embedding_id(update.embedding_id);
@@ -496,13 +497,13 @@ Status ExportInternal(
         update.activations_shape.ToProto();
   }
 
-  for (const auto notification : annotations.host_embedding_notify_infos) {
+  for (const auto& notification : annotations.host_embedding_notify_infos) {
     auto* update_proto = proto.add_notifications();
     update_proto->set_stream_handle(notification.stream_handle);
     update_proto->set_embedding_id(notification.embedding_id);
   }
 
-  for (const auto remote_parameter_info : annotations.remote_parameter_infos) {
+  for (const auto& remote_parameter_info : annotations.remote_parameter_infos) {
     auto* remote_parameter = proto.add_remote_parameters();
     remote_parameter->set_parameter_number(
         remote_parameter_info.parameter_number);
@@ -510,16 +511,17 @@ Status ExportInternal(
         remote_parameter_info.is_replica_partitioned);
     remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
     remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
+    remote_parameter->set_num_merged(remote_parameter_info.num_merged);
   }
 
-  for (const auto key_id_mapping : mappings) {
+  for (const auto& key_id_mapping : mappings) {
     auto* mapping = proto.add_key_id_mappings();
     mapping->set_handle(key_id_mapping.first);
     mapping->set_key(key_id_mapping.second.key);
     mapping->set_start_id(key_id_mapping.second.id);
   }
 
-  for (const auto feed : checkpoint_feeds_order) {
+  for (const auto& feed : checkpoint_feeds_order) {
     std::string* proto_feed = proto.add_checkpoint_feeds_order();
     *proto_feed = feed;
   }

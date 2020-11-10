@@ -31,6 +31,7 @@ message RemoteParameterConfig {
   bool is_replica_partitioned = 2;
   string buffer_name = 3;
   int64 buffer_offset = 4;
+  int64 num_merged = 5;
 }
 
 message KeyIdMapping {

@@ -103,7 +103,7 @@ class PoplarExecutable : public Executable {
     return host_embedding_notify_infos_;
   }
 
-  const RemoteParameterInfos& GeRemoteParameterInfos() const {
+  const RemoteParameterInfos& GetRemoteParameterInfos() const {
     return remote_parameter_infos_;
   }
 

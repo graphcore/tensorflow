@@ -197,11 +197,15 @@ HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
 
 HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_remote)
+    bool is_remote, absl::optional<HloRemoteBufferInfo> remote_buffer_info)
     : HloPoplarInstruction(shape, operands, PoplarOp::GradientAccumulatorCreate,
-                           is_remote),
-      is_remote_(is_remote) {
+                           is_remote, remote_buffer_info),
+      is_remote_(is_remote),
+      remote_buffer_info_(remote_buffer_info) {
   CHECK_LE(operands.size(), 1);
+  if (remote_buffer_info_.has_value()) {
+    CHECK(is_remote_);
+  }
   // Mark the creator as stateful so that it does not get merged with other same
   // shaped accumulators.
   set_custom_call_has_side_effect(true);
@@ -223,6 +227,23 @@ uint64 HloGradientAccumulatorCreate::NumberOfInplaceOperands() const {
 
 bool HloGradientAccumulatorCreate::IsPopOpsElementwise() const { return false; }
 
+absl::optional<HloRemoteBufferInfo>
+HloGradientAccumulatorCreate::RemoteBufferInfo() const {
+  CHECK(is_remote_);
+  return remote_buffer_info_;
+}
+
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorCreate::CloneWithRemoteBufferInfo(
+    const HloRemoteBufferInfo& info) const {
+  CHECK(is_remote_);
+  auto clone = absl::make_unique<HloGradientAccumulatorCreate>(
+      shape(), operands(), is_remote_, info);
+  SetupDerivedInstruction(clone.get());
+  clone->set_raw_backend_config_string(raw_backend_config_string());
+  return clone;
+}
+
 std::unique_ptr<HloInstruction>
 HloGradientAccumulatorCreate::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
@@ -235,6 +256,15 @@ HloGradientAccumulatorCreate::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back("is_remote=" + std::to_string(is_remote_));
+
+  if (remote_buffer_info_.has_value()) {
+    attributes.push_back("remote_buffer_name=" + remote_buffer_info_->name);
+    attributes.push_back("remote_buffer_num_merged=" +
+                         std::to_string(remote_buffer_info_->num_merged));
+    attributes.push_back("remote_buffer_merge_offset=" +
+                         std::to_string(remote_buffer_info_->merge_offset));
+  }
+
   return attributes;
 }
 
@@ -385,9 +415,17 @@ static HloPoplarInstructionFactory
 
 StatusOr<std::unique_ptr<HloInstruction>>
 HloGradientAccumulatorCreateFactoryFunc(HloCustomCallInstruction* call) {
+  bool is_remote = false;
+
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  if (attribute_map.HasAttribute("is_remote")) {
+    TF_ASSIGN_OR_RETURN(is_remote,
+                        attribute_map.GetAttributeAsBool("is_remote"));
+  }
+
   CHECK_EQ(call->operand_count(), 1);
   return HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
-      call->shape(), call->mutable_operand(0));
+      call->shape(), call->mutable_operand(0), is_remote);
 }
 
 static HloPoplarInstructionFactory gradient_accumulator_creator_factory(

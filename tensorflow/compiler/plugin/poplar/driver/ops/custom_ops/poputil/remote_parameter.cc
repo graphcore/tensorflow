@@ -127,9 +127,10 @@ class BufferStoreSliceOp : public PoplarOpDef {
 
     for (int64 i = 0; i < num_outputs; ++i) {
       CHECK_EQ(outputs[i].size(), 1);
-      poplar::RemoteBuffer remote_buffer = outputs[i][0].AsRemoteBuffer();
+      TensorOrRemoteBuffer& output = outputs[i][0];
 
       if (!UseSyntheticData()) {
+        poplar::RemoteBuffer remote_buffer = output.AsRemoteBuffer();
         const auto value_index = num_outputs + i;
         const auto offset_index = 2 * num_outputs + i;
 
@@ -144,7 +145,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
         seq.add(poplar::program::Copy(value, remote_buffer, offset));
       }
 
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, i, remote_buffer));
+      TF_CHECK_OK(AddOutput(tensor_map, inst, i, output));
     }
 
     return seq;

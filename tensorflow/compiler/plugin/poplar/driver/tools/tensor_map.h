@@ -64,11 +64,10 @@ struct TensorOrRemoteBuffer {
    * Construct with a poplar remote buffer.
    */
   explicit TensorOrRemoteBuffer(poplar::RemoteBuffer rbuffer,
-                                bool is_replica_partitioned,
-                                absl::optional<int64> slice_dimension)
+                                bool is_replica_partitioned, int64 num_merged)
       : remote_buffer(rbuffer),
         is_replica_partitioned(is_replica_partitioned),
-        slice_dimension(slice_dimension),
+        num_merged(num_merged),
         content_type(ContentType::RemoteBuffer) {}
 
   /**
@@ -87,7 +86,7 @@ struct TensorOrRemoteBuffer {
         content_type = ContentType::RemoteBuffer;
         remote_buffer = rhs.remote_buffer;
         is_replica_partitioned = rhs.is_replica_partitioned;
-        slice_dimension = rhs.slice_dimension;
+        num_merged = rhs.num_merged;
         break;
     }
   }
@@ -108,13 +107,7 @@ struct TensorOrRemoteBuffer {
     return IsRemoteBuffer() && is_replica_partitioned;
   }
 
-  absl::optional<int64> GetSliceDimension() const {
-    if (!IsRemoteBuffer()) {
-      return absl::nullopt;
-    }
-
-    return slice_dimension;
-  }
+  int64 NumMerged() const { return num_merged; }
 
   /**
    * Helper functions to force the cast to a poplar tensor when it is
@@ -153,7 +146,7 @@ struct TensorOrRemoteBuffer {
         content_type = ContentType::RemoteBuffer;
         remote_buffer = rhs.remote_buffer;
         is_replica_partitioned = rhs.is_replica_partitioned;
-        slice_dimension = rhs.slice_dimension;
+        num_merged = rhs.num_merged;
         break;
     }
 
@@ -176,7 +169,7 @@ struct TensorOrRemoteBuffer {
     content_type = ContentType::RemoteBuffer;
     remote_buffer = rbuffer;
     is_replica_partitioned = false;
-    slice_dimension = absl::nullopt;
+    num_merged = 1;
     return *this;
   }
 
@@ -211,7 +204,7 @@ struct TensorOrRemoteBuffer {
    * Additional meta-data is stored here
    */
   bool is_replica_partitioned = false;
-  absl::optional<int64> slice_dimension = absl::nullopt;
+  int64 num_merged = 1;
 
   enum class ContentType { Empty, Tensor, RemoteBuffer };
 
@@ -268,13 +261,6 @@ class TensorMap {
   Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
                                poplar::RemoteBuffer rbuffer,
                                bool is_replica_partitioned);
-  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
-                               poplar::RemoteBuffer rbuffer,
-                               int64 slice_dimension);
-  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
-                               poplar::RemoteBuffer rbuffer,
-                               bool is_replica_partitioned,
-                               int64 slice_dimension);
   Status AddOutput(const HloInstruction* inst, int64 output_index,
                    TensorOrRemoteBuffer torb);
 
@@ -307,7 +293,7 @@ class TensorMap {
                                    int64 output_index,
                                    poplar::RemoteBuffer rbuffer,
                                    bool is_replica_partitioned,
-                                   absl::optional<int64> slice_dimension);
+                                   int64 num_merged);
 };
 
 struct ComputationTensorMap {

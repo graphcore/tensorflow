@@ -87,22 +87,25 @@ struct HostEmbeddingInfo {
 struct RemoteParameterInfo {
   // Constructor used for lookups.
   explicit RemoteParameterInfo(int64 parameter_number)
-      : RemoteParameterInfo(parameter_number, false, "", 0) {}
+      : RemoteParameterInfo(parameter_number, false, "", 0, 0) {}
 
   explicit RemoteParameterInfo(int64 parameter_number,
                                bool is_replica_partitioned,
                                const std::string& buffer_name,
-                               int64 buffer_offset)
+                               int64 buffer_offset, int64 num_merged)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
-        buffer_offset(buffer_offset) {}
+        buffer_offset(buffer_offset),
+        num_merged(num_merged) {}
+
   RemoteParameterInfo() = delete;
 
   const int64 parameter_number;
   const bool is_replica_partitioned;
   const std::string buffer_name;
   const int64 buffer_offset;
+  const int64 num_merged;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;

@@ -211,6 +211,7 @@ cc_library(
         "driver/passes/recompute_instructions.cc",
         "driver/passes/recomputation_checkpoint_remover.cc",
         "driver/passes/recomputation_input_remover.cc",
+        "driver/passes/remote_buffer_merger.cc",
         "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
@@ -376,6 +377,7 @@ cc_library(
         "driver/passes/recomputation_checkpoint_remover.h",
         "driver/passes/recomputation_input_remover.h",
         "driver/passes/recompute_instructions.h",
+        "driver/passes/remote_buffer_merger.h",
         "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
@@ -414,6 +416,7 @@ cc_library(
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
+        "driver/tools/custom_ops/hlo_remote_buffer_info.h",
         "driver/tools/custom_ops/host_embedding.h",
         "driver/tools/custom_ops/inter_tileset_copy.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
@@ -1652,6 +1655,19 @@ xla_test(
     name = "combine_instructions_test",
     size = "small",
     srcs = ["tests/combine_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "remote_buffer_merger_test",
+    size = "small",
+    srcs = ["tests/remote_buffer_merger_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
