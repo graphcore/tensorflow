@@ -1983,7 +1983,7 @@ void PoplarExecutor::DumpPoplarOutOfMemoryAllocationException(
       TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
       TF_CHECK_OK(file->Append(text_report_stream.str()));
       TF_CHECK_OK(file->Close());
-      LOG(INFO) << "The ouf of memory summary text report saved to "
+      LOG(INFO) << "The out of memory summary text report saved to "
                 << filename;
     }
 
@@ -1999,7 +1999,7 @@ void PoplarExecutor::DumpPoplarOutOfMemoryAllocationException(
             tensorflow::Env::Default()->NewWritableFile(filename, &file));
         TF_CHECK_OK(file->Append(cbor_report_stream.str()));
         TF_CHECK_OK(file->Close());
-        LOG(INFO) << "The ouf of memory summary CBOR report saved to "
+        LOG(INFO) << "The out of memory summary CBOR report saved to "
                   << filename;
       } else {
         std::stringstream json_report_stream;
@@ -2008,7 +2008,7 @@ void PoplarExecutor::DumpPoplarOutOfMemoryAllocationException(
             tensorflow::Env::Default()->NewWritableFile(filename, &file));
         TF_CHECK_OK(file->Append(json_report_stream.str()));
         TF_CHECK_OK(file->Close());
-        LOG(INFO) << "The ouf of memory summary JSON report saved to "
+        LOG(INFO) << "The out of memory summary JSON report saved to "
                   << filename;
       }
     }
@@ -2821,6 +2821,14 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     }
     return output;
   } else {
+    if (UseSyntheticData()) {
+      LOG(WARNING)
+          << "Trying to dequeue elements from the outfeed queue with id="
+          << feed_id
+          << " which has outfeed_mode `GetLast`. This is not supported when "
+             "using synthetic data.";
+      return {};
+    }
     std::vector<std::vector<tensorflow::Tensor>> output(1);
     output[0] = outfeed_context->io_thread_output_queues.front();
     outfeed_context->io_thread_output_queues.clear();
@@ -2842,6 +2850,16 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
             outfeed_id.c_str());
       }
     } else {
+      if (UseSyntheticData() &&
+          outfeed_info.config.mode() ==
+              xla::poplarplugin::PoplarFeedConfig::GetLast) {
+        LOG(WARNING) << "Outfeed with id=" << outfeed_id
+                     << " has mode `GetLast` which is not supported when "
+                        "using synthetic data. An exception will be thrown if "
+                        "the dequeue TensorFlow operation is executed. "
+                        "Consider changing the `outfeed_mode` in "
+                        "IPUOutfeedQueue.";
+      }
       outfeed_contexts_[outfeed_id] =
           absl::make_unique<OutfeedContext>(outfeed_info);
     }
@@ -3344,7 +3362,7 @@ void PoplarExecutor::SetCurrentReplicationFactor(
     LOG(INFO) << "Multi-replica distribution: process index " << process_index
               << ", process count " << process_count
               << ", global replication factor " << executable_replication_factor
-              << ", local repliation factor " << current_replication_factor_;
+              << ", local replication factor " << current_replication_factor_;
   } else {
     current_replication_factor_ = executable_replication_factor;
   }

@@ -164,7 +164,7 @@ const HloInstruction* GetOperandLookThroughInterIpuCopy(
 
 // This function returns true if the environment variable flag
 // "use_synthetic_data" has been set. Using synthetic data means that *no data*
-// ill be copied to/from the device.
+// will be copied to/from the device.
 bool UseSyntheticData();
 
 // This function returns true if the environment variable flag
