@@ -171,7 +171,7 @@ For a full list, refer to  :ref:`api-section`.
     - Dump the schedule of the XLA graph to the user console.
   * - ``--dump_text_reports_to_stdio``
     - If profiling is enabled, then a text summary of the profile will be dumped
-      io standard output, in addition to the normal report processing.
+      to standard output, in addition to the normal report processing.
   * - ``--executable_cache_path``
     - Enables the Poplar executable cache.
 
@@ -214,9 +214,13 @@ For a full list, refer to  :ref:`api-section`.
   * - ``--use_ipu_model``
     - Use the Poplar IPUModel for graph compilation and execution.
   * - ``--use_synthetic_data``
-    - Prevent the system from downloading or uploading data to the card when
+    - Prevent the system from downloading or uploading data to the IPU when
       executing code. This is used for testing performance without the overhead
       of data transfer.
+
+      Executing the ``dequeue`` op for an ``IPUOutfeedQueue``
+      with ``outfeed_mode`` set to ``IPUOutfeedMode.LAST`` will throw an
+      exception when this flag is set.
   * - ``--while_loop_brute_force_max_trip_count``
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be

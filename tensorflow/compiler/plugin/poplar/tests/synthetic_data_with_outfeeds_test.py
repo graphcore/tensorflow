@@ -19,6 +19,7 @@ from __future__ import print_function
 import os
 import numpy as np
 
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
@@ -49,7 +50,7 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         return outfeed
 
       def my_net():
-        r = loops.repeat(5, body, [], infeed_queue)
+        r = loops.repeat(3, body, [], infeed_queue)
         return r
 
       with ops.device('cpu'):
@@ -79,7 +80,7 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         result = sess.run(dequeue_outfeed)
         self.assertAllEqual(np.full([10], 2.0), result['d1'][0])
 
-  def testSyntheticDataWithOutfeeds(self):
+  def testSyntheticDataWithOutfeedModeAll(self):
     poplar_flags = os.environ.get("TF_POPLAR_FLAGS", "")
     poplar_flags += " --use_ipu_model"
     poplar_flags += " --use_synthetic_data"
@@ -95,7 +96,7 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         return outfeed
 
       def my_net():
-        r = loops.repeat(5, body, [], infeed_queue)
+        r = loops.repeat(3, body, [], infeed_queue)
         return r
 
       with ops.device('cpu'):
@@ -124,6 +125,55 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         sess.run(run_loop)
         result = sess.run(dequeue_outfeed)
         self.assertAllEqual(len(result['d1']), 0)
+
+  def testSyntheticDataWithOutfeedModeLast(self):
+    poplar_flags = os.environ.get("TF_POPLAR_FLAGS", "")
+    poplar_flags += " --use_ipu_model"
+    poplar_flags += " --use_synthetic_data"
+
+    with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
+
+      # The device side main
+      def body(x1, x2):
+        d1 = x1 + x2
+        d2 = x1 - x2
+        outfeed = outfeed_queue.enqueue({'d1': d1, 'd2': d2})
+        return outfeed
+
+      def my_net():
+        r = loops.repeat(3, body, [], infeed_queue)
+        return r
+
+      with ops.device('cpu'):
+        # The dataset for feeding the graphs
+        ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[10]))
+        ds = ds.map(lambda x: [x, x])
+        ds = ds.repeat()
+
+        # The host side queues
+        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed3")
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+            feed_name="outfeed3",
+            outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+      with scopes.ipu_scope('/device:IPU:0'):
+        run_loop = ipu_compiler.compile(my_net, inputs=[])
+
+      # The outfeed dequeue has to happen after the outfeed enqueue
+      dequeue_outfeed = outfeed_queue.dequeue()
+
+      # Configure the hardware
+      config = utils.create_ipu_config()
+      config = utils.auto_select_ipus(config, 1)
+      utils.configure_ipu_system(config)
+
+      with tf.Session() as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(run_loop)
+        with self.assertRaisesRegex(
+            errors.FailedPreconditionError,
+            r'when using synthethic data. This is not supported.'):
+          sess.run(dequeue_outfeed)
 
 
 if __name__ == "__main__":

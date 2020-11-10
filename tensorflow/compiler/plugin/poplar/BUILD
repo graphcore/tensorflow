@@ -3398,7 +3398,7 @@ tf_xla_py_test(
     size = "small",
     srcs = ["tests/synthetic_data_with_outfeeds_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 2,
+    shard_count = 3,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

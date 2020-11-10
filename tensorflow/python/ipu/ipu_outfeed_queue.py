@@ -57,6 +57,7 @@ class IPUOutfeedQueue:
 
   In outfeed last mode only the last enqueued element is stored. The dequeue
   operation will in this case return a single element.
+
   """
   @deprecation.deprecated_args(None, "Use outfeed_mode instead.",
                                "outfeed_all")
@@ -259,6 +260,13 @@ class IPUOutfeedQueue:
     The return value of this operation depends on the enqueued tensors,
     replication factor and the execution mode.
 
+    Note: If the `TF_POPLAR_FLAGS` environment variable contains the flag
+    `--use_synthetic_data` then no data will be returned to the host.
+    If `outfeed_mode` is `IPUOutfeedMode.ALL` then empty arrays with the same
+    element structure as the enqueued tensors are returned.
+    If `outfeed_mode` is `IPUOutfeedMode.LAST` then running the dequeue
+    operation will throw an exception (there is no last element in this case).
+
     Examples:
 
     1. Outfeed returning a single tensor:
@@ -288,15 +296,15 @@ class IPUOutfeedQueue:
           result = sess.run(res, {v:np.ones([4, 4], np.float32)})
           outfed = sess.run(outfeed)
 
-    In this example the tensor `output` is of shape [4, 4] and it's enqueued
+    In this example the tensor `output` is of shape [4, 4] and it is enqueued
     into the outfeed with replication_factor = 2. If the `outfeed_mode` is
-    `outfeed_mode == IPUOutfeedMode.ALL`, then the shape of the resulting
+    `IPUOutfeedMode.ALL`, then the shape of the resulting
     `outfed` tensor will be [20, 2, 4, 4], where the first dimension represents
     the number of times we have enqueued a tensor to the outfeed - in this
     example the loop is repeated 20 times, and therefore we get 20 values back
     from the outfeed. The second dimension is the replication_factor, which
     allows us to see the individual values from each replicated graph. If the
-    `outfeed_mode` is `outfeed_mode == IPUOutfeedMode.LAST`, then the shape of
+    `outfeed_mode` is `IPUOutfeedMode.LAST`, then the shape of
     the resulting `outfed` tensor will be [2, 4, 4], which represents the value
     of the output tensor the last time it was enqueued during execution for
     each of the replicated graphs.
@@ -330,13 +338,13 @@ class IPUOutfeedQueue:
 
     In this example we outfeed a tuple of tensors, `output` and `sum`, where
     the former is of shape [4, 4] and latter [1]. If the `outfeed_mode` is
-    `outfeed_mode == IPUOutfeedMode.ALL`, then the resulting outfed is a
+    `IPUOutfeedMode.ALL`, then the resulting `outfed` is a
     two-tuple of tensors with shapes ([20, 4, 4], [20, 1]), where the first
     dimension in each of the tensors represents the number of times we have
     enqueued these tensors to the outfeed - in this example the loop is repeated
     20 times, and therefore we get 20 values back from the outfeed for each of
     the tensors in the tuple. If the `outfeed_mode` is
-    `outfeed_mode == IPUOutfeedMode.LAST`, then the `outfed` is a two tuple of
+    `IPUOutfeedMode.LAST`, then `outfed` is a two tuple of
     tensors with shapes ([4, 4], [1]), which represents the values of the
     `output` and `sum` tensors the last time they were enqueued during
     execution.
@@ -375,7 +383,7 @@ class IPUOutfeedQueue:
 
     In this example we outfeed a dictionary of tensors, `output` and `sum`,
     where the former is of shape [4, 4] and latter [1]. If the `outfeed_mode` is
-    `outfeed_mode == IPUOutfeedMode.ALL`, then the resulting outfed is a
+    `IPUOutfeedMode.ALL`, then the resulting `outfed` is a
     dictionary of tensors with shapes: {"x": [40, 8, 4, 4], "y": [40, 8, 1]},
     where the first dimension in each of the tensors represents the number of
     times we have enqueued these tensors to the outfeed - in this example the
@@ -383,7 +391,7 @@ class IPUOutfeedQueue:
     outfeed for each of the tensors in the tuple. The second dimension is the
     replication_factor, which allows us to see the individual values from each
     replicated graph. If the `outfeed_mode` is
-    `outfeed_mode == IPUOutfeedMode.LAST`, then the `outfed` is a dictionary of
+    `IPUOutfeedMode.LAST`, then `outfed` is a dictionary of
     tensors with shapes: {"x": [8, 4, 4], "y": [8, 1]}, which represents the
     values of the `output` and `sum` tensors the last time they were enqueued
     during execution for each of the replicated graphs.

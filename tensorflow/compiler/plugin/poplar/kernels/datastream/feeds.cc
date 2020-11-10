@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -377,6 +378,11 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
         for (size_t j = 0; j < num_outputs_; ++j) {
           ctx->set_output(j, outfeed_tensors[0][j]);
         }
+      } else if (xla::poplarplugin::UseSyntheticData()) {
+        OP_REQUIRES(ctx, false,
+                    errors::FailedPrecondition(
+                        "Trying to get the last value from an outfeed queue "
+                        "when using synthethic data. This is not supported."));
       } else {
         // Dequeue was called before there was any data.
         OP_REQUIRES(ctx, false,
