@@ -830,6 +830,7 @@ cc_library(
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
         "kernels/poputil/codelet_expression.cc",
+        "kernels/poputil/execution_counter.cc",
         "kernels/poputil/fifo.cc",
         "kernels/poputil/print_tensor.cc",
         "kernels/poputil/recompute.cc",
@@ -1039,6 +1040,7 @@ cc_library(
     name = "poputil_ops",
     srcs = [
         "ops/poputil/codelet_expression.cc",
+        "ops/poputil/execution_counter.cc",
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
         "ops/poputil/recompute.cc",

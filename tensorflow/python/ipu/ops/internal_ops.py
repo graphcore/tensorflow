@@ -185,3 +185,12 @@ def block_recompute(x, name=None):
   """
 
   return gen_poputil_ops.ipu_block_recompute(x, name=name)
+
+
+def get_current_iteration_counter(name=None):
+  """Returns which gradient accumulation iteration the pipeline is in.
+
+  Returns:
+    A scalar tensor with the iteration count.
+  """
+  return gen_poputil_ops.execution_counter(name)
