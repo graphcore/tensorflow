@@ -21,6 +21,7 @@ namespace tensorflow {
 REGISTER_OP("DatasetBenchmark")
     .Input("input_dataset: variant")
     .Attr("print_stats: bool")
+    .Attr("do_memcpy: bool")
     .Attr("number_of_epochs: int")
     .Attr("elements_per_epochs: int")
     .Attr("output_types: list(type) >= 1")

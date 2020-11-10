@@ -70,9 +70,9 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 }
 
 xla::poplarplugin::IOFunction ConsumerThread(
-    bool print_stats, uint64 number_of_epochs, uint64 elements_per_epochs,
-    Notification* finished_notifiation, Json::Value* stats_json,
-    xla::poplarplugin::InfeedIterator* itr) {
+    bool print_stats, bool do_memcpy, uint64 number_of_epochs,
+    uint64 elements_per_epochs, Notification* finished_notifiation,
+    Json::Value* stats_json, xla::poplarplugin::InfeedIterator* itr) {
   return [=](std::atomic<bool>& cancelled) {
     Json::Value epochs(Json::arrayValue);
 
@@ -105,7 +105,9 @@ xla::poplarplugin::IOFunction ConsumerThread(
               return tensorflow::errors::Aborted("Consumer thread cancelled");
             }
           }
-          std::memcpy(buffers[k], buf->data(), buffer_sizes[k]);
+          if (do_memcpy) {
+            std::memcpy(buffers[k], buf->data(), buffer_sizes[k]);
+          }
           replica_queues[k]->AdvanceReadPosition();
         }
       }
@@ -184,6 +186,7 @@ class DatasetBenchmark : public OpKernel {
  public:
   explicit DatasetBenchmark(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("print_stats", &print_stats_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("do_memcpy", &do_memcpy_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("number_of_epochs", &number_of_epochs_));
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("elements_per_epochs", &elements_per_epochs_));
@@ -213,9 +216,9 @@ class DatasetBenchmark : public OpKernel {
       // Start the consumer thread.
       xla::poplarplugin::IOThread consumer_thread(
           "consumer",
-          ConsumerThread(print_stats_, number_of_epochs_, elements_per_epochs_,
-                         &consumer_finished_notifiation, &stats_json,
-                         &infeed_iterator));
+          ConsumerThread(print_stats_, do_memcpy_, number_of_epochs_,
+                         elements_per_epochs_, &consumer_finished_notifiation,
+                         &stats_json, &infeed_iterator));
 
       // Start the producer thread.
       xla::poplarplugin::IOThread producer_thread(
@@ -239,6 +242,7 @@ class DatasetBenchmark : public OpKernel {
 
  private:
   bool print_stats_;
+  bool do_memcpy_;
   int number_of_epochs_;
   int elements_per_epochs_;
   std::vector<xla::Shape> shapes_;

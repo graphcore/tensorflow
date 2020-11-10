@@ -26,7 +26,8 @@ def dataset_benchmark(dataset,
                       number_of_epochs,
                       elements_per_epochs,
                       print_stats=True,
-                      apply_options=True):
+                      apply_options=True,
+                      do_memcpy=True):
   """Allows the user to benchmark performance of a `tf.data.Dataset`.
 
     Args:
@@ -37,6 +38,8 @@ def dataset_benchmark(dataset,
         console.
       apply_options: Whether to apply optimization options which can improve the
         dataset performance.
+      do_memcpy: Whether to perform a `memcpy` operation which simulates a
+        dataset buffer being copied to a Poplar managed buffer.
 
     Returns:
       A JSON string with performance statistics, which records the following
@@ -74,7 +77,7 @@ def dataset_benchmark(dataset,
     dataset_variant = dataset._as_variant_tensor  # pylint: disable=protected-access
 
   return gen_dataset_benchmark.dataset_benchmark(dataset_variant, print_stats,
-                                                 number_of_epochs,
+                                                 do_memcpy, number_of_epochs,
                                                  elements_per_epochs,
                                                  **dataset._flat_structure)  # pylint: disable=protected-access
 
@@ -82,7 +85,8 @@ def dataset_benchmark(dataset,
 def infeed_benchmark(infeed_queue,
                      number_of_epochs,
                      elements_per_epochs,
-                     print_stats=True):
+                     print_stats=True,
+                     do_memcpy=True):
   """Allows the user to benchmark performance of an
     `ipu.ipu_infeed_queue.IPUInfeedQueue`.
 
@@ -93,6 +97,8 @@ def infeed_benchmark(infeed_queue,
       elements_per_epochs: The number of elements there are in each epoch.
       print_stats: Whether to print statistics about the performance to the
         console.
+      do_memcpy: Whether to perform a `memcpy` operation which simulates a
+        dataset buffer being copied to a Poplar managed buffer.
 
     Returns:
       A JSON string with performance statistics, which records the following
@@ -123,4 +129,5 @@ def infeed_benchmark(infeed_queue,
       number_of_epochs,
       elements_per_epochs,
       print_stats=print_stats,
-      apply_options=apply_options)
+      apply_options=apply_options,
+      do_memcpy=do_memcpy)
