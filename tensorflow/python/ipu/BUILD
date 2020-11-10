@@ -332,6 +332,23 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "iteration_counter_test",
+    size = "small",
+    srcs = ["tests/iteration_counter_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "host_embedding_lookup_test",
     size = "large",
     srcs = ["tests/host_embedding_lookup_test.py"],
@@ -1060,6 +1077,7 @@ test_suite(
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
         "ipu_session_run_hooks_test",
+        "iteration_counter_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
