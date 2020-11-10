@@ -721,7 +721,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(RemoteParameterInfo{
         offload_info.entry_param_number, replication_factor > 1,
-        offload_info.stream_name, 0});
+        offload_info.stream_name, /*buffer_offset=*/0, /*num_merged=*/1});
     changed = true;
   }
 

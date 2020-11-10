@@ -347,32 +347,21 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
     CHECK(shapes[0].IsArray());
 
     poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
-    TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shapes[0]));
-    int64 element_count = ShapeUtil::ElementsIn(shapes[0]);
+    TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shapes[0]));
+    const int64 element_count = ShapeUtil::ElementsIn(shapes[0]);
 
-    const bool is_replica_partitioned = IsReplicaPartitioned(inst, resources_);
+    const auto info =
+        FindRemoteParameterInfo(inst->parameter_number(),
+                                resources_.annotations.remote_parameter_infos);
+    CHECK(info.has_value());
 
-    const std::size_t grain_size = 4 / graph.getTarget().getTypeSize(type);
+    TF_ASSIGN_OR_RETURN(
+        auto output,
+        GetOrCreateRemoteBuffer(
+            graph, resources_, info->buffer_name, element_type, element_count,
+            /*num_repeats=*/1, info->num_merged, info->is_replica_partitioned));
 
-    if (is_replica_partitioned) {
-      element_count = grain_size * tensorflow::MathUtil::CeilOfRatio<int64>(
-                                       tensorflow::MathUtil::CeilOfRatio<int64>(
-                                           element_count, grain_size),
-                                       resources_.replication_factor);
-    }
-
-    const std::string remote_buffer_name =
-        resources_.annotations.input_output_aliasing_map
-            .GetEntryInputInfos()[inst->parameter_number()]
-            .Handles()
-            .at(0);
-
-    poplar::RemoteBuffer output =
-        graph.addRemoteBuffer(remote_buffer_name, type, element_count, 1, true);
-
-    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, output,
-                                      is_replica_partitioned));
-
+    TF_CHECK_OK(AddOutput(tensor_map, inst, 0, output));
     return Status::OK();
   }
 
@@ -879,16 +868,34 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   if (create->IsRemote()) {
     CHECK(inst->shape().IsArray());
 
-    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
-    // Create the buffer.
-    TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(inst->shape()));
-    const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
-    poplar::RemoteBuffer output =
-        graph.addRemoteBuffer(inst->name(), type, element_count, 1, true);
-    TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
-
     poplar::program::Sequence zeroing_seq;
-    ZeroRemoteBuffers(resources_, graph, {output}, zeroing_seq);
+
+    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
+    TF_ASSIGN_OR_RETURN(poplar::Type element_type,
+                        PoplarDataType(inst->shape()));
+    const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
+
+    auto info = create->RemoteBufferInfo();
+    if (info.has_value()) {
+      TF_ASSIGN_OR_RETURN(auto output, GetOrCreateRemoteBuffer(
+                                           graph, resources_, info->name,
+                                           element_type, element_count,
+                                           /*num_repeats=*/1, info->num_merged,
+                                           /*is_replica_partitioned=*/false));
+
+      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
+
+      // Zero the remote buffer for the offset that we own.
+      auto remote_buffer = output.AsRemoteBuffer();
+      ZeroRemoteBuffer(resources_, graph, remote_buffer, info->merge_offset,
+                       zeroing_seq);
+    } else {
+      // Create a new buffer.
+      poplar::RemoteBuffer output = graph.addRemoteBuffer(
+          inst->name(), element_type, element_count, 1, true);
+      TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
+      ZeroRemoteBuffer(resources_, graph, output, /*offset=*/0, zeroing_seq);
+    }
 
     // Add the remote buffer to the zeroing stack.
     TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, zeroing_seq));
@@ -966,15 +973,25 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
   TensorLocation output_location(inst, 0);
   if (create_buffer->IsRemoteBuffer()) {
     poplar::Graph& graph = GetGraph(resources_, inst);
-    TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
+    TF_ASSIGN_OR_RETURN(poplar::Type element_type, PoplarDataType(shape));
     std::size_t num_repeats = ShapeUtil::GetDimension(shape, 0);
     std::size_t element_count =
         ShapeUtil::ElementsIn(ShapeUtil::DeleteDimension(0, shape));
 
-    poplar::RemoteBuffer result = graph.addRemoteBuffer(
-        inst->name(), type, element_count, num_repeats, true);
+    auto info = create_buffer->RemoteBufferInfo();
+    if (info.has_value()) {
+      TF_ASSIGN_OR_RETURN(
+          auto output, GetOrCreateRemoteBuffer(graph, resources_, info->name,
+                                               element_type, element_count,
+                                               num_repeats, info->num_merged));
 
-    TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, result));
+      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
+    } else {
+      poplar::RemoteBuffer result = graph.addRemoteBuffer(
+          inst->name(), element_type, element_count, num_repeats, true);
+
+      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, result));
+    }
   } else {
     // Allocate now if there is an allocation target.
     const bool allocate_now =

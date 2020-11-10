@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_remote_buffer_info.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -123,15 +124,20 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
       const Shape& shape, HloInstruction* const variable,
       bool is_remote = false);
 
-  HloGradientAccumulatorCreate(const Shape& shape,
-                               absl::Span<HloInstruction* const> operands,
-                               bool is_remote = false);
+  HloGradientAccumulatorCreate(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_remote = false,
+      absl::optional<HloRemoteBufferInfo> remote_buffer_info = absl::nullopt);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
   bool IsPopOpsElementwise() const override;
   bool IsRemote() const { return is_remote_; }
+  absl::optional<HloRemoteBufferInfo> RemoteBufferInfo() const;
+
+  std::unique_ptr<HloInstruction> CloneWithRemoteBufferInfo(
+      const HloRemoteBufferInfo& info) const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -143,6 +149,7 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   const bool is_remote_;
+  const absl::optional<HloRemoteBufferInfo> remote_buffer_info_;
 };
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(

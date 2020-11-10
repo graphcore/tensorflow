@@ -36,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
+#include "tensorflow/compiler/plugin/poplar/driver/threestate.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
@@ -378,6 +379,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.speed_size_config().allow_recompute();
   }
 
+  ThreeState RemoteBufferMergingMode() const {
+    return current_config_.remote_buffer_merging_mode();
+  }
+
   poplar::OptionFlags GetConvolutionOptions() const { return conv_options_; }
 
   poplar::OptionFlags GetMatMulOptions() const { return matmul_options_; }
@@ -634,11 +639,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
           fn(fn),
           streamed(streamed),
           remote_parameter_info(remote_parameter_info) {}
-    InputDef(const InputDef& other)
-        : tc(other.tc),
-          fn(other.fn),
-          streamed(other.streamed),
-          remote_parameter_info(other.remote_parameter_info) {}
+    InputDef(const InputDef& other) = default;
   };
   using InputPairList = std::vector<InputDef>;
   using ArgsHandleMap = std::map<std::string, InputDef>;

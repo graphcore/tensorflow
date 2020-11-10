@@ -26,6 +26,7 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 # pylint: disable=unused-import
 # These imports are only here to make it easier for the Tensorflow Wheel users
@@ -397,6 +398,7 @@ def create_ipu_config(profiling=False,
   opts.disable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
+  opts.remote_buffer_merging_mode = threestate_pb2.THREESTATE_OFF
 
   # Configure IpuOptions according to the passed arguments.
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
@@ -471,6 +473,7 @@ def set_optimization_options(opts,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
                              minimum_remote_tensor_size=128,
+                             merge_remote_buffers=False,
                              gather_simplifier=True,
                              triangular_solve_expander_block_size=0,
                              enable_fast_math=False):
@@ -503,6 +506,15 @@ def set_optimization_options(opts,
       These are lowered to stream copies that can be merged by Poplar.
     minimum_remote_tensor_size: The minimum size (in bytes) a tensor has to be
       in order to be consider for being stored in remote memory.
+    merge_remote_buffers: Whether to merge compatible remote buffers. Merging
+      of remote buffers can allow for more code re-use if the only difference
+      between computations are the remote buffers being accessed. One of:
+        - False: Do not attempt to merge any remote buffers.
+        - True: Attempt to merge all compatible remote buffers.
+        - None: Merge remote buffers only when it is considered beneficial
+          according to a simple heuristic predicting its possibility to enable
+          code re-use (the default).
+
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
@@ -517,6 +529,13 @@ def set_optimization_options(opts,
   Returns:
     The IpuOptions configuration protobuf.
   """
+  def bool_to_three_state(value):
+    if value is None:
+      return threestate_pb2.THREESTATE_UNDEFINED
+    elif value:
+      return threestate_pb2.THREESTATE_ON
+    return threestate_pb2.THREESTATE_OFF
+
   # Internally embedding lookups are implemented using multiSlice operations.
   opts.enable_multi_slice_combiner = combine_embedding_lookups
   opts.enable_matmul_combiner = combine_matmuls
@@ -525,6 +544,7 @@ def set_optimization_options(opts,
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.minimum_remote_tensor_size = minimum_remote_tensor_size
+  opts.remote_buffer_merging_mode = bool_to_three_state(merge_remote_buffers)
   opts.disable_gather_simplifier = not gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size

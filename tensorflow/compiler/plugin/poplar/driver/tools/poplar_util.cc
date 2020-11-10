@@ -362,6 +362,42 @@ bool IsReplicaPartitioned(const HloInstruction* inst,
          IsReplicaPartitioned(inst->parameter_number(), res);
 }
 
+StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
+    poplar::Graph& graph, CompilerResources& res,
+    std::string remote_buffer_name, poplar::Type element_type,
+    int64 element_count, int64 num_repeats, int64 num_merged,
+    bool is_replica_partitioned) {
+  auto found_buffer = res.remote_buffers.find(remote_buffer_name);
+  if (found_buffer != res.remote_buffers.end()) {
+    // Return the existing remote buffer.
+    return TensorOrRemoteBuffer(found_buffer->second, is_replica_partitioned,
+                                num_merged);
+  }
+
+  // Create a new remote buffer.
+  if (is_replica_partitioned) {
+    const std::size_t grain_size =
+        4 / graph.getTarget().getTypeSize(element_type);
+
+    element_count = grain_size * tensorflow::MathUtil::CeilOfRatio<int64>(
+                                     tensorflow::MathUtil::CeilOfRatio<int64>(
+                                         element_count, grain_size),
+                                     res.replication_factor);
+  }
+
+  const int64 total_num_repeats = num_merged * num_repeats;
+
+  poplar::RemoteBuffer remote_buffer = graph.addRemoteBuffer(
+      remote_buffer_name, element_type, element_count, total_num_repeats,
+      /*rearrangeOnHost=*/true);
+
+  // Save the buffer such that the others that we have merged with can find it.
+  CHECK(res.remote_buffers.emplace(remote_buffer_name, remote_buffer).second);
+
+  return TensorOrRemoteBuffer(remote_buffer, is_replica_partitioned,
+                              num_merged);
+}
+
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res) {
   auto call_sites =
       res.module_call_graph->GetNode(inst->parent()).caller_callsites();
@@ -729,31 +765,25 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
   return deferred_inputs;
 }
 
-void ZeroRemoteBuffers(CompilerResources& res, poplar::Graph& graph,
-                       const std::vector<poplar::RemoteBuffer>& remote_buffers,
-                       poplar::program::Sequence& sequence) {
-  // Hold onto the constant zeros by type.
-  absl::flat_hash_map<poplar::Type, poplar::Tensor, PoplarTypeHasher> zeros;
+void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
+                      poplar::RemoteBuffer& remote_buffer, int64 offset,
+                      poplar::program::Sequence& sequence) {
+  poplar::Tensor zero = graph.addConstant(remote_buffer.elementType(), {1}, 0);
+  MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
 
-  for (auto& remote_buffer : remote_buffers) {
-    // Check if we have a constant zero, to save poplar a little effort.
-    auto itr = zeros.find(remote_buffer.elementType());
-    poplar::Tensor zero;
-    if (itr == zeros.end()) {
-      // Create a const zero tensor.
-      zero = graph.addConstant(remote_buffer.elementType(), {1}, 0);
-      MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
-      zeros[remote_buffer.elementType()] = zero;
-    } else {
-      // Use an existing constant zero.
-      zero = itr->second;
-    }
+  // Broadcast up to the number of elements in the remote buffer.
+  zero = zero.broadcast(remote_buffer.numElements(), 0);
 
-    // Broadcast up to the number of elements in the remote buffer.
-    zero = zero.broadcast(remote_buffer.numElements(), 0);
-
-    // Copy the zero into the remote buffer.
+  // Copy the zero into the remote buffer at the right offset.
+  CHECK_LT(offset, remote_buffer.getRepeats());
+  if (offset == 0) {
     sequence.add(poplar::program::Copy(zero, remote_buffer));
+  } else {
+    poplar::Tensor offset_tensor =
+        graph.addConstant(poplar::UNSIGNED_INT, {1}, offset);
+    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
+                                     offset_tensor);
+    sequence.add(poplar::program::Copy(zero, remote_buffer, offset_tensor));
   }
 }
 

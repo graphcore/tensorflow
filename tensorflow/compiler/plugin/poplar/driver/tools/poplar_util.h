@@ -130,6 +130,15 @@ bool IsReplicaPartitioned(int64 parameter_number, const CompilerResources& res);
 bool IsReplicaPartitioned(const HloInstruction* inst,
                           const CompilerResources& res);
 
+StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
+    poplar::Graph& graph, CompilerResources& res,
+    std::string remote_buffer_name, poplar::Type element_type,
+    int64 element_count, int64 num_repeats, int64 num_merged,
+    bool is_replica_partitioned = false);
+
+StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteParameterBuffer(
+    const HloInstruction* inst, CompilerResources& res);
+
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
 
 StatusOr<std::string> GetInstructionCompilationInfo(
@@ -179,11 +188,10 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const VerifiedStreamsIndices::KeyIdMappings& indices,
     const std::vector<string>& checkpoint_feeds_order);
 
-// Zero the given remote buffers
-void ZeroRemoteBuffers(
-    CompilerResources& res, poplar::Graph& graph,
-    const ::std::vector<poplar::RemoteBuffer>& remote_buffers,
-    poplar::program::Sequence& sequence);
+// Zero the given remote buffer at the given repeat offset.
+void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
+                      poplar::RemoteBuffer& remote_buffer, int64 offset,
+                      poplar::program::Sequence& sequence);
 
 // Zero the given tensors efficiently.
 void ZeroTensors(CompilerResources& res, poplar::Graph& graph,

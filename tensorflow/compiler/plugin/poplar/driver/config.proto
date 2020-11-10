@@ -3,6 +3,7 @@ syntax = "proto3";
 package xla.poplarplugin;
 
 import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/threestate.proto";
 
 enum IpuSelectionOrder {
   AUTO = 0;
@@ -265,4 +266,11 @@ message IpuOptions {
   // Whether to enable remote buffers for the compilations without devices
   // attached.
   bool enable_remote_buffers_without_device = 39;
+
+  // Control the merging mode for compatible remote buffers.
+  // THREESTATE_OFF: Do not attempt to merge any remote buffers.
+  // THREESTATE_ON: Attempt to merge all compatible remote buffers.
+  // THREESTATE_UNDEFINED: Merge remote buffers only when it is
+  //     considered beneficial to enable code re-use.
+  ThreeState remote_buffer_merging_mode = 40;
 };

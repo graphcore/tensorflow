@@ -42,6 +42,7 @@ limitations under the License.
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
@@ -113,6 +114,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_checkpoint_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_input_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_parameter_parallel_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
@@ -1280,6 +1282,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
+    pipeline.AddPass<RemoteBufferMerger>(
+        resources.annotations, poplar_executor->RemoteBufferMergingMode());
     pipeline.AddPass<RemoteParameterParallelCombiner>();
     pipeline.AddPass<AllocationFinder>(
         resources.annotations, resources.always_rearrange_copies_on_host);

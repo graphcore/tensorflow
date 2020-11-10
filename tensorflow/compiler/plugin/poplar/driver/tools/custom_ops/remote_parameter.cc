@@ -229,9 +229,13 @@ static HloPoplarInstructionFactory remote_parameter_store_factory(
     PoplarOp::RemoteParameterStore, HloRemoteParameterStoreFactoryFunc);
 }  // namespace
 
-HloCreateBuffer::HloCreateBuffer(const Shape& shape, bool is_remote)
-    : HloPoplarInstruction(shape, {}, PoplarOp::CreateBuffer, is_remote),
-      is_remote_(is_remote) {
+HloCreateBuffer::HloCreateBuffer(
+    const Shape& shape, bool is_remote,
+    absl::optional<HloRemoteBufferInfo> remote_buffer_info)
+    : HloPoplarInstruction(shape, {}, PoplarOp::CreateBuffer, is_remote,
+                           remote_buffer_info),
+      is_remote_(is_remote),
+      remote_buffer_info_(remote_buffer_info) {
   CHECK(!shape.IsTuple());
   // Set the instruction to have side effect to prevent it from being merged
   // with other similarly shaped buffers.
@@ -250,6 +254,20 @@ uint64 HloCreateBuffer::NumberOfInplaceOperands() const { return 0; }
 
 bool HloCreateBuffer::IsPopOpsElementwise() const { return false; }
 
+absl::optional<HloRemoteBufferInfo> HloCreateBuffer::RemoteBufferInfo() const {
+  CHECK(is_remote_);
+  return remote_buffer_info_;
+}
+
+std::unique_ptr<HloInstruction> HloCreateBuffer::CloneWithRemoteBufferInfo(
+    const HloRemoteBufferInfo& info) const {
+  CHECK(is_remote_);
+  auto clone = absl::make_unique<HloCreateBuffer>(shape(), is_remote_, info);
+  SetupDerivedInstruction(clone.get());
+  clone->set_raw_backend_config_string(raw_backend_config_string());
+  return clone;
+}
+
 std::unique_ptr<HloInstruction> HloCreateBuffer::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
@@ -261,12 +279,21 @@ std::vector<std::string> HloCreateBuffer::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back("is_remote=" + std::to_string(is_remote_));
+
+  if (remote_buffer_info_.has_value()) {
+    attributes.push_back("remote_buffer_name=" + remote_buffer_info_->name);
+    attributes.push_back("remote_buffer_num_merged=" +
+                         std::to_string(remote_buffer_info_->num_merged));
+    attributes.push_back("remote_buffer_merge_offset=" +
+                         std::to_string(remote_buffer_info_->merge_offset));
+  }
+
   return attributes;
 }
 
 std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
                                                       bool is_remote) {
-  return absl::make_unique<HloCreateBuffer>(shape, is_remote);
+  return absl::make_unique<HloCreateBuffer>(shape, is_remote, absl::nullopt);
 }
 
 namespace {

@@ -373,16 +373,20 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     }
 
     if (out.IsRemoteBuffer()) {
+      const auto merged_element_count = out.AsRemoteBuffer().numElements() *
+                                        out.AsRemoteBuffer().getRepeats();
+      CHECK_GT(out.NumMerged(), 0);
+      CHECK_EQ(merged_element_count % out.NumMerged(), 0);
+      const auto element_count = merged_element_count / out.NumMerged();
+
       // Check shape of non-replicated case
       if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
           ((resources_.replication_factor < 2) ||
            !out.IsReplicaPartitioned())) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
-            out.AsRemoteBuffer().numElements() *
-                out.AsRemoteBuffer().getRepeats(),
-            ") and XLA (", Join(shape.dimensions(), ","), ") shapes. ",
-            __FUNCTION__, " ", __LINE__);
+            element_count, ") and XLA (", Join(shape.dimensions(), ","),
+            ") shapes. ", __FUNCTION__, " ", __LINE__);
       }
 
       // Check shape of replicated case
@@ -390,11 +394,9 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
           (resources_.replication_factor > 1) && out.IsReplicaPartitioned()) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
-            out.AsRemoteBuffer().numElements() *
-                out.AsRemoteBuffer().getRepeats() *
-                resources_.replication_factor,
-            ") and XLA (", Join(shape.dimensions(), ","),
-            ") replica partitioned shapes. ", __FUNCTION__, " ", __LINE__);
+            element_count * resources_.replication_factor, ") and XLA (",
+            Join(shape.dimensions(), ","), ") replica partitioned shapes. ",
+            __FUNCTION__, " ", __LINE__);
       }
 
       // Check type
