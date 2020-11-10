@@ -867,15 +867,14 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
          ++replica_id) {
       auto& replica_queues = queues[replica_id];
       for (size_t j = 0; j < shapes.size(); ++j) {
-        const auto length = ShapeUtil::ByteSizeOf(shapes[j]);
-        const auto bytes_per_replica = length / current_replication_factor_;
+        const auto bytes = ShapeUtil::ByteSizeOf(shapes[j]);
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
           infeed_callback = absl::make_unique<NullPrefetchCallback>(
-              GetInfeedAllocator(), bytes_per_replica);
+              GetInfeedAllocator(), bytes);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
-              replica_queues[j], bytes_per_replica);
+              replica_queues[j], bytes);
         }
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
@@ -955,48 +954,33 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
         VLOG(2) << "Infeed queue is empty.";
       }
 
-      std::vector<tensorflow::Tensor> outputs;
-      bool end_of_sequence = false;
-      TF_RETURN_IF_ERROR(
-          infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence));
+      // Enqueue tensors to each replica.
+      for (size_t replica_id = 0; replica_id != current_replication_factor_;
+           ++replica_id) {
+        std::vector<tensorflow::Tensor> outputs;
+        bool end_of_sequence = false;
+        TF_RETURN_IF_ERROR(
+            infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence));
 
-      if (end_of_sequence) {
-        VLOG(1) << "The dataset iterator has reached the end of the dataset.";
+        if (end_of_sequence) {
+          VLOG(1) << "The dataset iterator has reached the end of the dataset.";
 
-        for (auto& queues : infeed_queues) {
-          for (auto& queue : queues) {
-            queue->SignalEndOfQueue();
+          for (auto& queues : infeed_queues) {
+            for (auto& queue : queues) {
+              queue->SignalEndOfQueue();
+            }
           }
+
+          // This is not considered an error. However, we will report an
+          // error if the consumer tries to pop past the end of the queue.
+          return Status::OK();
         }
 
-        // This is not considered an error. However, we will report an
-        // error if the consumer tries to pop past the end of the queue.
-        return Status::OK();
-      }
-
-      for (size_t j = 0; j < outputs.size(); ++j) {
-        auto& tensor = outputs[j];
-        std::vector<tensorflow::Tensor> tensor_slices;
-        if (current_replication_factor_ > 1) {
-          // For replicated graphs, slice the input tensor and enqueue
-          // it separately for each replica.
-          CHECK_EQ(tensor.dim_size(0), current_replication_factor_);
-          tensor_slices.reserve(current_replication_factor_);
-          for (auto replica_id = 0; replica_id < current_replication_factor_;
-               ++replica_id) {
-            // Note that the tensor_slice shares the data buffer with the
-            // tensor which works with ref counting.
-            tensor_slices.push_back(tensor.SubSlice(replica_id));
-          }
-        } else {
-          tensor_slices = {tensor};
-        }
-
-        // Enqueue tensors to each replica.
-        for (size_t replica_id = 0; replica_id < tensor_slices.size();
-             replica_id++) {
+        for (size_t j = 0; j != outputs.size(); ++j) {
           auto& queue = infeed_queues[replica_id][j];
-          auto* tb = tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
+          auto* tb = tensorflow::DMAHelper::buffer(&outputs[j]);
+          // Increase the refcount for the buffer whilst it is in the infeed
+          // queue.
           tb->Ref();
           queue->BlockPush(tb);
           queue->AdvanceWritePosition();

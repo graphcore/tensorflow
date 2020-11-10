@@ -23,6 +23,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.data.ops import dataset_ops as ipu_dataset_ops
 
 
 class IPUInfeedQueue:
@@ -171,8 +172,8 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
                                             drop_remainder=True)
 
       if self._replication_factor != 1:
-        self._dataset = self._dataset.batch(self._replication_factor,
-                                            drop_remainder=True)
+        self._dataset = ipu_dataset_ops.BufferDataset(self._dataset,
+                                                      self._replication_factor)
 
       # Apply the dataset and take ownership.
       self._dataset = self._dataset._apply_options()
