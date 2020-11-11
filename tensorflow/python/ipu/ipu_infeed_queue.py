@@ -171,12 +171,13 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
         self._dataset = self._dataset.batch(self._io_batch_size,
                                             drop_remainder=True)
 
+      # Apply the dataset options - do this before replica handling to make sure
+      # all the optimizations can be applied.
+      self._dataset = self._dataset._apply_options()  # pylint: disable=protected-access
+
       if self._replication_factor != 1:
         self._dataset = ipu_dataset_ops.BufferDataset(self._dataset,
                                                       self._replication_factor)
-
-      # Apply the dataset and take ownership.
-      self._dataset = self._dataset._apply_options()
 
       # ID used for differentiating between datasets.
       self._id = str(feed_name)
