@@ -1591,7 +1591,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with session_lib.Session() as sess:
       with self.assertRaisesRegex(
           errors.FailedPreconditionError,
-          "Unsupprted datatype int64 on index 0 of feed operation"):
+          "Unsupported datatype int64 on index 0 of feed operation"):
         sess.run(infeed_queue.initializer)
 
   @test_util.deprecated_graph_mode_only

@@ -24,8 +24,10 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import backprop
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.tests import pipelining_test_util
+from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
@@ -949,6 +951,62 @@ class IPUModelTest(test.TestCase):
       self.assertEqual(len(result), 1)
       self.assertEqual(type(result[0]), np.ndarray)
       self.assertEqual(result[0].shape, (96, 2))
+
+  @test_util.run_v2_only
+  def testAutocast_V2DtypeBehaviourTrue(self):
+    base_layer_utils.enable_v2_dtype_behavior()
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([72, 32], 1.0, dtype=np.float64)
+      input_y = np.full([72, 2], 0.2, dtype=np.float64)
+
+      m.fit(input_x, input_y, batch_size=2)
+      m.predict(input_x, batch_size=2)
+      m.evaluate(input_x, input_y, batch_size=2)
+
+      # No exceptions thrown
+
+  @test_util.run_v2_only
+  def testAutocast_V2DtypeBehaviourFalse(self):
+    base_layer_utils.disable_v2_dtype_behavior()
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([72, 32], 1.0, dtype=np.float64)
+      input_y = np.full([72, 2], 0.2, dtype=np.float64)
+
+      with self.assertRaisesWithPredicateMatch(errors.FailedPreconditionError,
+                                               "Unsupported datatype double"):
+        m.predict(input_x, batch_size=2)
+
+      with self.assertRaisesWithPredicateMatch(errors.FailedPreconditionError,
+                                               "Unsupported datatype double"):
+        m.evaluate(input_x, input_y, batch_size=2)
+
+      with self.assertRaisesWithPredicateMatch(errors.FailedPreconditionError,
+                                               "Unsupported datatype double"):
+        m.fit(input_x, input_y, batch_size=2)
 
 
 if __name__ == '__main__':

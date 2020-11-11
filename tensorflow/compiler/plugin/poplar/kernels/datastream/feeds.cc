@@ -109,7 +109,7 @@ void GetFeedConfig(OpKernelConstruction* ctx,
       std::string acceptable =
           absl::StrJoin(ok_types, ",", TypeToStringFormatter());
       ctx->CtxFailureWithWarning(errors::FailedPrecondition(
-          "Unsupprted datatype ", DataTypeString(types[i]), " on index ", i,
+          "Unsupported datatype ", DataTypeString(types[i]), " on index ", i,
           " of feed operation ", ctx->def().name(), " with feed id '", feed_id,
           "'. You should use a tf.DataSet.map() operation to cast the element "
           "into one of (",

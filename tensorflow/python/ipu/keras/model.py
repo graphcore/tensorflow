@@ -58,6 +58,8 @@ from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
 from tensorflow.python.util import tf_inspect
+from tensorflow.python import cast
+from tensorflow.python import dtypes
 
 
 def _validate_args(kwargs, fn):
@@ -98,28 +100,48 @@ def _get_dataset_and_count(x, y, batch_size):
   adapter = adapter_cls(x, y, batch_size=batch_size)
 
   dataset = adapter.get_dataset()
+  original_dataset = dataset
   size = adapter.get_size()
 
   if adapter.has_partial_batch():
-    original_dataset = dataset
     dataset = dataset.unbatch()
     # Remove the partial batch from the dataset.
     dataset = dataset.batch(batch_size, drop_remainder=True)
 
-    # Check whether the dataset should be prefetched.
-    prefetch_buffer = None
-    if isinstance(original_dataset, dataset_ops.PrefetchDataset):
-      prefetch_buffer = original_dataset._buffer_size  # pylint: disable=protected-access
-    elif (isinstance(original_dataset, dataset_ops.DatasetV1Adapter) and
-          isinstance(original_dataset._dataset, dataset_ops.PrefetchDataset)):  # pylint: disable=protected-access
-      prefetch_buffer = original_dataset._dataset._buffer_size  # pylint: disable=protected-access
-
-    if prefetch_buffer is not None:
-      dataset = dataset.prefetch(prefetch_buffer)
-
     size -= 1
 
+  dataset = _autocast_dataset(dataset)
+
+  # Check whether the dataset should be prefetched.
+  prefetch_buffer = None
+  if isinstance(original_dataset, dataset_ops.PrefetchDataset):
+    prefetch_buffer = original_dataset._buffer_size  # pylint: disable=protected-access
+  elif (
+      isinstance(original_dataset, dataset_ops.DatasetV1Adapter)
+      and isinstance(original_dataset._dataset, dataset_ops.PrefetchDataset)):  # pylint: disable=protected-access
+    prefetch_buffer = original_dataset._dataset._buffer_size  # pylint: disable=protected-access
+
+  if prefetch_buffer is not None:
+    dataset = dataset.prefetch(prefetch_buffer)
+
   return dataset, size
+
+
+def _autocast_dataset(dataset):
+  if (not base_layer_utils.v2_dtype_behavior_enabled()
+      or not any(spec.dtype == dtypes.float64
+                 for spec in nest.flatten(dataset.element_spec))):
+    return dataset
+
+  def autocast_tensors(*tensors):
+    def autocast_tensor(tensor):
+      if tensor.dtype == dtypes.float64:
+        return cast(tensor, dtypes.float32)
+      return tensor
+
+    return [autocast_tensor(tensor) for tensor in tensors]
+
+  return dataset.map(autocast_tensors)
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
