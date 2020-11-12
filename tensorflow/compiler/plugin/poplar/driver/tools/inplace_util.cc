@@ -381,7 +381,6 @@ HloInstructionDescription::HloInstructionDescription(
     // Inplace read/write ops.
     // Unary Elementwise ops - inplace on operand 0.
     case HloOpcode::kAbs:
-    case HloOpcode::kBitcastConvert:
     case HloOpcode::kCeil:
     case HloOpcode::kClz:
     case HloOpcode::kCos:
@@ -587,6 +586,7 @@ HloInstructionDescription::HloInstructionDescription(
     // Inplace read-only ops.
     // These ops are implemented as inplace ops on operand 0.
     case HloOpcode::kAddDependency:
+    case HloOpcode::kBitcastConvert:
     case HloOpcode::kBroadcast:
     case HloOpcode::kReshape:
     case HloOpcode::kReverse:
