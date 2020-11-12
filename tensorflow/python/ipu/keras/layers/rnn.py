@@ -573,7 +573,7 @@ class PopnnGRU(_PopnnRNN):
   reversed.
   The first one is the default behaviour for this implementation, however the
   Keras equivalent can use the second variant. To use this variant,
-  set `'reset_after'=True` (currently unsupported).
+  set `'reset_after'=True`.
 
   Note that the Keras equivalent uses the `hard_sigmoid` as the default
   recurrent activation, however this version uses `sigmoid` as the default.
@@ -649,9 +649,9 @@ class PopnnGRU(_PopnnRNN):
       `recurrent_initializer`.
     partials_dtype: the type used by Popnn to perform partial calculations.
       Either tf.float16 or tf.float32.
-    reset_after:  Unsupported - GRU convention (whether to apply reset gate
-      after or before matrix multiplication). False = "before" (default),
-      True = "after".
+    reset_after:  GRU convention (whether to apply reset gate
+      after or before matrix multiplication). False = "before",
+      True = "after" (default).
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -681,7 +681,7 @@ class PopnnGRU(_PopnnRNN):
                go_backwards=False,
                stateful=False,
                unroll=False,
-               reset_after=False,
+               reset_after=True,
                seed=None,
                partials_dtype=dtypes.float32,
                time_major=False,
@@ -741,8 +741,7 @@ class PopnnGRU(_PopnnRNN):
     if unroll:
       raise ValueError("IPU custom GRU layer does not support unroll.")
 
-    if reset_after:
-      raise ValueError("IPU custom GRU layer does not support reset_after.")
+    self._reset_after = reset_after
 
     super(PopnnGRU, self).__init__(num_units=units,
                                    partials_dtype=partials_dtype,
@@ -757,6 +756,12 @@ class PopnnGRU(_PopnnRNN):
                                    time_major=time_major,
                                    stateful=stateful,
                                    **kwargs)
+
+  def _canonical_bias_shape(self, unused_layer):
+    """Shapes of Popnn canonical bias tensors for given layer."""
+    if self._reset_after:
+      return [2, self._num_gates_per_layer * self._num_units]
+    return super()._canonical_bias_shape(unused_layer)
 
   def build(self, input_shape):
     """Create variables of the PopnnGRU layer.
@@ -831,8 +836,15 @@ class PopnnGRU(_PopnnRNN):
 
     combined_kernel = array_ops.concat([self.kernel, self.recurrent_kernel], 0)
 
-    bias_tensor = array_ops.reshape(
-        self.biases, [self._num_gates_per_layer, self._num_units])
+    if self._reset_after:
+      # New shape: [self._num_gates_per_layer, 2, self._num_units]
+      bias_tensor = array_ops.stack(
+          array_ops.split(self.biases,
+                          [self._num_units] * self._num_gates_per_layer,
+                          axis=1))
+    else:
+      bias_tensor = array_ops.reshape(
+          self.biases, [self._num_gates_per_layer, self._num_units])
 
     output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
@@ -842,7 +854,8 @@ class PopnnGRU(_PopnnRNN):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
-        name=self._name)
+        name=self._name,
+        reset_after=self._reset_after)
 
     if self._stateful:
       updates = [state_ops.assign(self.states[0], output_state)]

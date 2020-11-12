@@ -21,13 +21,40 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace rnn_helper {
+// Helper for parsing the attribute map when converting a custom call
+// instruction for an GRU.
+struct GRUAttributes : public RNNAttributes {
+  static StatusOr<GRUAttributes> Parse(const HloCustomCallInstruction* call);
+  GRUAttributes() = delete;
 
-class HloGRUFwdInstruction : public HloRNNFwdInstruction {
+  bool reset_after;
+
+ protected:
+  GRUAttributes(int32 num_channels, bool is_training,
+                xla::PrimitiveType partials_xla_type, bool reset_after);
+};
+}  // namespace rnn_helper
+
+class HloGRUInstructionCommon {
+ protected:
+  explicit HloGRUInstructionCommon(bool reset_after);
+
+ public:
+  bool reset_after() const;
+
+ private:
+  bool reset_after_;
+};
+
+class HloGRUFwdInstruction : public HloRNNFwdInstruction,
+                             public HloGRUInstructionCommon {
  public:
   explicit HloGRUFwdInstruction(const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type);
+                                xla::PrimitiveType partials_type,
+                                bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -37,12 +64,14 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction {
       HloCloneContext* ctx) const override;
 };
 
-class HloGRUBwdInstruction : public HloRNNBwdInstruction {
+class HloGRUBwdInstruction : public HloRNNBwdInstruction,
+                             public HloGRUInstructionCommon {
  public:
   explicit HloGRUBwdInstruction(const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type);
+                                xla::PrimitiveType partials_type,
+                                bool reset_after);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -52,11 +81,13 @@ class HloGRUBwdInstruction : public HloRNNBwdInstruction {
 
 std::unique_ptr<HloInstruction> CreateGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
 
 std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
 }  // namespace poplarplugin
 }  // namespace xla
 

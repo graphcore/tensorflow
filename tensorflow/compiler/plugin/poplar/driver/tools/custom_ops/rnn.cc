@@ -46,17 +46,6 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
 }
 }  // namespace rnn_helper
 
-HloRNNInstruction::HloRNNInstruction(const Shape& shape,
-                                     absl::Span<HloInstruction* const> operands,
-                                     PoplarOp op, bool is_training,
-                                     int32 num_channels,
-                                     xla::PrimitiveType partials_type)
-    : HloPoplarInstruction(shape, operands, op, is_training, num_channels,
-                           partials_type),
-      is_training_(is_training),
-      num_channels_(num_channels),
-      partials_type_(partials_type) {}
-
 bool HloRNNInstruction::is_training() const { return is_training_; }
 int32 HloRNNInstruction::num_channels() const { return num_channels_; }
 xla::PrimitiveType HloRNNInstruction::partials_type() const {
@@ -74,13 +63,6 @@ std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-HloRNNFwdInstruction::HloRNNFwdInstruction(
-    PoplarOp op, const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNInstruction(shape, operands, op, is_training, num_channels,
-                        partials_type),
-      op_(op) {}
-
 absl::flat_hash_map<int64, int64> HloRNNFwdInstruction::LayoutDependencies()
     const {
   return {};
@@ -89,13 +71,6 @@ absl::flat_hash_map<int64, int64> HloRNNFwdInstruction::LayoutDependencies()
 uint64 HloRNNFwdInstruction::NumberOfInplaceOperands() const { return 0; }
 
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
-
-HloRNNBwdInstruction::HloRNNBwdInstruction(
-    PoplarOp op, const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNInstruction(shape, operands, op, is_training, num_channels,
-                        partials_type),
-      op_(op) {}
 
 absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {
   return {};

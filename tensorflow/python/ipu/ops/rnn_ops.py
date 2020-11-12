@@ -385,7 +385,8 @@ class PopnnGRU(_PopnnRNN):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
-               name=None):
+               name=None,
+               reset_after=False):
     """Creates a PopnnGRU model from model spec.
 
     Args:
@@ -402,6 +403,11 @@ class PopnnGRU(_PopnnRNN):
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
+      reset_after:  GRU convention (whether to apply reset gate
+        after or before matrix multiplication). False = "before" (default),
+        True = "after".
+        Leave as default (False) to match the behaviour of the standard
+        TensorFlow GRU.
     """
     super(PopnnGRU, self).__init__(num_units=num_units,
                                    dtype=dtype,
@@ -410,6 +416,7 @@ class PopnnGRU(_PopnnRNN):
                                    weights_initializer=weights_initializer,
                                    bias_initializer=bias_initializer,
                                    name=name)
+    self._reset_after = reset_after
 
   def build(self, input_shape):
     """Create variables of the PopnnGRU.
@@ -484,5 +491,12 @@ class PopnnGRU(_PopnnRNN):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
-        name=self._name)
+        name=self._name,
+        reset_after=self._reset_after)
     return output, output_c
+
+  def _canonical_bias_shape(self, unused_layer):
+    """Shapes of Popnn canonical bias tensors for given layer."""
+    if self._reset_after:
+      return [self._num_gates_per_layer, 2, self._num_units]
+    return super()._canonical_bias_shape(unused_layer)

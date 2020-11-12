@@ -18,7 +18,9 @@ limitations under the License.
 #include <popnn/LstmDef.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 namespace xla {
@@ -103,6 +105,16 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
   gru_params.calcInputGradients = gru_inst->is_training();
   gru_params.cellOrder = {BASIC_GRU_CELL_UPDATE_GATE, BASIC_GRU_CELL_RESET_GATE,
                           BASIC_GRU_CELL_CANDIDATE};
+
+  const HloGRUInstructionCommon* gru_common_inst;
+  if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst)) {
+    gru_common_inst = Cast<HloGRUFwdInstruction>(inst);
+  } else {
+    // If inst is not a GRULayerFwd assume it is a GRULayerBwd
+    gru_common_inst = Cast<HloGRUBwdInstruction>(inst);
+  }
+  gru_params.resetAfter = gru_common_inst->reset_after();
+
   return gru_params;
 }
 

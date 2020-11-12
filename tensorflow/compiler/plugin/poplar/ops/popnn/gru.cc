@@ -32,6 +32,7 @@ REGISTER_OP("PopnnGRULayer")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
       TF_RETURN_IF_ERROR(c->GetAttr("num_channels", &num_channels));
@@ -69,6 +70,7 @@ REGISTER_OP("PopnnGRULayerBackprop")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
       auto in_state_shape = c->input(1);
