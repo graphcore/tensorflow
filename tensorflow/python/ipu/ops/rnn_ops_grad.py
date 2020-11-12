@@ -61,4 +61,5 @@ def _popnn_gru_layer_backward(op, *grads):
       output_state_backprop=grads[1],
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
-      is_training=op.get_attr("is_training"))
+      is_training=op.get_attr("is_training"),
+      reset_after=op.get_attr("reset_after"))

@@ -48,6 +48,8 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after_));
+    attribute_map_.AddAttribute("reset_after", reset_after_);
   }
 
  public:
@@ -83,20 +85,30 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
                     input_size + num_channels_, 3 * num_channels_)));
 
     TensorShape expected_biases_shape;
-    TensorShapeUtils::MakeShape(std::vector<int64>({3, num_channels_}),
-                                &expected_biases_shape);
-    OP_REQUIRES(
-        ctx, ctx->InputShape(3) == expected_biases_shape,
-        errors::InvalidArgument(absl::StrFormat(
-            "The biases tensor needs to be of shape [3, %u].", num_channels_)));
+    if (reset_after_) {
+      TensorShapeUtils::MakeShape(std::vector<int64>({3, 2, num_channels_}),
+                                  &expected_biases_shape);
+      OP_REQUIRES(ctx, ctx->InputShape(3) == expected_biases_shape,
+                  errors::InvalidArgument(absl::StrFormat(
+                      "The biases tensor needs to be of shape [3, 2, %u].",
+                      num_channels_)));
+    } else {
+      TensorShapeUtils::MakeShape(std::vector<int64>({3, num_channels_}),
+                                  &expected_biases_shape);
+      OP_REQUIRES(ctx, ctx->InputShape(3) == expected_biases_shape,
+                  errors::InvalidArgument(absl::StrFormat(
+                      "The biases tensor needs to be of shape [3, %u].",
+                      num_channels_)));
+    }
 
     xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, batch_size, num_channels_});
     xla::Shape output_state_shape =
         xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
     // The 3 in intermidate shape represents the number of gates.
+    int num_intermediates = reset_after_ ? 4 : 3;
     xla::Shape intermediates_shape = xla::ShapeUtil::MakeShape(
-        input_type, {time_steps, 3, batch_size, num_channels_});
+        input_type, {time_steps, num_intermediates, batch_size, num_channels_});
 
     std::vector<xla::Shape> output_shapes = {output_seq_shape,
                                              output_state_shape};
@@ -136,6 +148,7 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
  private:
   bool is_training_;
   int32 num_channels_;
+  bool reset_after_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGRULayerOp);
 };
@@ -154,6 +167,9 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
+    bool reset_after;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after));
+    attribute_map_.AddAttribute("reset_after", reset_after);
   }
 
  public:

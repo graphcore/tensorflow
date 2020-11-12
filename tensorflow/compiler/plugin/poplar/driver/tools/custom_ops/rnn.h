@@ -33,7 +33,7 @@ struct RNNAttributes {
   bool is_training;
   xla::PrimitiveType partials_xla_type;
 
- private:
+ protected:
   RNNAttributes(int32 num_channels, bool is_training,
                 xla::PrimitiveType partials_xla_type);
 };
@@ -41,10 +41,17 @@ struct RNNAttributes {
 
 class HloRNNInstruction : public HloPoplarInstruction {
  public:
+  template <typename... Args>
   explicit HloRNNInstruction(const Shape& shape,
                              absl::Span<HloInstruction* const> operands,
                              PoplarOp op, bool is_training, int32 num_channels,
-                             xla::PrimitiveType partials_type);
+                             xla::PrimitiveType partials_type,
+                             Args&&... attributes)
+      : HloPoplarInstruction(shape, operands, op, is_training, num_channels,
+                             partials_type, attributes...),
+        is_training_(is_training),
+        num_channels_(num_channels),
+        partials_type_(partials_type) {}
 
   bool is_training() const;
   int32 num_channels() const;
@@ -62,10 +69,15 @@ class HloRNNInstruction : public HloPoplarInstruction {
 
 class HloRNNFwdInstruction : public HloRNNInstruction {
  public:
+  template <typename... Args>
   explicit HloRNNFwdInstruction(PoplarOp op, const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type);
+                                xla::PrimitiveType partials_type,
+                                Args&&... attributes)
+      : HloRNNInstruction(shape, operands, op, is_training, num_channels,
+                          partials_type, attributes...),
+        op_(op) {}
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
@@ -77,10 +89,15 @@ class HloRNNFwdInstruction : public HloRNNInstruction {
 
 class HloRNNBwdInstruction : public HloRNNInstruction {
  public:
+  template <typename... Args>
   explicit HloRNNBwdInstruction(PoplarOp op, const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type);
+                                xla::PrimitiveType partials_type,
+                                Args&&... attributes)
+      : HloRNNInstruction(shape, operands, op, is_training, num_channels,
+                          partials_type, attributes...),
+        op_(op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;

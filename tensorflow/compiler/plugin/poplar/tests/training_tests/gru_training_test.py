@@ -47,7 +47,23 @@ def _PopnnGRU(x, initial_state, y):
       num_hidden,
       dtype=dataType,
       weights_initializer=init_ops.zeros_initializer(dtype=dataType),
-      bias_initializer=init_ops.zeros_initializer(dtype=dataType))
+      bias_initializer=init_ops.zeros_initializer(dtype=dataType),
+      reset_after=False)
+  outputs, _ = gru_cell(x, initial_state=initial_state, training=True)
+  softmax = nn.softmax_cross_entropy_with_logits_v2(
+      logits=outputs[-1], labels=array_ops.stop_gradient(y))
+  loss = math_ops.reduce_mean(softmax)
+  train = gradient_descent.GradientDescentOptimizer(lr).minimize(loss)
+  return [loss, train]
+
+
+def _PopnnGRU_ResetAfter(x, initial_state, y):
+  gru_cell = ipu.ops.rnn_ops.PopnnGRU(
+      num_hidden,
+      dtype=dataType,
+      weights_initializer=init_ops.zeros_initializer(dtype=dataType),
+      bias_initializer=init_ops.zeros_initializer(dtype=dataType),
+      reset_after=True)
   outputs, _ = gru_cell(x, initial_state=initial_state, training=True)
   softmax = nn.softmax_cross_entropy_with_logits_v2(
       logits=outputs[-1], labels=array_ops.stop_gradient(y))
@@ -129,6 +145,33 @@ class GRUTrainingTest(xla_test.XLATestCase):
     # Check that the loss is the same for the reference as well
     ref_losses = self._RunLayer(_tfGRU, X, labels)
     self.assertAllClose(custom_losses, ref_losses, atol=0.01)
+
+  # Check that the loss goes downZ.
+  def testTraining_resetAfter(self):
+    np.random.seed(42)
+    nums = np.arange(batch_size + seq_len)
+    # prepare the dataset of input to output pairs encoded as integers
+    inputs = []
+    one_hot = []
+    for i in range(0, len(nums) - seq_len):
+      sequence = nums[i:i + seq_len]
+      output = nums[i + seq_len]
+      inputs.append(sequence)
+      one_hot.append(output)
+    X = np.reshape(inputs, (seq_len, batch_size, input_size))
+    # normalize
+    X = X / float(len(nums))
+    # one hot encode the output variable
+    y = get_one_hot(nums[seq_len:], nums.size)
+    labels = np.zeros([batch_size, num_hidden], dtype=dataType)
+    labels[:y.shape[0], :y.shape[1]] = y
+
+    custom_losses = self._RunLayer(_PopnnGRU_ResetAfter, X, labels)
+    # Check the loss goes down
+    self.assertTrue(custom_losses[0] > custom_losses[-1])
+
+    # TF GRU does not support reset_after so no reference comparison
+    # is done here.
 
 
 if __name__ == "__main__":
