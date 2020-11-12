@@ -168,12 +168,15 @@ bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
   }
 }
 
-void GetTypeFromInstruction(MLType* type, const HloInstruction* inst) {
+absl::optional<MLType> GetTypeFromInstruction(const HloInstruction* inst) {
   const auto attributes = inst->frontend_attributes();
   auto itr = attributes.map().find(FrontendAttributeId_Name(ML_TYPE));
   if (itr != attributes.map().end()) {
-    CHECK(MLType_Parse(itr->second, type));
+    MLType type;
+    CHECK(MLType_Parse(itr->second, &type));
+    return type;
   }
+  return absl::nullopt;
 }
 }  // namespace
 
@@ -288,13 +291,14 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
 
   for (auto& it : classifications) {
     MLType type = it.second;
-
-    if (type == MLType::INFERENCE_FWD) {
-      GetTypeFromInstruction(&type, it.first);
+    HloInstruction* mapped = annotations_.flattened_inst_map_bwd.at(it.first);
+    // It's possible that the outter context has set the ML type directly.
+    auto optional_type = GetTypeFromInstruction(mapped);
+    if (optional_type && (*optional_type) != MLType::INFERENCE_FWD) {
+      type = *optional_type;
     }
 
     TF_RETURN_IF_ERROR(SetInstructionMLType(it.first, type));
-    HloInstruction* mapped = annotations_.flattened_inst_map_bwd.at(it.first);
     TF_RETURN_IF_ERROR(SetInstructionMLType(mapped, type));
 
     if (VLOG_IS_ON(2)) {
