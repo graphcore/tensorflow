@@ -93,60 +93,68 @@ def embedding_lookup(params,
   if serialization_factor == 1:
     result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
   else:
+    # Get the scope name so that the function nested operations get the scope
+    # name too.
+    with ops.name_scope(name + "/Serialized") as scope_name:
 
-    @custom_gradient.custom_gradient
-    def serialized_embedding_lookup(table, indices):
-      @functional_ops.outlined_function
-      def func(sliced_table, indices, min_idx, max_idx):
-        # Do a serialized embedding lookup by adjusting the indices.
-        adjusted_indices = indices - min_idx
-        x = gen_popops_ops.ipu_multi_slice(sliced_table,
-                                           adjusted_indices,
-                                           name=name)
+      @custom_gradient.custom_gradient
+      def serialized_embedding_lookup(table, indices):
 
-        # Mask out any outputs which are not in range [min_idx, max_idx).
-        mask_max = indices < max_idx
-        mask_min = indices >= min_idx
-        mask = math_ops.logical_and(mask_max, mask_min)
-        mask = array_ops.expand_dims(mask, 1)
-        return array_ops.where_v2(mask,
-                                  x,
-                                  array_ops.constant(0, x.dtype),
-                                  name=name + "/Mask")
+        table_shape = table.shape.as_list()
+        assert len(table_shape) == 2
+        assert (table_shape[0] % serialization_factor) == 0
+        split_size = table_shape[0] // serialization_factor
 
-      table_shape = table.shape.as_list()
-      assert len(table_shape) == 2
-      assert (table_shape[0] % serialization_factor) == 0
-      split_size = table_shape[0] // serialization_factor
+        @functional_ops.outlined_function
+        def func(sliced_table, indices, min_idx):
+          with ops.name_scope(scope_name):
+            # Do a serialized embedding lookup by adjusting the indices.
+            adjusted_indices = indices - min_idx
 
-      # Create the first lookup.
-      table_sliced = array_ops.slice(table, [0, 0],
-                                     [split_size, table_shape[1]])
-      output = func(table_sliced, indices, 0, split_size)
+            # Mask out any indices which are not in range.
+            mask_max = adjusted_indices < split_size
+            mask_min = adjusted_indices > -1
+            mask = math_ops.logical_and(mask_max, mask_min)
 
-      for i in range(1, serialization_factor):
-        min_idx = split_size * i
-        max_idx = split_size * (i + 1)
+            indices_mask = math_ops.cast(mask, adjusted_indices.dtype)
+            adjusted_indices = adjusted_indices * indices_mask
 
-        table_sliced = array_ops.slice(table, [min_idx, 0],
+            x = gen_popops_ops.ipu_multi_slice(sliced_table,
+                                               adjusted_indices,
+                                               name=name)
+
+            # Mask out any values which are not in range.
+            mask = array_ops.expand_dims(mask, 1)
+            mask = math_ops.cast(mask, x.dtype)
+            return x * mask
+
+        # Create the first lookup.
+        table_sliced = array_ops.slice(table, [0, 0],
                                        [split_size, table_shape[1]])
-        masked_output = func(table_sliced, indices, min_idx, max_idx)
-        # Add the masked slice
-        output = math_ops.add(output, masked_output, name=f"slice_{i}")
+        output = func(table_sliced, indices, 0)
 
-      # Need to redefine the gradient function.
-      def grad(*dy):
-        return [
-            gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(table),
-                                                indices=indices,
-                                                updates=dy[0],
-                                                scale=array_ops.constant(
-                                                    1, table.dtype)), None
-        ]
+        for i in range(1, serialization_factor):
+          min_idx = split_size * i
 
-      return output, grad
+          table_sliced = array_ops.slice(table, [min_idx, 0],
+                                         [split_size, table_shape[1]])
+          masked_output = func(table_sliced, indices, min_idx)
+          # Add the masked slice
+          output = math_ops.add(output, masked_output, name=f"slice_{i}")
 
-    result = serialized_embedding_lookup(params_2d, ids_flat)
+        # Need to redefine the gradient function.
+        def grad(*dy):
+          return [
+              gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(table),
+                                                  indices=indices,
+                                                  updates=dy[0],
+                                                  scale=array_ops.constant(
+                                                      1, table.dtype)), None
+          ]
+
+        return output, grad
+
+      result = serialized_embedding_lookup(params_2d, ids_flat)
 
   # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
   return array_ops.reshape(result, list(ids_shape) + list(params_shape))
