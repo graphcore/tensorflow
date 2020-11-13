@@ -37,7 +37,13 @@ class HloReachabilityMap;
 
 namespace poplarplugin {
 
-using ForwardAllocationGraph = MetaGraph<HloInstruction*, HloPtrComparator>;
+struct ForwardAllocationGraphComparator {
+  bool operator()(const HloInstruction* const& lhs,
+                  const HloInstruction* const& rhs) const;
+};
+
+using ForwardAllocationGraph =
+    MetaGraph<HloInstruction*, ForwardAllocationGraphComparator>;
 
 class ForwardAllocation : public HloModulePass {
  public:
