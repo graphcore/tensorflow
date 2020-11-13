@@ -42,6 +42,17 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+bool ForwardAllocationGraphComparator::operator()(
+    const HloInstruction* const& lhs, const HloInstruction* const& rhs) const {
+  // Make sure parameters are last.
+  const bool lhs_parameter = lhs->opcode() == HloOpcode::kParameter;
+  const bool rhs_parameter = rhs->opcode() == HloOpcode::kParameter;
+   if (lhs_parameter == rhs_parameter) {
+    return HloPtrComparator()(lhs, rhs);
+  }
+
+  return rhs_parameter;
+}
 
 template <typename Predicate>
 static ForwardAllocationGraph::MetaGraphSet reduce(
@@ -688,7 +699,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
     return inst->operands();
   };
 
-  const auto g = ForwardAllocationGraph(comp->root_instruction(), get_operands);
+  const ForwardAllocationGraph g(comp->root_instruction(), get_operands);
 
   std::unique_ptr<HloReachabilityMap> reachability_map =
       HloReachabilityMap::Build(comp);

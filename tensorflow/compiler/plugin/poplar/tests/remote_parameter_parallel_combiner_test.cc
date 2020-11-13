@@ -698,12 +698,11 @@ ENTRY e {
           EXPECT_EQ(target0.backward_path[0]->opcode(), HloOpcode::kTranspose);
         } else {
           EXPECT_EQ(user->tuple_index(), 1);
-          // arg4 should have its layout from arg1 from the new combined load.
-          const auto* arg4 = resource_update_comp->parameter_instruction(4);
+          // arg1 from the new combined load should have its layout from arg4.
           const auto& target =
-              annotations.tensor_allocation_map.at(TensorLocation(arg4, 0));
-          EXPECT_EQ(target.tgt->name(), "new_arg1");
-          EXPECT_EQ(*target.layout, user);
+              annotations.tensor_allocation_map.at(TensorLocation(user, 0));
+          const auto* arg4 = resource_update_comp->parameter_instruction(4);
+          EXPECT_EQ(*target.layout, arg4);
           EXPECT_EQ(*target.layout_output_idx, 0);
         }
       }
