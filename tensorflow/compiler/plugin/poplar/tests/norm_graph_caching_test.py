@@ -227,7 +227,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/*Transpose',
-          'Norm/gradients',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -475,7 +474,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/group-norm-grad*/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/*Transpose',
-          'Norm/gradients',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
