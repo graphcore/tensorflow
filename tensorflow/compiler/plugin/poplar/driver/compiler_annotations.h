@@ -40,6 +40,10 @@ struct FeedInfo {
       : stream_prefix(stream_prefix), config(config), shape(shape) {}
   FeedInfo() = delete;
 
+  bool operator<(const FeedInfo& rhs) const {
+    return stream_prefix < rhs.stream_prefix;
+  }
+
   std::string stream_prefix;
   PoplarFeedConfig config;
   Shape shape;
@@ -105,8 +109,8 @@ struct RemoteParameterInfo {
   }
 };
 
-using OutfeedInfos = std::vector<FeedInfo>;
-using InfeedInfos = std::vector<FeedInfo>;
+using OutfeedInfos = std::set<FeedInfo>;
+using InfeedInfos = std::set<FeedInfo>;
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
@@ -213,6 +217,40 @@ struct CompilerAnnotations {
   FlattenedInstMap flattened_inst_map_fwd;
   FlattenedInstMap flattened_inst_map_bwd;
 };
+
+inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,
+                            const FeedInfo& feed_info) {
+  auto other_info_itr = compiler_annotations.infeed_infos.find(feed_info);
+  if (other_info_itr != compiler_annotations.infeed_infos.end() &&
+      feed_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Infeeds with matching name '%s' have different shapes.",
+        feed_info.stream_prefix);
+  }
+
+  if (other_info_itr == compiler_annotations.infeed_infos.end()) {
+    compiler_annotations.infeed_infos.insert(feed_info);
+  }
+
+  return Status::OK();
+}
+
+inline Status AddOutfeedInfo(CompilerAnnotations& compiler_annotations,
+                             const FeedInfo& feed_info) {
+  auto other_info_itr = compiler_annotations.outfeed_infos.find(feed_info);
+  if (other_info_itr != compiler_annotations.outfeed_infos.end() &&
+      feed_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Outfeeds with matching name '%s' have different shapes.",
+        feed_info.stream_prefix);
+  }
+
+  if (other_info_itr == compiler_annotations.outfeed_infos.end()) {
+    compiler_annotations.outfeed_infos.insert(feed_info);
+  }
+
+  return Status::OK();
+}
 
 }  // namespace poplarplugin
 }  // namespace xla
