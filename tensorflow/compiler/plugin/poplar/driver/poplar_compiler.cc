@@ -877,14 +877,39 @@ struct ExecutableCacheLock {
     VLOG(1) << "Acquired lock for " << filepath;
 
     // Using plain new to be able to keep constructor private.
-    return std::unique_ptr<ExecutableCacheLock>(new ExecutableCacheLock(fd));
+    return std::unique_ptr<ExecutableCacheLock>(
+        new ExecutableCacheLock(filepath, fd));
   }
 
-  ~ExecutableCacheLock() { ::close(fd_); }
+  ~ExecutableCacheLock() {
+    // Closing the file descriptor releases the lock.
+    VLOG(1) << "Releasing lock for " << filepath_;
+    if (::close(fd_) == -1) {
+      LOG(WARNING) << "Failed to close file descriptor for " << filepath_
+                   << ": " << std::strerror(errno);
+    }
+
+    // Attempt to delete the file to clean up after us. Deleting a file on
+    // POSIX only means removing the name from the filesystem. If any other
+    // processes still have the file open, the file will remain in existence
+    // until the last file descriptor referring to it is closed.
+    auto status = tensorflow::Env::Default()->DeleteFile(filepath_);
+
+    // The different processes will race to delete the file, so we only care
+    // if the deletion failed with anything else than NOT_FOUND.
+    if (!status.ok() && status.code() != tensorflow::error::NOT_FOUND) {
+      LOG(WARNING) << "Failed to delete " << filepath_ << ": "
+                   << status.ToString();
+    }
+  }
 
  private:
-  explicit ExecutableCacheLock(int fd) : fd_(fd) {}
+  explicit ExecutableCacheLock(const std::string& filepath, int fd)
+      : filepath_(filepath), fd_(fd) {}
+
+  std::string filepath_;
   int fd_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutableCacheLock);
 };
 
