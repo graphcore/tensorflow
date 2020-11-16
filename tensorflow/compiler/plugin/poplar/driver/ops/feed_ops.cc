@@ -330,7 +330,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
 
   FeedInfo info(outfeed->name(), outfeed_config,
                 outfeed->operands()[0]->shape());
-  res.annotations.outfeed_infos.push_back(info);
+  TF_RETURN_IF_ERROR(AddOutfeedInfo(res.annotations, info));
 
   if (UseSyntheticData()) {
     return seq;
