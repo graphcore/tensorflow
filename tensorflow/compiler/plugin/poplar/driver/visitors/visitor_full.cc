@@ -153,18 +153,15 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
 
   poplar::program::Sequence seq;
 
-  TF_ASSIGN_OR_RETURN(auto inputs, FindInplaceOutputs(tensor_map, resources_,
-                                                      inst, seq, false));
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  if (inputs[0][0].IsRemoteBuffer()) {
-    TF_CHECK_OK(AddOutput(tensor_map, inst, 0, inputs[0][0]));
-  } else {
-    poplar::Tensor out = inputs[0][0].AsTensor();
-    std::vector<size_t> dims(PoplarShapeFromXlaShape(GetOutputShape(inst)));
-    out = out.reshape(dims);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-  }
+  poplar::Tensor out = inputs[0][0];
+  std::vector<size_t> dims(PoplarShapeFromXlaShape(GetOutputShape(inst)));
+  out = out.reshape(dims);
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return AddSequenceForInstruction(inst, seq);
 }
