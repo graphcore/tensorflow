@@ -59,13 +59,8 @@ bool IsRemoteParameterLoad(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
 }
 
-bool IsNonReplicatedParameterLoad(
-    const HloInstruction* inst,
-    const CrossReplicaValidInputs& cross_replica_valid_inputs) {
+bool IsNonReplicatedParameterLoad(const HloInstruction* inst) {
   if (!IsRemoteParameterLoad(inst)) {
-    return false;
-  }
-  if (!cross_replica_valid_inputs.contains(inst->operand(0))) {
     return false;
   }
   auto remote_load = Cast<HloRemoteParameterLoad>(inst);
@@ -88,7 +83,7 @@ bool ValidClusterInput(
   // replicas.
   return cross_replica_valid_inputs.contains(inst) || IsWideConstant(inst) ||
          IsAllReduce(inst) || IsReplicatedParameterLoad(inst) ||
-         IsNonReplicatedParameterLoad(inst, cross_replica_valid_inputs);
+         IsNonReplicatedParameterLoad(inst);
 }
 
 bool CanCluster(
@@ -244,10 +239,9 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
     return bcast_input;
   }
 
-  // If it's reshape(all-gather(reshape(remote-parameter-load))), remove
+  // If it's reshape(all-gather(reshape(remote-parameter-laod))), remove
   // all-gather.
   if (IsReplicatedParameterLoad(cluster_input)) {
-    CHECK(cluster.IsReplicaPartitioned());
     HloInstruction* remote_load = cluster_input->mutable_operand(0);
     if (remote_load->shape().dimensions() == cluster.GetShardDimensions()) {
       VLOG(2) << "Adding remote cluster input " << remote_load->ToString();
@@ -296,13 +290,8 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
 
   const Shape flat_shape =
       ShapeUtil::MakeShape(cluster_input_type, {cluster.GetClusterSize()});
-
-  // Lower the all reduce into the cluster if all its users will be in the
-  // cluster too.
-  const bool lower_all_reduce =
-      IsAllReduce(cluster_input) && cluster.AllUsersIn(cluster_input);
-
-  if (lower_all_reduce) {
+  // Convert an all reduce input into an outlined reduce scatter sum.
+  if (IsAllReduce(cluster_input)) {
     HloInstruction* input = cluster_input->mutable_operand(0);
     HloInstruction* input_reshaped = input_comp->AddInstruction(
         HloInstruction::CreateReshape(flat_shape, input));
@@ -310,22 +299,13 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
     HloInstruction* parameter =
         builder->AddInstruction(HloInstruction::CreateParameter(
             param_idx, flat_shape, "parameter-" + input->name()));
-    // Convert an all reduce input into an outlined reduce scatter sum for
-    // partitined graphs.
-    if (cluster.IsReplicaPartitioned()) {
-      // Add any necessary padding before scatter.
-      parameter = pad_input(parameter);
 
-      HloInstruction* scatter = builder->AddInstruction(
-          CreateReduceScatter({parameter}, in_comp_shape));
-      context->MapInstruction(cluster_input, scatter);
+    // Add any necessary padding before scatter.
+    parameter = pad_input(parameter);
 
-    } else {
-      // Lower the allreduce in.
-      HloInstruction* all_reduce = builder->AddInstruction(
-          cluster_input->CloneWithNewOperands(in_comp_shape, {parameter}));
-      context->MapInstruction(cluster_input, all_reduce);
-    }
+    HloInstruction* scatter = builder->AddInstruction(
+        CreateReduceScatter({parameter}, in_comp_shape));
+    context->MapInstruction(cluster_input, scatter);
     return input_reshaped;
   }
 
@@ -334,45 +314,40 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
   HloInstruction* cluster_input_reshaped = input_comp->AddInstruction(
       HloInstruction::CreateReshape(flat_shape, cluster_input));
 
+  const Shape all_shards_shape = ShapeUtil::MakeShape(
+      cluster_input_type, {replication_factor, cluster.GetShardSize()});
+
   HloInstruction* parameter =
       builder->AddInstruction(HloInstruction::CreateParameter(
           param_idx, flat_shape, "parameter-" + cluster_input->name()));
 
-  if (cluster.IsReplicaPartitioned()) {
-    // Add any necessary padding before slicing.
-    parameter = pad_input(parameter);
+  // Add any necessary padding before slicing.
+  parameter = pad_input(parameter);
 
-    const Shape all_shards_shape = ShapeUtil::MakeShape(
-        cluster_input_type, {replication_factor, cluster.GetShardSize()});
+  // Reshaped the parameter so that it can be sliced.
+  HloInstruction* reshaped = builder->AddInstruction(
+      HloInstruction::CreateReshape(all_shards_shape, parameter));
 
-    // Reshaped the parameter so that it can be sliced.
-    HloInstruction* reshaped = builder->AddInstruction(
-        HloInstruction::CreateReshape(all_shards_shape, parameter));
+  HloInstruction* replica_id =
+      builder->AddInstruction(CreateReplicationIndex());
 
-    HloInstruction* replica_id =
-        builder->AddInstruction(CreateReplicationIndex());
+  HloInstruction* zero_i =
+      builder->AddInstruction(HloInstruction::CreateConstant(
+          LiteralUtil::Zero(replica_id->shape().element_type())));
 
-    HloInstruction* zero_i =
-        builder->AddInstruction(HloInstruction::CreateConstant(
-            LiteralUtil::Zero(replica_id->shape().element_type())));
+  // Slice off this replica's storage elements.
+  const Shape slice_shape =
+      ShapeUtil::MakeShape(cluster_input_type, {1, cluster.GetShardSize()});
+  HloInstruction* slice =
+      builder->AddInstruction(HloInstruction::CreateDynamicSlice(
+          slice_shape, reshaped, {replica_id, zero_i},
+          {1, cluster.GetShardSize()}));
 
-    // Slice off this replica's storage elements.
-    const Shape slice_shape =
-        ShapeUtil::MakeShape(cluster_input_type, {1, cluster.GetShardSize()});
-    HloInstruction* slice =
-        builder->AddInstruction(HloInstruction::CreateDynamicSlice(
-            slice_shape, reshaped, {replica_id, zero_i},
-            {1, cluster.GetShardSize()}));
+  HloInstruction* input_slice = builder->AddInstruction(
+      HloInstruction::CreateReshape(in_comp_shape, slice));
 
-    HloInstruction* input_slice = builder->AddInstruction(
-        HloInstruction::CreateReshape(in_comp_shape, slice));
-
-    VLOG(2) << "Input slice: " << input_slice->ToString();
-    context->MapInstruction(cluster_input, input_slice);
-  } else {
-    VLOG(2) << "Parameter: " << parameter->ToString();
-    context->MapInstruction(cluster_input, parameter);
-  }
+  VLOG(2) << "Input slice: " << input_slice->ToString();
+  context->MapInstruction(cluster_input, input_slice);
   return cluster_input_reshaped;
 }
 
@@ -394,7 +369,6 @@ StatusOr<HloInstruction*> AddClusterOutput(
   // Check whether the cluster is just being stored.
   if (inst_users.size() == 1 &&
       IsReplicatedParameterStore(inst_users[0].instruction)) {
-    CHECK(cluster.IsReplicaPartitioned());
     HloInstruction* store_input = inst_users[0].instruction;
     HloInstruction* store = store_input->users()[0];
     if (store_input->shape().dimensions() == cluster.GetShardDimensions()) {
@@ -410,31 +384,26 @@ StatusOr<HloInstruction*> AddClusterOutput(
     }
   }
 
-  if (cluster.IsReplicaPartitioned()) {
-    // Create all gather.
-    auto inst_element_type = cluster_output->shape().element_type();
-    const Shape all_gather_shape = ShapeUtil::MakeShape(
-        inst_element_type, {replication_factor, cluster.GetShardSize()});
-    HloInstruction* all_gather = builder->AddInstruction(
-        CreateAllGather({in_cluster_output}, all_gather_shape));
+  // Create all gather.
+  auto inst_element_type = cluster_output->shape().element_type();
+  const Shape all_gather_shape = ShapeUtil::MakeShape(
+      inst_element_type, {replication_factor, cluster.GetShardSize()});
+  HloInstruction* all_gather = builder->AddInstruction(
+      CreateAllGather({in_cluster_output}, all_gather_shape));
 
-    const Shape flat_cluster_shape =
-        ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
-    const Shape aligned_cluster_shape = ShapeUtil::MakeShape(
-        inst_element_type, {cluster.GetAlignedClusterSize()});
-    HloInstruction* output = builder->AddInstruction(
-        HloInstruction::CreateReshape(aligned_cluster_shape, all_gather));
+  const Shape flat_cluster_shape =
+      ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
+  const Shape aligned_cluster_shape = ShapeUtil::MakeShape(
+      inst_element_type, {cluster.GetAlignedClusterSize()});
+  HloInstruction* output = builder->AddInstruction(
+      HloInstruction::CreateReshape(aligned_cluster_shape, all_gather));
 
-    if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
-      output = builder->AddInstruction(HloInstruction::CreateSlice(
-          flat_cluster_shape, output, {0}, {cluster.GetClusterSize()}, {1}));
-      VLOG(2) << "Slicing padding, slice: " << output->ToString();
-    }
-    return output;
-
-  } else {
-    return in_cluster_output;
+  if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+    output = builder->AddInstruction(HloInstruction::CreateSlice(
+        flat_cluster_shape, output, {0}, {cluster.GetClusterSize()}, {1}));
+    VLOG(2) << "Slicing padding, slice: " << output->ToString();
   }
+  return output;
 }
 
 StatusOr<bool> RewriteCall(
@@ -443,7 +412,7 @@ StatusOr<bool> RewriteCall(
     uint32 replication_factor) {
   TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
                       ResourceUpdateElementwiseClustering::GetClustersIn(
-                          call, elementwise_comps, replication_factor));
+                          call, elementwise_comps));
 
   if (clusters.empty()) {
     VLOG(2) << "No clusters found.";
@@ -452,13 +421,6 @@ StatusOr<bool> RewriteCall(
 
   bool changed = false;
   for (auto& cluster : clusters) {
-    // TODO(T29961) only outline replicated clusters with remote loads/stores.
-    if (!cluster.IsReplicaPartitioned()) {
-      VLOG(2) << "Skipping outlining cluster with top "
-              << cluster.GetTop()->name()
-              << " as it is not replica partitioned.";
-    }
-
     TF_ASSIGN_OR_RETURN(bool outlined,
                         ResourceUpdateElementwiseClustering::OutlineCluster(
                             cluster, replication_factor));
@@ -478,13 +440,12 @@ bool ElementwiseCluster::In(HloInstruction* inst) const {
 }
 
 bool ElementwiseCluster::AnyUserIn(HloInstruction* inst) const {
-  return absl::c_any_of(inst->users(),
-                        [this](HloInstruction* user) { return In(user); });
-}
-
-bool ElementwiseCluster::AllUsersIn(HloInstruction* inst) const {
-  return absl::c_all_of(inst->users(),
-                        [this](HloInstruction* user) { return In(user); });
+  for (auto user : inst->users()) {
+    if (ContainsKey(insts_, user)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ElementwiseCluster::Add(HloInstruction* inst) {
@@ -530,8 +491,7 @@ HloComputation* ElementwiseCluster::GetComputation() const {
 }
 
 bool ElementwiseCluster::Finalize(
-    const CrossReplicaValidInputs& cross_replica_valid_inputs,
-    ThreeState partition_offload_variables) {
+    const CrossReplicaValidInputs& cross_replica_valid_inputs) {
   CHECK(!finalized_);
 
   if (IsScalar(top_)) {
@@ -546,32 +506,9 @@ bool ElementwiseCluster::Finalize(
     }
   }
 
-  const int64 num_replicated_parameter_load =
-      absl::c_count_if(inputs_, IsReplicatedParameterLoad);
-  const int64 num_non_replicated_parameter_load = absl::c_count_if(
-      inputs_, [&cross_replica_valid_inputs](const HloInstruction* input) {
-        return IsNonReplicatedParameterLoad(input, cross_replica_valid_inputs);
-      });
-  VLOG(2) << "Number of replicated parameter load inputs: "
-          << num_replicated_parameter_load;
-  VLOG(2) << "Number of non replicated parameter load inputs: "
-          << num_non_replicated_parameter_load;
-
-  if (partition_offload_variables == THREESTATE_OFF &&
-      num_replicated_parameter_load) {
-    VLOG(2) << "Resource update partition offload is turned off, cannot "
-               "offload cluster.";
-    return false;
-  }
-
-  if (!num_replicated_parameter_load && !num_non_replicated_parameter_load) {
-    VLOG(2) << "No parameter load inputs found.";
-    return false;
-  }
-
-  if (num_replicated_parameter_load && num_non_replicated_parameter_load) {
-    VLOG(2) << "Found a cluster with both replicated and non replicated "
-               "parameter loads which is currently unsupported.";
+  // Check at least one input is remote.
+  if (!absl::c_any_of(inputs_, IsReplicatedParameterLoad)) {
+    VLOG(2) << "No replicated parameter loads found.";
     return false;
   }
 
@@ -642,52 +579,42 @@ bool ElementwiseCluster::Finalize(
   cluster_dimensions_ = {cluster_shape_.dimensions().begin(),
                          cluster_shape_.dimensions().end()};
 
-  // Only perform replica partitioning if there is a replicated parameter load.
-  is_replica_partitioned_ = num_replicated_parameter_load;
-  if (is_replica_partitioned_) {
-    // Get all parameter loads.
-    std::vector<HloInstruction*> parameter_loads;
-    absl::c_copy_if(inputs_vec_, std::back_inserter(parameter_loads),
-                    IsReplicatedParameterLoad);
+  // Get all parameter loads.
+  std::vector<HloInstruction*> parameter_loads;
+  absl::c_copy_if(inputs_vec_, std::back_inserter(parameter_loads),
+                  IsReplicatedParameterLoad);
 
-    // Get dimensions for each load and make sure there is only one unique set.
-    absl::flat_hash_set<std::vector<int64>> all_shard_dimensions;
-    absl::c_transform(
-        parameter_loads,
-        std::inserter(all_shard_dimensions, all_shard_dimensions.begin()),
-        [](const HloInstruction* inst) -> std::vector<int64> {
-          auto dimensions = inst->operand(0)->shape().dimensions();
-          return {dimensions.begin(), dimensions.end()};
-        });
+  // Get dimensions for each load and make sure there is only one unique set.
+  absl::flat_hash_set<std::vector<int64>> all_shard_dimensions;
+  absl::c_transform(
+      parameter_loads,
+      std::inserter(all_shard_dimensions, all_shard_dimensions.begin()),
+      [](const HloInstruction* inst) -> std::vector<int64> {
+        auto dimensions = inst->operand(0)->shape().dimensions();
+        return {dimensions.begin(), dimensions.end()};
+      });
 
-    if (all_shard_dimensions.size() != 1) {
-      VLOG(2) << "Multiple shard sizes detected.";
-      return false;
-    }
-    shard_dimensions_ = *std::begin(all_shard_dimensions);
-    CHECK_EQ(shard_dimensions_.size(), 1);
-    shard_size_ = shard_dimensions_[0];
+  if (all_shard_dimensions.size() != 1) {
+    VLOG(2) << "Multiple shard sizes detected.";
+    return false;
+  }
+  shard_dimensions_ = *std::begin(all_shard_dimensions);
+  CHECK_EQ(shard_dimensions_.size(), 1);
+  shard_size_ = shard_dimensions_[0];
 
-    // Get sizes for the all gathers inside of the parameter load fusions.
-    absl::flat_hash_set<int64> all_gather_sizes;
-    absl::c_transform(
-        parameter_loads,
-        std::inserter(all_gather_sizes, all_gather_sizes.begin()),
-        [](const HloInstruction* inst) {
-          return ShapeUtil::ElementsIn(
-              GetReplicatedParameterLoadFusionAllGatherShape(inst));
-        });
-    if (all_gather_sizes.size() == 1) {
-      aligned_cluster_size_ = *std::begin(all_gather_sizes);
-    } else {
-      VLOG(2) << "Multiple aligned cluster sizes found.";
-      return false;
-    }
+  // Get sizes for the all gathers inside of the parameter load fusions.
+  absl::flat_hash_set<int64> all_gather_sizes;
+  absl::c_transform(parameter_loads,
+                    std::inserter(all_gather_sizes, all_gather_sizes.begin()),
+                    [](const HloInstruction* inst) {
+                      return ShapeUtil::ElementsIn(
+                          GetReplicatedParameterLoadFusionAllGatherShape(inst));
+                    });
+  if (all_gather_sizes.size() == 1) {
+    aligned_cluster_size_ = *std::begin(all_gather_sizes);
   } else {
-    // This is a non replica partitioned cluster.
-    shard_dimensions_ = {cluster_size_};
-    shard_size_ = cluster_size_;
-    aligned_cluster_size_ = cluster_size_;
+    VLOG(2) << "Multiple aligned cluster sizes found.";
+    return false;
   }
 
   finalized_ = true;
@@ -740,11 +667,6 @@ int64 ElementwiseCluster::GetShardSize() const {
   return shard_size_;
 }
 
-bool ElementwiseCluster::IsReplicaPartitioned() const {
-  CHECK(finalized_);
-  return is_replica_partitioned_;
-}
-
 std::string ElementwiseCluster::Dump() const {
   std::stringstream ss;
   ss << "Cluster dump:\n";
@@ -768,7 +690,6 @@ std::string ElementwiseCluster::ToString() const {
      << ", aligned cluster size: " << GetAlignedClusterSize() << "\n";
   ss << "Shard shape: (" << absl::StrJoin(GetShardDimensions(), ",")
      << "), total elements " << GetShardSize() << "\n";
-  ss << "Is replica partitioned: " << IsReplicaPartitioned() << "\n";
   ss << "Inputs:\n";
   for (auto inst : inputs_vec_) {
     ss << "* " << inst->ToString() << "\n";
@@ -791,20 +712,11 @@ std::string ElementwiseCluster::ToString() const {
 
 namespace {
 absl::flat_hash_set<int64> GetPartitionableResourceUpdateInputs(
-    const HloInstruction* call, const HloInstruction* resource_update,
-    uint32 replication_factor) {
-  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
-  // When the graph is not replicated, all the inputs are valid.
-  if (replication_factor < 2) {
-    for (int64 i = 0; i != resource_update->operand_count(); ++i) {
-      allowed_resource_update_parameter_indices.insert(i);
-    }
-    return allowed_resource_update_parameter_indices;
-  }
-
+    const HloInstruction* call, const HloInstruction* resource_update) {
   const HloComputation* call_comp = call->to_apply();
   const HloInstruction* call_root = call_comp->root_instruction();
 
+  absl::flat_hash_set<int64> allowed_resource_update_parameter_indices;
   for (int64 i = 0; i != call->operand_count(); ++i) {
     const HloInstruction* call_operand = call->operand(i);
     if (!IsParameter(call_operand) && !call_operand->IsConstant() &&
@@ -916,8 +828,7 @@ ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
 StatusOr<std::vector<ElementwiseCluster>>
 ResourceUpdateElementwiseClustering::GetClustersIn(
     HloInstruction* const call,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-    uint32 replication_factor) {
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
   CHECK(IsRepeatLoop(call) || IsPipelineOp(call));
   HloComputation* call_comp = call->to_apply();
   // Make sure that the root of the call op is a tuple instruction.
@@ -941,6 +852,10 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
 
   auto offload_variables =
       GetResourceUpdatePartitionOffloadedVariables(resource_update);
+  if (offload_variables == THREESTATE_OFF) {
+    VLOG(2) << "Resource update partition offload is turned off, exiting.";
+    return clusters;
+  }
 
   // Find all the parameters which can be partitioned - these are the parameters
   // which we can guarantee are identical across replicas - this means that the
@@ -959,8 +874,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   }
 
   absl::flat_hash_set<int64> allowed_resource_update_parameter_indices =
-      GetPartitionableResourceUpdateInputs(call, resource_update,
-                                           replication_factor);
+      GetPartitionableResourceUpdateInputs(call, resource_update);
   VLOG(2) << "Allowed resource update parameters are: "
           << absl::StrJoin(allowed_resource_update_parameter_indices, ", ");
   // Given the valid input indicies, find all the instructions which are valid
@@ -1053,8 +967,7 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   absl::flat_hash_set<HloInstruction*> seen_insts;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    bool valid =
-        cluster.Finalize(cross_replica_valid_inputs, offload_variables);
+    bool valid = cluster.Finalize(cross_replica_valid_inputs);
 
     if (valid) {
       // Make sure that non of the outputs overlap with previously seen
@@ -1086,14 +999,12 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
   VLOG(2) << "Rewriting cluster with top in " << cluster.GetTop()->ToString()
           << ", " << cluster.GetPostOrder().size()
           << " instructions and replication factor " << replication_factor;
-  if (cluster.IsReplicaPartitioned()) {
-    if (cluster.GetShardSize() * replication_factor !=
-        cluster.GetAlignedClusterSize()) {
-      VLOG(2) << "Cluster shape and replica shape don't match "
-              << cluster.GetShardSize() << " vs " << cluster.GetClusterSize()
-              << "(" << cluster.GetAlignedClusterSize() << ")";
-      return false;
-    }
+  if (cluster.GetShardSize() * replication_factor !=
+      cluster.GetAlignedClusterSize()) {
+    VLOG(2) << "Cluster shape and replica shape don't match "
+            << cluster.GetShardSize() << " vs " << cluster.GetClusterSize()
+            << "(" << cluster.GetAlignedClusterSize() << ")";
+    return false;
   }
 
   HloComputation* cluster_comp = cluster.GetComputation();
@@ -1193,6 +1104,10 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
 }
 
 StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
+  if (replication_factor_ <= 1) {
+    VLOG(2) << "Skipping clustering, no replicas.";
+    return false;
+  }
   VLOG(2) << "Before the ResourceUpdateElementwiseClustering:";
   XLA_VLOG_LINES(2, module->ToString());
 

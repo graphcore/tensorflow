@@ -19,7 +19,6 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -47,7 +46,6 @@ class ElementwiseCluster {
   explicit ElementwiseCluster(HloInstruction* top) noexcept;
   bool In(HloInstruction* inst) const;
   bool AnyUserIn(HloInstruction* inst) const;
-  bool AllUsersIn(HloInstruction* inst) const;
   void Add(HloInstruction* inst);
   bool MaybeAdd(HloInstruction* inst);
   bool CanMerge(const ElementwiseCluster& other);
@@ -58,8 +56,7 @@ class ElementwiseCluster {
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
-  bool Finalize(const CrossReplicaValidInputs& cross_replica_valid_inputs,
-                ThreeState partition_offload_variables);
+  bool Finalize(const CrossReplicaValidInputs& cross_replica_valid_inputs);
 
   // Following functions can be called once finalized.
   std::string ToString() const;
@@ -79,8 +76,6 @@ class ElementwiseCluster {
   int64 GetAlignedClusterSize() const;
   // The size of the partitioned shape.
   int64 GetShardSize() const;
-  // Whether this cluster is replica partitioned.
-  bool IsReplicaPartitioned() const;
 
  private:
   HloInstruction* top_;
@@ -90,7 +85,6 @@ class ElementwiseCluster {
   bool finalized_ = false;
 
   // Populated once finalized.
-  bool is_replica_partitioned_;
   std::vector<HloInstruction*> inputs_vec_;
   std::vector<HloInstruction*> post_order_;
   std::vector<HloInstruction*> outputs_;
@@ -125,8 +119,7 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   // a pipeline.
   static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const call,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-      uint32 replication_factor);
+      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
 
   // Outline the provided cluster - returns whether it was successfully
   // outlined.
