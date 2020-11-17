@@ -1675,12 +1675,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     option_flags_.set("exchange.enablePrefetch", "true");
   }
 
-  option_flags_.set(
-      "target.maxStreamCallbackThreadsPerNumaNode",
-      PoplarXlaFlags::Get().max_infeed_threads > 0
-          ? std::to_string(PoplarXlaFlags::Get().max_infeed_threads)
-          : "auto");
-
   for (const auto& opt : current_config_.compilation_options()) {
     option_flags_.set(opt.option(), opt.value());
   }
