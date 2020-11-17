@@ -141,7 +141,7 @@ MultiUpdateCombiner::MultiUpdateCombiner(
     struct CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, true) {}
 
-bool MultiUpdateCombiner::HandleMatch(
+StatusOr<bool> MultiUpdateCombiner::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto pattern = patterns_[match.pattern_idx];
   HloComputation* computation = match.computation;

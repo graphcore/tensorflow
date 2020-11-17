@@ -110,8 +110,8 @@ HloInstruction* PrepareLHS(HloInstruction* lhs,
 MatmulCombiner::MatmulCombiner(struct CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, true) {}
 
-bool MatmulCombiner::HandleMatch(HloMatcherMatched& match,
-                                 const absl::optional<int64> sharding_device) {
+StatusOr<bool> MatmulCombiner::HandleMatch(
+    HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto pattern = patterns_[match.pattern_idx];
   HloComputation* computation = match.computation;
 

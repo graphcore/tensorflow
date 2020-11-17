@@ -30,8 +30,8 @@ class AllToAllFinder : public HloMatcher {
   absl::string_view name() const override { return "all-to-all-finder"; }
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64>) override;
+  StatusOr<bool> HandleMatch(HloMatcherMatched& match,
+                             const absl::optional<int64>) override;
 
   const uint32 replication_factor;
 };

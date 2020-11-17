@@ -36,8 +36,8 @@ class GradientAccumulationFuser : public HloMatcher {
   }
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64>) override;
+  StatusOr<bool> HandleMatch(HloMatcherMatched& match,
+                             const absl::optional<int64>) override;
 };
 
 }  // namespace poplarplugin

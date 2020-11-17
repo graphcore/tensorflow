@@ -222,18 +222,13 @@ AllToAllFinder::AllToAllFinder(CompilerAnnotations& annotations,
     : replication_factor(replication_factor),
       HloMatcher(patterns, annotations, false, false) {}
 
-bool AllToAllFinder::HandleMatch(HloMatcherMatched& match,
-                                 const absl::optional<int64>) {
+StatusOr<bool> AllToAllFinder::HandleMatch(HloMatcherMatched& match,
+                                           const absl::optional<int64>) {
   HloInstruction* all_reduce = match.instruction_mapping[1];
   HloInstruction* multi_update = match.instruction_mapping[2];
   if (IsSwapCostEffective(multi_update, all_reduce, replication_factor)) {
-    Status err = ApplyTransformation(match, replication_factor);
-
-    if (err != Status::OK()) {
-      LOG(FATAL) << err.ToString();
-    } else {
-      return true;
-    }
+    TF_RETURN_IF_ERROR(ApplyTransformation(match, replication_factor));
+    return true;
   }
 
   return false;

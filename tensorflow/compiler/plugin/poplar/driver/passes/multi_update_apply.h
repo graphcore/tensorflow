@@ -35,8 +35,8 @@ class MultiUpdateApply : public HloMatcher {
   absl::string_view name() const override { return "multi-update-apply"; }
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64> shard) override;
+  StatusOr<bool> HandleMatch(HloMatcherMatched& match,
+                             const absl::optional<int64> shard) override;
 };
 
 }  // namespace poplarplugin

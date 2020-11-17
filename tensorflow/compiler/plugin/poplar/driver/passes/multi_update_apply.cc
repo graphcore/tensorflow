@@ -355,39 +355,33 @@ StatusOr<bool> HandleBinary(HloMatcherMatched& match,
   return true;
 }
 
-bool MultiUpdateApply::HandleMatch(HloMatcherMatched& match,
-                                   const absl::optional<int64> shard) {
-  StatusOr<bool> s;
+StatusOr<bool> MultiUpdateApply::HandleMatch(
+    HloMatcherMatched& match, const absl::optional<int64> shard) {
+  bool handled;
   switch (match.pattern_idx) {
     case 0:
     case 1:
     case 2:
     case 3: {
-      s = HandleNoReshape(match, shard);
+      TF_ASSIGN_OR_RETURN(handled, HandleNoReshape(match, shard));
       break;
     }
     case 4:
     case 5:
     case 6:
     case 7: {
-      s = HandleReshape(match, shard);
+      TF_ASSIGN_OR_RETURN(handled, HandleReshape(match, shard));
       break;
     }
     case 8:
     case 9: {
-      s = HandleBinary(match, shard);
+      TF_ASSIGN_OR_RETURN(handled, HandleBinary(match, shard));
       break;
     }
-    default: {
-      s = InternalError("Invalid pattern index.");
-      break;
-    }
+    default: { return InternalError("Invalid pattern index."); }
   }
 
-  if (!s.ok()) {
-    LOG(FATAL) << s.status();
-  }
-  return s.ValueOrDie();
+  return handled;
 }
 }  // namespace poplarplugin
 }  // namespace xla

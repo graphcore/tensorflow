@@ -156,8 +156,8 @@ CastsElimination::CastsElimination(struct CompilerAnnotations& annotations)
 
 // For casts elimination we ignore the sharding device because we replace
 // instructions with the sharding they had before.
-bool CastsElimination::HandleMatch(HloMatcherMatched& match,
-                                   const absl::optional<int64>) {
+StatusOr<bool> CastsElimination::HandleMatch(HloMatcherMatched& match,
+                                             const absl::optional<int64>) {
   // A map from original instructions to their new counterparts
   absl::flat_hash_map<NodeId, HloInstruction*> outlined;
   // A set of nodes which we have already outlined.
@@ -228,9 +228,10 @@ bool CastsElimination::HandleMatch(HloMatcherMatched& match,
 
   // Sanity check - make sure we have outlined everything.
   if (outlined.size() != pattern.GetPatternNodes().size()) {
-    LOG(FATAL) << "Failed to outline a pattern correctly - not all "
-                  "instructions have been outlined. "
-               << outlined.size() << " " << pattern.GetPatternNodes().size();
+    return InternalError(
+        "Failed to outline a pattern correctly - not all "
+        "instructions have been outlined. ",
+        outlined.size(), " ", pattern.GetPatternNodes().size());
   }
 
   HloInstruction* new_pattern_root = outlined[pattern.GetOutputs()[0]];

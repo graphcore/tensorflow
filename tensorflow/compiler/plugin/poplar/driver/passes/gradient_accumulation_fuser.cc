@@ -197,7 +197,7 @@ bool HandleGradAccumWithMomentum(HloMatcherPattern& pattern,
 }
 }  // namespace
 
-bool GradientAccumulationFuser::HandleMatch(
+StatusOr<bool> GradientAccumulationFuser::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto pattern = patterns_[match.pattern_idx];
   CHECK_EQ(pattern.GetOutputs().size(), 1);
@@ -224,8 +224,7 @@ bool GradientAccumulationFuser::HandleMatch(
       return HandleGradAccumWithMomentum(pattern, match, sharding_device);
     }
     default: {
-      LOG(FATAL) << "Unreachable";
-      return false;
+      return InternalError("Unreachable pattern index", match.pattern_idx);
     }
   }
 }

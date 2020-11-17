@@ -251,12 +251,9 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXbY(
 SliceOptimizer::SliceOptimizer(CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, false) {}
 
-bool SliceOptimizer::HandleMatch(HloMatcherMatched& match,
-                                 const absl::optional<int64>) {
-  auto status = ReplaceMatch(match);
-  if (!status.ok()) {
-    LOG(FATAL) << status;
-  }
+StatusOr<bool> SliceOptimizer::HandleMatch(HloMatcherMatched& match,
+                                           const absl::optional<int64>) {
+  TF_RETURN_IF_ERROR(ReplaceMatch(match));
   return true;
 }
 

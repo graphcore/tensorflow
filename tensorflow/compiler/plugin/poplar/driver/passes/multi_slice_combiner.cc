@@ -58,7 +58,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 MultiSliceCombiner::MultiSliceCombiner(struct CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, true) {}
 
-bool MultiSliceCombiner::HandleMatch(
+StatusOr<bool> MultiSliceCombiner::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto pattern = patterns_[match.pattern_idx];
   HloComputation* computation = match.computation;
