@@ -697,9 +697,9 @@ absl::optional<Trace> HloMatcher::FindNextMatchingOp(
   return absl::nullopt;
 }
 
-bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
-                                          const HloMatcherPattern& pattern,
-                                          HloMatcherMatched& match) {
+StatusOr<bool> HloMatcher::MatchPatternSingleOutput(
+    HloInstruction* root, const HloMatcherPattern& pattern,
+    HloMatcherMatched& match) {
   match.instruction_mapping[pattern.GetOutputs()[0]] = root;
 
   std::set<HloInstruction*> associative_set = GetAssociativeSet(root);
@@ -791,7 +791,7 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
         size_t n = node.GetOperands()[i];
 
         if (n >= match.instruction_mapping.size()) {
-          LOG(FATAL) << "Invalid matcher reference " << n;
+          return InvalidArgument("Invalid matcher reference ", n);
         }
 
         if (match.instruction_mapping[n] != nullptr) {
@@ -818,8 +818,8 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
   return true;
 }
 
-bool HloMatcher::MatchPattern(HloInstruction* root,
-                              const unsigned pattern_idx) {
+StatusOr<bool> HloMatcher::MatchPattern(HloInstruction* root,
+                                        const unsigned pattern_idx) {
   HloMatcherMatched match(root->parent(), pattern_idx);
   auto& pattern = patterns_[pattern_idx];
 
@@ -829,7 +829,8 @@ bool HloMatcher::MatchPattern(HloInstruction* root,
     // We still use the old algorithm for the matching of patterns with a single
     // output because that algorithm supports associative look through matching.
     // Remove this algorithm once the new algorithm supports it.
-    matched = MatchPatternSingleOutput(root, pattern, match);
+    TF_ASSIGN_OR_RETURN(matched,
+                        MatchPatternSingleOutput(root, pattern, match));
   } else {
     matched = MatchDAGIsomorphism(match.instruction_mapping, root, pattern);
   }
@@ -879,7 +880,7 @@ bool HloMatcher::MatchPattern(HloInstruction* root,
   }
 }
 
-bool HloMatcher::MatchPatternStart(HloComputation* computation) {
+StatusOr<bool> HloMatcher::MatchPatternStart(HloComputation* computation) {
   bool matched = false;
 
   // Non recursive depth first DAG traversal to match the patterns - note that
@@ -905,9 +906,10 @@ bool HloMatcher::MatchPatternStart(HloComputation* computation) {
         auto output_0_node = pattern.GetPatternNodes()[pattern.GetOutputs()[0]];
         if (output_0_node.Matches(inst)) {
           // Try matching the whole pattern
-          if (MatchPattern(inst, i)) {
-            VLOG(1) << "Matched pattern type " << pattern.GetType() << ".";
+          TF_ASSIGN_OR_RETURN(bool pattern_matches, MatchPattern(inst, i));
+          if (pattern_matches) {
             matched = true;
+            VLOG(1) << "Matched pattern type " << pattern.GetType() << ".";
             // Restart the matcher
             start_from_root = true;
             break;
@@ -934,13 +936,14 @@ StatusOr<bool> HloMatcher::Run(HloModule* module) {
 
   if (root_computation_only_) {
     HloComputation* comp = module->entry_computation();
-    matched = MatchPatternStart(comp);
+    TF_ASSIGN_OR_RETURN(matched, MatchPatternStart(comp));
   } else {
     // Copy list of computations as we will be introducing new ones
     std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
     for (auto* comp : comps) {
       if (!comp->IsFusionComputation() && !IsPopOpsFusion(comp)) {
-        matched |= MatchPatternStart(comp);
+        TF_ASSIGN_OR_RETURN(bool pattern_matched, MatchPatternStart(comp));
+        matched |= pattern_matched;
       }
     }
   }
@@ -976,7 +979,7 @@ std::set<HloInstruction*> HloMatcher::ReorderGraph(
   return modified_instructions;
 }
 
-HloInstruction* HloMatcher::OutlineExpressionFromComputation(
+StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
     const HloMatcherMatched& matched,
     const std::string& outlined_computation_name,
     const absl::optional<int64> sharding_device,
@@ -1061,8 +1064,15 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
     outlined_node_ids.insert(node_id);
     // Replace all the operands
     for (int64 operand = 0; operand < new_inst->operand_count(); ++operand) {
-      NodeId operand_id =
-          pattern.GetPatternNodes()[node_id].GetOperands()[operand];
+      auto& operands = pattern.GetPatternNodes()[node_id].GetOperands();
+      if (operand >= operands.size()) {
+        return InvalidArgument(
+            "Operand index out of range ", operand, " / ", operands.size(),
+            ". Pattern and instruction operands don't not match. "
+            "One possible scenario could be "
+            "HloMatcherOpcode::kAnyOpcode not specified as input.");
+      }
+      NodeId operand_id = operands[operand];
       TF_CHECK_OK(new_inst->ReplaceOperandWith(operand, outlined[operand_id]));
     }
     // Check if we can outline more instructions.
@@ -1073,9 +1083,10 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
 
   // Sanity check - make sure we have outlined everything.
   if (outlined.size() != pattern.GetPatternNodes().size()) {
-    LOG(FATAL) << "Failed to outline a pattern correctly - not all "
-                  "instructions have been outlined. "
-               << outlined.size() << " " << pattern.GetPatternNodes().size();
+    return InternalError(
+        "Failed to outline a pattern correctly - not all "
+        "instructions have been outlined. ",
+        outlined.size(), " ", pattern.GetPatternNodes().size());
   }
   // If we have multiple outputs then create a root tuple - otherwise output[0]
   // is the root.

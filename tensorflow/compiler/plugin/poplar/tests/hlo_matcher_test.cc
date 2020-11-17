@@ -37,8 +37,9 @@ class TestMatcher : public HloMatcher {
                    look_through_depth) {}
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64> sharding_device) override {
+  StatusOr<bool> HandleMatch(
+      HloMatcherMatched& match,
+      const absl::optional<int64> sharding_device) override {
     auto pattern = patterns_[match.pattern_idx];
     OutlineExpressionFromComputation(match, pattern.GetType(), sharding_device);
     replace_count++;

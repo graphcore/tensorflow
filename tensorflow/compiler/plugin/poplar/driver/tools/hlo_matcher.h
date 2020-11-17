@@ -221,7 +221,7 @@ class HloMatcher : public HloModulePass {
  protected:
   // Outlines the given match and return the instruction which calls the
   // outlined computation.
-  HloInstruction* OutlineExpressionFromComputation(
+  StatusOr<HloInstruction*> OutlineExpressionFromComputation(
       const HloMatcherMatched& matched,
       const std::string& outlined_computation_name,
       const absl::optional<int64> sharding_device,
@@ -234,11 +234,12 @@ class HloMatcher : public HloModulePass {
   struct CompilerAnnotations& annotations_;
 
  private:
-  virtual bool HandleMatch(HloMatcherMatched& match,
-                           const absl::optional<int64> sharding_device) = 0;
+  virtual StatusOr<bool> HandleMatch(
+      HloMatcherMatched& match,
+      const absl::optional<int64> sharding_device) = 0;
 
-  bool MatchPatternStart(HloComputation*);
-  bool MatchPattern(HloInstruction* inst, const unsigned pattern_idx);
+  StatusOr<bool> MatchPatternStart(HloComputation*);
+  StatusOr<bool> MatchPattern(HloInstruction* inst, const unsigned pattern_idx);
 
   std::set<HloInstruction*> GetAssociativeSet(HloInstruction*);
 
@@ -247,9 +248,9 @@ class HloMatcher : public HloModulePass {
                                            const HloOpcode desiredOpcode,
                                            const std::set<HloInstruction*>&);
 
-  bool MatchPatternSingleOutput(HloInstruction* root,
-                                const HloMatcherPattern& pattern,
-                                HloMatcherMatched& match);
+  StatusOr<bool> MatchPatternSingleOutput(HloInstruction* root,
+                                          const HloMatcherPattern& pattern,
+                                          HloMatcherMatched& match);
 
   std::set<HloInstruction*> ReorderGraph(const HloMatcherMatched& matched);
 

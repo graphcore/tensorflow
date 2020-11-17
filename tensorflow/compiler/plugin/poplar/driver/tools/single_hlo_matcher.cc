@@ -24,12 +24,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-bool SingleHloMatcher::HandleMatch(
+StatusOr<bool> SingleHloMatcher::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto& pattern = patterns_[match.pattern_idx];
   std::string name = op_prefix_ + pattern.GetType();
-  HloInstruction* inst =
-      OutlineExpressionFromComputation(match, name, sharding_device);
+  TF_ASSIGN_OR_RETURN(HloInstruction * inst, OutlineExpressionFromComputation(
+                                                 match, name, sharding_device));
 
   PoplarOp tmp;
 
@@ -46,9 +46,9 @@ bool SingleHloMatcher::HandleMatch(
   bool parse = PoplarOp_Parse(name, &tmp);
 
   if (!parse) {
-    LOG(FATAL)
-        << "Matched fusion is NOT a known poplar operation registered with XLA "
-        << name;
+    return InternalError(
+        "Matched fusion is NOT a known poplar operation registered with XLA ",
+        name);
   }
 
   return true;

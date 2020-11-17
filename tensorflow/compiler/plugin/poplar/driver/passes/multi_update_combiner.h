@@ -31,8 +31,8 @@ class MultiUpdateCombiner : public HloMatcher {
   absl::string_view name() const override { return "multi-update-combiner"; }
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64>) override;
+  StatusOr<bool> HandleMatch(HloMatcherMatched& match,
+                             const absl::optional<int64>) override;
 };
 
 }  // namespace poplarplugin

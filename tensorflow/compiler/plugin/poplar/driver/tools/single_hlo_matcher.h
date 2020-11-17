@@ -35,8 +35,9 @@ class SingleHloMatcher : public HloMatcher {
   ~SingleHloMatcher() override = default;
 
  private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64> sharding_device) override;
+  StatusOr<bool> HandleMatch(
+      HloMatcherMatched& match,
+      const absl::optional<int64> sharding_device) override;
 
   std::string op_prefix_;
 };
