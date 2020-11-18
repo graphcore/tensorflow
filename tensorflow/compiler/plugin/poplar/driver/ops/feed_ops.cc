@@ -50,6 +50,10 @@ Status CreatePoplarH2DFIFO(
   fifo_options.set("bufferingDepth",
                    std::to_string(infeed_config.prefetch_depth()));
 
+  if (res.remote_memory_supported) {
+    fifo_options.set("addressSpace", "addressTranslationTable");
+  }
+
   auto fifo = graph.addHostToDeviceFIFO(
       handle, tensor_to_update.elementType(), tensor_to_update.numElements(),
       poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
