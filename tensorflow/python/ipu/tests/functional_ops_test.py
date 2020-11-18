@@ -519,6 +519,39 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {x: np.ones(x.shape) for x in [a]})
       self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
+  @test_util.deprecated_graph_mode_only
+  def testInputsWithAliasing(self):
+    with tu.ipu_session() as sess:
+
+      @ipu.outlined_function
+      def func(x):
+        return math_ops.sigmoid(x)
+
+      def body(a, b):
+        a = array_ops.broadcast_to(a, shape=[1024])
+        b = array_ops.broadcast_to(b, shape=[1024])
+        return func(a) - func(b)
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [])
+        b = array_ops.placeholder(np.float32, [])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a, b])
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      report = tu.ReportJSON(self, sess)
+      result = sess.run(res, {x: np.ones(x.shape) for x in [a, b]})
+      self.assertAllClose(result[0], np.broadcast_to(0., [1024]))
+
+      report.parse_log()
+      report.assert_max_tile_memory(513)
+
+      # Entry computation and outlined one.
+      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+
 
 if __name__ == "__main__":
   googletest.main()

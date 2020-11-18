@@ -1302,7 +1302,8 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
   } else {
     auto name = absl::StrCat(GetDebugName(allocation_location.instruction), "_",
                              allocation_location.flattened_output_tuple_index);
-    out = graph.clone(*tensor_like, name);
+    out =
+        TensorCloneAndRebalanceAliasing(graph, resources_, *tensor_like, name);
   }
 
   return out;

@@ -935,9 +935,11 @@ poplar::Tensor TensorCloneAndRebalanceAliasing(poplar::Graph& graph,
                                                CompilerResources& res,
                                                const poplar::Tensor& tensor,
                                                const std::string& name) {
-  poplar::Tensor rebalanced_tensor;
-  poplar::Tensor tensor_flat = tensor.flatten();
+  if (tensor.isParallelWriteable()) {
+    return graph.clone(tensor, name);
+  }
 
+  poplar::Tensor tensor_flat = tensor.flatten();
   // Get all the intervals, and create new intervals for the aliased ones.
   std::vector<std::size_t> interval_aliases;
   std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
@@ -966,46 +968,44 @@ poplar::Tensor TensorCloneAndRebalanceAliasing(poplar::Graph& graph,
   CHECK_EQ(interval_aliases.size(),
            unaliased_intervals.size() + aliased_intervals.size());
 
-  if (aliased_intervals.size()) {
-    // Clone the intervals into a new tensor.
-    poplar::Tensor aliased_clone = graph.clone(
-        poplar::concat(tensor_flat.slices(aliased_intervals)), name);
-    poplar::Tensor unaliased_clone = graph.clone(
-        poplar::concat(tensor_flat.slices(unaliased_intervals)), name);
-
-    // Remap the aliased intervals clone.
-    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
-                                     aliased_clone);
-
-    // Combine the tensor together from the intervals.
-    auto aliased_intervals_itr = aliased_intervals.begin();
-    uint64 next_idx_aliased_tensor = 0;
-    auto unaliased_intervals_itr = unaliased_intervals.begin();
-    uint64 next_idx_unaliased_tensor = 0;
-
-    std::vector<poplar::Tensor> output_slices(interval_id);
-    for (uint64 i = 0; i != is_interval_an_alias.size(); ++i) {
-      if (is_interval_an_alias[i]) {
-        const uint64 interval_size = aliased_intervals_itr->size();
-        output_slices[i] = aliased_clone.slice(
-            {next_idx_aliased_tensor, next_idx_aliased_tensor + interval_size});
-        next_idx_aliased_tensor += interval_size;
-        aliased_intervals_itr++;
-      } else {
-        const uint64 interval_size = unaliased_intervals_itr->size();
-        output_slices[i] =
-            unaliased_clone.slice({next_idx_unaliased_tensor,
-                                   next_idx_unaliased_tensor + interval_size});
-        next_idx_unaliased_tensor += interval_size;
-        unaliased_intervals_itr++;
-      }
-    }
-    rebalanced_tensor = poplar::concat(output_slices).reshape(tensor.shape());
-  } else {
-    // No aliased intervals, just clone the tensor.
-    rebalanced_tensor = graph.clone(tensor, name);
+  if (aliased_intervals.empty()) {
+    return graph.clone(tensor, name);
   }
-  return rebalanced_tensor;
+
+  // Clone the intervals into a new tensor.
+  poplar::Tensor aliased_clone =
+      graph.clone(poplar::concat(tensor_flat.slices(aliased_intervals)), name);
+  poplar::Tensor unaliased_clone = graph.clone(
+      poplar::concat(tensor_flat.slices(unaliased_intervals)), name);
+
+  // Remap the aliased intervals clone.
+  MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
+                                   aliased_clone);
+
+  // Combine the tensor together from the intervals.
+  auto aliased_intervals_itr = aliased_intervals.begin();
+  uint64 next_idx_aliased_tensor = 0;
+  auto unaliased_intervals_itr = unaliased_intervals.begin();
+  uint64 next_idx_unaliased_tensor = 0;
+
+  std::vector<poplar::Tensor> output_slices(interval_id);
+  for (uint64 i = 0; i != is_interval_an_alias.size(); ++i) {
+    if (is_interval_an_alias[i]) {
+      const uint64 interval_size = aliased_intervals_itr->size();
+      output_slices[i] = aliased_clone.slice(
+          {next_idx_aliased_tensor, next_idx_aliased_tensor + interval_size});
+      next_idx_aliased_tensor += interval_size;
+      aliased_intervals_itr++;
+    } else {
+      const uint64 interval_size = unaliased_intervals_itr->size();
+      output_slices[i] =
+          unaliased_clone.slice({next_idx_unaliased_tensor,
+                                 next_idx_unaliased_tensor + interval_size});
+      next_idx_unaliased_tensor += interval_size;
+      unaliased_intervals_itr++;
+    }
+  }
+  return poplar::concat(output_slices).reshape(tensor.shape());
 }
 
 Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
