@@ -204,7 +204,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        57095,
+        199241,
         True,
         pipelining_ops.PipelineSchedule.Sequential,
         batch_serialization_iterations=5)
@@ -261,7 +261,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        26596,
+        60107,
         True,
         pipelining_ops.PipelineSchedule.Sequential,
         batch_serialization_iterations=6)
