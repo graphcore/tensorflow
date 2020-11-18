@@ -1840,10 +1840,6 @@ bool PoplarExecutor::HaveCachedExecutable(
 
 bool PoplarExecutor::SupportsRemoteBuffers() const {
   CHECK(HasPoplarTarget());
-  if (ipu_.TargetOrDie().getTargetType() != poplar::TargetType::IPU) {
-    return false;
-  }
-
   if (!PoplarDeviceIsAttached()) {
     return current_config_.enable_remote_buffers_without_device();
   }
