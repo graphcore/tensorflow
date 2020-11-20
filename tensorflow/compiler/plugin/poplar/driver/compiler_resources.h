@@ -163,11 +163,11 @@ struct CompilerResources {
 
   absl::flat_hash_map<std::string,
                       std::pair<poplar::program::Sequence, poplar::Tensor>>
-      io_tile_infeed_cache;
+      infeed_cache;
 
   absl::flat_hash_map<std::string,
                       std::pair<poplar::program::Sequence, poplar::Tensor>>
-      io_tile_outfeed_cache;
+      outfeed_cache;
 
   CompilerResources(
       HloModule* module, const CompilerInformation& information,

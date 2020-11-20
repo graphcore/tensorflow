@@ -73,15 +73,14 @@ Status CreatePoplarH2DFIFO(
   return Status::OK();
 }
 
-Status CreateIOTilePoplarH2DFIFO(
+Status CreateReusablePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
     poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq) {
   // Is the stream registered in the cache?
-  auto itr = res.io_tile_infeed_cache.find(handle);
-
-  if (itr != res.io_tile_infeed_cache.end()) {
+  auto itr = res.infeed_cache.find(handle);
+  if (itr != res.infeed_cache.end()) {
     // Reuse the cache program and copy the result into the tensor.
     seq.add(itr->second.first);
     seq.add(poplar::program::Copy(itr->second.second, tensor_to_update));
@@ -95,7 +94,7 @@ Status CreateIOTilePoplarH2DFIFO(
                                          handle, graph, tmp, seq));
 
   // Add to the cache.
-  res.io_tile_infeed_cache[handle] = std::make_pair(seq, tmp);
+  res.infeed_cache[handle] = std::make_pair(seq, tmp);
   seq.add(poplar::program::Copy(tmp, tensor_to_update));
 
   return Status::OK();
@@ -103,15 +102,14 @@ Status CreateIOTilePoplarH2DFIFO(
 
 Status CreatePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
-    const xla::poplarplugin::PoplarFeedConfig& outfeed_config, FeedInfo& info,
+    const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     poplar::program::Sequence& seq) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      info.config.feed_id(), tuple_index, handle, seq, inst));
-  std::string tuple_handle = GetOutfeedCopyHandle(inst->name(), tuple_index);
-  auto fifo = graph.addDeviceToHostFIFO(
-      tuple_handle, in.elementType(), in.numElements(),
-      res.streams_indices.GraphFeedOptions(handle));
+      outfeed_config.feed_id(), tuple_index, handle, seq, inst));
+  auto fifo =
+      graph.addDeviceToHostFIFO(handle, in.elementType(), in.numElements(),
+                                res.streams_indices.GraphFeedOptions(handle));
   if (res.use_verified_transfers) {
     TF_ASSIGN_OR_RETURN(poplar::Tensor index,
                         res.streams_indices.IndexTensor(handle, inst, seq));
@@ -129,22 +127,20 @@ Status CreatePoplarD2HFIFO(
   return Status::OK();
 }
 
-Status CreateIOTilePoplarD2HFIFO(
+Status CreateReusablePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
-    const xla::poplarplugin::PoplarFeedConfig& outfeed_config, FeedInfo& info,
+    const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     poplar::program::Sequence& seq) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      info.config.feed_id(), tuple_index, handle, seq, inst));
-  std::string tuple_handle = GetOutfeedCopyHandle(inst->name(), tuple_index);
+      outfeed_config.feed_id(), tuple_index, handle, seq, inst));
 
   // Is the stream registered in the cache?
-  auto itr = res.io_tile_outfeed_cache.find(tuple_handle);
-
-  if (itr != res.io_tile_outfeed_cache.end()) {
+  auto itr = res.outfeed_cache.find(handle);
+  if (itr != res.outfeed_cache.end()) {
     // Reuse the cache program and copy the input into the tensor.
-    seq.add(itr->second.first);
     seq.add(poplar::program::Copy(in, itr->second.second));
+    seq.add(itr->second.first);
 
     return Status::OK();
   }
@@ -153,12 +149,12 @@ Status CreateIOTilePoplarD2HFIFO(
   poplar::Tensor tmp = graph.clone(in);
   poplar::program::Sequence out_copy;
   TF_RETURN_IF_ERROR(CreatePoplarD2HFIFO(res, inst, tuple_index, outfeed_config,
-                                         info, handle, graph, tmp, out_copy));
+                                         handle, graph, tmp, out_copy));
 
   // Add to the cache.
   seq.add(poplar::program::Copy(in, tmp));
   seq.add(out_copy);
-  res.io_tile_infeed_cache[tuple_handle] = std::make_pair(out_copy, tmp);
+  res.outfeed_cache[handle] = std::make_pair(out_copy, tmp);
 
   return Status::OK();
 }
@@ -195,12 +191,12 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                     poplar::Tensor& tensor_to_update) {
     if (!UseSyntheticData()) {
       const std::string handle =
-          GetInfeedCopyHandle(infeed->name(), tuple_index);
+          GetInfeedCopyHandle(infeed_config.feed_id(), tuple_index);
 
-      TF_ASSIGN_OR_RETURN(auto tileset, GetTileset(inst));
-      if (tileset == TILESET_IO_TILES) {
-        return CreateIOTilePoplarH2DFIFO(res, inst, tuple_index, infeed_config,
-                                         handle, graph, tensor_to_update, seq);
+      if (infeed_config.reusable()) {
+        return CreateReusablePoplarH2DFIFO(res, inst, tuple_index,
+                                           infeed_config, handle, graph,
+                                           tensor_to_update, seq);
       }
 
       return CreatePoplarH2DFIFO(res, inst, tuple_index, infeed_config, handle,
@@ -332,7 +328,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
         res.local_replication_factor);
   }
 
-  FeedInfo info(outfeed->name(), outfeed_config,
+  FeedInfo info(outfeed_config.feed_id(), outfeed_config,
                 outfeed->operands()[0]->shape());
   TF_RETURN_IF_ERROR(AddOutfeedInfo(res.annotations, info));
 
@@ -351,22 +347,27 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
                       FindInstructionInputTensors(tensor_map, res, inst, 0, seq,
                                                   expand_aliasing));
 
-  TF_ASSIGN_OR_RETURN(auto tileset, GetTileset(inst));
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
     poplar::Tensor& in = input_tensors[i];
+    const std::string handle =
+        GetOutfeedCopyHandle(outfeed_config.feed_id(), i);
 
     if (io_batch_size == 1) {
       // Simply copy to the stream
-      const std::string handle = GetOutfeedCopyHandle(inst->name(), i);
-
-      if (tileset == TILESET_IO_TILES) {
-        TF_RETURN_IF_ERROR(CreateIOTilePoplarD2HFIFO(
-            res, inst, i, outfeed_config, info, handle, graph, in, seq));
+      if (outfeed_config.reusable()) {
+        TF_RETURN_IF_ERROR(CreateReusablePoplarD2HFIFO(
+            res, inst, i, outfeed_config, handle, graph, in, seq));
       } else {
         TF_RETURN_IF_ERROR(CreatePoplarD2HFIFO(res, inst, i, outfeed_config,
-                                               info, handle, graph, in, seq));
+                                               handle, graph, in, seq));
       }
     } else {
+      if (outfeed_config.reusable()) {
+        return UnimplementedStrCat(
+            "Trying to reuse", inst->ToString(),
+            " outfeed with an io batch size greater than 1.");
+      }
+
       // Batch multiple writes, and then write as a block.
 
       // If the tensor is a scalar then we need to make sure the buffer is
@@ -425,9 +426,8 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       poplar::program::Sequence true_body;
 
       // Copy the data to the host
-      auto fifo = graph.addDeviceToHostFIFO(
-          GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
-          batched.numElements());
+      auto fifo = graph.addDeviceToHostFIFO(handle, batched.elementType(),
+                                            batched.numElements());
       true_body.add(poplar::program::Copy(batched, fifo, false));
 
       // The NOP body.
