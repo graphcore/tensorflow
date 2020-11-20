@@ -187,6 +187,7 @@ cc_library(
         "driver/passes/multi_update_canonicalize.cc",
         "driver/passes/multi_update_combiner.cc",
         "driver/passes/multi_update_scale_apply.cc",
+        "driver/passes/multi_use_feeds_finder.cc",
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
@@ -354,6 +355,7 @@ cc_library(
         "driver/passes/multi_update_canonicalize.h",
         "driver/passes/multi_update_combiner.h",
         "driver/passes/multi_update_scale_apply.h",
+        "driver/passes/multi_use_feeds_finder.h",
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
@@ -3045,6 +3047,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "multi_use_feeds_finder_test",
+    srcs = ["tests/multi_use_feeds_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4744,6 +4759,7 @@ test_suite(
         "multi_update_canonicalize_test",
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
+        "multi_use_feeds_finder_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",

@@ -91,6 +91,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_scale_apply.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_use_feeds_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
@@ -1319,6 +1320,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<LowerFrontendAttributes>();
+    pipeline.AddPass<MultiUseFeedsFinder>();
 
     TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
   }

@@ -552,7 +552,7 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
   }
   has_infeed_ = true;
 
-  FeedInfo info(infeed->name(), infeed_config, infeed->shape());
+  FeedInfo info(infeed_config.feed_id(), infeed_config, infeed->shape());
   TF_RETURN_IF_ERROR(AddInfeedInfo(resources_.annotations, info));
 
   return Status::OK();

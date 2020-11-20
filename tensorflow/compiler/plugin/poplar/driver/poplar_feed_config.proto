@@ -29,4 +29,8 @@ message PoplarFeedConfig {
 
 	// How many elements to prefetch.
 	int64 prefetch_depth = 6;
+
+	// Whether the feed sequence is reusable because this feed id has multiple
+	// uses.
+	bool reusable = 7;
 };

@@ -1040,6 +1040,8 @@ class HloOutfeedInstruction : public HloInstruction {
   const string& outfeed_config() const { return outfeed_config_; }
   // Returns a serialized representation of this instruction.
   HloInstructionProto ToProto() const override;
+  // Sets the config for the outfeed instruction.
+  void set_outfeed_config(const string& config) { outfeed_config_ = config; }
 
  private:
   std::vector<string> ExtraAttributesToStringImpl(
