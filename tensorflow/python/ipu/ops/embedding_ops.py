@@ -190,7 +190,7 @@ class HostEmbeddingOptimizerSpec:
 
   def get_learning_rate(self):
     """
-    Get the optimiser learning rate.
+    Get the optimizer learning rate.
 
     Returns:
       The learning rate.
@@ -284,7 +284,20 @@ class HostEmbeddingOptimizerSpec:
 
 
 class HostEmbeddingSGDGAOptimizerSpec(HostEmbeddingOptimizerSpec):
+  """ Description of the Host Embedding optimizer that uses SGD and
+      gradient accumulation.
+
+  """
   def __init__(self, learning_rate, accumulation_factor):
+    """
+    Create a HostEmbeddingSGDGAOptimizerSpec.
+
+    Args:
+        learning_rate: The SGD learning rate.
+        accumulation_factor: The gradient accumulation factor (number of
+          mini-batches the gradients will be accumulated for).
+
+    """
     if accumulation_factor > 1:
       super().__init__(learning_rate, "SGD+GA")
     else:
@@ -293,6 +306,13 @@ class HostEmbeddingSGDGAOptimizerSpec(HostEmbeddingOptimizerSpec):
     self._accumulation_factor = accumulation_factor
 
   def get_accumulation_factor(self):
+    """
+    Get the optimizer gradient accumulation factor.
+
+    Returns:
+      The gradient accumulation factor.
+
+    """
     return self._accumulation_factor
 
 

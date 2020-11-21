@@ -214,6 +214,7 @@ It is also possible to access the operators via the
   :members:
   :special-members: __init__
   :imported-members:
+  :exclude-members: mul, reduce
 
 .. automodule:: tensorflow.python.ipu.reduce_scatter_op
   :members:
