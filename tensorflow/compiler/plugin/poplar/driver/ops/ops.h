@@ -279,10 +279,6 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateSort(CompilerResources& res,
-                                              const HloInstruction* inst,
-                                              TensorMap& tensor_map);
-
 poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
                                         const unsigned feature_dimension);
 
@@ -314,14 +310,6 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                                 poplar::Tensor tensor);
 
 /* Op Creation Helpers */
-
-StatusOr<poplar::program::Sequence> CreateSort(
-    poplar::Graph& graph, poplar::Tensor input, const int64 dimension,
-    const std::string& debug_name = "");
-
-StatusOr<poplar::program::Sequence> CreateSort(
-    poplar::Graph& graph, poplar::Tensor key, poplar::Tensor value,
-    const int64 dimension, const std::string& debug_name = "");
 
 Status SetPartialsTypeIfPresent(const HloInstruction* inst,
                                 poplar::OptionFlags& option_flags);

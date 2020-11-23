@@ -67,8 +67,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleIota(HloInstruction* inst) override;
 
-  Status HandleSort(HloInstruction* inst) override;
-
   Status Postprocess(HloInstruction* inst) override;
 
   Status HandleOutfeed(HloInstruction* inst) override;
@@ -82,6 +80,7 @@ class FullVisitor : public BaseVisitor {
   HANDLE_AS_HLO_OP(HandleBatchNormGrad)
   HANDLE_AS_HLO_OP(HandleGather)
   HANDLE_AS_HLO_OP(HandleScatter)
+  HANDLE_AS_HLO_OP(HandleSort)
 };
 
 }  // namespace poplarplugin

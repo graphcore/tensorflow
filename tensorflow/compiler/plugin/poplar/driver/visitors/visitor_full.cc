@@ -287,14 +287,6 @@ Status FullVisitor::HandleIota(HloInstruction* inst) {
   return AddSequenceForInstruction(inst, prog);
 }
 
-Status FullVisitor::HandleSort(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-
-  TF_ASSIGN_OR_RETURN(auto prog, CreateSort(resources_, inst, tensor_map));
-
-  return AddSequenceForInstruction(inst, prog);
-}
-
 Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map));
