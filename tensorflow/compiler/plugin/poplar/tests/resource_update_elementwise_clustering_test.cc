@@ -608,10 +608,8 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
               ::testing::UnorderedElementsAre(arg1_new, arg2_new));
 
   // Convert the cluster.
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool converted,
-      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2));
-  EXPECT_TRUE(converted);
+  TF_ASSERT_OK(
+      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2).status());
   TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 
   HloInstruction *arg2_load, *arg2_store;
@@ -810,10 +808,8 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest,
               ::testing::UnorderedElementsAre(arg1_new, arg2_new));
 
   // Convert the cluster.
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool converted,
-      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2));
-  EXPECT_TRUE(converted);
+  TF_ASSERT_OK(
+      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2).status());
   TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 
   HloInstruction *arg2_load, *arg2_store;
@@ -1006,10 +1002,8 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
               ::testing::UnorderedElementsAre(arg1_new, arg2_new));
 
   // Convert the cluster.
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool converted,
-      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2));
-  EXPECT_TRUE(converted);
+  TF_ASSERT_OK(
+      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2).status());
   TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 
   HloInstruction *arg2_load, *arg2_store;
@@ -1276,10 +1270,8 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
               ::testing::UnorderedElementsAre(arg1_new, arg2_new_c));
 
   // Convert the cluster.
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool converted,
-      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2));
-  EXPECT_TRUE(converted);
+  TF_ASSERT_OK(
+      ResourceUpdateElementwiseClustering::OutlineCluster(cluster, 2).status());
   TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
 
   HloInstruction *arg2_load, *arg2_store;
@@ -1538,6 +1530,212 @@ INSTANTIATE_TEST_CASE_P(
     ResourceUpdateElementwiseClusteringBasicTest_Instantiation,
     ResourceUpdateElementwiseClusteringBasicTest,
     ::testing::Values(true, false));
+
+using ResourceUpdateElementwiseClusteringOutlineTests = HloTestBase;
+
+TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestSameCluster) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
+    arg1_r = f16[128] all-reduce(arg1), to_apply=sum
+
+    arg2 = f16[128] parameter(2)
+    arg3 = f16[128] parameter(3)
+
+    arg4 = f16[128] parameter(4)
+    arg5 = f16[128] parameter(5)
+
+    arg6 = f16[] parameter(6)
+
+    arg4_new = f16[128] add(arg0_r, arg4)
+    arg5_new = f16[128] add(arg1_r, arg5)
+
+    bcast = f16[128] broadcast(arg6), dimensions={}
+
+    arg4_mul = f16[128] multiply(bcast, arg4_new)
+    arg5_mul = f16[128] multiply(bcast, arg5_new)
+
+    arg2_new = f16[128] add(arg2, arg4_mul)
+    arg3_new = f16[128] add(arg3, arg5_mul)
+
+    ROOT t = (f16[128],f16[128],f16[128],f16[128]) tuple(arg2_new, arg3_new, arg4_new, arg5_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    l.arg0 = f16[128] parameter(0)
+    l.arg1 = f16[128] parameter(1)
+    l.arg2 = f16[128] parameter(2)
+    l.arg3 = f16[128] parameter(3)
+    l.arg4 = f16[] parameter(4)
+
+    add.1 = f16[128] add(input, l.arg0)
+    add.2 = f16[128] add(add.1, l.arg1)
+
+    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
+    gte0 = f16[128] get-tuple-element(resource_update), index=0
+    gte1 = f16[128] get-tuple-element(resource_update), index=1
+    gte2 = f16[128] get-tuple-element(resource_update), index=2
+    gte3 = f16[128] get-tuple-element(resource_update), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128],f16[]) tuple(gte0, gte1, gte2, gte3, l.arg4)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    e.in2 = f16[128] parameter(2)
+    e.in3 = f16[128] parameter(3)
+    e.in4 = f16[] parameter(4)
+    loop_call = (f16[128],f16[128],f16[128],f16[128],f16[]) call(e.in0, e.in1, e.in2, e.in3, e.in4), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    gte2 = f16[128] get-tuple-element(loop_call), index=2
+    gte3 = f16[128] get-tuple-element(loop_call), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128]) tuple(gte0, gte1, gte2, gte3)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  int64 replication_factor = 1;
+  CompilerAnnotations annotations(module.get());
+  HloInstruction* resource_update =
+      FindInstruction(module.get(), "resource_update");
+  // Check that there were no functions before.
+  ASSERT_EQ(GetCount(resource_update->to_apply(), IsFunction), 0);
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 4, replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, ResourceUpdateElementwiseClustering(
+                                            replication_factor, true)
+                                            .Run(module.get()));
+  EXPECT_TRUE(changed);
+  // Check that there are functions now due to the elementwise clusters which
+  // were outlined.
+  ASSERT_EQ(GetCount(resource_update->to_apply(), IsFunction), 2);
+}
+
+TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestDifferentCluster) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
+    arg1_r = f16[128] all-reduce(arg1), to_apply=sum
+
+    arg2 = f16[128] parameter(2)
+    arg3 = f16[128] parameter(3)
+
+    arg4 = f16[128] parameter(4)
+    arg5 = f16[128] parameter(5)
+
+    arg6 = f16[] parameter(6)
+
+    arg4_new = f16[128] add(arg0_r, arg4)
+    arg5_new = f16[128] add(arg1_r, arg5)
+
+    bcast = f16[128] broadcast(arg6), dimensions={}
+
+    arg4_mul = f16[128] multiply(bcast, arg4_new)
+    arg5_div = f16[128] divide(bcast, arg5_new)
+
+    arg2_new = f16[128] add(arg2, arg4_mul)
+    arg3_new = f16[128] add(arg3, arg5_div)
+
+    ROOT t = (f16[128],f16[128],f16[128],f16[128]) tuple(arg2_new, arg3_new, arg4_new, arg5_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    l.arg0 = f16[128] parameter(0)
+    l.arg1 = f16[128] parameter(1)
+    l.arg2 = f16[128] parameter(2)
+    l.arg3 = f16[128] parameter(3)
+    l.arg4 = f16[] parameter(4)
+
+    add.1 = f16[128] add(input, l.arg0)
+    add.2 = f16[128] add(add.1, l.arg1)
+
+    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
+    gte0 = f16[128] get-tuple-element(resource_update), index=0
+    gte1 = f16[128] get-tuple-element(resource_update), index=1
+    gte2 = f16[128] get-tuple-element(resource_update), index=2
+    gte3 = f16[128] get-tuple-element(resource_update), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128],f16[]) tuple(gte0, gte1, gte2, gte3, l.arg4)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    e.in2 = f16[128] parameter(2)
+    e.in3 = f16[128] parameter(3)
+    e.in4 = f16[] parameter(4)
+    loop_call = (f16[128],f16[128],f16[128],f16[128],f16[]) call(e.in0, e.in1, e.in2, e.in3, e.in4), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    gte2 = f16[128] get-tuple-element(loop_call), index=2
+    gte3 = f16[128] get-tuple-element(loop_call), index=3
+    ROOT r = (f16[128],f16[128],f16[128],f16[128]) tuple(gte0, gte1, gte2, gte3)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  int64 replication_factor = 1;
+  CompilerAnnotations annotations(module.get());
+  HloInstruction* resource_update =
+      FindInstruction(module.get(), "resource_update");
+  // Check that there were no functions before.
+  ASSERT_EQ(GetCount(resource_update->to_apply(), IsFunction), 0);
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 4, replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, ResourceUpdateElementwiseClustering(
+                                            replication_factor, true)
+                                            .Run(module.get()));
+  EXPECT_TRUE(changed);
+  // Check that there are no functions due to the elementwise clusters being
+  // different.
+  ASSERT_EQ(GetCount(resource_update->to_apply(), IsFunction), 0);
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

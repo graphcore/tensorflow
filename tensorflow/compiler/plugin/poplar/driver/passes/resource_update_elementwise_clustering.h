@@ -59,7 +59,8 @@ class ElementwiseCluster {
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
   bool Finalize(const CrossReplicaValidInputs& cross_replica_valid_inputs,
-                ThreeState partition_offload_variables);
+                ThreeState partition_offload_variables,
+                uint32 replication_factor);
 
   // Following functions can be called once finalized.
   std::string ToString() const;
@@ -107,8 +108,10 @@ class ElementwiseCluster {
 // all-gather(remote-parameter-load) and store result in remote buffer shard.
 class ResourceUpdateElementwiseClustering : public HloModulePass {
  public:
-  explicit ResourceUpdateElementwiseClustering(uint32 replication_factor)
-      : replication_factor_(replication_factor) {}
+  explicit ResourceUpdateElementwiseClustering(
+      uint32 replication_factor, bool handle_non_replicated_clusters = false)
+      : replication_factor_(replication_factor),
+        handle_non_replicated_clusters_(handle_non_replicated_clusters) {}
 
   absl::string_view name() const override {
     return "resource-update-elementwise-clustering";
@@ -128,13 +131,13 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
       const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
       uint32 replication_factor);
 
-  // Outline the provided cluster - returns whether it was successfully
-  // outlined.
-  static StatusOr<bool> OutlineCluster(ElementwiseCluster& cluster,
-                                       uint32 replication_factor);
+  // Outline the provided cluster - returns the call instruction to the cluster.
+  static StatusOr<HloInstruction*> OutlineCluster(ElementwiseCluster& cluster,
+                                                  uint32 replication_factor);
 
  private:
   uint32 replication_factor_;
+  bool handle_non_replicated_clusters_;
 };
 
 }  // namespace poplarplugin

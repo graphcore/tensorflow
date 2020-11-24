@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
+#include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -440,7 +441,7 @@ StatusOr<HloInstruction*> AddClusterOutput(
 StatusOr<bool> RewriteCall(
     HloModule* module, HloInstruction* call,
     const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-    uint32 replication_factor) {
+    uint32 replication_factor, bool handle_non_replicated_clusters) {
   TF_ASSIGN_OR_RETURN(std::vector<ElementwiseCluster> clusters,
                       ResourceUpdateElementwiseClustering::GetClustersIn(
                           call, elementwise_comps, replication_factor));
@@ -450,22 +451,45 @@ StatusOr<bool> RewriteCall(
     return false;
   }
 
-  bool changed = false;
+  std::vector<HloInstruction*> non_replicated_outlined_clusters;
   for (auto& cluster : clusters) {
     // TODO(T29961) only outline replicated clusters with remote loads/stores.
-    if (!cluster.IsReplicaPartitioned()) {
+    if (!cluster.IsReplicaPartitioned() && !handle_non_replicated_clusters) {
       VLOG(2) << "Skipping outlining cluster with top "
               << cluster.GetTop()->name()
               << " as it is not replica partitioned.";
       continue;
     }
 
-    TF_ASSIGN_OR_RETURN(bool outlined,
+    TF_ASSIGN_OR_RETURN(HloInstruction * call,
                         ResourceUpdateElementwiseClustering::OutlineCluster(
                             cluster, replication_factor));
-    changed |= outlined;
+    if (!cluster.IsReplicaPartitioned()) {
+      non_replicated_outlined_clusters.push_back(call);
+    }
   }
-  return changed;
+
+  // Only outline the non replicated clusters which occur multiple times.
+  HloInstructionSet non_unique_clusters;
+  for (int64 i = 0; i != non_replicated_outlined_clusters.size(); ++i) {
+    HloInstruction* i_call = non_replicated_outlined_clusters[i];
+    HloComputation* i_comp = i_call->to_apply();
+    for (int64 j = 0; j != i; ++j) {
+      HloInstruction* j_call = non_replicated_outlined_clusters[j];
+      HloComputation* j_comp = j_call->to_apply();
+      if (HloComputationEquals()(i_comp, j_comp)) {
+        non_unique_clusters.insert(i_call);
+        non_unique_clusters.insert(j_call);
+      }
+    }
+  }
+  // Inline all the clusters which are unique.
+  for (HloInstruction* call : non_replicated_outlined_clusters) {
+    if (!ContainsKey(non_unique_clusters, call)) {
+      TF_RETURN_IF_ERROR(CallInliner::Inline(call).status());
+    }
+  }
+  return true;
 }
 }  // namespace
 
@@ -532,7 +556,7 @@ HloComputation* ElementwiseCluster::GetComputation() const {
 
 bool ElementwiseCluster::Finalize(
     const CrossReplicaValidInputs& cross_replica_valid_inputs,
-    ThreeState partition_offload_variables) {
+    ThreeState partition_offload_variables, uint32 replication_factor) {
   CHECK(!finalized_);
 
   if (IsScalar(top_)) {
@@ -681,6 +705,13 @@ bool ElementwiseCluster::Finalize(
       VLOG(2) << "Multiple aligned cluster sizes found.";
       return false;
     }
+
+    if (shard_size_ * replication_factor != aligned_cluster_size_) {
+      VLOG(2) << "Cluster shape and replica shape don't match " << shard_size_
+              << " vs " << cluster_size_ << "(" << aligned_cluster_size_ << ")";
+      return false;
+    }
+
   } else {
     // This is a non replica partitioned cluster.
     shard_dimensions_ = {cluster_size_};
@@ -1051,8 +1082,8 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   absl::flat_hash_set<HloInstruction*> seen_insts;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    bool valid =
-        cluster.Finalize(cross_replica_valid_inputs, offload_variables);
+    bool valid = cluster.Finalize(cross_replica_valid_inputs, offload_variables,
+                                  replication_factor);
 
     if (valid) {
       // Make sure that non of the outputs overlap with previously seen
@@ -1079,20 +1110,11 @@ ResourceUpdateElementwiseClustering::GetClustersIn(
   return clusters;
 }
 
-StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
+StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
     ElementwiseCluster& cluster, uint32 replication_factor) {
   VLOG(2) << "Rewriting cluster with top in " << cluster.GetTop()->ToString()
           << ", " << cluster.GetPostOrder().size()
           << " instructions and replication factor " << replication_factor;
-  if (cluster.IsReplicaPartitioned()) {
-    if (cluster.GetShardSize() * replication_factor !=
-        cluster.GetAlignedClusterSize()) {
-      VLOG(2) << "Cluster shape and replica shape don't match "
-              << cluster.GetShardSize() << " vs " << cluster.GetClusterSize()
-              << "(" << cluster.GetAlignedClusterSize() << ")";
-      return false;
-    }
-  }
 
   HloComputation* cluster_comp = cluster.GetComputation();
   HloModule* module = cluster_comp->parent();
@@ -1187,7 +1209,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::OutlineCluster(
     }
   }
 
-  return true;
+  return call;
 }
 
 StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
@@ -1215,7 +1237,8 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   for (auto call : to_optimize) {
     TF_ASSIGN_OR_RETURN(
         auto changed,
-        RewriteCall(module, call, elementwise_comps, replication_factor_));
+        RewriteCall(module, call, elementwise_comps, replication_factor_,
+                    handle_non_replicated_clusters_));
     if (changed) {
       module_changed = true;
     }
