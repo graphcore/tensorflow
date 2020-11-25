@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+from threading import Thread
+import time
+
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -24,6 +27,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
@@ -493,6 +497,58 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
           tensor_spec.TensorSpec(inputs.shape, inputs.dtype))
       result = strategy.experimental_run_v2(concrete_function, args=[inputs])
       self.assertEqual(result, inputs)
+
+  @test_util.run_v2_only
+  def test_outfeed_async_dequeue_eager(self):
+    num_iterations = 1000
+    dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
+
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+
+    @def_function.function
+    def training_step(x):
+      outfeed_queue.enqueue(x)
+      x = x + 1
+      return x
+
+    strategy = ipu_strategy.IPUStrategy()
+
+    def test_with_delay(delay):
+      with strategy.scope():
+        # Async dequeue function that will run during main thread training loop
+        dequeued_samples = []
+
+        def dequeue():
+          counter = 0
+          while counter != num_iterations:
+            # Create a varying speed differential between the threads
+            time.sleep(delay)
+            r = outfeed_queue.dequeue().numpy()
+            if r.size:
+              for t in r:
+                dequeued_samples.append((counter, t))
+                counter += 1
+
+        # Start the training loop
+        for i, x in zip(range(num_iterations), dataset):
+          strategy.experimental_run_v2(training_step, args=[x[0]])
+          # Once the model is compiled, start the dequeuing thread
+          if i == 0:
+            dequeue_thread = Thread(target=dequeue)
+            dequeue_thread.start()
+
+        # Wait for the dequeuing thread to finish
+        dequeue_thread.join()
+
+        # Verify the dequeued samples
+        for i, sample in enumerate(dequeued_samples):
+          self.assertEqual(sample[0], i)
+          self.assertEqual(sample[1], i)
+
+    # Test with varying speed differences
+    test_with_delay(0)
+    test_with_delay(0.001)
+    test_with_delay(1)
 
 
 if __name__ == "__main__":

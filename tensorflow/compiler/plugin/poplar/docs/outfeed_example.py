@@ -1,77 +1,70 @@
 from threading import Thread
 
-from tensorflow.python.ipu import ipu_compiler
-from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.python.ipu import loops
-from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import utils
-from tensorflow.python import keras
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+from tensorflow import keras
+import tensorflow as tf
 
-# The dataset for feeding the graphs
-ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[2, 20]))
-ds = ds.repeat()
-
-# The host side queues
-infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
+# The host side queue
 outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
 
-# The device side main
-def body(image):
-  partial = keras.layers.Dense(256, activation=tf.nn.relu)(image)
-  partial = keras.layers.Dense(128, activation=tf.nn.relu)(partial)
-  logits = keras.layers.Dense(10)(partial)
-  classes = tf.argmax(input=logits, axis=1, output_type=tf.dtypes.int32)
-  outfeed = outfeed_queue.enqueue(classes)
-  return outfeed
+# A custom training loop
+@tf.function
+def training_step(features, labels, in_model, optimizer):
+  with tf.GradientTape() as tape:
+    predictions = in_model(features, training=True)
+    prediction_loss = keras.losses.sparse_categorical_crossentropy(
+        labels, predictions)
+    loss = tf.reduce_mean(prediction_loss)
+    grads = tape.gradient(loss, in_model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, in_model.trainable_variables))
+
+  outfeed_queue.enqueue(loss)
+  return loss
 
 
-num_iterations = 100
+# Configure the IPU devices
+utils.configure_ipu_system(utils.create_ipu_config())
 
+# Execute the graph
+strategy = ipu_strategy.IPUStrategy()
+with strategy.scope():
+  # Create the dataset for feeding the graphs
+  dataset = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[2, 20]))
+  dataset = dataset.repeat()
+  # Create the keras model and optimizer
+  model = keras.models.Sequential([
+      keras.layers.Flatten(),
+      keras.layers.Dense(128, activation='relu'),
+      keras.layers.Dense(10, activation='softmax')
+  ])
+  opt = keras.optimizers.SGD(0.01)
+  NUM_ITERATIONS = 100
 
-def my_net():
-  r = loops.repeat(100, body, [], infeed_queue)
-  return r
-
-
-with scopes.ipu_scope('/device:IPU:0'):
-  run_loop = ipu_compiler.compile(my_net, inputs=[])
-
-# The outfeed dequeue has to happen after the outfeed enqueue
-dequeue_outfeed = outfeed_queue.dequeue()
-
-# Configure the hardware
-config = utils.create_ipu_config()
-config = utils.auto_select_ipus(config, 1)
-utils.configure_ipu_system(config)
-
-with tf.Session() as sess:
-  sess.run(tf.global_variables_initializer())
-  sess.run(infeed_queue.initializer)
-
-  # Function which is executed when continuously dequeuing the outfeed
-  def dequeue():
+  # Function to continuously dequeue the outfeed until n examples are seen
+  def dequeue_thread_fn():
     counter = 0
-    # We expect 2*`num_iterations` results because we execute the loop twice
-    while counter != num_iterations * 2:
-      r = sess.run(dequeue_outfeed)
-      # Check if there are any results to process
-      if r.size:
-        # Print the partial results
-        print(r)
-        counter += len(r)
+    while counter != NUM_ITERATIONS:
+      r = outfeed_queue.dequeue().numpy()
 
-  # Run the main loop once to compile the program.
-  sess.run(run_loop)
-  # Create a thread which will continuously dequeue the outfeed queue and start
-  # it
-  dequeue_thread = Thread(target=dequeue)
-  dequeue_thread.start()
-  # Run the main loop
-  sess.run(run_loop)
-  # Once the main loop has finished, make sure to only finish once the dequeue
-  # thread has stopped
+      # Check if something has been enqueued
+      if r.size:
+        # The outfeed may have been enqueued multiple times between dequeues
+        for t in r:
+          print("Step", counter, "loss = ", t)
+          counter += 1
+
+  # Start the dequeuing thread
+  dequeue_thread = Thread(target=dequeue_thread_fn)
+
+  # Run the custom training loop over the data.
+  for i, (x, y) in zip(range(NUM_ITERATIONS), dataset):
+    strategy.experimental_run_v2(training_step, args=[x, y, model, opt])
+    # Start the dequeue_thread once the graph has been compiled
+    if i == 0:
+      dequeue_thread.start()
+
+  # Wait for the dequeuing thread to finish
   dequeue_thread.join()

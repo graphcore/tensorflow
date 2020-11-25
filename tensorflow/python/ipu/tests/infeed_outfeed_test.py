@@ -415,7 +415,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertTrue(initial_loss > final_loss)
 
   @test_util.deprecated_graph_mode_only
-  def testMultipleOutfeedEnequeue(self):
+  def testMultipleOutfeedEnqueue(self):
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -437,7 +437,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         ipu.ipu_compiler.compile(my_net, inputs=[v])
 
   @test_util.deprecated_graph_mode_only
-  def testMultipleOutfeedEnequeueDifferentGraphs(self):
+  def testMultipleOutfeedEnqueueDifferentGraphs(self):
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 

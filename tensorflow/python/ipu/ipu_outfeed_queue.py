@@ -18,6 +18,7 @@ Outfeed queue
 """
 
 from enum import Enum
+import threading
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.framework import func_graph
@@ -129,6 +130,9 @@ class IPUOutfeedQueue:
     self._structure = None
     self._device_str = '/device:IPU:{}'.format(str(device_ordinal))
 
+    # Helper to handle async dequeue
+    self._enqueuing_thread = None
+
   def enqueue(self, tensors):
     """Enqueue a tensor, tuple or a dictionary of tensors for being outfed
     from the IPU graph. This operation is placed on the IPU device.
@@ -234,6 +238,8 @@ class IPUOutfeedQueue:
           io_batch_size=self._io_batch_size)
 
     self._operations.append(outfeed_op)
+    self._enqueuing_thread = threading.get_ident()
+    self._enqueuing_default_graph = ops.get_default_graph()
     return outfeed_op
 
   @property
@@ -249,7 +255,16 @@ class IPUOutfeedQueue:
     for o in self._operations:
       add_graphs(o.graph)
 
-    current_graph = ops.get_default_graph()
+    # All threads have different default graphs. If we're checking if we
+    # enqueued in a different thread to the one we enqueued in, the check will
+    # always fail. Instead, in these cases, use the enqueuing thread's default
+    # graph
+    if self._enqueuing_thread is None:
+      return False
+    if threading.get_ident() != self._enqueuing_thread:
+      current_graph = self._enqueuing_default_graph
+    else:
+      current_graph = ops.get_default_graph()
     return current_graph in enqueued_graphs
 
   def dequeue(self):
