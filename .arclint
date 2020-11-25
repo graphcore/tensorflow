@@ -70,6 +70,9 @@
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
                  "(^third_party/ipus/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)"
+            ],
+            "exclude": [
+                 "(^tensorflow/compiler/plugin/poplar/docs/.*\\.py$)"
             ]
         }
     }
