@@ -66,6 +66,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/function_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
@@ -1204,6 +1205,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<SerializeGradientAccumulation>();
     pipeline.AddPass<SliceOptimizer>(resources.annotations);
+    pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseSimplifier>();
     pipeline.AddPass<ElementwiseBroadcastConverter>();

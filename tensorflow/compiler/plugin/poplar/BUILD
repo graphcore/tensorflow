@@ -181,6 +181,7 @@ cc_library(
         "driver/passes/forward_allocation.cc",
         "driver/passes/function_optimizer.cc",
         "driver/passes/fuse_ops_early.cc",
+        "driver/passes/fuse_ops_into_poplar_ops.cc",
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
         "driver/passes/fusion_inliner.cc",
@@ -349,6 +350,7 @@ cc_library(
         "driver/passes/forward_allocation.h",
         "driver/passes/function_optimizer.h",
         "driver/passes/fuse_ops_early.h",
+        "driver/passes/fuse_ops_into_poplar_ops.h",
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
         "driver/passes/fusion_inliner.h",
@@ -3541,6 +3543,18 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "fuse_ops_into_poplar_ops_test",
+    srcs = ["tests/fuse_ops_into_poplar_ops_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -4703,6 +4717,7 @@ test_suite(
         "find_all_users_test",
         "forward_allocation_test",
         "function_optimizer_test",
+        "fuse_ops_into_poplar_ops_test",
         "fuse_ops_test",
         "fuse_wide_const_test",
         "fused_batch_norm_test",

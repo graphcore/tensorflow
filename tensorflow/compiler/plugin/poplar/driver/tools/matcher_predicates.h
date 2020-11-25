@@ -28,6 +28,11 @@ namespace poplarplugin {
 bool IsRandomNormal(const HloInstruction*);
 bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);
+bool IsCompareNotEqual(const HloInstruction*);
+bool IsCompareLess(const HloInstruction*);
+bool IsCompareLessOrEqual(const HloInstruction*);
+bool IsCompareGreater(const HloInstruction*);
+bool IsCompareGreaterOrEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
 bool IsWideConstant(const HloInstruction*);

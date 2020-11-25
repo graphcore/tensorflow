@@ -417,6 +417,26 @@ bool IsCompareEqual(const HloInstruction* inst) {
   return inst->comparison_direction() == ComparisonDirection::kEq;
 }
 
+bool IsCompareNotEqual(const HloInstruction* inst) {
+  return inst->comparison_direction() == ComparisonDirection::kNe;
+}
+
+bool IsCompareLess(const HloInstruction* inst) {
+  return inst->comparison_direction() == ComparisonDirection::kLt;
+}
+
+bool IsCompareLessOrEqual(const HloInstruction* inst) {
+  return inst->comparison_direction() == ComparisonDirection::kLe;
+}
+
+bool IsCompareGreater(const HloInstruction* inst) {
+  return inst->comparison_direction() == ComparisonDirection::kGt;
+}
+
+bool IsCompareGreaterOrEqual(const HloInstruction* inst) {
+  return inst->comparison_direction() == ComparisonDirection::kGe;
+}
+
 bool IsSupportedAllReduce(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kAllReduce) {
     const HloInstruction* root = inst->to_apply()->root_instruction();
