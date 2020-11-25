@@ -40,7 +40,8 @@ def my_net():
 with scopes.ipu_scope('/device:IPU:0'):
   run_loop = ipu_compiler.compile(my_net, inputs=[])
 
-# The outfeed dequeue has to happen after the outfeed enqueue
+# The outfeed dequeue has to happen after the outfeed enqueue and in the same
+# thread as the enqueue, since threads have different default graphs
 dequeue_outfeed = outfeed_queue.dequeue()
 
 # Configure the hardware
