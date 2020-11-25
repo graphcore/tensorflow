@@ -136,7 +136,6 @@ HloRemoteParameterStore::HloRemoteParameterStore(
   CHECK_GE(rbuffers_and_values.size(), 2);
   CHECK_EQ(rbuffers_and_values.size() % 2, 0);
   CHECK_EQ(rbuffers_and_values.size() / 2, replication_factors.size());
-  set_custom_call_has_side_effect(true);
 }
 
 absl::flat_hash_set<int64> HloRemoteParameterStore::AllocatingIndices() const {
@@ -365,7 +364,6 @@ HloBufferStoreSlice::HloBufferStoreSlice(
   // store into.
   CHECK_GE(rbuffers_values_and_offsets.size(), 3);
   CHECK_EQ(rbuffers_values_and_offsets.size() % 3, 0);
-  set_custom_call_has_side_effect(true);
 }
 
 uint64 HloBufferStoreSlice::NumberOfInplaceOperands() const {
