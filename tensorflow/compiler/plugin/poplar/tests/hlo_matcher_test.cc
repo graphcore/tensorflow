@@ -41,7 +41,9 @@ class TestMatcher : public HloMatcher {
       HloMatcherMatched& match,
       const absl::optional<int64> sharding_device) override {
     auto pattern = patterns_[match.pattern_idx];
-    OutlineExpressionFromComputation(match, pattern.GetType(), sharding_device);
+    TF_ASSIGN_OR_RETURN(
+        auto inst, OutlineExpressionFromComputation(match, pattern.GetType(),
+                                                    sharding_device));
     replace_count++;
     const int replaced_instructions =
         match.instruction_mapping.size() - pattern.GetInputs().size();

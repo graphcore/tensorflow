@@ -30,6 +30,11 @@ StatusOr<bool> SingleHloMatcher::HandleMatch(
   std::string name = op_prefix_ + pattern.GetType();
   TF_ASSIGN_OR_RETURN(HloInstruction * inst, OutlineExpressionFromComputation(
                                                  match, name, sharding_device));
+  if (pattern.GetReplaceFn()) {
+    // Actual replacement happened in replace function, and poplar operation
+    // name doesn't have to be valid.
+    return true;
+  }
 
   PoplarOp tmp;
 

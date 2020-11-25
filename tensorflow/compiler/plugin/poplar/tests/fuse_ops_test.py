@@ -124,6 +124,52 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = ['__seed*', 'Relu/relu/Nonlinearity']
       report.assert_all_compute_sets_and_list(ok)
 
+  def testReluExpr(self):
+    def relu_like(x):
+      return math_ops.maximum(x, array_ops.zeros_like(x))
+
+    with self.session() as sess:
+      input_values = np.ones((1, 4, 4, 2))
+
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+        lr = array_ops.placeholder(np.float32, shape=[])
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(2,
+                            1,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name="a")(x)
+          y = relu_like(y)
+
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(lr)
+        train = optimizer.minimize(loss)
+
+      report = tu.ReportJSON(self, sess)
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      fe = {
+          x: input_values,
+          lr: 0.1,
+      }
+      sess.run((loss, train), fe)
+
+      report.parse_log(assert_len=6)
+
+      ok = [
+          '__seed*',
+          '/OnTileCopy',
+          'GradientDescent/update_vs',
+          'Sum/reduce',
+          'Maximum/relu/Nonlinearity',
+          'gradients/vs/Maximum_grad',
+          'gradients/vs/a/Conv2D_grad',
+          'vs/a/BiasAdd',
+          'vs/a/Conv2D',
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+
   def testReluNotInPlace(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):

@@ -383,8 +383,17 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInputs inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
-    : HloMatcherPattern(type, meta_target, inputs, {}, outputs, pattern_nodes) {
-}
+    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs, {},
+                        outputs, pattern_nodes) {}
+
+HloMatcherPattern::HloMatcherPattern(PatternType type,
+                                     PatternReplaceFn replace_fn,
+                                     PatternMetaTarget meta_target,
+                                     PatternInputs inputs,
+                                     PatternOutputs outputs,
+                                     Pattern pattern_nodes)
+    : HloMatcherPattern(type, replace_fn, meta_target, inputs, {}, outputs,
+                        pattern_nodes) {}
 
 HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternMetaTarget meta_target,
@@ -392,7 +401,18 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInplaceInputs inplace_inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
+    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs,
+                        inplace_inputs, outputs, pattern_nodes) {}
+
+HloMatcherPattern::HloMatcherPattern(PatternType type,
+                                     PatternReplaceFn replace_fn,
+                                     PatternMetaTarget meta_target,
+                                     PatternInputs inputs,
+                                     PatternInplaceInputs inplace_inputs,
+                                     PatternOutputs outputs,
+                                     Pattern pattern_nodes)
     : type(type),
+      replace_fn(replace_fn),
       meta_target(meta_target),
       inputs(inputs),
       inplace_inputs(inplace_inputs),
@@ -408,6 +428,10 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
 }
 
 const PatternType& HloMatcherPattern::GetType() const { return type; }
+
+const PatternReplaceFn& HloMatcherPattern::GetReplaceFn() const {
+  return replace_fn;
+}
 
 const PatternMetaTarget& HloMatcherPattern::GetMetaTarget() const {
   return meta_target;
@@ -558,6 +582,34 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
   }
 
   return {nodes_to_operands, operands_to_nodes};
+}
+
+HloInstruction* HloMatcherMatched::GetMetaTarget(
+    const HloMatcherPattern& pattern) const {
+  return instruction_mapping.at(pattern.GetMetaTarget());
+}
+
+std::vector<HloInstruction*> HloMatcherMatched::MapInstructions(
+    const HloMatcherPattern& pattern, const std::vector<NodeId>& nodes,
+    const std::vector<HloInstruction*>& forced_parameters) const {
+  std::vector<HloInstruction*> insts;
+  insts.reserve(nodes.size() + forced_parameters.size());
+  for (NodeId node : nodes) {
+    insts.push_back(instruction_mapping.at(node));
+  }
+  absl::c_copy(forced_parameters, std::back_inserter(insts));
+  return insts;
+}
+
+std::vector<HloInstruction*> HloMatcherMatched::GetInputs(
+    const HloMatcherPattern& pattern,
+    const std::vector<HloInstruction*>& forced_arguments) const {
+  return MapInstructions(pattern, pattern.GetInputs(), forced_arguments);
+}
+
+std::vector<HloInstruction*> HloMatcherMatched::GetOutputs(
+    const HloMatcherPattern& pattern) const {
+  return MapInstructions(pattern, pattern.GetOutputs());
 }
 
 HloMatcher::HloMatcher(const std::vector<HloMatcherPattern>& patterns,
@@ -979,13 +1031,64 @@ std::set<HloInstruction*> HloMatcher::ReorderGraph(
   return modified_instructions;
 }
 
+Status HloMatcher::RemoveUnusedInstructions(const HloMatcherMatched& matched) {
+  HloComputation* computation = matched.computation;
+  const auto& pattern = patterns_[matched.pattern_idx];
+  // Remove all the dead instructions in the graph after outlining.
+  // DF Traversal from every output node - note that we can't call
+  // RemoveInstructionAndUnusedOperands as it doesn't allow us to remove state
+  // full ops.
+  for (NodeId output_node_id : pattern.GetOutputs()) {
+    std::queue<NodeId> to_visit;
+    to_visit.push(output_node_id);
+    absl::flat_hash_set<NodeId> visited;
+
+    while (!to_visit.empty()) {
+      NodeId node_id = to_visit.front();
+      to_visit.pop();
+      HloInstruction* inst = matched.instruction_mapping.at(node_id);
+
+      // Don't remove nodes already visited or the instructions with users.
+      if (visited.count(node_id) != 0 || inst->user_count() != 0) {
+        continue;
+      }
+
+      for (auto operand_id :
+           pattern.GetNodesToOperandsMatcherGraph()[node_id]) {
+        to_visit.push(operand_id);
+      }
+
+      visited.insert(node_id);
+
+      TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
+      TF_RETURN_IF_ERROR(computation->RemoveInstruction(inst));
+    }
+  }
+  return Status::OK();
+}
+
 StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
     const HloMatcherMatched& matched,
     const std::string& outlined_computation_name,
     const absl::optional<int64> sharding_device,
-    std::vector<HloInstruction*> forced_parameters) {
+    std::vector<HloInstruction*>&& forced_parameters) {
+  const auto& pattern = patterns_[matched.pattern_idx];
+  return !pattern.GetReplaceFn()
+             ? OutlineFusionFromComputation(matched, outlined_computation_name,
+                                            sharding_device,
+                                            std::move(forced_parameters))
+             : OutlineCustomOpFromComputation(
+                   matched, outlined_computation_name, sharding_device,
+                   std::move(forced_parameters));
+}
+
+StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
+    const HloMatcherMatched& matched,
+    const std::string& outlined_computation_name,
+    const absl::optional<int64> sharding_device,
+    std::vector<HloInstruction*>&& forced_parameters) {
   HloComputation* computation = matched.computation;
-  auto pattern = patterns_[matched.pattern_idx];
+  const auto& pattern = patterns_[matched.pattern_idx];
   HloModule* module = computation->parent();
 
   // Unlink the AddDependency instructions from the matched pattern
@@ -1001,7 +1104,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
   absl::flat_hash_set<NodeId> outlined_node_ids;
   // A set of nodes which we can outline because all the operands have been
   // outlined.
-  absl::flat_hash_set<NodeId> to_outline;
+  std::set<NodeId> to_outline;
   // Arguments to the new computation.
   std::vector<HloInstruction*> arguments;
   // A node can be outlined if all the operands have been outlined and it has
@@ -1073,7 +1176,8 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
             "HloMatcherOpcode::kAnyOpcode not specified as input.");
       }
       NodeId operand_id = operands[operand];
-      TF_CHECK_OK(new_inst->ReplaceOperandWith(operand, outlined[operand_id]));
+      TF_RETURN_IF_ERROR(
+          new_inst->ReplaceOperandWith(operand, outlined[operand_id]));
     }
     // Check if we can outline more instructions.
     absl::c_copy_if(pattern.GetOperandsToNodesMatcherGraph()[node_id],
@@ -1143,7 +1247,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
   *(cfg->mutable_inplace_operands()) = {inplace_indices.begin(),
                                         inplace_indices.end()};
 
-  TF_CHECK_OK(fusion->set_backend_config(backend_config));
+  TF_RETURN_IF_ERROR(fusion->set_backend_config(backend_config));
 
   fusion->set_metadata(old->metadata());
   if (sharding_device) {
@@ -1161,12 +1265,12 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
       HloInstruction* gte =
           computation->AddInstruction(HloInstruction::CreateGetTupleElement(
               old_inst->shape(), fusion, tuple_id));
-      TF_CHECK_OK(old_inst->ReplaceAllUsesWith(gte));
+      TF_RETURN_IF_ERROR(old_inst->ReplaceAllUsesWith(gte));
     }
   } else {
     HloInstruction* old_inst =
         matched.instruction_mapping.at(pattern.GetOutputs()[0]);
-    TF_CHECK_OK(old_inst->ReplaceAllUsesWith(fusion));
+    TF_RETURN_IF_ERROR(old_inst->ReplaceAllUsesWith(fusion));
   }
 
   // Create new dependencies in place of the old ones
@@ -1174,55 +1278,115 @@ StatusOr<HloInstruction*> HloMatcher::OutlineExpressionFromComputation(
     auto new_dep =
         computation->AddInstruction(HloInstruction::CreateAddDependency(
             fusion->mutable_operand(0), dep->mutable_operand(1)));
-    fusion->ReplaceOperandWith(0, new_dep);
+    TF_RETURN_IF_ERROR(fusion->ReplaceOperandWith(0, new_dep));
   }
 
-  std::set<HloInstruction*> deps_set;
+  HloInstructionSet deps_set;
   for (auto dep : matched.dependency_predecessors) {
     deps_set.insert(dep);
   }
 
   for (auto dep : deps_set) {
-    computation->RemoveInstruction(dep);
+    TF_RETURN_IF_ERROR(computation->RemoveInstruction(dep));
   }
 
   // Move the AfterAll instructions to the fusion output
   for (auto* u : after_all) {
-    u->ReplaceOperandWith(0, fusion);
+    TF_RETURN_IF_ERROR(u->ReplaceOperandWith(0, fusion));
   }
 
-  // Remove all the dead instructions in the graph after outlining.
-  // DF Traversal from every output node - note that we can't call
-  // RemoveInstructionAndUnusedOperands as it doesn't allow us to remove state
-  // full ops.
-  for (NodeId output_node_id : pattern.GetOutputs()) {
-    std::queue<NodeId> to_visit;
-    to_visit.push(output_node_id);
-    absl::flat_hash_set<NodeId> visited;
+  TF_RETURN_IF_ERROR(RemoveUnusedInstructions(matched));
 
-    while (!to_visit.empty()) {
-      NodeId node_id = to_visit.front();
-      to_visit.pop();
-      HloInstruction* inst = matched.instruction_mapping.at(node_id);
+  return fusion;
+}
 
-      // Don't remove nodes already visited or the instructions with users.
-      if (visited.count(node_id) != 0 || inst->user_count() != 0) {
-        continue;
+StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
+    const HloMatcherMatched& matched,
+    const std::string& outlined_computation_name,
+    const absl::optional<int64> sharding_device,
+    std::vector<HloInstruction*>&& forced_parameters) {
+  HloComputation* computation = matched.computation;
+  const auto& pattern = patterns_[matched.pattern_idx];
+  HloModule* module = computation->parent();
+
+  auto& replace_fn = pattern.GetReplaceFn();
+  if (!replace_fn) {
+    return InternalError("Replace function was not specified in pattern.");
+  }
+
+  if (!pattern.GetInplaceInputs().empty()) {
+    return InvalidArgument(
+        "Pattern with replacement function can't have inplace operands "
+        "specified.");
+  }
+
+  if (!forced_parameters.empty()) {
+    return InvalidArgument(
+        "Pattern with replacement function can't have forced parameters "
+        "specified.");
+  }
+
+  for (auto* dep : matched.dependency_predecessors) {
+    dep->ReplaceAllUsesWith(dep->mutable_operand(0));
+  }
+
+  auto* old_meta_target = matched.GetMetaTarget(pattern);
+
+  HloInstructionSet after_all;
+  for (auto pair : matched.instruction_mapping) {
+    for (auto user : pair.second->users()) {
+      if (user->opcode() == HloOpcode::kAfterAll) {
+        after_all.insert(user);
       }
-
-      for (auto operand_id :
-           pattern.GetNodesToOperandsMatcherGraph()[node_id]) {
-        to_visit.push(operand_id);
-      }
-
-      visited.insert(node_id);
-
-      TF_CHECK_OK(inst->DropAllControlDeps());
-      TF_CHECK_OK(computation->RemoveInstruction(inst));
     }
   }
 
-  return fusion;
+  std::vector<HloInstruction*> inputs = matched.GetInputs(pattern);
+
+  TF_ASSIGN_OR_RETURN(PatternInstructionOutputs outputs,
+                      replace_fn(pattern, matched));
+  for (HloInstruction* inst : outputs) {
+    if (inst->parent() != computation) {
+      return InternalError(
+          "Output returned from replacement function was not added to "
+          "matched.computation.");
+    }
+  }
+
+  auto pattern_outputs = matched.GetOutputs(pattern);
+  if (outputs.size() != pattern_outputs.size()) {
+    return InternalError(
+        "Replacement function returned wrong number of outputs.");
+  }
+
+  HloInstruction* new_meta_target = nullptr;
+  auto metadata = old_meta_target->metadata();
+  auto frontend_attrs = old_meta_target->frontend_attributes();
+  for (std::size_t i = 0; i < pattern_outputs.size(); ++i) {
+    HloInstruction* pattern_output = pattern_outputs[i];
+    HloInstruction* output = outputs[i];
+    if (pattern_output == old_meta_target) {
+      new_meta_target = output;
+    }
+    TF_RETURN_IF_ERROR(pattern_output->ReplaceAllUsesWith(output));
+    output->set_metadata(metadata);
+    if (sharding_device) {
+      output->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    }
+    output->set_frontend_attributes(frontend_attrs);
+  }
+
+  if (!new_meta_target) {
+    return InternalError("CustomOp replacement couldn't find new meta target.");
+  }
+
+  for (HloInstruction* inst : after_all) {
+    TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(0, new_meta_target));
+  }
+
+  TF_RETURN_IF_ERROR(RemoveUnusedInstructions(matched));
+
+  return new_meta_target;
 }
 
 }  // namespace poplarplugin

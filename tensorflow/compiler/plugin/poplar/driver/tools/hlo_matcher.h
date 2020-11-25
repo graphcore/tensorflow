@@ -16,7 +16,11 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_MATCHER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_MATCHER_H_
 
+#include <functional>
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
@@ -98,6 +102,12 @@ using PatternOutputs = std::vector<NodeId>;
 using PatternInplaceInputs = std::vector<NodeId>;
 using Pattern = std::vector<HloMatcherNode>;
 
+class HloMatcherPattern;
+struct HloMatcherMatched;
+using PatternInstructionOutputs = std::vector<HloInstruction*>;
+using PatternReplaceFn = std::function<StatusOr<PatternInstructionOutputs>(
+    const HloMatcherPattern& pattern, const HloMatcherMatched&)>;
+
 class HloMatcherPattern {
  public:
   HloMatcherPattern() = delete;
@@ -110,7 +120,18 @@ class HloMatcherPattern {
                     PatternInputs inputs, PatternInplaceInputs inplace_inputs,
                     PatternOutputs outputs, Pattern pattern);
 
+  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
+                    PatternMetaTarget meta_target, PatternInputs inputs,
+                    PatternOutputs outputs, Pattern pattern);
+
+  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
+                    PatternMetaTarget meta_target, PatternInputs inputs,
+                    PatternInplaceInputs inplace_inputs, PatternOutputs outputs,
+                    Pattern pattern);
+
   const PatternType& GetType() const;
+
+  const PatternReplaceFn& GetReplaceFn() const;
 
   const PatternMetaTarget& GetMetaTarget() const;
 
@@ -131,6 +152,10 @@ class HloMatcherPattern {
  private:
   // The name to give the extracted fused graph.
   PatternType type;
+
+  // Replace function. If it specified, instead of outlining as a fusion,
+  // matcher will call this function and insert instruction instead.
+  PatternReplaceFn replace_fn;
 
   // The index of the op within the fusion which should have its op_metadata
   // copied to the kFusion instruction.
@@ -200,6 +225,16 @@ struct HloMatcherMatched {
 
   HloMatcherMatched(HloComputation* computation, const unsigned pattern_idx)
       : computation(computation), pattern_idx(pattern_idx) {}
+
+  HloInstruction* GetMetaTarget(const HloMatcherPattern& pattern) const;
+  std::vector<HloInstruction*> GetInputs(
+      const HloMatcherPattern& pattern,
+      const std::vector<HloInstruction*>& forced_parameters = {}) const;
+  std::vector<HloInstruction*> GetOutputs(
+      const HloMatcherPattern& pattern) const;
+  std::vector<HloInstruction*> MapInstructions(
+      const HloMatcherPattern& pattern, const std::vector<NodeId>& nodes,
+      const std::vector<HloInstruction*>& forced_parameters = {}) const;
 };
 
 using ReplacedInstructions = std::vector<HloInstruction*>;
@@ -225,7 +260,7 @@ class HloMatcher : public HloModulePass {
       const HloMatcherMatched& matched,
       const std::string& outlined_computation_name,
       const absl::optional<int64> sharding_device,
-      std::vector<HloInstruction*> forced_parameters = {});
+      std::vector<HloInstruction*>&& forced_parameters = {});
 
   // The list of patterns to try to find in the computations
   std::vector<HloMatcherPattern> patterns_;
@@ -237,6 +272,20 @@ class HloMatcher : public HloModulePass {
   virtual StatusOr<bool> HandleMatch(
       HloMatcherMatched& match,
       const absl::optional<int64> sharding_device) = 0;
+
+  Status RemoveUnusedInstructions(const HloMatcherMatched& matched);
+
+  StatusOr<HloInstruction*> OutlineFusionFromComputation(
+      const HloMatcherMatched& matched,
+      const std::string& outlined_computation_name,
+      const absl::optional<int64> sharding_device,
+      std::vector<HloInstruction*>&& forced_parameters);
+
+  StatusOr<HloInstruction*> OutlineCustomOpFromComputation(
+      const HloMatcherMatched& matched,
+      const std::string& outlined_computation_name,
+      const absl::optional<int64> sharding_device,
+      std::vector<HloInstruction*>&& forced_parameters);
 
   StatusOr<bool> MatchPatternStart(HloComputation*);
   StatusOr<bool> MatchPattern(HloInstruction* inst, const unsigned pattern_idx);
