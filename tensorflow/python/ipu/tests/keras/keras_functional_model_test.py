@@ -1105,6 +1105,33 @@ class IPUModelModelTest(test.TestCase):
       self.assertAllClose(t_ipu, t_cpu)
 
   @test_util.run_v2_only
+  def testFitVanillaKerasMatch(self):
+    # IPU Model.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 1], w=1)
+      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+
+      m.compile('sgd', 'mse')
+      ipu_out = m.fit(test_dataset(length=96), epochs=4)
+
+    # CPU Model.
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [32, 32, 1], w=1)
+    m = keras.Model(inputs=input_layer, outputs=x)
+
+    m.compile('sgd', 'mse')
+    cpu_out = m.fit(test_dataset(length=96), epochs=4)
+
+    # Compare.
+    self.assertAllClose(ipu_out.history['loss'], cpu_out.history['loss'])
+
+  @test_util.run_v2_only
   def testTrainMultipleInputMultipleOutput(self):
     # 3 inputs, 2 outputs.
     def data_fn():

@@ -486,8 +486,8 @@ class _IpuModelBase(KerasModel):
 
     # Aggregator for combining the various outputs/metrics together
     if mode != ModeKeys.PREDICT:
-      aggregator = training_utils.MetricsAggregator(use_steps=True,
-                                                    steps=total_batches)
+      aggregator = training_utils.MetricsAggregator(
+          use_steps=True, steps=mini_batches_per_epoch)
     else:
       aggregator = training_utils.OutputsAggregator(use_steps=True,
                                                     steps=total_batches)

@@ -360,7 +360,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 2,
+    shard_count = 4,
 )
 
 tf_py_test(
@@ -442,6 +442,18 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
+)
+
+tf_py_test(
+    name = "keras_mnist_test",
+    size = "large",
+    srcs = ["tests/keras/examples/keras_mnist_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+    shard_count = 2,
 )
 
 tf_py_test(
