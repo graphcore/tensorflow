@@ -53,20 +53,34 @@ def test_dataset_two_input_output(length=None,
                                   batch_size=1,
                                   x_val=1.0,
                                   y_val=0.2):
-  constant_d = constant_op.constant(x_val, shape=[32])
-  constant_l = constant_op.constant(y_val, shape=[2])
-
   ds = dataset_ops.Dataset.from_tensors(({
-      "input_a": constant_d,
-      "input_b": constant_d
+      "input_a":
+      constant_op.constant(x_val, shape=[32]),
+      "input_b":
+      constant_op.constant(x_val, shape=[16])
   }, {
-      "target_a": constant_l,
-      "target_b": constant_l
+      "target_a":
+      constant_op.constant(y_val, shape=[2]),
+      "target_b":
+      constant_op.constant(y_val, shape=[1])
   }))
   ds = ds.repeat(length)
   ds = ds.batch(batch_size, drop_remainder=True)
 
   return ds
+
+
+def test_dataset_two_input_output_np(length=96, x_val=1.0, y_val=0.2):
+  inputs = {
+      'input_a': np.ones((length, 32), dtype=np.float32) * x_val,
+      'input_b': np.ones((length, 16), dtype=np.float32) * x_val
+  }
+  targets = {
+      'target_a': np.ones((length, 2), dtype=np.float32) * y_val,
+      'target_b': np.ones((length, 1), dtype=np.float32) * y_val
+  }
+
+  return (inputs, targets)
 
 
 def test_inference_dataset_two_input_output(length=None,
@@ -975,7 +989,7 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       input_a = keras.layers.Input(shape=(32))
-      input_b = keras.layers.Input(shape=(32))
+      input_b = keras.layers.Input(shape=(16))
 
       block_a = simple_model(input_a, [32, 32], w=0.4)
       block_b = simple_model(input_b, [32, 32], w=0.4)
@@ -983,7 +997,7 @@ class IPUModelModelTest(test.TestCase):
       concat_ab = keras.layers.concatenate([block_a, block_b])
 
       block_c = simple_model(concat_ab, [32, 2])
-      block_d = simple_model(concat_ab, [32, 2])
+      block_d = simple_model(concat_ab, [32, 1])
 
       m = ipu.keras.Model(inputs=[input_a, input_b],
                           outputs=[block_c, block_d],
@@ -996,7 +1010,36 @@ class IPUModelModelTest(test.TestCase):
       m.compile("sgd", loss=['mse', 'mse'])
 
       ds = test_dataset_two_input_output(length=96, batch_size=4)
+
       m.fit(ds)
+
+  @test_util.run_v2_only
+  def testTrainMultipleInputMap(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_a = keras.layers.Input(shape=(32))
+      input_b = keras.layers.Input(shape=(16))
+
+      block_a = simple_model(input_a, [32, 32], w=0.4)
+      block_b = simple_model(input_b, [32, 32], w=0.4)
+
+      concat_ab = keras.layers.concatenate([block_a, block_b])
+
+      block_c = simple_model(concat_ab, [32, 2])
+      block_d = simple_model(concat_ab, [32, 1])
+
+      m = ipu.keras.Model(inputs=[input_a, input_b],
+                          outputs=[block_c, block_d],
+                          accumulation_count=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      m.compile("sgd", loss=['mse', 'mse'])
+
+      ds = test_dataset_two_input_output_np(length=96)
+      m.fit(*ds, batch_size=4)
 
   @test_util.run_v2_only
   def testPredictNumpyData(self):
