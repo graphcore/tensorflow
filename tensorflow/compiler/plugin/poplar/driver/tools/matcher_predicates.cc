@@ -349,6 +349,10 @@ bool IsBiasAdd(const HloInstruction* inst) {
   return true;
 }
 
+bool IsAdd(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kAdd;
+}
+
 bool IsAddOrSubtract(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kAdd ||
          inst->opcode() == HloOpcode::kSubtract;

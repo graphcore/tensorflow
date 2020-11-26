@@ -371,7 +371,7 @@ class ZeroPadOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Zero_pad, ZeroPadOp);
 
-class ScaledInplaceabYOp : public PoplarOpDef {
+class ScaledInplaceXbYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -417,9 +417,9 @@ class ScaledInplaceabYOp : public PoplarOpDef {
     return seq;
   }
 };
-REGISTER_POPLAR_OP(Scaled_inplace_aby, ScaledInplaceabYOp);
+REGISTER_POPLAR_OP(Scaled_inplace_xby, ScaledInplaceXbYOp);
 
-class ScaledInplaceaXbOp : public PoplarOpDef {
+class ScaledInplaceaXYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -473,7 +473,7 @@ class ScaledInplaceaXbOp : public PoplarOpDef {
     return seq;
   }
 };
-REGISTER_POPLAR_OP(Scaled_inplace_axb, ScaledInplaceaXbOp);
+REGISTER_POPLAR_OP(Scaled_inplace_axy, ScaledInplaceaXYOp);
 
 class ScaledInplaceaXbYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
