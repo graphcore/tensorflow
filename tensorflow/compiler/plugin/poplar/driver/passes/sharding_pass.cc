@@ -667,10 +667,7 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
             IsFunction(call_graph_node.caller_callsites()[0].instruction())) {
           HloInstruction* caller =
               call_graph_node.caller_callsites()[0].instruction();
-          TF_ASSIGN_OR_RETURN(auto backend_config,
-                              caller->backend_config<PoplarBackendConfig>());
-          const bool unique_sharding =
-              backend_config.call_config().function_config().unique_sharding();
+          const bool unique_sharding = GetFunctionUniqueSharding(caller);
           if (unique_sharding) {
             TF_RETURN_IF_ERROR(ConvertComputationToUniqueSharding(
                 caller, comp, call_graph.get()));

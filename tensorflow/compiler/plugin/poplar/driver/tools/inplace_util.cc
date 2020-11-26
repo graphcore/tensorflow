@@ -530,6 +530,27 @@ HloInstructionDescription::HloInstructionDescription(
           }
         }
         type_ = HloInstructionType::kInplaceReadWrite;
+      } else if (IsFunction(inst)) {
+        // Functions are inplace on remote buffer inputs.
+        // Assume that the first "num_modified_remote_buffers" inputs are remote
+        // buffers which are modified and they are also the first
+        // "num_modified_remote_buffers" outputs.
+        // Assume that the next "num_unmodified_remote_buffers" inputs are
+        // remote buffers which are only loaded.
+        const int64 num_modified_remote_buffers =
+            GetFunctionNumberModifiedRemoteBufferInputs(inst);
+        const int64 num_unmodified_remote_buffers =
+            GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
+        // TODO(T10387): consider unmodified remote buffers as read only.
+        if (num_modified_remote_buffers + num_unmodified_remote_buffers) {
+          OperandIndexes indexes(num_modified_remote_buffers +
+                                 num_unmodified_remote_buffers);
+          absl::c_iota(indexes, 0);
+          type_ = HloInstructionType::kInplaceReadWrite;
+          inplace_operands_ = indexes;
+        } else {
+          type_ = HloInstructionType::kNotInplace;
+        }
       } else {
         // Calls are not inplace.
         type_ = HloInstructionType::kNotInplace;

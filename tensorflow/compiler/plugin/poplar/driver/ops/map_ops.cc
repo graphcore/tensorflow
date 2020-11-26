@@ -440,10 +440,24 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
 
   bool keep_input_layouts = false;
   if (IsFunction(inst)) {
-    TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
-                        inst->backend_config<PoplarBackendConfig>());
-    keep_input_layouts =
-        cfg.call_config().function_config().keep_input_layouts();
+    keep_input_layouts = GetFunctionKeepInputLayouts(inst);
+  }
+
+  // Get information about remote buffer inputs.
+  const int64 num_modified_remote_buffer_inputs =
+      GetFunctionNumberModifiedRemoteBufferInputs(inst);
+  const int64 num_unmodified_remote_buffer_inputs =
+      GetFunctionNumberUnmodifiedRemoteBufferInputs(inst);
+  const int64 num_remote_buffer_inputs =
+      num_modified_remote_buffer_inputs + num_unmodified_remote_buffer_inputs;
+
+  // This instruction needs to be lowered inplace on the remote buffers.
+  if (num_remote_buffer_inputs) {
+    if (!IsLoweredInplace(inst)) {
+      return InternalErrorStrCat(
+          "Found a function ", inst->ToString(),
+          " with remote buffer inputs which is not lowered inplace.");
+    }
   }
 
   TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
@@ -464,27 +478,34 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
       return xla::FailedPrecondition("Mismatched number of inputs.");
     }
     for (size_t i = 0; i < inst_inputs.size(); i++) {
-      if (inst_inputs[i].IsRemoteBuffer()) {
-        return xla::FailedPrecondition(
-            "Unable to handle used remote buffer tensor in function call "
-            "instruction %s",
-            inst->name());
-      }
-
-      if (subcomp_visitor->InputIsUsed(o, i)) {
-        if (comp_inputs[i].IsTensor()) {
-          seq.add(poplar::program::Copy(inst_inputs[i].AsTensor(),
-                                        comp_inputs[i].AsTensor()));
-        } else if (comp_inputs[i].IsRemoteBuffer()) {
+      auto& inst_input = inst_inputs[i];
+      auto& comp_input = comp_inputs[i];
+      if (o < num_remote_buffer_inputs) {
+        if (!inst_input.IsRemoteBuffer()) {
           return xla::FailedPrecondition(
-              "Unable to handle used remote buffer tensor in function call "
-              "instruction %s",
-              inst->name());
-        } else {
-          return xla::FailedPrecondition(
-              "Unknown output type in function call instruction `%s`, expected "
-              "a tensor",
-              inst->name());
+              "Unable to handle input to function call instruction %s at input "
+              "index %d.",
+              inst->name(), o);
+        }
+        CHECK(comp_input.IsRemoteBuffer());
+        CHECK(comp_input == inst_input);
+      } else {
+        if (subcomp_visitor->InputIsUsed(o, i)) {
+          if (comp_input.IsTensor()) {
+            seq.add(poplar::program::Copy(inst_input.AsTensor(),
+                                          comp_input.AsTensor()));
+          } else if (comp_input.IsRemoteBuffer()) {
+            return xla::FailedPrecondition(
+                "Unable to handle used remote buffer tensor in function call "
+                "instruction %s",
+                inst->name());
+          } else {
+            return xla::FailedPrecondition(
+                "Unknown output type in function call instruction `%s`, "
+                "expected "
+                "a tensor",
+                inst->name());
+          }
         }
       }
     }
@@ -494,24 +515,38 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
   seq.add(subcomp_visitor->GetFunctionCall());
 
   // Propagate the outputs.
-  for (size_t i = 0; i < subcomp_visitor->outputs().size(); i++) {
-    if (subcomp_visitor->outputs()[i].IsTensor()) {
-      auto name = StrCat(GetDebugName(inst), "_out_", i);
-      poplar::Tensor output = poputil::duplicate(
-          graph, subcomp_visitor->outputs()[i].AsTensor(), seq, name,
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
-    } else if (subcomp_visitor->outputs()[i].IsRemoteBuffer()) {
-      return xla::FailedPrecondition(
-          "Remote buffer output type in function instruction `%s`, expected a "
-          "tensor.",
-          inst->name());
+  auto& outputs = subcomp_visitor->outputs();
+  int64 flat_tuple_index = 0;
+  auto output_locations = ShapeUtil::GetLeafShapes(output);
+
+  for (const auto& output_location : output_locations) {
+    const ShapeIndex& shape_index = output_location.index;
+    const int64 tuple_index = shape_index.empty() ? 0 : shape_index[0];
+    auto& output = outputs[flat_tuple_index];
+
+    if (tuple_index < num_modified_remote_buffer_inputs) {
+      if (!output.IsRemoteBuffer()) {
+        return InternalErrorStrCat("Expected output at index ",
+                                   shape_index.ToString(),
+                                   " to be a RemoteBuffer object");
+      }
+      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, flat_tuple_index, output));
     } else {
-      return xla::FailedPrecondition(
-          "Unknown output type in function instruction `%s`, expected a "
-          "tensor.",
-          inst->name());
+      if (!output.IsTensor()) {
+        return InternalErrorStrCat("Expected output at index ",
+                                   shape_index.ToString(),
+                                   " to be a Tensor object");
+      }
+
+      auto name = absl::StrCat(GetDebugName(inst), "_out_", flat_tuple_index);
+      poplar::Tensor cloned_output = poputil::duplicate(
+          graph, output.AsTensor(), seq, name,
+          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      TF_RETURN_IF_ERROR(
+          AddOutputTensor(tensor_map, inst, flat_tuple_index, cloned_output));
     }
+
+    flat_tuple_index++;
   }
 
   return seq;

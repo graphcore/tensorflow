@@ -3081,6 +3081,18 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "graph_caching_with_remote_buffer_test",
+    srcs = ["tests/graph_caching_with_remote_buffer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4726,6 +4738,7 @@ test_suite(
         "gradient_accumulation_buffers_offload_test",
         "gradient_accumulation_fuser_test",
         "gradient_accumulation_optimization_pass_test",
+        "graph_caching_with_remote_buffer_test",
         "graph_compile_io_map_test",
         "group_norm_test",
         "gru_test",

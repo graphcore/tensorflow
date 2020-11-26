@@ -480,6 +480,31 @@ ThreeState GetResourceUpdatePartitionOffloadedVariables(
       .partition_offloaded_variables();
 }
 
+bool GetFunctionKeepInputLayouts(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().function_config().keep_input_layouts();
+}
+
+bool GetFunctionUniqueSharding(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().function_config().unique_sharding();
+}
+
+int64 GetFunctionNumberModifiedRemoteBufferInputs(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .function_config()
+      .num_modified_remote_buffer_inputs();
+}
+
+int64 GetFunctionNumberUnmodifiedRemoteBufferInputs(
+    const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config()
+      .function_config()
+      .num_unmodified_remote_buffer_inputs();
+}
+
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
     const HloInstruction* inst, const int64 operand_idx) {
   const HloInstruction* operand = inst->operand(operand_idx);
