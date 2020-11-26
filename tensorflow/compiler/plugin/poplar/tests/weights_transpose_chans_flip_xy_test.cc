@@ -14,7 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
 #include "tensorflow/compiler/xla/test.h"
@@ -27,10 +29,17 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class WeightsTransposeChansFlipXYTest : public HloTestBase {};
+class WeightsTransposeChansFlipXYTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<bool> {};
+
+INSTANTIATE_TEST_SUITE_P(WeightsTransposeChansFlipXYTestCases,
+                         WeightsTransposeChansFlipXYTest,
+                         ::testing::Values(false, true));
 
 // This tests that the output value has the expected value
-TEST_F(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
+TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
+  const bool allocate = GetParam();
   HloComputation::Builder builder = HloComputation::Builder("BuilderHloComp0");
 
   auto weights = builder.AddInstruction(HloInstruction::CreateConstant(
@@ -80,7 +89,12 @@ TEST_F(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
   auto module = CreateNewVerifiedModule();
   module->AddEntryComputation(std::move(computation));
 
-  Literal result = Execute(std::move(module), {}).ValueOrDie();
+  CompilerAnnotations annotations(module.get());
+  if (allocate) {
+    EXPECT_TRUE(AllocationFinder(annotations).Run(module.get()).ValueOrDie());
+  }
+
+  Literal result = ExecuteNoHloPasses(std::move(module), {});
 
   Literal expected = LiteralUtil::CreateR4<float>({{{{1, 2}, {3, 4}}}});
 
@@ -88,7 +102,8 @@ TEST_F(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
       LiteralTestUtil::NearOrEqual(expected, result, ErrorSpec{1e-4, 1e-4}));
 }
 
-TEST_F(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
+TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
+  const bool allocate = GetParam();
   HloComputation::Builder builder = HloComputation::Builder("BuilderHloComp1");
 
   auto weights = builder.AddInstruction(
@@ -159,7 +174,12 @@ TEST_F(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
   auto module = CreateNewVerifiedModule();
   module->AddEntryComputation(std::move(computation));
 
-  Literal result = Execute(std::move(module), {}).ValueOrDie();
+  CompilerAnnotations annotations(module.get());
+  if (allocate) {
+    EXPECT_TRUE(AllocationFinder(annotations).Run(module.get()).ValueOrDie());
+  }
+
+  Literal result = ExecuteNoHloPasses(std::move(module), {});
 
   Literal expected = LiteralUtil::CreateR4<float>(
       {{ /*i0=0*/
