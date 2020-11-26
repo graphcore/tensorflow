@@ -14,34 +14,40 @@ tf.disable_v2_behavior()
 ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[2, 20]))
 ds = ds.repeat()
 
-# The host side queues
+# Host side queues that handle data transfer to and from the device
 infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
 outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
 
-# The device side main
-def body(image):
+# A simple inference step that predicts classes for an image with a model
+# composed of three dense layers and sends the predicted classes from the IPU
+# device to the host using an IPUOutfeedQueue
+def inference_step(image):
   partial = keras.layers.Dense(256, activation=tf.nn.relu)(image)
   partial = keras.layers.Dense(128, activation=tf.nn.relu)(partial)
   logits = keras.layers.Dense(10)(partial)
   classes = tf.argmax(input=logits, axis=1, output_type=tf.dtypes.int32)
+  # Insert an enqueue op into the graph when inference_step is called
   outfeed = outfeed_queue.enqueue(classes)
   return outfeed
 
 
-num_iterations = 100
+NUM_ITERATIONS = 100
 
 
-def my_net():
-  r = loops.repeat(100, body, [], infeed_queue)
+def inference_loop():
+  r = loops.repeat(NUM_ITERATIONS, inference_step, [], infeed_queue)
   return r
 
 
+# Build the main graph and encapsulate it into an IPU cluster
 with scopes.ipu_scope('/device:IPU:0'):
-  run_loop = ipu_compiler.compile(my_net, inputs=[])
+  run_loop = ipu_compiler.compile(inference_loop, inputs=[])
 
-# The outfeed dequeue has to happen after the outfeed enqueue and in the same
-# thread as the enqueue, since threads have different default graphs
+# Calling outfeed_queue.dequeue() will insert the dequeue op into the graph.
+# We must do this after we've inserted the enqueue op and in the same graph as
+# the enqueue op. Note that threads have different default graphs, so we call it
+# here to ensure both ops are in the same graph.
 dequeue_outfeed = outfeed_queue.dequeue()
 
 # Configure the hardware
@@ -53,26 +59,30 @@ with tf.Session() as sess:
   sess.run(tf.global_variables_initializer())
   sess.run(infeed_queue.initializer)
 
-  # Function which is executed when continuously dequeuing the outfeed
+  # Function to continuously execute the dequeue op and print the dequeued data
   def dequeue():
     counter = 0
-    # We expect 2*`num_iterations` results because we execute the loop twice
-    while counter != num_iterations * 2:
+    # We expect 2*`NUM_ITERATIONS` results because we execute the loop twice
+    while counter != NUM_ITERATIONS * 2:
       r = sess.run(dequeue_outfeed)
       # Check if there are any results to process
       if r.size:
         # Print the partial results
-        print(r)
-        counter += len(r)
+        for t in r:
+          print("Step:", counter, "classes:", t)
+          counter += 1
 
-  # Run the main loop once to compile the program.
+  # Execute the main loop once to compile the program. We must do this before
+  # starting the dequeuing thread, or the TensorFlow runtime will try to dequeue
+  # an outfeed that it doesn't know about
   sess.run(run_loop)
-  # Create a thread which will continuously dequeue the outfeed queue and start
-  # it
+
+  # Start a thread that asynchronously continuously dequeues the outfeed
   dequeue_thread = Thread(target=dequeue)
   dequeue_thread.start()
-  # Run the main loop
+
+  # Run the main loop while the outfeed is being dequeued by the second thread
   sess.run(run_loop)
-  # Once the main loop has finished, make sure to only finish once the dequeue
-  # thread has stopped
+
+  # After main loop execution, wait for the dequeuing thread to finish
   dequeue_thread.join()
