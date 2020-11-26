@@ -317,6 +317,7 @@ class TensorMaps {
   Iterator end() { return Iterator(_map.end()); }
   ConstIterator begin() const { return ConstIterator(_map.begin()); }
   ConstIterator end() const { return ConstIterator(_map.end()); }
+  std::size_t size() const { return _map.size(); }
 
  private:
   std::map<std::string, TensorMap> _map;

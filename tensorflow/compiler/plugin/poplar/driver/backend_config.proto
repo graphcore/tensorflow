@@ -152,6 +152,8 @@ message PoplarBackendConfig {
     message FunctionConfig {
       bool keep_input_layouts = 1;
       bool unique_sharding = 2;
+      int64 num_modified_remote_buffer_inputs = 3;
+      int64 num_unmodified_remote_buffer_inputs = 4;
     }
 
     message ResourceUpdateConfig {

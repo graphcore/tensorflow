@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -24,10 +25,38 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace subcomputation_graph_caching {
+namespace {
+RemoteBufferHandleVectors GetInputRemoteBufferHandles(
+    DeferredArgRBVectors& inputs) {
+  RemoteBufferHandleVectors handles(inputs.size());
+
+  // Construct the structure for encoding remote buffer inputs and their
+  // positions.
+  for (int64 operand_idx = 0; operand_idx != inputs.size(); ++operand_idx) {
+    auto& operand_inputs = inputs[operand_idx];
+    RemoteBufferHandleVector& operand_handles = handles[operand_idx];
+    operand_handles.resize(operand_inputs.size());
+    for (int64 tuple_idx = 0; tuple_idx != operand_inputs.size(); ++tuple_idx) {
+      // For remote buffer inputs store their handle.
+      auto& operand_input = operand_inputs[tuple_idx];
+      if (operand_input && operand_input->IsRemoteBuffer()) {
+        operand_handles[tuple_idx] = operand_input->AsRemoteBuffer().handle();
+      }
+    }
+  }
+  return handles;
+}
+}  // namespace
 
 size_t SubcomputationGraphCacheKeyHash::operator()(
     const SubcomputationGraphCacheKey& key) const {
   size_t hash = HloComputationHash()(key.computation);
+  for (auto& operand_handles : key.remote_buffer_handles) {
+    for (auto& operand_handle : operand_handles) {
+      hash = tensorflow::Hash64Combine(
+          hash, std::hash<std::string>()(operand_handle.value_or("no_handle")));
+    }
+  }
   return tensorflow::Hash64Combine(hash, key.keep_input_layouts);
 }
 
@@ -37,6 +66,11 @@ bool SubcomputationGraphCacheKeyEquals::operator()(
   if (a.keep_input_layouts != b.keep_input_layouts) {
     return false;
   }
+
+  if (a.remote_buffer_handles != b.remote_buffer_handles) {
+    return false;
+  }
+
   return HloComputationEquals()(a.computation, b.computation);
 }
 
@@ -53,7 +87,8 @@ StatusOr<std::shared_ptr<DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, DeferredArgRBVectors& inputs,
     const HloComputation* computation, bool keep_input_layouts) {
-  SubcomputationGraphCacheKey key{computation, keep_input_layouts};
+  SubcomputationGraphCacheKey key{computation, keep_input_layouts,
+                                  GetInputRemoteBufferHandles(inputs)};
 
   auto itr = table_.find(key);
   if (itr == table_.end()) {

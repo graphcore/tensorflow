@@ -17,8 +17,11 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SUBCOMPUTATION_GRAPH_CACHING_H_
 
 #include <memory>
-#include <poputil/GraphFunction.hpp>
+#include <string>
 #include <unordered_map>
+#include <vector>
+
+#include <poputil/GraphFunction.hpp>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -33,9 +36,13 @@ struct CompilerResources;
 
 namespace subcomputation_graph_caching {
 
+using RemoteBufferHandleVector = std::vector<absl::optional<std::string>>;
+using RemoteBufferHandleVectors = std::vector<RemoteBufferHandleVector>;
+
 struct SubcomputationGraphCacheKey {
   const HloComputation* computation;
   bool keep_input_layouts;
+  RemoteBufferHandleVectors remote_buffer_handles;
 };
 
 struct SubcomputationGraphCacheKeyHash {
