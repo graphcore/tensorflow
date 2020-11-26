@@ -238,6 +238,52 @@ static const std::vector<HloMatcherPattern> patterns = {
     })),
 
   // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are tensors)
+  // (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternMetaTarget(0),
+    PatternInputs({9, 10, 11, 12}),
+    PatternInplaceInputs({9}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({9, 3})},
+      {HloOpcode::kMultiply, NodeOperands({10, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kReshape, NodeOperands({7}), IsScalar},
+      {HloOpcode::kReshape, NodeOperands({8}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({11}), IsF32ToF16Convert},
+      {HloOpcode::kConvert, NodeOperands({12}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are tensors)
+  // (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternMetaTarget(0),
+    PatternInputs({7, 8, 9, 10}),
+    PatternInplaceInputs({7}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({7, 3})},
+      {HloOpcode::kMultiply, NodeOperands({8, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kConvert, NodeOperands({9}), IsF32ToF16Convert},
+      {HloOpcode::kConvert, NodeOperands({10}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are tensors)
   HloMatcherPattern(
     PatternType("scaled_inplace_axby"),
     PatternMetaTarget(0),
@@ -256,9 +302,9 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
     })),
 
-  // Scaled add/subtract to/from - a = a * X +/- b (constant)
+  // Scaled add/subtract to/from - X = a * X +/- Y (constant)
   HloMatcherPattern(
-    PatternType("scaled_inplace_axb"),
+    PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({3, 4}),
     PatternInplaceInputs({3}),
@@ -273,9 +319,46 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Scaled add/subtract to/from - a = a * X +/- b (tensor)
+  // Scaled add/subtract to/from - X = a * X +/- Y (tensor)
+  // (mixed precision)
   HloMatcherPattern(
-    PatternType("scaled_inplace_axb"),
+    PatternType("scaled_inplace_axy"),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7}),
+    PatternInplaceInputs({5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 6}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({5, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({7}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/- Y (tensor)
+  // (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axy"),
+    PatternMetaTarget(0),
+    PatternInputs({4, 5, 6}),
+    PatternInplaceInputs({4}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 5}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({4, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/- Y (tensor)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({3, 4, 5}),
     PatternInplaceInputs({3}),
@@ -290,9 +373,9 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Scaled add/subtract to/from - a = a +/- b * Y (constant)
+  // Scaled add/subtract to/from - X = X +/- b * Y (constant)
   HloMatcherPattern(
-    PatternType("scaled_inplace_aby"),
+    PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({3, 4}),
     PatternInplaceInputs({3}),
@@ -307,9 +390,46 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Scaled add/subtract to/from - a = a +/- b * Y (tensor)
+  // Scaled add/subtract to/from - X = X +/- b * Y (tensor)
+  // (mixed precision)
   HloMatcherPattern(
-    PatternType("scaled_inplace_aby"),
+    PatternType("scaled_inplace_xby"),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7}),
+    PatternInplaceInputs({5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({5, 1}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({6, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({7}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = X +/- b * Y (tensor)
+  // (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_xby"),
+    PatternMetaTarget(0),
+    PatternInputs({4, 5, 6}),
+    PatternInplaceInputs({4}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({5, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = X +/- b * Y (tensor)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({3, 4, 5}),
     PatternInplaceInputs({3}),

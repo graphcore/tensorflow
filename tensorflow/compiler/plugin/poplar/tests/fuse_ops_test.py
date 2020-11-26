@@ -24,6 +24,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import dtypes
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
@@ -1048,6 +1049,63 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
       report.parse_log(assert_len=4)
+
+  def testScaledAddaXbYMixed(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        px = array_ops.placeholder(np.float16, [3])
+        py = array_ops.placeholder(np.float16, [3])
+        scale_a = array_ops.placeholder(np.float32, [])
+        scale_b = array_ops.placeholder(np.float32, [])
+        scale_a_16 = math_ops.cast(scale_a, dtypes.float16)
+        scale_b_16 = math_ops.cast(scale_b, dtypes.float16)
+        axby = scale_a_16 * px + scale_b_16 * py
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      fd = {
+          px: [2.0, 0.5, 1.0],
+          py: [1.0, 2.0, 3.0],
+          scale_a: 2.0,
+          scale_b: 3.0
+      }
+      result = sess.run(axby, fd)
+      self.assertAllClose(result, [7.0, 7.0, 11.0])
+
+      report.parse_log(assert_len=4)
+
+      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      report.assert_all_compute_sets_and_list(ok)
+
+  # Using a scale smaller than a float16 can represent
+  # to ensure the cast is not actually being performed
+  def testScaledAddXbYMixedSmallScale(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        px = array_ops.placeholder(np.float16, [3])
+        py = array_ops.placeholder(np.float16, [3])
+        scale_b = array_ops.placeholder(np.float32, [])
+        scale_b_16 = math_ops.cast(scale_b, dtypes.float16)
+        xby = px + scale_b_16 * py
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      # Note that the output xby is still a float16 so py is scaled up
+      # to ensure the output is representable as a float16
+      fd = {
+          px: [4.0e-4, 1.0e-4, 2.0e-4],
+          py: [1.0e4, 2.0e4, 3.0e4],
+          scale_b: 3e-8
+      }
+      result = sess.run(xby, fd)
+      self.assertAllClose(result, [7.0e-4, 7.0e-4, 11.0e-4])
+
+      report.parse_log(assert_len=4)
+
+      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScaledAddToVariableFor2Scales(self):
     with self.session() as sess:

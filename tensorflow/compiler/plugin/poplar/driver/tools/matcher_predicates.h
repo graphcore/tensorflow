@@ -59,6 +59,7 @@ bool IsPopOpsConvolutionWithReverse(const HloInstruction*);
 bool IsOpWithWindowNoBaseDilation(const HloInstruction*);
 bool IsOpWithWindowNoStride(const HloInstruction*);
 bool IsPaddingReduceWindow(const HloInstruction*);
+bool IsAdd(const HloInstruction*);
 bool IsAddOrSubtract(const HloInstruction*);
 bool IsMultiplyOrDivide(const HloInstruction*);
 bool IsBiasAdd(const HloInstruction*);
