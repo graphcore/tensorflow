@@ -20,9 +20,47 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
+#include "absl/strings/str_cat.h"
+
 namespace xla {
 namespace poplarplugin {
 namespace {
+StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
+    poplar::Graph& graph, const std::string& debug_prefix,
+    const HloInstruction* inst, CompilerResources& resources) {
+  const HloWeightsTransposeChansFlipXYInstruction* weights_transpose_inst =
+      Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+
+  const ConvolutionDimensionNumbers& conv_dimension_numbers =
+      weights_transpose_inst->convolution_dimension_numbers();
+
+  const std::vector<size_t>& conv_input_shape =
+      weights_transpose_inst->ConvInputShape();
+
+  const std::vector<size_t>& conv_output_shape =
+      weights_transpose_inst->ConvOutputShape();
+
+  TF_ASSIGN_OR_RETURN(
+      poplin::ConvParams conv_params,
+      GetConvolutionParametersForWeightsTranspose(
+          weights_transpose_inst, conv_input_shape, conv_output_shape));
+
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                      GetConvolutionOptionsForInst(inst, resources));
+
+  poplar::Tensor out_weights = poplin::createWeights(
+      graph, conv_params,
+      absl::StrCat(debug_prefix, "/CreateWeights_TransposeChansFlipXY"), opts,
+      &resources.convolution_cache);
+
+  out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
+
+  out_weights = ShuffleConvolutionWeightsToTensorflow(conv_dimension_numbers,
+                                                      out_weights);
+
+  return out_weights;
+}
+
 class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -95,6 +133,31 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out_weights));
 
     return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const int64 input_index = tensor_target.input_index;
+    const HloInstruction* inst = tensor_target.tgt;
+
+    poplar::Tensor out;
+    switch (input_index) {
+      case 0: {
+        TF_ASSIGN_OR_RETURN(out, AddConvWeightsTransposeChansFlipXY(
+                                     graph, GetDebugName(inst), inst, res));
+        break;
+      }
+      default:
+        return xla::FailedPrecondition(
+            "Input index %d of weights transpose chans flipxy op shouldn't be "
+            "allocating",
+            input_index);
+    }
+
+    return out;
   }
 };
 

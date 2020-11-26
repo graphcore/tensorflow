@@ -54,7 +54,7 @@ HloWeightsTransposeChansFlipXYInstruction::ConvOutputShape() const {
 
 absl::flat_hash_set<int64>
 HloWeightsTransposeChansFlipXYInstruction::AllocatingIndices() const {
-  return {};
+  return {0};
 }
 
 absl::flat_hash_map<int64, int64>
