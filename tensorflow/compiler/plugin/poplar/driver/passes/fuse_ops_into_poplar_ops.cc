@@ -47,10 +47,9 @@ bool IsCompareGreaterOrGreaterEqual(const HloInstruction* inst) {
 static const std::vector<HloMatcherPattern> patterns = {
   HloMatcherPattern(
     PatternType("relu"),
-    PatternReplaceFn([](const HloMatcherPattern & pattern,
-    const HloMatcherMatched& matched)
+    PatternReplaceFn([](const HloMatcherMatched& matched)
     -> StatusOr<PatternInstructionOutputs> {
-      auto inputs = matched.GetInputs(pattern);
+      auto inputs = matched.GetInputs();
       if (inputs.size() != 1) {
           return InternalError("Relu accepts only one argument");
       }
@@ -71,10 +70,9 @@ static const std::vector<HloMatcherPattern> patterns = {
 
   HloMatcherPattern(
     PatternType("relu_grad"),
-    PatternReplaceFn([](const HloMatcherPattern & pattern,
-    const HloMatcherMatched& matched)
+    PatternReplaceFn([](const HloMatcherMatched& matched)
     -> StatusOr<PatternInstructionOutputs> {
-      auto inputs = matched.GetInputs(pattern);
+      auto inputs = matched.GetInputs();
       if (inputs.size() != 2) {
         return InternalError("ReluGrad accepts exactly two arguments");
       }

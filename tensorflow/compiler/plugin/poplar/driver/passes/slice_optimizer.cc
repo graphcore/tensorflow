@@ -129,7 +129,7 @@ StatusOr<HloInstruction*> ConvertToSliceApplyBase(HloOpcode opcode,
 
 Status ReplaceMatch(HloMatcherMatched& match) {
   HloComputation* comp = match.computation;
-  auto pattern = patterns[match.pattern_idx];
+  const auto& pattern = match.pattern;
   HloInstruction* root = match.instruction_mapping.at(0);
   HloInstruction* input = match.instruction_mapping.at(pattern.GetInputs()[0]);
   HloInstruction* update = match.instruction_mapping.at(pattern.GetInputs()[1]);

@@ -143,7 +143,7 @@ MultiUpdateCombiner::MultiUpdateCombiner(
 
 StatusOr<bool> MultiUpdateCombiner::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
-  auto pattern = patterns_[match.pattern_idx];
+  const auto& pattern = match.pattern;
   HloComputation* computation = match.computation;
   HloInstruction* pattern_root =
       match.instruction_mapping[pattern.GetOutputs()[0]];

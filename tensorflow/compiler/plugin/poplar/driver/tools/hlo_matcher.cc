@@ -584,13 +584,12 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
   return {nodes_to_operands, operands_to_nodes};
 }
 
-HloInstruction* HloMatcherMatched::GetMetaTarget(
-    const HloMatcherPattern& pattern) const {
+HloInstruction* HloMatcherMatched::GetMetaTarget() const {
   return instruction_mapping.at(pattern.GetMetaTarget());
 }
 
 std::vector<HloInstruction*> HloMatcherMatched::MapInstructions(
-    const HloMatcherPattern& pattern, const std::vector<NodeId>& nodes,
+    const std::vector<NodeId>& nodes,
     const std::vector<HloInstruction*>& forced_parameters) const {
   std::vector<HloInstruction*> insts;
   insts.reserve(nodes.size() + forced_parameters.size());
@@ -602,14 +601,12 @@ std::vector<HloInstruction*> HloMatcherMatched::MapInstructions(
 }
 
 std::vector<HloInstruction*> HloMatcherMatched::GetInputs(
-    const HloMatcherPattern& pattern,
     const std::vector<HloInstruction*>& forced_arguments) const {
-  return MapInstructions(pattern, pattern.GetInputs(), forced_arguments);
+  return MapInstructions(pattern.GetInputs(), forced_arguments);
 }
 
-std::vector<HloInstruction*> HloMatcherMatched::GetOutputs(
-    const HloMatcherPattern& pattern) const {
-  return MapInstructions(pattern, pattern.GetOutputs());
+std::vector<HloInstruction*> HloMatcherMatched::GetOutputs() const {
+  return MapInstructions(pattern.GetOutputs());
 }
 
 HloMatcher::HloMatcher(const std::vector<HloMatcherPattern>& patterns,
@@ -872,8 +869,8 @@ StatusOr<bool> HloMatcher::MatchPatternSingleOutput(
 
 StatusOr<bool> HloMatcher::MatchPattern(HloInstruction* root,
                                         const unsigned pattern_idx) {
-  HloMatcherMatched match(root->parent(), pattern_idx);
-  auto& pattern = patterns_[pattern_idx];
+  const auto& pattern = patterns_[pattern_idx];
+  HloMatcherMatched match(root->parent(), pattern_idx, pattern);
 
   bool matched = false;
   if (pattern.GetOutputs().size() == 1) {
@@ -942,7 +939,7 @@ StatusOr<bool> HloMatcher::MatchPatternStart(HloComputation* computation) {
     start_from_root = false;
 
     for (unsigned i = 0; i < patterns_.size(); i++) {
-      auto pattern = patterns_[i];
+      const auto& pattern = patterns_[i];
       std::stack<HloInstruction*> to_visit;
       // The list of instructions visited while searching for each pattern
       std::set<HloInstruction*> visited;
@@ -1330,7 +1327,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
     dep->ReplaceAllUsesWith(dep->mutable_operand(0));
   }
 
-  auto* old_meta_target = matched.GetMetaTarget(pattern);
+  auto* old_meta_target = matched.GetMetaTarget();
 
   HloInstructionSet after_all;
   for (auto pair : matched.instruction_mapping) {
@@ -1341,10 +1338,9 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
     }
   }
 
-  std::vector<HloInstruction*> inputs = matched.GetInputs(pattern);
+  std::vector<HloInstruction*> inputs = matched.GetInputs();
 
-  TF_ASSIGN_OR_RETURN(PatternInstructionOutputs outputs,
-                      replace_fn(pattern, matched));
+  TF_ASSIGN_OR_RETURN(PatternInstructionOutputs outputs, replace_fn(matched));
   for (HloInstruction* inst : outputs) {
     if (inst->parent() != computation) {
       return InternalError(
@@ -1353,7 +1349,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
     }
   }
 
-  auto pattern_outputs = matched.GetOutputs(pattern);
+  auto pattern_outputs = matched.GetOutputs();
   if (outputs.size() != pattern_outputs.size()) {
     return InternalError(
         "Replacement function returned wrong number of outputs.");

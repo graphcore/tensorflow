@@ -166,7 +166,7 @@ StatusOr<bool> CastsElimination::HandleMatch(HloMatcherMatched& match,
   // outlined.
   std::set<NodeId> to_outline;
 
-  auto pattern = patterns_[match.pattern_idx];
+  const auto& pattern = match.pattern;
   HloComputation* computation = match.computation;
   HloInstruction* old_pattern_root =
       match.instruction_mapping[pattern.GetOutputs()[0]];
