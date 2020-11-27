@@ -112,7 +112,7 @@ MatmulCombiner::MatmulCombiner(struct CompilerAnnotations& annotations)
 
 StatusOr<bool> MatmulCombiner::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
-  auto pattern = patterns_[match.pattern_idx];
+  const auto& pattern = match.pattern;
   HloComputation* computation = match.computation;
 
   HloDotInstruction* matmul1 =

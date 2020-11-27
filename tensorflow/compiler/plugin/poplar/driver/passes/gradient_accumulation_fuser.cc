@@ -96,9 +96,9 @@ GradientAccumulationFuser::GradientAccumulationFuser(
     : HloMatcher(patterns, annotations, false, true) {}
 
 namespace {
-bool HandleGradAccumNoMomentum(HloMatcherPattern& pattern,
-                               HloMatcherMatched& match,
+bool HandleGradAccumNoMomentum(HloMatcherMatched& match,
                                const absl::optional<int64> sharding_device) {
+  auto& pattern = match.pattern;
   auto comp = match.computation;
   // Get the input output id.
   CHECK_EQ(pattern.GetInputs().size(), 1);
@@ -152,9 +152,9 @@ bool HandleGradAccumNoMomentum(HloMatcherPattern& pattern,
   return true;
 }
 
-bool HandleGradAccumWithMomentum(HloMatcherPattern& pattern,
-                                 HloMatcherMatched& match,
+bool HandleGradAccumWithMomentum(HloMatcherMatched& match,
                                  const absl::optional<int64> sharding_device) {
+  auto& pattern = match.pattern;
   auto comp = match.computation;
   // Get the input output id.
   CHECK_EQ(pattern.GetInputs().size(), 3);
@@ -199,7 +199,7 @@ bool HandleGradAccumWithMomentum(HloMatcherPattern& pattern,
 
 StatusOr<bool> GradientAccumulationFuser::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
-  auto pattern = patterns_[match.pattern_idx];
+  const auto& pattern = match.pattern;
   CHECK_EQ(pattern.GetOutputs().size(), 1);
   NodeId output_id = pattern.GetOutputs()[0];
   // Don't bother replacing the instructions if there is an instruction in
@@ -218,10 +218,10 @@ StatusOr<bool> GradientAccumulationFuser::HandleMatch(
   switch (match.pattern_idx) {
     case 0:
     case 1: {
-      return HandleGradAccumNoMomentum(pattern, match, sharding_device);
+      return HandleGradAccumNoMomentum(match, sharding_device);
     }
     case 2: {
-      return HandleGradAccumWithMomentum(pattern, match, sharding_device);
+      return HandleGradAccumWithMomentum(match, sharding_device);
     }
     default: {
       return InternalError("Unreachable pattern index", match.pattern_idx);

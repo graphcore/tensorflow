@@ -106,7 +106,7 @@ class HloMatcherPattern;
 struct HloMatcherMatched;
 using PatternInstructionOutputs = std::vector<HloInstruction*>;
 using PatternReplaceFn = std::function<StatusOr<PatternInstructionOutputs>(
-    const HloMatcherPattern& pattern, const HloMatcherMatched&)>;
+    const HloMatcherMatched&)>;
 
 class HloMatcherPattern {
  public:
@@ -219,21 +219,21 @@ using Trace = std::vector<InstructionIndex>;
 struct HloMatcherMatched {
   HloComputation* computation;
   unsigned pattern_idx;
+  const HloMatcherPattern& pattern;
   absl::flat_hash_map<NodeId, HloInstruction*> instruction_mapping;
   std::vector<Trace> replacement_traces;
   std::vector<HloInstruction*> dependency_predecessors;
 
-  HloMatcherMatched(HloComputation* computation, const unsigned pattern_idx)
-      : computation(computation), pattern_idx(pattern_idx) {}
+  HloMatcherMatched(HloComputation* computation, const unsigned pattern_idx,
+                    const HloMatcherPattern& pattern)
+      : computation(computation), pattern_idx(pattern_idx), pattern(pattern) {}
 
-  HloInstruction* GetMetaTarget(const HloMatcherPattern& pattern) const;
+  HloInstruction* GetMetaTarget() const;
   std::vector<HloInstruction*> GetInputs(
-      const HloMatcherPattern& pattern,
       const std::vector<HloInstruction*>& forced_parameters = {}) const;
-  std::vector<HloInstruction*> GetOutputs(
-      const HloMatcherPattern& pattern) const;
+  std::vector<HloInstruction*> GetOutputs() const;
   std::vector<HloInstruction*> MapInstructions(
-      const HloMatcherPattern& pattern, const std::vector<NodeId>& nodes,
+      const std::vector<NodeId>& nodes,
       const std::vector<HloInstruction*>& forced_parameters = {}) const;
 };
 
@@ -253,6 +253,10 @@ class HloMatcher : public HloModulePass {
 
   StatusOr<bool> Run(HloModule* module) override;
 
+ private:
+  // The list of patterns to try to find in the computations
+  std::vector<HloMatcherPattern> patterns_;
+
  protected:
   // Outlines the given match and return the instruction which calls the
   // outlined computation.
@@ -261,9 +265,6 @@ class HloMatcher : public HloModulePass {
       const std::string& outlined_computation_name,
       const absl::optional<int64> sharding_device,
       std::vector<HloInstruction*>&& forced_parameters = {});
-
-  // The list of patterns to try to find in the computations
-  std::vector<HloMatcherPattern> patterns_;
 
   // The instruction annotations from the compiler
   struct CompilerAnnotations& annotations_;
