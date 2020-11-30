@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 
+#include <memory>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
@@ -23,8 +24,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -42,19 +45,19 @@ bool ShouldRecomputeInstruction(const HloInstruction* inst) {
 
 StatusOr<bool> SuggestRecompute::Run(HloModule* module) {
   bool result = false;
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
 
-  // We might not want to suggest recomputation for some computations, such as
-  // the resource update in pipelining.
-  absl::flat_hash_set<HloComputation*> no_recomputation_computations;
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
-  for (HloInstruction* pipeline_op : pipeline_ops) {
-    TF_ASSIGN_OR_RETURN(PipelineStages stages,
-                        GetPipelineStages(pipeline_op->to_apply()));
-    if (stages.resource_update) {
-      // Do not add recompute inside of the resource update.
-      no_recomputation_computations.insert(
-          (*stages.resource_update)->to_apply());
+  // Do not suggest recomputation for resource updates or any computations which
+  // they call.
+  absl::flat_hash_set<const HloComputation*> no_recomputation_computations;
+  for (auto comp : module->computations()) {
+    for (auto inst : comp->instructions()) {
+      if (IsResourceUpdate(inst)) {
+        TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_comps,
+                            GetAllComputationsCalledBy(inst, call_graph.get()));
+        no_recomputation_computations.insert(called_comps.begin(),
+                                             called_comps.end());
+      }
     }
   }
 
