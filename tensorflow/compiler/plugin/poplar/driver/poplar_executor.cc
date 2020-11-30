@@ -1753,7 +1753,11 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   target_hash.push_back(ipu_.Target().getNumWorkerContexts());
   target_hash.push_back(ipu_.Target().getTilesPerIPU());
   target_hash.push_back(ipu_.Target().getNumIPUs());
-  target_hash.push_back((unsigned)ipu_.Target().getTargetType());
+  target_hash.push_back(static_cast<int64>(ipu_.Target().getTargetType()));
+  target_hash.push_back(
+      static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
+  target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
+  target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
 
   // Generate Options hash
   target_hash.push_back(GetConfigHash(current_config_));
