@@ -57,9 +57,6 @@ enum FrontendAttributeId {
   OFFLOAD_VARIABLES = 17;
   // Used in pipelining to indicate the recomputation mode.
   RECOMPUTATION_MODE = 18;
-  // Used for functions to indicate whether the callsite should have unique
-  // sharding.
-  UNIQUE_SHARDING = 19;
 };
 
 // An enum representing the "Machine Learning" type of the instruction.

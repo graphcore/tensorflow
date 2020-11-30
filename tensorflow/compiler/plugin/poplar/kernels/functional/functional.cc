@@ -32,9 +32,7 @@ namespace tensorflow {
 class FunctionOp : public poplarplugin::FunctionBaseOp {
  public:
   explicit FunctionOp(OpKernelConstruction* ctx)
-      : poplarplugin::FunctionBaseOp(ctx, /*evaluate_constants=*/false) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("unique_sharding", &unique_sharding_));
-  }
+      : poplarplugin::FunctionBaseOp(ctx, /*evaluate_constants=*/false) {}
 
  protected:
   Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) override {
@@ -42,14 +40,10 @@ class FunctionOp : public poplarplugin::FunctionBaseOp {
         operation, pp::FrontendAttributeId_Name(pp::CALL_CONFIG_TYPE),
         pp::PoplarBackendConfig_CallConfig_Type_Name(
             pp::PoplarBackendConfig::CallConfig::Function)));
-    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
-        operation, pp::FrontendAttributeId_Name(pp::UNIQUE_SHARDING),
-        std::to_string(unique_sharding_)));
     return Status::OK();
   }
 
  private:
-  bool unique_sharding_;
   TF_DISALLOW_COPY_AND_ASSIGN(FunctionOp);
 };
 REGISTER_IPU_OP("Function", FunctionOp);

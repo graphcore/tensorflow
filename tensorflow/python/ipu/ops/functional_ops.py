@@ -30,7 +30,7 @@ from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 
 
-def outlined_function(func=None, unique_sharding=False, name=None):
+def outlined_function(func, name=None):
   """
   An outlined function is a block of organized, reusable code which is used to
   perform a single action. Functions provide better modularity for your
@@ -52,10 +52,6 @@ def outlined_function(func=None, unique_sharding=False, name=None):
       See the documentation for examples of how to pass non `tf.Tensor`-like
       objects to the functions.
       The function provided must return at least one `tf.Tensor`-like object.
-    unique_sharding: Makes sure that all function inputs are copied to a single
-      device before the function call is executed. Enabling this can increase
-      performance as any inter IPU communication can be more efficiently
-      scheduled and any duplicated copies can be elided.
     name: The name of the function.
 
   Returns:
@@ -64,36 +60,28 @@ def outlined_function(func=None, unique_sharding=False, name=None):
   """
   name = name if name else "function"
 
-  def decorated(inner_func):
-    def func_wrapper(*args):
-      args = _convert_to_list(args)
-      with ops.name_scope(name) as scope:
-        func_graph, captured_args = _compile_function(
-            inner_func, args, scope, [], allow_external_captures=True)
+  def func_wrapper(*args):
+    args = _convert_to_list(args)
+    with ops.name_scope(name) as scope:
+      func_graph, captured_args = _compile_function(
+          func, args, scope, [], allow_external_captures=True)
 
-        with ops.control_dependencies(list(func_graph.control_captures)):
-          outputs = gen_functional_ops.function(
-              captured_args,
-              to_apply=util.create_new_tf_function(func_graph),
-              Tout=func_graph.output_types,
-              output_shapes=func_graph.output_shapes,
-              unique_sharding=unique_sharding,
-              name=name)
+      with ops.control_dependencies(list(func_graph.control_captures)):
+        outputs = gen_functional_ops.function(
+            captured_args,
+            to_apply=util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes)
 
-          # pack_sequence_as requires a list of Tensors, but the gen_ operation
-          # returns an Operation under some circumstances (probably when that
-          # list would be empty)
-          if isinstance(outputs, ops.Operation):
-            outputs = outputs.outputs
+        # pack_sequence_as requires a list of Tensors, but the gen_ operation
+        # returns an Operation under some circumstances (probably when that
+        # list would be empty)
+        if isinstance(outputs, ops.Operation):
+          outputs = outputs.outputs
 
-        return _pack_sequence_as(func_graph.structured_outputs, outputs)
+      return _pack_sequence_as(func_graph.structured_outputs, outputs)
 
-    return func_wrapper
-
-  if func is not None:
-    return decorated(func)
-
-  return decorated
+  return func_wrapper
 
 
 @deprecation.deprecated(None, "Use `ipu.outlined_function(...)`.")
