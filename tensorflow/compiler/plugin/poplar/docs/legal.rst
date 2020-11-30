@@ -1,10 +1,28 @@
 Trademarks & copyright
 ======================
 
-Graphcore® and Poplar® are Registered Trademarks of Graphcore Ltd. PopART™,
-IPU-Core™, In-Processor-Memory™, IPU-Tile™, IPU-Exchange™,
-IPU-Machine™, IPU-POD™, IPU-Link™ and Virtual-IPU™
-are trademarks of Graphcore Ltd. All other trademarks are the property of
-their respective owners.
+Graphcore® and Poplar® are registered trademarks of Graphcore Ltd.
 
-© Copyright 2016-2020, Graphcore Ltd.
+AI-Float™,
+Colossus™,
+Exchange Memory™,
+In-Processor-Memory™,
+IPU-Core™,
+IPU-Exchange™,
+IPU-Fabric™,
+IPU-Link™,
+IPU-M2000™,
+IPU-Machine™,
+IPU-POD™,
+IPU-Tile™,
+PopART™,
+PopLibs™,
+PopVision™,
+PopTorch™,
+Streaming Memory™
+and Virtual-IPU™
+are trademarks of Graphcore Ltd.
+
+All other trademarks are the property of their respective owners.
+
+Copyright © 2016-2020 Graphcore Ltd. All rights reserved.

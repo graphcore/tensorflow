@@ -1,18 +1,30 @@
 .. _references-section:
 
-References
-----------
+Resources
+---------
 
-The following documents may be useful.
+You may find the following sources of information useful.
 
-- TensorFlow main site:  http://tensorflow.org
-- TensorFlow user guide: https://www.tensorflow.org/guide
-- TensorFlow tutorial series: https://www.tensorflow.org/tutorials
-- TensorFlow XLA:  https://www.tensorflow.org/performance/xla/
-- TensorFlow general model repository on GitHub (an excellent reference for
-  various model implementations): https://github.com/tensorflow/models
-- *Hands-on Machine Learning with Scikit-Learn and TensorFlow*: A very useful
-  practical guide to developing and training network models using TensorFlow:
-  http://shop.oreilly.com/product/0636920052289.do
-- `Poplar and PopLibs User Guide <https://docs.graphcore.ai/projects/poplar-user-guide/>`_
-- `Graphcore GitHub repository <https://github.com/graphcore/examples>`_ with application examples
+Graphcore
+_________
+
+- The latest versions of all the Graphcore `software documentation <https://docs.graphcore.ai/page/software.html>`_ including user guides and technical notes
+- The Graphcore `GitHub repository <https://github.com/graphcore/examples>`_ has application examples and tutorials
+- There are `Graphcore videos <https://www.graphcore.ai/resources/how-to-videos>`_ with explanations and demos of Graphcore software
+- The source code for `TensorFlow for the IPU <https://github.com/graphcore/tensorflow>`_ on GitHub
+
+TensorFlow
+__________
+
+- `TensorFlow website <http://tensorflow.org>`_
+- `User Guide <https://www.tensorflow.org/guide>`_
+- `TensorFlow tutorial series <https://www.tensorflow.org/tutorials>`_
+- `TensorFlow XLA <https://www.tensorflow.org/performance/xla/>`_
+
+Other
+_____
+
+- The TensorFlow `model repository on GitHub <https://github.com/tensorflow/models>`_ an excellent reference for
+  various model implementations
+- The book `Hands-on Machine Learning with Scikit-Learn and TensorFlow <http://shop.oreilly.com/product/0636920052289.do>`_ a very useful
+  practical guide to developing and training network models using TensorFlow
