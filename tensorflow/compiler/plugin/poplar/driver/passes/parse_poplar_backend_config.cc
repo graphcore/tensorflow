@@ -75,6 +75,14 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           auto* call_config = poplar_config.mutable_call_config();
           call_config->set_type(type);
           switch (type) {
+            case PoplarBackendConfig::CallConfig::Function: {
+              auto* function_config = call_config->mutable_function_config();
+              TF_ASSIGN_OR_RETURN(std::string unique_sharding_str,
+                                  GetAttribute(attributes, UNIQUE_SHARDING));
+              bool unique_sharding = std::stoi(unique_sharding_str);
+              function_config->set_unique_sharding(unique_sharding);
+              break;
+            }
             case PoplarBackendConfig::CallConfig::Pipeline: {
               auto* pipeline_config = call_config->mutable_pipeline_config();
               // Get the pipeline depth.
