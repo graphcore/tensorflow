@@ -850,8 +850,8 @@ class IPUSequential(_IpuModelBase):
       return []
 
     def body(*args):
-      fn = functional_ops.function(inference_body if mode ==
-                                   ModeKeys.PREDICT else training_body)
+      fn = functional_ops.outlined_function(
+          inference_body if mode == ModeKeys.PREDICT else training_body)
       return fn(*args)
 
     result = loops.repeat(int(repeat_count * self.accumulation_count),
@@ -1350,8 +1350,8 @@ class IPUModel(_IpuModelBase):
     def body(*args):
       # Flatten all the arguments.
       args = nest.flatten(args)
-      fn = functional_ops.function(inference_body if mode ==
-                                   ModeKeys.PREDICT else training_body)
+      fn = functional_ops.outlined_function(
+          inference_body if mode == ModeKeys.PREDICT else training_body)
       return fn(*args)
 
     result = loops.repeat(int(repeat_count * self.accumulation_count),
