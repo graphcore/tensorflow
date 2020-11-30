@@ -5,6 +5,10 @@ The purpose of this document is to introduce the TensorFlow framework from the
 perspective of developing and training models for the IPU. It assumes you have
 some knowledge of machine learning and TensorFlow.
 
+.. note:: This document is for TensorFlow 2. For information on TensorFlow 1
+          please refer to `Targeting the IPU from TensorFlow 1
+          <https://docs.graphcore.ai/projects/tensorflow1-user-guide/>`_.
+
 See the "Getting Started" guide for your IPU system in the
 `Graphcore documentation <https://docs.graphcore.ai>`_
 for information on installing the Poplar SDK and TensorFlow.
@@ -45,9 +49,11 @@ These will be described in the appropriate sections of this document.
 Document overview
 ~~~~~~~~~~~~~~~~~
 
-* The first section provides information about :any:`selecting specific IPU
+* This document starts with :any:`a tutorial overview <Tutorial>` of TensorFlow
+  for the IPU. This describes how to execute a graph on an IPU, how to select
+  the IPU hardware to run on, and a simple approach to using multiple IPUs.
+* The next section provides information about :any:`selecting specific IPU
   <device_selection>` hardware and configuring the code to run on it.
-* After this, there is an overview of the support for TensorFlow 2 and Keras.
 * The following sections provide information on various methods related to
   training a model on the IPU.
 * The next few sections provide information on IPU-specific features.
