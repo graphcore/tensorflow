@@ -5,6 +5,10 @@ The purpose of this document is to introduce the TensorFlow framework from the
 perspective of developing and training models for the IPU. It assumes you have
 some knowledge of machine learning and TensorFlow.
 
+.. note:: This document is for TensorFlow 1. For information on TensorFlow 2
+          please refer to `Targeting the IPU from TensorFlow 2
+          <https://docs.graphcore.ai/projects/tensorflow2-user-guide/>`_.
+
 See the "Getting Started" guide for your IPU system in the
 `Graphcore documentation <https://docs.graphcore.ai>`_
 for information on installing the Poplar SDK and TensorFlow.

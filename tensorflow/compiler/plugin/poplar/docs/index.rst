@@ -1,5 +1,5 @@
-Targeting the IPU from TensorFlow
-=================================
+Targeting the IPU from TensorFlow 1
+===================================
 
 .. gcdoc::
     :verb-borders:
