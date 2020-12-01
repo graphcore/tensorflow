@@ -28,7 +28,7 @@ class FuseOpsLate : public SingleHloMatcher {
 
   ~FuseOpsLate() override = default;
 
-  absl::string_view name() const override { return "poplar-fuse-late"; }
+  absl::string_view name() const override { return "fuse-ops-late"; }
 };
 
 }  // namespace poplarplugin

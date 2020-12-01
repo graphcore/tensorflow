@@ -28,7 +28,9 @@ class PoplarAlgebraicSimplifier : public HloModulePass {
  public:
   explicit PoplarAlgebraicSimplifier(bool enable_fast_math = false);
   ~PoplarAlgebraicSimplifier() override = default;
-  absl::string_view name() const override { return "poplar-algsimp"; }
+  absl::string_view name() const override {
+    return "poplar-algebraic-simplifier";
+  }
 
   // Run algebraic simplification on the given computation. Returns whether the
   // computation was changed.

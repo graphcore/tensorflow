@@ -25,9 +25,7 @@ namespace poplarplugin {
 
 class CustomOpReplacer : public HloModulePass {
  public:
-  absl::string_view name() const override {
-    return "poplar-custom-op-replacer";
-  }
+  absl::string_view name() const override { return "custom-op-replacer"; }
   StatusOr<bool> Run(HloModule* module) override;
 };
 

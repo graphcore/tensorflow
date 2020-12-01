@@ -26,7 +26,7 @@ namespace poplarplugin {
 // scalar.
 class ConstantSliceFolding : public HloModulePass {
  public:
-  absl::string_view name() const override { return "constant_slice_folding"; }
+  absl::string_view name() const override { return "constant-slice-folding"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 };

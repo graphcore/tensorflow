@@ -44,9 +44,7 @@ class RecomputeInstructions : public HloModulePass {
  public:
   RecomputeInstructions(bool allow_recompute);
 
-  absl::string_view name() const override {
-    return "non-linearity-recomputation";
-  }
+  absl::string_view name() const override { return "recompute-instructions"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 

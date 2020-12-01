@@ -117,7 +117,7 @@ class VariablesOffloadAndPartition : public HloModulePass {
                                int64 minimum_remote_tensor_size,
                                int64 replication_factor);
   absl::string_view name() const override {
-    return "resource-update-variables-offload";
+    return "variables-offload-and-partition";
   }
 
   StatusOr<bool> Run(HloModule* module) override;

@@ -35,7 +35,7 @@ class PipelineFIFOInserter : public HloModulePass {
 
   explicit PipelineFIFOInserter(bool remote_memory_supported);
 
-  absl::string_view name() const override { return "fifo-inserter"; }
+  absl::string_view name() const override { return "pipeline-fifo-inserter"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 

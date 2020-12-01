@@ -28,7 +28,7 @@ class FuseWideConst : public SingleHloMatcher {
 
   ~FuseWideConst() override = default;
 
-  absl::string_view name() const override { return "poplar-fuse-wide-const"; }
+  absl::string_view name() const override { return "fuse-wide-const"; }
 };
 
 }  // namespace poplarplugin
