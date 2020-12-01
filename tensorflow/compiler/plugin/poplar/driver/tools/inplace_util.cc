@@ -52,8 +52,8 @@ void RemoveDependencies(std::vector<HloInstruction*> froms, HloInstruction* to,
   reachability_map->UpdateReachabilityThroughInstruction(to);
 }
 
-// Returns true if user is an inplace read only instruction and uses inst in an
-// inplace operand index.
+// Returns true if user is of specific inplace type and uses inst at a inplace
+// operand index.
 bool IsUsedAsInplace(const HloInstruction* user, const HloInstruction* inst,
                      const HloInstructionType inplace_type) {
   auto user_description = HloInstructionDescription(user);
@@ -301,10 +301,8 @@ bool ConvertToInplaceReadOnly(HloInstruction* inst,
             // then we mark it as not inplace.
             not_inplace_users.insert(user);
           }
-        } else if (node_description.GetType() ==
-                   HloInstructionType::kInplaceReadOnly) {
-          // Otherwise, if the current node is kInplaceReadOnly, then we add the
-          // user as a not inplace user.
+        } else {
+          // Otherwise add the node as non inplace user.
           not_inplace_users.insert(user);
         }
       }

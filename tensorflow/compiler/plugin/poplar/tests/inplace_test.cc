@@ -1013,6 +1013,38 @@ ENTRY c1 {
   }
 }
 
+TEST_F(HloInplaceDependencyTest, ReadOnlyAndReadWrite) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f32[7,8] parameter(0)
+  p1 = f32[7,7] parameter(1)
+  slice = f32[7,7] slice(p0), slice={[0:7], [0:7]}
+  add = f32[7,7] add(slice, p1)
+  dot = f32[7,8] dot(add, p0), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT r = f32[56] reshape(dot)
+}
+
+)";
+
+  auto module = ParseAndReturnVerifiedModule(hlo);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  InplaceFinder inplace_finder;
+  EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(module0);
+  EXPECT_THAT(inplace_instructions.size(), 2);
+
+  HloInstruction* add = FindInstruction(module0, "add");
+  HloInstruction* r = FindInstruction(module0, "r");
+  // 'slice' cannot be inplace because p0 is used in `dot` and `add` is inplace.
+  EXPECT_TRUE(inplace_instructions.contains(add));
+  EXPECT_TRUE(inplace_instructions.contains(r));
+}
+
 void EnableLoopAliasAnalysis(HloInstruction* repeat_loop) {
   auto backend_config =
       repeat_loop->backend_config<PoplarBackendConfig>().ValueOrDie();
