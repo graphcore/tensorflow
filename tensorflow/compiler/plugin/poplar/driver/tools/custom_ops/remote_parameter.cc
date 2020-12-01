@@ -136,6 +136,11 @@ HloRemoteParameterStore::HloRemoteParameterStore(
   CHECK_GE(rbuffers_and_values.size(), 2);
   CHECK_EQ(rbuffers_and_values.size() % 2, 0);
   CHECK_EQ(rbuffers_and_values.size() / 2, replication_factors.size());
+  const int64 half_size = rbuffers_and_values.size() / 2;
+  for (int64 i = 0; i != half_size; ++i) {
+    CHECK_EQ(rbuffers_and_values[i]->shape().element_type(),
+             rbuffers_and_values[i + half_size]->shape().element_type());
+  }
 }
 
 absl::flat_hash_set<int64> HloRemoteParameterStore::AllocatingIndices() const {

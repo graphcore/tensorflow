@@ -770,10 +770,9 @@ StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
     }
   }
   if (gtes.size() != 1) {
-    return InternalErrorStrCat(
-        "Expected the gradient accumulation buffer to only have a "
-        "single user, but it has ",
-        gtes.size(), " users.");
+    return InternalErrorStrCat("Expected the ", inst->ToString(),
+                               " to only have a single user, but it has ",
+                               gtes.size(), " users.");
   }
   return *std::begin(gtes);
 }
