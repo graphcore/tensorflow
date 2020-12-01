@@ -622,16 +622,16 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
   EXPECT_THAT(
       cluster_call->operands(),
       ::testing::ElementsAre(
-          (replica_partition ? arg2_load : LookThroughReshape(arg2_load)),
-          LookThroughReshape(arg1), LookThroughReshape(arg0), arg3));
+          LookThroughReshape(arg1), LookThroughReshape(arg0), arg3,
+          (replica_partition ? arg2_load : LookThroughReshape(arg2_load))));
 
-  arg1 = cluster_comp->parameter_instruction(1);
+  arg1 = cluster_comp->parameter_instruction(0);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(arg1, GetRewrittenInput(arg1, false));
   }
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  HloInstruction* collective = cluster_comp->parameter_instruction(2);
+  HloInstruction* collective = cluster_comp->parameter_instruction(1);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(collective, GetScatterInput(collective, false));
   } else {
@@ -639,10 +639,10 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestScalarConstant) {
   }
   EXPECT_THAT(collective->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  arg3 = cluster_comp->parameter_instruction(3);
+  arg3 = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(arg3->shape(), ShapeUtil::MakeShape(F16, {}));
 
-  arg2_load = cluster_comp->parameter_instruction(0);
+  arg2_load = cluster_comp->parameter_instruction(3);
   if (replica_partition) {
     EXPECT_THAT(arg2_load->user_count(), 1);
     arg2_load = arg2_load->users()[0];
@@ -823,16 +823,16 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(
       cluster_call->operands(),
       ::testing::ElementsAre(
-          (replica_partition ? arg2_load : LookThroughReshape(arg2_load)),
-          LookThroughReshape(arg1), LookThroughReshape(arg0), arg3_new));
+          LookThroughReshape(arg1), LookThroughReshape(arg0), arg3_new,
+          (replica_partition ? arg2_load : LookThroughReshape(arg2_load))));
 
-  arg1 = cluster_comp->parameter_instruction(1);
+  arg1 = cluster_comp->parameter_instruction(0);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(arg1, GetRewrittenInput(arg1, false));
   }
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  HloInstruction* collective = cluster_comp->parameter_instruction(2);
+  HloInstruction* collective = cluster_comp->parameter_instruction(1);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(collective, GetScatterInput(collective, false));
   } else {
@@ -840,14 +840,14 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest,
   }
   EXPECT_THAT(collective->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  HloInstruction* param_arg3_new = cluster_comp->parameter_instruction(3);
+  HloInstruction* param_arg3_new = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(param_arg3_new->shape(), ShapeUtil::MakeShape(F16, {}));
   EXPECT_THAT(param_arg3_new->user_count(), 1);
   bcast = param_arg3_new->users()[0];
   EXPECT_THAT(bcast->operands(), ::testing::ElementsAre(param_arg3_new));
   EXPECT_THAT(bcast->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  arg2_load = cluster_comp->parameter_instruction(0);
+  arg2_load = cluster_comp->parameter_instruction(3);
   if (replica_partition) {
     EXPECT_THAT(arg2_load->user_count(), 1);
     arg2_load = arg2_load->users()[0];
@@ -1014,21 +1014,21 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
   EXPECT_TRUE(IsFunction(cluster_call));
   HloComputation* cluster_comp = cluster_call->to_apply();
 
-  const HloInstruction* new_const = cluster_call->operand(3);
+  const HloInstruction* new_const = cluster_call->operand(2);
   EXPECT_TRUE(Match(new_const, m::ConstantScalar(0.125)));
   EXPECT_THAT(
       cluster_call->operands(),
       ::testing::ElementsAre(
-          (replica_partition ? arg2_load : LookThroughReshape(arg2_load)),
-          LookThroughReshape(arg1), LookThroughReshape(arg0), new_const));
+          LookThroughReshape(arg1), LookThroughReshape(arg0), new_const,
+          (replica_partition ? arg2_load : LookThroughReshape(arg2_load))));
 
-  arg1 = cluster_comp->parameter_instruction(1);
+  arg1 = cluster_comp->parameter_instruction(0);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(arg1, GetRewrittenInput(arg1, false));
   }
   EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  HloInstruction* collective = cluster_comp->parameter_instruction(2);
+  HloInstruction* collective = cluster_comp->parameter_instruction(1);
   if (replica_partition) {
     TF_ASSERT_OK_AND_ASSIGN(collective, GetScatterInput(collective, false));
   } else {
@@ -1036,13 +1036,13 @@ TEST_P(ResourceUpdateElementwiseClusteringBasicTest, TestWideConstant) {
   }
   EXPECT_THAT(collective->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  fusion = cluster_comp->parameter_instruction(3);
+  fusion = cluster_comp->parameter_instruction(2);
   EXPECT_THAT(fusion->shape(), ShapeUtil::MakeShape(F16, {}));
   EXPECT_THAT(fusion->user_count(), 1);
   fusion = fusion->users()[0];
   EXPECT_THAT(fusion->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
-  arg2_load = cluster_comp->parameter_instruction(0);
+  arg2_load = cluster_comp->parameter_instruction(3);
   if (replica_partition) {
     EXPECT_THAT(arg2_load->user_count(), 1);
     arg2_load = arg2_load->users()[0];
@@ -1118,32 +1118,41 @@ std::string GetHlo(bool partition_offloaded_variables,
     arg2_new = $element_type$shape add(arg0_r, arg2_c)
     arg1_new = $element_type$shape add(arg1, arg2_new)
     arg2_new_c = $remote_buffer_element_type$shape convert(arg2_new)
-    ROOT t = ($element_type$shape,$remote_buffer_element_type$shape) tuple(arg1_new, arg2_new_c)
+    ROOT t = ($element_type$shape,$remote_buffer_element_type$shape)
+    tuple(arg1_new, arg2_new_c)
   }
 
   loop {
     after-all = token[] after-all()
     infeed = ($element_type$shape, token[]) infeed(after-all),
-    infeed_config="140121807314576"
-    input = $element_type$shape get-tuple-element(infeed), index=0
+    infeed_config="140121807314576" input = $element_type$shape
+    get-tuple-element(infeed), index=0
 
     arg0 = $element_type$shape parameter(0)
     arg1 = $remote_buffer_element_type$shape parameter(1)
 
     add.1 = $element_type$shape add(input, arg0)
-    call = ($element_type$shape,$remote_buffer_element_type$shape) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"$partition_offloaded_variables\"}}}"
-    gte0 = $element_type$shape get-tuple-element(call), index=0
-    gte1 = $remote_buffer_element_type$shape get-tuple-element(call), index=1
-    ROOT r = ($element_type$shape,$remote_buffer_element_type$shape) tuple(gte0, gte1)
+    call = ($element_type$shape,$remote_buffer_element_type$shape)
+    call(add.1, arg0, arg1), to_apply=resource_update,
+    frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate},
+    backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\",
+    \"partitionOffloadedVariables\":\"$partition_offloaded_variables\"}}}" gte0 =
+    $element_type$shape get-tuple-element(call), index=0 gte1 =
+    $remote_buffer_element_type$shape get-tuple-element(call), index=1 ROOT r
+    = ($element_type$shape,$remote_buffer_element_type$shape) tuple(gte0,
+    gte1)
   }
 
   ENTRY e {
     e.in0 = $element_type$shape parameter(0)
     e.in1 = $remote_buffer_element_type$shape parameter(1)
-    loop_call = ($element_type$shape,$remote_buffer_element_type$shape) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    loop_call = ($element_type$shape,$remote_buffer_element_type$shape)
+    call(e.in0, e.in1), to_apply=loop,
+    backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
     gte0 = $element_type$shape get-tuple-element(loop_call), index=0
-    gte1 = $remote_buffer_element_type$shape get-tuple-element(loop_call), index=1
-    ROOT r = ($element_type$shape,$remote_buffer_element_type$shape) tuple(gte0, gte1)
+    gte1 = $remote_buffer_element_type$shape get-tuple-element(loop_call),
+    index=1 ROOT r = ($element_type$shape,$remote_buffer_element_type$shape)
+    tuple(gte0, gte1)
   }
   )";
   std::string hlo_string = tensorflow::str_util::StringReplace(
@@ -1275,12 +1284,12 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
 
   EXPECT_THAT(
       cluster_call->operands(),
-      ::testing::ElementsAre(
-          (param.partition_offloaded_variables ? arg2_load
-                                               : LookThroughReshape(arg2_load)),
-          LookThroughReshape(arg1), LookThroughReshape(arg0)));
+      ::testing::ElementsAre(LookThroughReshape(arg1), LookThroughReshape(arg0),
+                             (param.partition_offloaded_variables
+                                  ? arg2_load
+                                  : LookThroughReshape(arg2_load))));
 
-  arg1 = cluster_comp->parameter_instruction(1);
+  arg1 = cluster_comp->parameter_instruction(0);
   if (param.partition_offloaded_variables) {
     TF_ASSERT_OK_AND_ASSIGN(arg1,
                             GetRewrittenInput(arg1, param.padded_and_sliced));
@@ -1288,7 +1297,7 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   EXPECT_THAT(arg1->shape(),
               ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
 
-  HloInstruction* collective = cluster_comp->parameter_instruction(2);
+  HloInstruction* collective = cluster_comp->parameter_instruction(1);
   if (param.partition_offloaded_variables) {
     TF_ASSERT_OK_AND_ASSIGN(
         collective, GetScatterInput(collective, param.padded_and_sliced));
@@ -1298,7 +1307,7 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   EXPECT_THAT(collective->shape(),
               ShapeUtil::MakeShape(param.element_type, {param.shard_size}));
 
-  arg2_load = cluster_comp->parameter_instruction(0);
+  arg2_load = cluster_comp->parameter_instruction(2);
   if (param.partition_offloaded_variables) {
     EXPECT_THAT(arg2_load->user_count(), 1);
     arg2_load = arg2_load->users()[0];
@@ -1347,25 +1356,25 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
               ShapeUtil::MakeShape(param.element_type, {param.cluster_size}));
 
   EXPECT_TRUE(Match(cluster_comp->root_instruction(),
-                    m::Tuple(m::Op().Is(arg2_new_c), m::Op().Is(arg1_new))));
+                    m::Tuple(m::Op().Is(arg1_new), m::Op().Is(arg2_new_c))));
 
   if (param.partition_offloaded_variables) {
     EXPECT_TRUE(
         Match(arg2_store,
               m::CustomCall(m::Op().Is(arg2),
-                            m::GetTupleElement(m::Op().Is(cluster_call), 0))));
+                            m::GetTupleElement(m::Op().Is(cluster_call), 1))));
   } else {
     EXPECT_TRUE(Match(
         arg2_store,
         m::CustomCall(m::Op().Is(arg2), m::Reshape(m::GetTupleElement(
-                                            m::Op().Is(cluster_call), 0)))));
+                                            m::Op().Is(cluster_call), 1)))));
   }
 
   HloComputation* resource_update =
       FindComputation(module.get(), "resource_update");
   EXPECT_TRUE(Match(
       resource_update->root_instruction(),
-      m::Tuple(m::Reshape(m::GetTupleElement(m::Op().Is(cluster_call), 1)),
+      m::Tuple(m::Reshape(m::GetTupleElement(m::Op().Is(cluster_call), 0)),
                m::Op().Is(arg2_store))));
 }
 

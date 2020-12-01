@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
 
 #include <functional>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -721,124 +720,6 @@ bool ElementwiseCluster::Finalize(
     shard_dimensions_ = {cluster_size_};
     shard_size_ = cluster_size_;
     aligned_cluster_size_ = cluster_size_;
-  }
-
-  // Sort the inputs/outputs such that:
-  // * Fist x inputs/outputs correspond to pairs of parameter load/stores which
-  // can be outlined.
-  // * Next y inputs correspond to parameter loads which are not modified.
-  // * Rest of the inputs/outputs.
-  std::set<int64> outlined_modified_load_indices;
-  std::set<int64> outlined_unmodified_load_indices;
-  std::set<int64> outlined_modified_store_indices;
-
-  for (int64 i = 0; i != inputs_vec_.size(); ++i) {
-    HloInstruction* input = inputs_vec_[i];
-    // Only consider outlining remote buffers which are used inside the cluster
-    // only.
-    if (!AllUsersIn(input)) {
-      continue;
-    }
-
-    const bool is_replicated_parameter_load = IsReplicatedParameterLoad(input);
-    const bool is_non_replicated_parameter_load =
-        IsNonReplicatedParameterLoad(input, cross_replica_valid_inputs);
-
-    if (!is_replicated_parameter_load && !is_non_replicated_parameter_load) {
-      continue;
-    }
-
-    HloInstruction* remote_load =
-        is_replicated_parameter_load ? input->mutable_operand(0) : input;
-    HloInstruction* remote_input = remote_load->mutable_operand(0);
-
-    if (remote_input->user_count() == 1) {
-      VLOG(2) << "Cluster input " << input->ToString()
-              << " is an unmodified parameter load.";
-      outlined_unmodified_load_indices.insert(i);
-    } else if (remote_input->user_count() == 2) {
-      HloInstruction *store, *load;
-      if (!GetRemoteLoadStoreUsers(remote_input, &load, &store).ok()) {
-        continue;
-      }
-      CHECK_EQ(load, remote_load);
-      HloInstruction* store_input = store->mutable_operand(1);
-      if (is_replicated_parameter_load) {
-        if (IsReplicatedParameterStore(store_input)) {
-          store_input = store_input->mutable_operand(0);
-        } else {
-          continue;
-        }
-      }
-
-      if (!ContainsKey(outputs_to_users_, store_input)) {
-        continue;
-      }
-
-      // Find the output index.
-      auto itr = absl::c_find(outputs_, store_input);
-      CHECK(itr != outputs_.end());
-      int64 output_idx = std::distance(outputs_.begin(), itr);
-
-      VLOG(2) << "Cluster input " << input->ToString()
-              << " is a modified parameter load.";
-      VLOG(2) << "Cluster output " << store_input->ToString()
-              << " is a modified parameter store.";
-
-      outlined_modified_load_indices.insert(i);
-      outlined_modified_store_indices.insert(output_idx);
-    } else {
-      continue;
-    }
-  }
-
-  auto permute =
-      [](std::vector<HloInstruction*> in,
-         std::vector<int64> permutation) -> std::vector<HloInstruction*> {
-    std::vector<HloInstruction*> out(in.size());
-    for (int64 i = 0; i != permutation.size(); ++i) {
-      out[i] = in[permutation[i]];
-    }
-    return out;
-  };
-
-  // Permute the inputs and outputs.
-  {
-    std::vector<int64> inputs_permutation(inputs_vec_.size());
-    int64 next_idx = 0;
-    for (int64 i : outlined_modified_load_indices) {
-      inputs_permutation[next_idx++] = i;
-    }
-    for (int64 i : outlined_unmodified_load_indices) {
-      inputs_permutation[next_idx++] = i;
-    }
-    for (int64 i = 0; i != inputs_vec_.size(); ++i) {
-      if (ContainsKey(outlined_modified_load_indices, i) ||
-          ContainsKey(outlined_unmodified_load_indices, i)) {
-        continue;
-      }
-      inputs_permutation[next_idx++] = i;
-    }
-    VLOG(2) << "Inputs permutation is "
-            << absl::StrJoin(inputs_permutation, ", ");
-    inputs_vec_ = permute(inputs_vec_, inputs_permutation);
-  }
-
-  {
-    std::vector<int64> outputs_permutation(outputs_.size());
-    int64 next_idx = 0;
-    for (int64 i : outlined_modified_store_indices) {
-      outputs_permutation[next_idx++] = i;
-    }
-    for (int64 i = 0; i != outputs_.size(); ++i) {
-      if (ContainsKey(outlined_modified_store_indices, i)) {
-        continue;
-      }
-      outputs_permutation[next_idx++] = i;
-    }
-    VLOG(2) << "Outputs permutation is "
-            << absl::StrJoin(outputs_permutation, ", ");
-    outputs_ = permute(outputs_, outputs_permutation);
   }
 
   finalized_ = true;
