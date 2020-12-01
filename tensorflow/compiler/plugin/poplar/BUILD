@@ -233,6 +233,7 @@ cc_library(
         "driver/passes/recompute_instructions.cc",
         "driver/passes/recomputation_checkpoint_remover.cc",
         "driver/passes/recomputation_input_remover.cc",
+        "driver/passes/remote_buffer_canonicalizer.cc",
         "driver/passes/remote_buffer_merger.cc",
         "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
@@ -401,6 +402,7 @@ cc_library(
         "driver/passes/recomputation_checkpoint_remover.h",
         "driver/passes/recomputation_input_remover.h",
         "driver/passes/recompute_instructions.h",
+        "driver/passes/remote_buffer_canonicalizer.h",
         "driver/passes/remote_buffer_merger.h",
         "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
@@ -3093,6 +3095,18 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "remote_buffer_canonicalizer_test",
+    srcs = ["tests/remote_buffer_canonicalizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4808,6 +4822,7 @@ test_suite(
         "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",
+        "remote_buffer_canonicalizer_test",
         "remote_parameter_parallel_combiner_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",

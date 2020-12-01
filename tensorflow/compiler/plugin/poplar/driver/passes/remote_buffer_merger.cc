@@ -90,8 +90,13 @@ bool IsGradientAccumulatorSink(const HloInstruction* inst) {
   return IsPoplarInstruction(GradientAccumulatorSink, inst);
 }
 
+bool IsReshape(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kReshape;
+}
+
 bool IsRemoteBufferPassthrough(const HloInstruction* inst) {
-  return IsRemoteBufferStore(inst) || IsGradientAccumulatorSink(inst);
+  return IsRemoteBufferStore(inst) || IsGradientAccumulatorSink(inst) ||
+         IsReshape(inst);
 }
 
 StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(

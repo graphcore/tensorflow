@@ -218,6 +218,27 @@ bool IndependentlySchedulable(const std::vector<HloInstruction*>& instructions,
   return true;
 }
 
+StatusOr<int64> GetParameterNumberImpl(const HloInstruction* inst) {
+  switch (inst->operand(0)->opcode()) {
+    case HloOpcode::kParameter: {
+      return inst->operand(0)->parameter_number();
+    }
+    case HloOpcode::kReshape: {
+      return GetParameterNumberImpl(inst->operand(0));
+    }
+    default: {
+      return InternalErrorStrCat("Found invalid source of remote buffer ",
+                                 inst->ToString());
+    }
+  }
+}
+
+int64 GetParameterNumber(const HloInstruction* inst) {
+  auto statusor_num = GetParameterNumberImpl(inst);
+  TF_CHECK_OK(statusor_num.status());
+  return statusor_num.ValueOrDie();
+}
+
 struct DecreasingSizeComparator {
   bool operator()(const HloInstruction* a, const HloInstruction* b) const {
     const auto a_size = ShapeUtil::ByteSizeOf(a->shape(), 1);
@@ -227,8 +248,8 @@ struct DecreasingSizeComparator {
     }
 
     // If the size is the same, order by parameter index.
-    const int64 a_index = a->operand(0)->parameter_number();
-    const int64 b_index = b->operand(0)->parameter_number();
+    const int64 a_index = GetParameterNumber(a);
+    const int64 b_index = GetParameterNumber(b);
     if (a_index != b_index) {
       return a_index > b_index;
     }

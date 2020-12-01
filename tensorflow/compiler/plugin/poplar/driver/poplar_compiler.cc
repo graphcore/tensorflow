@@ -116,6 +116,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_checkpoint_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_input_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_canonicalizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_parameter_parallel_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
@@ -1245,6 +1246,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       };
       pipeline.AddPass<FusionInliner>(inline_fusion);
     }
+    pipeline.AddPass<RemoteBufferCanonicalizer>(resources.annotations);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<ResourceUpdateCopyInserter>();
