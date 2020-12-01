@@ -34,9 +34,7 @@ namespace poplarplugin {
  */
 class ResourceUpdateFixer : public HloModulePass {
  public:
-  absl::string_view name() const override {
-    return "pipeline-resource-update-fixer";
-  }
+  absl::string_view name() const override { return "resource-update-fixer"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 

@@ -30,7 +30,7 @@ namespace poplarplugin {
 class ResourceUpdateScheduleOptimizer : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "resource-update--schedule-optimizer";
+    return "resource-update-schedule-optimizer";
   }
 
   StatusOr<bool> Run(HloModule* module) override;

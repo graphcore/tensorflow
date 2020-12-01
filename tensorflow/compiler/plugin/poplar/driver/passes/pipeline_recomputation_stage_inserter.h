@@ -33,7 +33,7 @@ class PipelineRecomputationStageInserter : public HloModulePass {
                                               bool remote_memory_supported);
 
   absl::string_view name() const override {
-    return "pipeline_recomputation_stage_inserter";
+    return "pipeline-recomputation-stage-inserter";
   }
 
   StatusOr<bool> Run(HloModule* module) override;

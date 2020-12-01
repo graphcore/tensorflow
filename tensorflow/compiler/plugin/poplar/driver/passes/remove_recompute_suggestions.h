@@ -29,7 +29,7 @@ namespace poplarplugin {
 class RemoveRecomputeSuggestions : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "recompute-suggestion-remover";
+    return "remove-recompute-suggestions";
   }
   StatusOr<bool> Run(HloModule* module) override;
 };

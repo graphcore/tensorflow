@@ -30,7 +30,7 @@ namespace poplarplugin {
 
 class ExpressionOutliner : public HloModulePass {
  public:
-  absl::string_view name() const override { return "expression-outline"; }
+  absl::string_view name() const override { return "expression-outliner"; }
 
   StatusOr<bool> Run(HloModule* module);
 };

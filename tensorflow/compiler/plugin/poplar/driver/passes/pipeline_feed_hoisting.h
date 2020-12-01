@@ -34,7 +34,7 @@ namespace poplarplugin {
  */
 class PipelineFeedHoisting : public HloModulePass {
  public:
-  absl::string_view name() const override { return "feed-hoisting"; }
+  absl::string_view name() const override { return "pipeline-feed-hoisting"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 

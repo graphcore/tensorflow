@@ -38,7 +38,7 @@ namespace poplarplugin {
 class RemoveBlockedRecomputeSuggestions : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "recompute-suggestion-blocked-remover";
+    return "remove-blocked-recompute-suggestions";
   }
   StatusOr<bool> Run(HloModule* module) override;
 };

@@ -35,7 +35,7 @@ class RootTokenReplacer : public HloModulePass {
 
   ~RootTokenReplacer() = default;
 
-  absl::string_view name() const override { return "root-token-replacer-pass"; }
+  absl::string_view name() const override { return "root-token-replacer"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 };

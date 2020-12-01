@@ -30,7 +30,7 @@ class CastsElimination : public HloMatcher {
 
   ~CastsElimination() override = default;
 
-  absl::string_view name() const override { return "poplar-casts-elimination"; }
+  absl::string_view name() const override { return "casts-elimination"; }
 
  private:
   StatusOr<bool> HandleMatch(HloMatcherMatched& match,

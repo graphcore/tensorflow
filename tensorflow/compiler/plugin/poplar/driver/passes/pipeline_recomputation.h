@@ -32,7 +32,7 @@ class PipelineRecomputation : public HloModulePass {
  public:
   explicit PipelineRecomputation(bool allow_recomputation);
 
-  absl::string_view name() const override { return "pipeline_recomputation"; }
+  absl::string_view name() const override { return "pipeline-recomputation"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 

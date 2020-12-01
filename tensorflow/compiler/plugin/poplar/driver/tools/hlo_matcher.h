@@ -249,7 +249,7 @@ class HloMatcher : public HloModulePass {
 
   ~HloMatcher() override = default;
 
-  absl::string_view name() const override { return "matcher"; }
+  absl::string_view name() const override { return "hlo-matcher"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 
