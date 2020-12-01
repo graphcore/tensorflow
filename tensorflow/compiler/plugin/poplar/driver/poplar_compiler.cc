@@ -95,6 +95,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_use_feeds_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/outline_remote_buffers.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_buffer_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_loop_inserter.h"
@@ -1249,6 +1250,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<RemoteBufferCanonicalizer>(resources.annotations);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloCSE>(true);
+    pipeline.AddPass<OutlineRemoteBuffers>();
     pipeline.AddPass<ResourceUpdateCopyInserter>();
     pipeline.AddPass<HostEmbeddingNotification>();
 
