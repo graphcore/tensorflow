@@ -363,7 +363,6 @@ struct UserOpsExecutionState {
   std::unordered_map<const HloInstruction*, uint32_t>
       numbers_of_inputs_initialized;
 };
-
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -952,13 +951,19 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // replica for an infeed are dequeued every iteration - we therefore
       // only need to check if the first queue is full to know whether all the
       // queues are full.
-      if (infeed_queues[0][0]->IsFull()) {
-        VLOG(2) << "Infeed queue is full.";
-        continue;
+      if (VLOG_IS_ON(2)) {
+        if (infeed_queues[0][0]->IsFull()) {
+          VLOG(2) << "Infeed queue is full.";
+        }
+
+        if (infeed_queues[0][0]->IsEmpty()) {
+          VLOG(2) << "Infeed queue is empty.";
+        }
       }
 
-      if (infeed_queues[0][0]->IsEmpty()) {
-        VLOG(2) << "Infeed queue is empty.";
+      if (infeed_queues[0][0]->IsFull()) {
+        _mm_pause();
+        continue;
       }
 
       // Enqueue tensors to each replica.
@@ -1054,6 +1059,7 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
 
       // Continue if all the outfeed queues are empty.
       if (all_queues_empty) {
+        _mm_pause();
         continue;
       }
 
