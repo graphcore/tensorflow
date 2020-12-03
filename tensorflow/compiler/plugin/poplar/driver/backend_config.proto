@@ -60,6 +60,9 @@ enum FrontendAttributeId {
   // Used for functions to indicate whether the callsite should have unique
   // sharding.
   UNIQUE_SHARDING = 19;
+  // Used for functions to indicate whether the callsite should keep the input
+  // layouts or whether they can be reallocated.
+  KEEP_INPUT_LAYOUTS = 20;
 };
 
 // An enum representing the "Machine Learning" type of the instruction.
