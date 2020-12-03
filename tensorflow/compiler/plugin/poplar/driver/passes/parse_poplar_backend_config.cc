@@ -81,6 +81,10 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                                   GetAttribute(attributes, UNIQUE_SHARDING));
               bool unique_sharding = std::stoi(unique_sharding_str);
               function_config->set_unique_sharding(unique_sharding);
+              TF_ASSIGN_OR_RETURN(std::string keep_input_layouts_str,
+                                  GetAttribute(attributes, KEEP_INPUT_LAYOUTS));
+              bool keep_input_layouts = std::stoi(keep_input_layouts_str);
+              function_config->set_keep_input_layouts(keep_input_layouts);
               break;
             }
             case PoplarBackendConfig::CallConfig::Pipeline: {

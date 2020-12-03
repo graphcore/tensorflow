@@ -184,7 +184,8 @@ def _function_grad(op, *grads):
       to_apply=util.create_new_tf_function(func_grad_graph),
       Tout=func_grad_graph.output_types,
       output_shapes=func_grad_graph.output_shapes,
-      unique_sharding=op.get_attr("unique_sharding"))
+      unique_sharding=op.get_attr("unique_sharding"),
+      keep_input_layouts=True)
 
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)

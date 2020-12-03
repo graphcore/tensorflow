@@ -34,6 +34,8 @@ class FunctionOp : public poplarplugin::FunctionBaseOp {
   explicit FunctionOp(OpKernelConstruction* ctx)
       : poplarplugin::FunctionBaseOp(ctx, /*evaluate_constants=*/false) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("unique_sharding", &unique_sharding_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("keep_input_layouts", &keep_input_layouts_));
   }
 
  protected:
@@ -45,11 +47,15 @@ class FunctionOp : public poplarplugin::FunctionBaseOp {
     TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
         operation, pp::FrontendAttributeId_Name(pp::UNIQUE_SHARDING),
         std::to_string(unique_sharding_)));
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, pp::FrontendAttributeId_Name(pp::KEEP_INPUT_LAYOUTS),
+        std::to_string(keep_input_layouts_)));
     return Status::OK();
   }
 
  private:
   bool unique_sharding_;
+  bool keep_input_layouts_;
   TF_DISALLOW_COPY_AND_ASSIGN(FunctionOp);
 };
 REGISTER_IPU_OP("Function", FunctionOp);
