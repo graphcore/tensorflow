@@ -43,20 +43,9 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
  public:
   explicit DropoutOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx), IpuOpKernel() {
-    float rate;
-    float scale;
-    std::vector<int64> noise_shape;
-
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("rate", &rate));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("scale", &scale));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape));
-
-    attribute_map_.AddAttribute("rate", rate);
-    attribute_map_.AddAttribute("scale", scale);
-    // noise_shape is optional and defaults to an empty list.
-    if (!noise_shape.empty()) {
-      attribute_map_.AddAttribute("noise_shape", noise_shape);
-    }
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("rate", &rate_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("scale", &scale_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -74,6 +63,15 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
     const xla::Shape output_tuple_shape =
         xla::ShapeUtil::MakeTupleShape({xla_shape, GetSeedShape()});
 
+    attribute_map_.AddAttribute("can_create_reference_tensor",
+                                CanCreateReferenceTensor());
+    attribute_map_.AddAttribute("rate", rate_);
+    attribute_map_.AddAttribute("scale", scale_);
+    // noise_shape is optional and defaults to an empty list.
+    if (!noise_shape_.empty()) {
+      attribute_map_.AddAttribute("noise_shape", noise_shape_);
+    }
+
     xla::XlaOp call_output = xla::CustomCall(
         b, PoplarOp_Name(PoplarOp::Dropout), {input, GetSeed(ctx, b)},
         output_tuple_shape, attribute_map_.Serialise());
@@ -89,6 +87,10 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
   }
 
  protected:
+  // A dropout operation can only create a reference tensor iff it creates a
+  // seed.
+  virtual bool CanCreateReferenceTensor() { return true; }
+
   virtual xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
                              xla::XlaBuilder* builder) {
     const xla::Shape seed_shape = GetSeedShape();
@@ -133,6 +135,10 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
   }
 
  private:
+  float rate_;
+  float scale_;
+  std::vector<int64> noise_shape_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(DropoutOp);
 };
 REGISTER_IPU_OP("IpuDropout", DropoutOp);
@@ -142,6 +148,9 @@ class DropoutWithSeedOp : public DropoutOp {
   explicit DropoutWithSeedOp(OpKernelConstruction* ctx) : DropoutOp(ctx) {}
 
  protected:
+  // Cannot create reference tensor as the source of the seed is not known.
+  bool CanCreateReferenceTensor() override { return false; }
+
   xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
                      xla::XlaBuilder* builder) override {
     return ctx->Input(1);

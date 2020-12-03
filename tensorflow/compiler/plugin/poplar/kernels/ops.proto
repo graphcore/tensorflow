@@ -87,6 +87,7 @@ enum PoplarOp {
   RecomputationInput = 83;
   DynamicGRULayerBwd = 84;
   DynamicGRULayerFwd = 85;
+  DropoutWithReference = 86;
 
   // Supported Fusions.
   Conv_biasadd = 200;

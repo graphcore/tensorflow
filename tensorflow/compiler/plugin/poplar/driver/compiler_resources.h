@@ -169,6 +169,11 @@ struct CompilerResources {
                       std::pair<poplar::program::Sequence, poplar::Tensor>>
       outfeed_cache;
 
+  // Store a map from a reference key to the reference tensor and the IPU which
+  // it resides on.
+  absl::flat_hash_map<std::string, std::pair<poplar::Tensor, unsigned>>
+      reference_tensors;
+
   CompilerResources(
       HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
