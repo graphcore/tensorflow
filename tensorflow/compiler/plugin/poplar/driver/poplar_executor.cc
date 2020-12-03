@@ -1537,8 +1537,10 @@ Status PoplarExecutor::CreatePoplarTarget() {
                 poplar::TargetType::IPU, *num_devices);
             if (device_list.empty()) {
               return FailedPrecondition(
-                  "Could not find any IPU devices with %d IPUs for "
-                  "/device:IPU:%d",
+                  "Unsupported number of IPUs requested - could not find an"
+                  " IPU device with %d IPUs for the TensorFlow virtual device"
+                  " /device:IPU:%d. Use `gc-info -l` to view the available"
+                  " device configurations.",
                   *num_devices, ordinal_);
             }
             if (HasMultiReplicaDistributionOptions()) {
