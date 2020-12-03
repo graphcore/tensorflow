@@ -1265,7 +1265,7 @@ def select_ipus(opts, indices):
     raise Exception("`indices` must be a list or tuple.")
 
   if len(set(indices)) != len(indices):
-    raise Exception("All device indeicies in `indices` must be unique.")
+    raise Exception("All device indices in `indices` must be unique.")
 
   for i in indices:
     dev = opts.device_config.add()
