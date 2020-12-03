@@ -58,6 +58,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/dropout_with_reference_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
@@ -637,10 +638,6 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     }
     VLOG(1) << "Created " << num_ipus << " IPU shards";
     VLOG(1) << "Shards have been mapped to the following IPUs:";
-    int64 next_shard_id = 0;
-    for (unsigned hw_id : resources.shard_to_ipu_id) {
-      VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
-    }
   } else {  // !ShardingEnabled(module)
     if (tilesets.has_value()) {
       resources.compute_graph.emplace(
@@ -649,6 +646,11 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       resources.io_graph.emplace(
           main_graph.createVirtualGraph(tilesets->io_tiles));
     }
+    resources.shard_to_ipu_id = {0};
+  }
+  int64 next_shard_id = 0;
+  for (unsigned hw_id : resources.shard_to_ipu_id) {
+    VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
   }
 
   std::stringstream codelets_src{
@@ -1110,6 +1112,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
+    pipeline.AddPass<ModuleFlatten>(resources.annotations);
+    pipeline.AddPass<DropoutWithReferenceFinder>(resources.annotations);
     pipeline.AddPass<ParsePoplarBackendConfig>();
     pipeline.AddPass<PipelineFixer>();
     pipeline.AddPass<PipelineTupleRemover>();
