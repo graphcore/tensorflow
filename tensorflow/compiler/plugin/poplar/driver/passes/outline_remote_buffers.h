@@ -59,6 +59,9 @@ class RemoteBufferInputsOutputsInfos {
   // Number of total load inputs (both modified and unmodified).
   int64 GetNumLoadInputs() const;
 
+  // Get the replication factors.
+  const absl::flat_hash_map<int64, uint64>& GetReplicationFactors() const;
+
   const std::vector<int64>& GetInputsOldToNewPermutation() const;
   const std::vector<int64>& GetInputsNewToOldPermutation() const;
   const std::vector<int64>& GetOutputsOldToNewPermutation() const;

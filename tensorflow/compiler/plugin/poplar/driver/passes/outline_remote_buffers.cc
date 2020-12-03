@@ -214,6 +214,11 @@ int64 RemoteBufferInputsOutputsInfos::GetNumLoadInputs() const {
   return GetNumModifiedLoadStores() + GetNumUnmodifiedLoads();
 }
 
+const absl::flat_hash_map<int64, uint64>&
+RemoteBufferInputsOutputsInfos::GetReplicationFactors() const {
+  return input_to_replication_factor_;
+}
+
 const std::vector<int64>&
 RemoteBufferInputsOutputsInfos::GetInputsOldToNewPermutation() const {
   return inputs_old_to_new_permutation_;
@@ -454,6 +459,13 @@ bool ShouldOutlineFunctions(const Functions& functions) {
   // Can't outline loads/stores without them being inputs.
   if (rbioi.GetNumLoadInputs() == 0) {
     return false;
+  }
+
+  // TODO(T31225): Support outlining replica partitioned remote buffers.
+  for (auto& pair : rbioi.GetReplicationFactors()) {
+    if (pair.second != 1) {
+      return false;
+    }
   }
 
   // Only outline if all the functions have the same loads/stores indicies.
