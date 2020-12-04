@@ -109,9 +109,12 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
   const HloGRUInstructionCommon* gru_common_inst;
   if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst)) {
     gru_common_inst = Cast<HloGRUFwdInstruction>(inst);
-  } else {
-    // If inst is not a GRULayerFwd assume it is a GRULayerBwd
+  } else if (IsPoplarInstruction(PoplarOp::GRULayerBwd)(inst)) {
     gru_common_inst = Cast<HloGRUBwdInstruction>(inst);
+  } else if (IsPoplarInstruction(PoplarOp::DynamicGRULayerFwd)(inst)) {
+    gru_common_inst = Cast<HloDynamicGRUFwdInstruction>(inst);
+  } else if (IsPoplarInstruction(PoplarOp::DynamicGRULayerBwd)(inst)) {
+    gru_common_inst = Cast<HloDynamicGRUBwdInstruction>(inst);
   }
   gru_params.resetAfter = gru_common_inst->reset_after();
 

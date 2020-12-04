@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -71,7 +72,38 @@ poplar::Tensor PackGruKernel(poplar::Tensor input_weights,
                         FlattenWeight(output_weights));
 }
 
-class GRULayerFwdOp : public PoplarOpDef {
+class GRULayerBaseOp : public PoplarOpDef {
+ protected:
+  virtual std::vector<poplar::Tensor> GetOutputParams(bool training) {
+    return std::vector<poplar::Tensor>{OutputTensorCount()};
+  }
+
+  virtual poputil::graphfn::Signature GetSignature(
+      const std::vector<poplar::Tensor>& args, bool training) {
+    poputil::graphfn::Signature signature;
+    int64 total_param_count = InputTensorCount() + OutputTensorCount();
+    const auto& name_list = NameList();
+
+    for (int64 i = 0; i < total_param_count; ++i) {
+      if (i < InputTensorCount()) {
+        signature.push_back(poputil::graphfn::input(args[i], name_list[i]));
+      } else {
+        signature.push_back(poputil::graphfn::created(name_list[i]));
+      }
+    }
+    return signature;
+  }
+
+  virtual void SetOutputTensor(std::vector<poplar::Tensor>& args,
+                               const HloInstruction* inst,
+                               TensorMap& tensor_map, bool training) {
+    for (int64 j = 0; j < OutputTensorCount(); ++j) {
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, j, args[j + InputTensorCount()]));
+    }
+  }
+
+ public:
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -110,35 +142,30 @@ class GRULayerFwdOp : public PoplarOpDef {
       }
       default: {
         return xla::FailedPrecondition(
-            "Trying to allocate GRULayerFwdOp tensor for an index out of "
-            "range "
-            "%d.",
-            input_index);
+            "Trying to allocate %s tensor for an index out of range %d.",
+            ClassName().c_str(), input_index);
       }
     }
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  virtual StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map) {
     poplar::program::Sequence seq;
+    auto gru_inst = Cast<HloRNNInstruction>(inst);
+    bool training = gru_inst->is_training();
 
-    // Do not expand aliasing when creating a cached op - the input will be
-    // reallocated if required.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq,
-                                             /*expand_aliasing*/ false));
+    std::vector<poplar::Tensor> args;
+    for (int64 i = 0; i < InputTensorCount(); ++i) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor input_tensor,
+                          FindInstructionInput(tensor_map, res, inst, i, seq));
+      args.push_back(input_tensor);
+    }
+
+    auto output_args = GetOutputParams(training);
+    args.insert(args.end(), output_args.begin(), output_args.end());
+
+    poputil::graphfn::Signature signature = GetSignature(args, training);
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
@@ -147,182 +174,298 @@ class GRULayerFwdOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
-    auto gru_inst = Cast<HloRNNInstruction>(inst);
-    bool is_training = gru_inst->is_training();
-
     const std::string debug_prefix = GetDebugName(inst);
-    auto func = [&graph, &res, gru_params, gru_opts, is_training, input_size,
-                 output_size, debug_prefix](std::vector<poplar::Tensor>& args,
-                                            poplar::program::Sequence& prog) {
-      poplar::Tensor input_seq = args[0];
-      poplar::Tensor input_state = args[1];
-      poplar::Tensor kernel = args[2];
-      poplar::Tensor biases = args[3];
 
-      popnn::gru::GruWeights weights;
-      std::tie(weights.inputWeights, weights.outputWeights) =
-          UnpackGruKernel(kernel, input_size, output_size);
-      weights.biases = biases;
-
-      auto intermediates_ptr = is_training ? &args[6] : nullptr;
-      args[4] = popnn::gru::gruFwd(graph, gru_params, input_state, input_seq,
-                                   weights, intermediates_ptr, prog,
-                                   debug_prefix, gru_opts, &res.dot_cache);
-      args[5] = poputil::duplicate(graph, args[4][gru_params.timeSteps - 1],
-                                   prog, debug_prefix + "/outputHState");
+    auto func = [&graph, &res, &inst, this, gru_params, gru_opts, input_size,
+                 output_size, debug_prefix,
+                 training](std::vector<poplar::Tensor>& args,
+                           poplar::program::Sequence& prog) {
+      LowerToPoplar(graph, res, inst, gru_params, gru_opts, input_size,
+                    output_size, training, debug_prefix, args, prog);
     };
-
-    poplar::Tensor output, output_state, intermediates;
-    std::vector<poplar::Tensor> args = {arg_input_seq, arg_input_state,
-                                        arg_kernel,    arg_biases,
-                                        output,        output_state};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(arg_input_seq, "input_seq"),
-        poputil::graphfn::input(arg_input_state, "input_state"),
-        poputil::graphfn::input(arg_kernel, "kernel"),
-        poputil::graphfn::input(arg_biases, "biases"),
-        poputil::graphfn::created("output"),
-        poputil::graphfn::created("output_state")};
-    if (is_training) {
-      args.push_back(intermediates);
-      signature.push_back(poputil::graphfn::created("intermediates"));
-    }
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
         inst, graph, res, seq, func, signature, args,
         gru_inst->AllocatingIndices(), gru_inst->LayoutDependencies()));
 
-    output = args[4];
-    output_state = args[5];
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, output_state));
-    if (is_training) {
-      intermediates = args[6];
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, intermediates));
-    }
+    SetOutputTensor(args, inst, tensor_map, training);
     return seq;
+  }
+
+ protected:
+  virtual const std::string ClassName() const = 0;
+
+  virtual std::vector<const char*> NameList() const = 0;
+
+  virtual int64 InputTensorCount() const = 0;
+
+  virtual int64 OutputTensorCount() const = 0;
+
+  virtual void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                             const HloInstruction* inst,
+                             popnn::gru::GruParams gru_params,
+                             const poplar::OptionFlags& gru_opts,
+                             const int64& input_size, const int64& output_size,
+                             bool training, const std::string& debug_prefix,
+                             std::vector<poplar::Tensor>& args,
+                             poplar::program::Sequence& prog) = 0;
+};
+
+class GRULayerFwdOp : public GRULayerBaseOp {
+ public:
+  GRULayerFwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override { return "GRULayerFwdOp"; }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq", "input_state", "kernel", "bias", "output", "output_state"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 4; }
+
+  int64 OutputTensorCount() const override { return 2; }
+
+  std::vector<poplar::Tensor> GetOutputParams(bool training) override {
+    auto args = GRULayerBaseOp::GetOutputParams(training);
+    if (training) {
+      poplar::Tensor intermediates;
+      args.push_back(intermediates);
+    }
+    return args;
+  }
+
+  poputil::graphfn::Signature GetSignature(
+      const std::vector<poplar::Tensor>& args, bool training) override {
+    auto signature = GRULayerBaseOp::GetSignature(args, training);
+
+    if (training) {
+      signature.push_back(poputil::graphfn::created("intermediates"));
+    }
+    return signature;
+  }
+
+  void SetOutputTensor(std::vector<poplar::Tensor>& args,
+                       const HloInstruction* inst, TensorMap& tensor_map,
+                       bool training) override {
+    int total_param_count = InputTensorCount() + OutputTensorCount();
+    GRULayerBaseOp::SetOutputTensor(args, inst, tensor_map, training);
+    if (training) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, OutputTensorCount(),
+                                  args[total_param_count]));
+    }
+  }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+
+    auto intermediates_ptr = training ? &args[6] : nullptr;
+
+    args[4] = popnn::gru::gruFwd(graph, gru_params, input_state, input_seq,
+                                 weights, intermediates_ptr, prog, debug_prefix,
+                                 gru_opts, &res.dot_cache);
+
+    args[5] = poputil::duplicate(graph, args[4][gru_params.timeSteps - 1], prog,
+                                 debug_prefix + "/outputHState");
   }
 };
 REGISTER_POPLAR_OP(GRULayerFwd, GRULayerFwdOp);
 
-class GRULayerBwdOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
+class GRULayerBwdOp : public GRULayerBaseOp {
+ public:
+  GRULayerBwdOp() = default;
 
-    // Do not expand aliasing when creating a cached op - the input will be
-    // reallocated if required.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output,
-                        FindInstructionInput(tensor_map, res, inst, 4, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_state,
-                        FindInstructionInput(tensor_map, res, inst, 5, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_intermediates,
-                        FindInstructionInput(tensor_map, res, inst, 6, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 7, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_state_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 8, seq,
-                                             /*expand_aliasing*/ false));
+ protected:
+  const std::string ClassName() const override { return "GRULayerBwdOp"; }
 
-    TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
-                        GetGruParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst, res));
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {"input_seq",
+                                                 "input_state",
+                                                 "kernel",
+                                                 "bias",
+                                                 "output",
+                                                 "output_state",
+                                                 "intermediates",
+                                                 "output_backprop",
+                                                 "output_state_backprop",
+                                                 "input_backprop",
+                                                 "input_state_backprop",
+                                                 "kernel_backprop",
+                                                 "biases_backprop"};
+    return name_list;
+  }
 
-    auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
-    auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
+  int64 InputTensorCount() const override { return 9; }
 
-    const std::string debug_prefix = GetDebugName(inst);
-    auto func = [&graph, &res, gru_params, gru_opts, input_size, output_size,
-                 debug_prefix](std::vector<poplar::Tensor>& args,
-                               poplar::program::Sequence& prog) {
-      poplar::Tensor input_seq = args[0];
-      poplar::Tensor input_state = args[1];
-      poplar::Tensor kernel = args[2];
-      poplar::Tensor biases = args[3];
-      poplar::Tensor output = args[4];
-      poplar::Tensor output_state = args[5];
-      poplar::Tensor intermediates = args[6];
-      poplar::Tensor output_backprop = args[7];
-      poplar::Tensor output_state_backprop = args[8];
+  int64 OutputTensorCount() const override { return 4; }
 
-      popnn::gru::GruWeights weights;
-      std::tie(weights.inputWeights, weights.outputWeights) =
-          UnpackGruKernel(kernel, input_size, output_size);
-      weights.biases = biases;
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+    poplar::Tensor output = args[4];
+    poplar::Tensor output_state = args[5];
+    poplar::Tensor intermediates = args[6];
+    poplar::Tensor output_backprop = args[7];
+    poplar::Tensor output_state_backprop = args[8];
 
-      popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
-                         output_state_backprop, prog,
-                         debug_prefix + "/outputGradient");
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+    weights.biases = biases;
 
-      popnn::gru::GruWeights weights_backprop;
-      args[10] = popnn::gru::gruBwdWithWU(
-          graph, gru_params, prog, input_state, intermediates, weights,
-          input_seq, output, output_backprop, &args[9], weights_backprop,
-          debug_prefix, gru_opts, &res.dot_cache);
-      args[11] = PackGruKernel(weights_backprop.inputWeights,
-                               weights_backprop.outputWeights);
-      args[12] = weights_backprop.biases;
-    };
+    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
+                       output_state_backprop, prog,
+                       debug_prefix + "/outputGradient");
 
-    poplar::Tensor input_backprop, input_state_backprop, kernel_backprop,
-        biases_backprop;
-    std::vector<poplar::Tensor> args = {
-        arg_input_seq,     arg_input_state,      arg_kernel,
-        arg_biases,        arg_output,           arg_output_state,
-        arg_intermediates, arg_output_backprop,  arg_output_state_backprop,
-        input_backprop,    input_state_backprop, kernel_backprop,
-        biases_backprop};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(arg_input_seq, "input_seq"),
-        poputil::graphfn::input(arg_input_state, "input_state"),
-        poputil::graphfn::input(arg_kernel, "kernel"),
-        poputil::graphfn::input(arg_biases, "biases"),
-        poputil::graphfn::input(arg_output, "output"),
-        poputil::graphfn::input(arg_output_state, "output_state"),
-        poputil::graphfn::input(arg_intermediates, "intermediates"),
-        poputil::graphfn::input(arg_output_backprop, "output_backprop"),
-        poputil::graphfn::input(arg_output_state_backprop,
-                                "output_state_backprop"),
-        poputil::graphfn::created("input_backprop"),
-        poputil::graphfn::created("input_state_backprop"),
-        poputil::graphfn::created("kernel_backprop"),
-        poputil::graphfn::created("biases_backprop")};
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
-
-    input_backprop = args[9];
-    input_state_backprop = args[10];
-    kernel_backprop = args[11];
-    biases_backprop = args[12];
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, input_state_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, kernel_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 3, biases_backprop));
-    return seq;
+    popnn::gru::GruWeights weights_backprop;
+    args[10] = popnn::gru::gruBwdWithWU(
+        graph, gru_params, prog, input_state, intermediates, weights, input_seq,
+        output, output_backprop, &args[9], weights_backprop, debug_prefix,
+        gru_opts, &res.dot_cache);
+    args[11] = PackGruKernel(weights_backprop.inputWeights,
+                             weights_backprop.outputWeights);
+    args[12] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(GRULayerBwd, GRULayerBwdOp);
+
+class DynamicGRULayerFwdOp : public GRULayerFwdOp {
+ public:
+  DynamicGRULayerFwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override {
+    return "DynamicGRULayerFwdOp";
+  }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq", "input_state", "kernel",      "bias",
+        "seq_len",   "output",      "output_state"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 5; }
+
+  int64 OutputTensorCount() const override { return 2; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+    poplin::matmul::PlanningCache cache;
+
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+
+    auto intermediates_ptr = training ? &args[7] : nullptr;
+    args[5] = popnn::gru::gruFwd(graph, gru_params, input_state, input_seq,
+                                 args[4], weights, intermediates_ptr, prog,
+                                 debug_prefix, gru_opts, &res.dot_cache);
+
+    args[6] = poputil::duplicate(graph, args[5][gru_params.timeSteps - 1], prog,
+                                 debug_prefix + "/outputHState");
+  }
+};
+REGISTER_POPLAR_OP(DynamicGRULayerFwd, DynamicGRULayerFwdOp);
+
+class DynamicGRULayerBwdOp : public GRULayerBwdOp {
+ public:
+  DynamicGRULayerBwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override {
+    return "DynamicGRULayerBwdOP";
+  }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq",       "input_state",
+        "kernel",          "bias",
+        "seq_len",         "output",
+        "output_state",    "intermediates",
+        "output_backprop", "output_state_backprop",
+        "input_backprop",  "input_state_backprop",
+        "kernel_backprop", "biases_backprop"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 10; }
+
+  int64 OutputTensorCount() const override { return 4; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+    poplar::Tensor seq_len = args[4];
+    poplar::Tensor output = args[5];
+    poplar::Tensor output_state = args[6];
+    poplar::Tensor intermediates = args[7];
+    poplar::Tensor output_backprop = args[8];
+    poplar::Tensor output_state_backprop = args[9];
+
+    popnn::gru::GruWeights weights_backprop;
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+
+    weights.biases = biases;
+
+    args[11] = popnn::gru::gruBwdWithWU(
+        graph, gru_params, prog, input_state, intermediates, weights, input_seq,
+        seq_len, output, output_backprop, &args[10], weights_backprop,
+        debug_prefix, gru_opts, &res.dot_cache);
+    args[12] = PackGruKernel(weights_backprop.inputWeights,
+                             weights_backprop.outputWeights);
+    args[13] = weights_backprop.biases;
+  }
+};
+REGISTER_POPLAR_OP(DynamicGRULayerBwd, DynamicGRULayerBwdOp);
 
 }  // namespace
 }  // namespace poplarplugin

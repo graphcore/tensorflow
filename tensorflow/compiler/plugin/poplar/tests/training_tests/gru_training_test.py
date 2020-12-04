@@ -17,6 +17,7 @@ from __future__ import division
 from __future__ import print_function
 
 # Naive GRU to learn three-char time steps to one-char mapping
+
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
@@ -42,7 +43,8 @@ num_training_steps = 100
 lr = 10
 
 
-def _PopnnGRU(x, initial_state, y):
+# pylint: disable=unused-argument
+def _PopnnGRU(x, initial_state, y, sequence_len=None):
   gru_cell = ipu.ops.rnn_ops.PopnnGRU(
       num_hidden,
       dtype=dataType,
@@ -57,7 +59,28 @@ def _PopnnGRU(x, initial_state, y):
   return [loss, train]
 
 
-def _PopnnGRU_ResetAfter(x, initial_state, y):
+# pylint: disable=unused-argument
+def _PopnnGRU_DynamicGRU(x, initial_state, y, sequence_len=None):
+  gru_cell = ipu.ops.rnn_ops.PopnnDynamicGRU(
+      num_hidden,
+      dtype=dataType,
+      weights_initializer=init_ops.zeros_initializer(dtype=dataType),
+      bias_initializer=init_ops.zeros_initializer(dtype=dataType),
+      reset_after=False)
+  outputs, _ = gru_cell(x,
+                        sequence_len,
+                        initial_state=initial_state,
+                        training=True)
+
+  softmax = nn.softmax_cross_entropy_with_logits_v2(
+      logits=outputs[-1], labels=array_ops.stop_gradient(y))
+  loss = math_ops.reduce_mean(softmax)
+  train = gradient_descent.GradientDescentOptimizer(lr).minimize(loss)
+  return [loss, train]
+
+
+# pylint: disable=unused-argument
+def _PopnnGRU_ResetAfter(x, initial_state, y, sequence_len=None):
   gru_cell = ipu.ops.rnn_ops.PopnnGRU(
       num_hidden,
       dtype=dataType,
@@ -72,7 +95,7 @@ def _PopnnGRU_ResetAfter(x, initial_state, y):
   return [loss, train]
 
 
-def _tfGRU(x, initial_state, y):
+def _tfGRU(x, initial_state, y, sequence_len=None):
   gru_cell = rnn_cell.GRUCell(
       num_hidden,
       name='gru_cell',
@@ -80,9 +103,11 @@ def _tfGRU(x, initial_state, y):
       bias_initializer=init_ops.zeros_initializer(dtype=dataType))
   outputs, _ = rnn.dynamic_rnn(gru_cell,
                                x,
+                               sequence_length=sequence_len,
                                dtype=dataType,
                                initial_state=initial_state,
                                time_major=True)
+
   softmax = nn.softmax_cross_entropy_with_logits_v2(
       logits=outputs[-1], labels=array_ops.stop_gradient(y))
   loss = math_ops.reduce_mean(softmax)
@@ -95,16 +120,23 @@ def get_one_hot(a, num_classes):
 
 
 class GRUTrainingTest(xla_test.XLATestCase):
-  def _RunLayer(self, layer_func, x, y):
+  def _RunLayer(self, layer_func, x, y, s=None):
     with self.session() as sess:
       with ops.device('cpu'):
         px = array_ops.placeholder(dataType, shape=x.shape)
-        pinitial_state = array_ops.placeholder(dataType,
-                                               shape=[batch_size, num_hidden])
+        pi_state = array_ops.placeholder(dataType,
+                                         shape=[batch_size, num_hidden])
         py = array_ops.placeholder(dataType, shape=y.shape)
+        compile_inputs = [px, pi_state, py]
+        fd = {px: x, pi_state: np.zeros(pi_state.shape), py: y}
+
+        if s is not None:
+          ps = array_ops.placeholder(np.int32, shape=s.shape)
+          compile_inputs.append(ps)
+          fd[ps] = s
+
       with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(layer_func,
-                                     inputs=[px, pinitial_state, py])
+        r = ipu.ipu_compiler.compile(layer_func, inputs=compile_inputs)
 
       opts = ipu.utils.create_ipu_config(profiling=True,
                                          use_poplar_text_report=True)
@@ -112,7 +144,6 @@ class GRUTrainingTest(xla_test.XLATestCase):
       ipu.utils.configure_ipu_system(opts)
 
       sess.run(variables.global_variables_initializer())
-      fd = {px: x, pinitial_state: np.ones(pinitial_state.shape), py: y}
       losses = []
       for _ in range(0, num_training_steps):
         loss = sess.run(r, fd)
@@ -125,46 +156,66 @@ class GRUTrainingTest(xla_test.XLATestCase):
     nums = np.arange(batch_size + seq_len)
     # prepare the dataset of input to output pairs encoded as integers
     inputs = []
-    one_hot = []
     for i in range(0, len(nums) - seq_len):
       sequence = nums[i:i + seq_len]
-      output = nums[i + seq_len]
       inputs.append(sequence)
-      one_hot.append(output)
     X = np.reshape(inputs, (seq_len, batch_size, input_size))
     # normalize
     X = X / float(len(nums))
-    # one hot encode the output variable
-    y = get_one_hot(nums[seq_len:], nums.size)
+
+    # geneate a target
     labels = np.zeros([batch_size, num_hidden], dtype=dataType)
-    labels[:y.shape[0], :y.shape[1]] = y
+    labels[:, 0] = 1.
 
     custom_losses = self._RunLayer(_PopnnGRU, X, labels)
     # Check the loss goes down
     self.assertTrue(custom_losses[0] > custom_losses[-1])
     # Check that the loss is the same for the reference as well
     ref_losses = self._RunLayer(_tfGRU, X, labels)
-    self.assertAllClose(custom_losses, ref_losses, atol=0.01)
+    self.assertTrue(ref_losses[0] > ref_losses[-1])
+    self.assertAllClose(custom_losses, ref_losses, rtol=0.05)
 
-  # Check that the loss goes downZ.
+  def testTrainingWithSeqLen(self):
+    np.random.seed(42)
+    nums = np.arange(batch_size + seq_len)
+    # prepare the dataset of input to output pairs encoded as integers
+    inputs = []
+    for i in range(0, len(nums) - seq_len):
+      sequence = nums[i:i + seq_len]
+      inputs.append(sequence)
+    X = np.reshape(inputs, (seq_len, batch_size, input_size))
+    S = np.array([(i % seq_len) + 1 for i in range(batch_size)])
+    # normalize
+    X = X / float(len(nums))
+
+    # Generate a target
+    labels = np.zeros([batch_size, num_hidden], dtype=dataType)
+    labels[:, 0] = 1.
+
+    custom_losses = self._RunLayer(_PopnnGRU_DynamicGRU, X, labels, s=S)
+
+    # Check the loss goes down
+    self.assertTrue(custom_losses[0] > custom_losses[-1])
+    # Check that the loss is the same for the reference as well
+    ref_losses = self._RunLayer(_tfGRU, X, labels, s=S)
+    self.assertTrue(ref_losses[0] > ref_losses[-1])
+    self.assertAllClose(custom_losses, ref_losses, rtol=0.05)
+
   def testTraining_resetAfter(self):
     np.random.seed(42)
     nums = np.arange(batch_size + seq_len)
     # prepare the dataset of input to output pairs encoded as integers
     inputs = []
-    one_hot = []
     for i in range(0, len(nums) - seq_len):
       sequence = nums[i:i + seq_len]
-      output = nums[i + seq_len]
       inputs.append(sequence)
-      one_hot.append(output)
     X = np.reshape(inputs, (seq_len, batch_size, input_size))
     # normalize
     X = X / float(len(nums))
-    # one hot encode the output variable
-    y = get_one_hot(nums[seq_len:], nums.size)
+
+    # generate a target
     labels = np.zeros([batch_size, num_hidden], dtype=dataType)
-    labels[:y.shape[0], :y.shape[1]] = y
+    labels[:, 0] = 1.
 
     custom_losses = self._RunLayer(_PopnnGRU_ResetAfter, X, labels)
     # Check the loss goes down

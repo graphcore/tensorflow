@@ -85,6 +85,8 @@ enum PoplarOp {
   Inverse = 81;
   RecomputationCheckpoint = 82;
   RecomputationInput = 83;
+  DynamicGRULayerBwd = 84;
+  DynamicGRULayerFwd = 85;
 
   // Supported Fusions.
   Conv_biasadd = 200;

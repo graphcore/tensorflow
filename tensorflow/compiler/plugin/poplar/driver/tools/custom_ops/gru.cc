@@ -12,6 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
+#include <memory>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -106,6 +109,61 @@ std::unique_ptr<HloInstruction> CreateGRUBwd(
       shape, operands, is_training, num_channels, partials_type, reset_after);
 }
 
+HloDynamicGRUFwdInstruction::HloDynamicGRUFwdInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after)
+    : HloRNNFwdInstruction(PoplarOp::DynamicGRULayerFwd, shape, operands,
+                           is_training, num_channels, partials_type,
+                           reset_after),
+      HloGRUInstructionCommon(reset_after) {}
+
+absl::flat_hash_set<int64> HloDynamicGRUFwdInstruction::AllocatingIndices()
+    const {
+  return {0, 1, 2, 3};
+}
+
+std::unique_ptr<HloInstruction>
+HloDynamicGRUFwdInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext* ctx) const {
+  return CreateDynamicGRUFwd(shape, operands, is_training(), num_channels(),
+                             partials_type(), reset_after());
+}
+
+std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after) {
+  return absl::make_unique<HloDynamicGRUFwdInstruction>(
+      shape, operands, is_training, num_channels, partials_type, reset_after);
+}
+
+HloDynamicGRUBwdInstruction::HloDynamicGRUBwdInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after)
+    : HloRNNBwdInstruction(PoplarOp::DynamicGRULayerBwd, shape, operands,
+                           is_training, num_channels, partials_type,
+                           reset_after),
+      HloGRUInstructionCommon(reset_after) {}
+
+std::unique_ptr<HloInstruction>
+HloDynamicGRUBwdInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext* ctx) const {
+  return CreateDynamicGRUBwd(shape, operands, is_training(), num_channels(),
+                             partials_type(), reset_after());
+}
+
+std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after) {
+  return absl::make_unique<HloDynamicGRUBwdInstruction>(
+      shape, operands, is_training, num_channels, partials_type, reset_after);
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloGRUFwdFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -134,6 +192,35 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGRUBwdFactoryFunc(
 
 static HloPoplarInstructionFactory gru_bwd_factory(PoplarOp::GRULayerBwd,
                                                    HloGRUBwdFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloDynamicGRUFwdFactoryFunc(
+    HloCustomCallInstruction* call) {
+  TF_ASSIGN_OR_RETURN(auto parsed_attributes,
+                      rnn_helper::GRUAttributes::Parse(call));
+
+  return CreateDynamicGRUFwd(
+      call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
+      parsed_attributes.reset_after);
+}
+
+static HloPoplarInstructionFactory dynamic_gru_fwd_factory(
+    PoplarOp::DynamicGRULayerFwd, HloDynamicGRUFwdFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloDynamicGRUBwdFactoryFunc(
+    HloCustomCallInstruction* call) {
+  TF_ASSIGN_OR_RETURN(auto parsed_attributes,
+                      rnn_helper::GRUAttributes::Parse(call));
+
+  return CreateDynamicGRUBwd(
+      call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
+      parsed_attributes.reset_after);
+}
+
+static HloPoplarInstructionFactory dynamic_gru_bwd_factory(
+    PoplarOp::DynamicGRULayerBwd, HloDynamicGRUBwdFactoryFunc);
+
 }  // namespace
 
 }  // namespace poplarplugin
