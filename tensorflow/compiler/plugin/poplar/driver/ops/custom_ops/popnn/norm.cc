@@ -406,10 +406,11 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
               poplar::FLOAT, debug_prefix, norm_opts.flags);
 
-          args[3] = popnn::gn::groupNormalise(graph, operand, scale, offset,
-                                              args[4], args[5], prog,
-                                              debug_prefix, norm_opts.flags)
-                        .first;
+          std::tie(args[3], args[6]) = popnn::gn::groupNormalise(
+              graph, operand, scale, offset, args[4], args[5], prog,
+              debug_prefix, norm_opts.flags);
+          args[6] =
+              ShuffleNormOutputToTensorflow(args[6], norm_opts.feature_index);
           break;
         }
       }
@@ -427,6 +428,11 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
                                pg::created("mean"),
                                pg::created("variance_or_inv_std_dev")};
 
+    if (norm_opts.type == NormType::GroupNorm) {
+      args.push_back(poplar::Tensor{});
+      signature.push_back(pg::created("whitened_operand"));
+    }
+
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
         inst, graph, res, seq, func, signature, args, {}, {{1, 0}, {2, 0}}));
 
@@ -437,6 +443,11 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, mean));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, variance_or_inv_std_dev));
+
+    if (norm_opts.type == NormType::GroupNorm) {
+      // GroupNorm also outputs the whitened activations.
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 3, args[6]));
+    }
 
     return seq;
   }
@@ -527,12 +538,11 @@ class NormGradOp : public PoplarOpDef {
           break;
         }
         case NormType::GroupNorm: {
+          // For group norm, operand is already whitened.
+          poplar::Tensor operand_whitened = operand;
+
           // For group norm variance_or_inv_std_dev is inv_std_dev, so we
           // don't need to convert it.
-          poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
-              graph, operand, mean, variance_or_inv_std_dev, prog,
-              debug_prefix + "/WhitenedActs", norm_opts.flags);
-
           // Compute the grad for the operand.
           args[5] = popnn::gn::groupNormGradients(
               graph, operand_whitened, grad_output, variance_or_inv_std_dev,
