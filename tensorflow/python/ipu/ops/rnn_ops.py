@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,11 +30,13 @@ from tensorflow.python.platform import tf_logging as logging
 
 POPNN_LSTM = "lstm"
 POPNN_GRU = "gru"
+POPNN_DYNAMIC_GRU = "dynamic_gru"
 
 POPNN_LSTM_NUM_GATES = 4
 POPNN_GRU_NUM_GATES = 3
+POPNN_DYNAMIC_GRU_NUM_GATES = 3
 
-__all__ = ["PopnnLSTM", "PopnnGRU"]
+__all__ = ["PopnnLSTM", "PopnnGRU", "PopnnDynamicGRU"]
 
 
 class _PopnnRNN(base_layer.Layer):
@@ -166,7 +168,9 @@ class _PopnnRNN(base_layer.Layer):
 
     self.built = True
 
-  def call(self, inputs, initial_state=None, training=True):
+  # pylint: disable=unused-argument
+  # pylint: disable=arguments-differ
+  def call(self, inputs, seq_len=None, initial_state=None, training=True):
     raise ValueError("This method needs to be overridden.")
 
   def state_shape(self, batch_size):
@@ -268,7 +272,7 @@ class PopnnLSTM(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, initial_state=None, training=True):
+  def call(self, inputs, seq_len=None, initial_state=None, training=True):
     """Runs the forward step for the LSTM model.
 
     Args:
@@ -321,8 +325,19 @@ class PopnnLSTM(_PopnnRNN):
     c, h = initial_state
     h = ops.convert_to_tensor(h, dtype=dtype)
     c = ops.convert_to_tensor(c, dtype=dtype)
-    outputs, state = self._forward(inputs, h, c, self.kernel, self.biases,
-                                   training)
+
+    outputs, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
+        inputs=inputs,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=self.biases,
+        input_h_state=h,
+        input_c_state=c,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        name=self._name)
+    state = rnn_cell.LSTMStateTuple(output_c, output_h)
+
     if uses_old_api:
       state = (state.h, state.c)
     return outputs, state
@@ -345,19 +360,6 @@ class PopnnLSTM(_PopnnRNN):
     for sp in self.state_shape(batch_size):
       res.append(array_ops.zeros(sp, dtype=self.dtype))
     return rnn_cell.LSTMStateTuple(*res)
-
-  def _forward(self, inputs, h, c, kernel, biases, training):
-    output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
-        inputs=inputs,
-        num_channels=self._num_units,
-        kernel=kernel,
-        biases=biases,
-        input_h_state=h,
-        input_c_state=c,
-        is_training=training,
-        partials_dtype=self._partials_dtype,
-        name=self._name)
-    return output, rnn_cell.LSTMStateTuple(output_c, output_h)
 
 
 class PopnnGRU(_PopnnRNN):
@@ -433,7 +435,7 @@ class PopnnGRU(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, initial_state=None, training=True):
+  def call(self, inputs, seq_len=None, initial_state=None, training=True):
     """Runs the forward step for the GRU model.
 
     Args:
@@ -458,13 +460,28 @@ class PopnnGRU(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
+    if seq_len is not None:
+      raise NotImplementedError(
+          "This cell does not yet support the seq_len parameter. Use the "
+          "PopnnDynamicGRU instead.")
+
     if initial_state is None:
       # Create a zero state.
       initial_state = self._zero_state(batch_size)
 
     initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
-    return self._forward(inputs, initial_state, self.kernel, self.biases,
-                         training)
+
+    output, output_c, _ = gen_popnn_ops.popnn_gru_layer(
+        inputs=inputs,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=self.biases,
+        initial_state=initial_state,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        name=self._name,
+        reset_after=self._reset_after)
+    return output, output_c
 
   def state_shape(self, batch_size):
     """Shape of Popnn GRU state.
@@ -482,21 +499,134 @@ class PopnnGRU(_PopnnRNN):
   def _zero_state(self, batch_size):
     return array_ops.zeros(self.state_shape(batch_size), dtype=self.dtype)
 
-  def _forward(self, inputs, initial_state, kernel, biases, training):
-    output, output_c, _ = gen_popnn_ops.popnn_gru_layer(
+  def _canonical_bias_shape(self, unused_layer):
+    """Shapes of Popnn canonical bias tensors for given layer."""
+    if self._reset_after:
+      return [self._num_gates_per_layer, 2, self._num_units]
+    return super(PopnnGRU, self)._canonical_bias_shape(unused_layer)
+
+
+class PopnnDynamicGRU(PopnnGRU):
+  # pylint:disable=line-too-long
+  """XLA compatible, time-major Popnn implementation of an GRU layer,
+  with a sequence length input.
+
+  Below is a typical workflow:
+
+  .. code-block:: python
+
+    with tf.Graph().as_default():
+      gru = PopnnDynamicGRU(num_units, ...)
+
+      outputs, output_state = gru(
+        inputs, seq_len, initial_state, training=True)
+
+  """
+  # pylint:enable=line-too-long
+  _rnn_mode = POPNN_DYNAMIC_GRU
+  _num_gates_per_layer = POPNN_DYNAMIC_GRU_NUM_GATES
+
+  def __init__(self,
+               num_units,
+               dtype=dtypes.float32,
+               partials_dtype=dtypes.float32,
+               seed=None,
+               weights_initializer=None,
+               bias_initializer=None,
+               name=None,
+               reset_after=False):
+    """Creates a PopnnDynamicGRU model from model spec.
+
+      Args:
+        num_units: the number of units within the RNN model.
+        dtype: tf.float16 or tf.float32
+        partials_dtype: the type used by Popnn to perform partial calculations.
+          Either tf.float16 or tf.float32.
+        seed: A Python integer. Used to create the default Glorot uniform
+          initializer weights_initializer.
+        weights_initializer: starting value to initialize the weight
+          (default is Glorot uniform initializer).
+        bias_initializer: starting value to initialize the bias
+          (default is all zeros).
+        name: VariableScope for the created subgraph; defaults to class name.
+          This only serves the default scope if later no scope is specified when
+          invoking ``__call__()``.
+        reset_after:  GRU convention (whether to apply reset gate
+          after or before matrix multiplication). False = "before" (default),
+          True = "after".
+          Leave as default (False) to match the behaviour of the standard
+          TensorFlow GRU.
+    """
+
+    super(PopnnDynamicGRU,
+          self).__init__(num_units=num_units,
+                         dtype=dtype,
+                         partials_dtype=partials_dtype,
+                         seed=seed,
+                         weights_initializer=weights_initializer,
+                         bias_initializer=bias_initializer,
+                         name=name,
+                         reset_after=reset_after)
+
+  @property
+  def saveable(self):
+    return False
+
+  def call(self, inputs, seq_len=None, initial_state=None, training=True):
+    """Runs the forward step for the DynamicGRU model.
+
+      Args:
+        inputs: 3-D tensor with shape [batch_size, time_len, input_size].
+        seq_len: 1-D tensor with the sequence length of samples in each batch.
+        initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
+        If not provided, the state is initialized to zeros.
+        training: whether this operation will be used in training or inference.
+
+      Returns:
+        output: a tensor of shape [time_len, batch_size, num_units].
+        output_state: The output state of the last cell.
+
+      Raises:
+        ValueError: if initial_state is not valid.
+
+    """
+
+    dtype = self.dtype
+
+    inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+
+    batch_size = array_ops.shape(inputs)[1]
+
+    if initial_state is None:
+      # Create a zero state.
+      initial_state = self._zero_state(batch_size)
+
+    initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
+    bias_ones = init_ops.constant_initializer(1.0, dtype=inputs.dtype)
+    bias_zeros = init_ops.constant_initializer(0.0, dtype=inputs.dtype)
+    biases_r_u = vs.get_variable("bias_r_u",
+                                 dtype=inputs.dtype,
+                                 initializer=bias_ones,
+                                 shape=[2, self._num_units])
+    biases_c = vs.get_variable("bias_c",
+                               dtype=inputs.dtype,
+                               initializer=bias_zeros,
+                               shape=[1, self._num_units])
+    biases = array_ops.concat([biases_r_u, biases_c], axis=0)
+    if self._reset_after:
+      biases = array_ops.expand_dims(biases, 1)
+      biases = array_ops.concat([biases, biases], axis=1)
+    self.biases = biases
+
+    output, output_c, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
         inputs=inputs,
+        seq_len=seq_len,
         num_channels=self._num_units,
-        kernel=kernel,
-        biases=biases,
+        kernel=self.kernel,
+        biases=self.biases,
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name,
         reset_after=self._reset_after)
     return output, output_c
-
-  def _canonical_bias_shape(self, unused_layer):
-    """Shapes of Popnn canonical bias tensors for given layer."""
-    if self._reset_after:
-      return [self._num_gates_per_layer, 2, self._num_units]
-    return super()._canonical_bias_shape(unused_layer)

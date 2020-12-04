@@ -63,3 +63,28 @@ def _popnn_gru_layer_backward(op, *grads):
       partials_dtype=op.get_attr("partials_dtype"),
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"))
+
+
+@ops.RegisterGradient("PopnnDynamicGRULayer")
+def _popnn_dynamic_gru_layer_backward(op, *grads):
+  """Gradients for the PopnnDynamicGRULayer op."""
+  if not op.get_attr("is_training"):
+    raise ValueError(
+        "To use PopnnDynamicGRULayer in gradients, is_training must be "
+        "set to True.")
+  g = gen_popnn_ops.popnn_dynamic_gru_layer_backprop(
+      inputs=op.inputs[0],
+      initial_state=op.inputs[1],
+      kernel=op.inputs[2],
+      biases=op.inputs[3],
+      seq_len=op.inputs[4],
+      output=op.outputs[0],
+      output_state=op.outputs[1],
+      intermediates=op.outputs[2],
+      output_backprop=grads[0],
+      output_state_backprop=grads[1],
+      num_channels=op.get_attr("num_channels"),
+      partials_dtype=op.get_attr("partials_dtype"),
+      is_training=op.get_attr("is_training"),
+      reset_after=op.get_attr("reset_after"))
+  return [g[0], g[1], g[2], g[3], None]

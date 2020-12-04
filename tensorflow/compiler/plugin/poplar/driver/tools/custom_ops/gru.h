@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_
 
+#include <memory>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 
@@ -88,6 +90,47 @@ std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
     bool reset_after);
+
+class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
+                                    public HloGRUInstructionCommon {
+ public:
+  explicit HloDynamicGRUFwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+      bool reset_after);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* ctx) const override;
+};
+
+class HloDynamicGRUBwdInstruction : public HloRNNBwdInstruction,
+                                    public HloGRUInstructionCommon {
+ public:
+  explicit HloDynamicGRUBwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+      bool reset_after);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* ctx) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
+
+std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
