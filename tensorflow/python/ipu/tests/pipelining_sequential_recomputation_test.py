@@ -354,7 +354,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 9096, True,
+        gradient_accumulation_count, dataset_fn, optimizer, self, 6328, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
 
