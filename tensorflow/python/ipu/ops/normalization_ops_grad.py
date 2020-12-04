@@ -23,7 +23,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 def _popnn_group_norm_backward(op, *grads):
   """Gradients for the PopnnGroupNormTraining op."""
   return gen_popnn_ops.popnn_group_norm_grad(
-      inputs=op.inputs[0],
+      inputs=op.outputs[3],
       gamma=op.inputs[1],
       mean=op.outputs[1],
       inv_std_dev=op.outputs[2],

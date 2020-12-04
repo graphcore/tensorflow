@@ -414,12 +414,13 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               name='conv1')
           gamma = constant_op.constant([0.5, 0.5], np.float32)
           beta = constant_op.constant([0.5, 0.5], np.float32)
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
-                                                            gamma=gamma,
-                                                            beta=beta,
-                                                            data_format="NHWC",
-                                                            epsilon=0.0015,
-                                                            num_groups=2)
+          y, _, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -427,12 +428,13 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               use_bias=False,
               kernel_initializer=init_ops.ones_initializer(),
               name='conv2')
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
-                                                            gamma=gamma,
-                                                            beta=beta,
-                                                            data_format="NHWC",
-                                                            epsilon=0.0015,
-                                                            num_groups=2)
+          y, _, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -440,12 +442,13 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               use_bias=False,
               kernel_initializer=init_ops.ones_initializer(),
               name='conv3')
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
-                                                            gamma=gamma,
-                                                            beta=beta,
-                                                            data_format="NHWC",
-                                                            epsilon=0.0015,
-                                                            num_groups=2)
+          y, _, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
