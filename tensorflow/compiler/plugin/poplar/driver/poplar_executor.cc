@@ -421,7 +421,6 @@ PoplarExecutor::PoplarExecutor()
       device_attached_(false),
       poplar_device_hash_(0),
       configured_(false),
-      has_cycle_counter_(false),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
   TENSORFLOW_TRACEPOINT();
   // TODO should this use the time/ms?
@@ -2942,18 +2941,16 @@ std::string PoplarExecutor::GetCycleCounterStream() {
 }
 
 void PoplarExecutor::ConnectCycleCounterCallback() {
-  if (has_cycle_counter_) {
-    for (int i = 0; i < current_replication_factor_; i++) {
-      current_engine_->connectStreamToCallback(
-          PoplarExecutor::GetCycleCounterStream(), i, [=](void* p) {
-            // Just log cyclecount for replica 0
-            if (i == 0) {
-              uint64_t count;
-              std::memcpy(&count, p, sizeof(count));
-              LOG(INFO) << "Cycle count: " << count;
-            }
-          });
-    }
+  for (int i = 0; i < current_replication_factor_; i++) {
+    current_engine_->connectStreamToCallback(
+        PoplarExecutor::GetCycleCounterStream(), i, [=](void* p) {
+          // Just log cyclecount for replica 0
+          if (i == 0) {
+            uint64_t count;
+            std::memcpy(&count, p, sizeof(count));
+            LOG(INFO) << "Cycle count: " << count;
+          }
+        });
   }
 }
 
@@ -3125,7 +3122,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         SetCurrentReplicationFactor(executable.GetReplicationFactor());
 
         ConnectSeedCallback();
-        ConnectCycleCounterCallback();
+        if (executable.LoggingCycleCount()) {
+          ConnectCycleCounterCallback();
+        }
 
         if (current_config_.profiling().enable_ipu_trace_events() &&
             current_config_.profiling().enable_io_trace()) {

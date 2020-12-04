@@ -61,6 +61,7 @@ class PoplarExecutable : public Executable {
                    HostEmbeddingInfos&& host_embedding_update_infos,
                    HostEmbeddingInfos&& host_embedding_notify_infos,
                    RemoteParameterInfos&& remote_parameter_infos,
+                   const bool logging_cycle_count,
                    const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
                    const std::vector<string>& checkpoint_feeds_order);
 
@@ -131,6 +132,8 @@ class PoplarExecutable : public Executable {
     return is_scalar_elementwise_graph_;
   }
 
+  const bool LoggingCycleCount() const { return logging_cycle_count_; }
+
   const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
     return key_id_mappings_;
   }
@@ -156,6 +159,7 @@ class PoplarExecutable : public Executable {
                           const CompilerAnnotations& annotations,
                           uint32 replication_count,
                           const poplar::OptionFlags& opts,
+                          bool logging_cycle_count,
                           const VerifiedStreamsIndices::KeyIdMappings& mappings,
                           const std::vector<string>& checkpoint_feeds_order);
 
@@ -199,6 +203,7 @@ class PoplarExecutable : public Executable {
   HostEmbeddingInfos host_embedding_notify_infos_;
   RemoteParameterInfos remote_parameter_infos_;
   bool loaded_from_cache_;
+  bool logging_cycle_count_;
   const bool is_scalar_elementwise_graph_;
   VerifiedStreamsIndices::KeyIdMappings key_id_mappings_;
   const std::vector<string> checkpoint_feeds_order_;

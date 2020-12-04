@@ -69,4 +69,6 @@ message PoplarExecutableProto {
   repeated KeyIdMapping key_id_mappings = 12;
 
   repeated string checkpoint_feeds_order = 13;
+
+  bool logging_cycle_count = 14;
 };

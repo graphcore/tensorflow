@@ -48,6 +48,7 @@ PoplarExecutable::PoplarExecutable(
     HostEmbeddingInfos&& host_embedding_update_infos,
     HostEmbeddingInfos&& host_embedding_notify_infos,
     RemoteParameterInfos&& remote_parameter_infos,
+    const bool logging_cycle_count,
     const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
     const std::vector<string>& checkpoint_feeds_order)
     : Executable(std::move(hlo_module), std::move(profile_printer),
@@ -72,6 +73,7 @@ PoplarExecutable::PoplarExecutable(
       host_embedding_notify_infos_(std::move(host_embedding_notify_infos)),
       remote_parameter_infos_(std::move(remote_parameter_infos)),
       loaded_from_cache_(false),
+      logging_cycle_count_(logging_cycle_count),
       key_id_mappings_(key_id_mappings),
       checkpoint_feeds_order_(checkpoint_feeds_order) {
   TENSORFLOW_TRACEPOINT();
@@ -203,6 +205,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   // Load metadata
   const uint32 replication_factor = proto.replication_factor();
 
+  const bool logging_cycle_count = proto.logging_cycle_count();
+
   InfeedInfos infeeds;
   for (const auto& infeed : proto.infeeds()) {
     infeeds.emplace(infeed.stream_prefix(), infeed.config(),
@@ -315,7 +319,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       {}, false, false, {}, replication_factor, std::move(infeeds),
       std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
       std::move(lookups), std::move(updates), std::move(notifications),
-      std::move(remote_parameter_infos), key_id_mappings,
+      std::move(remote_parameter_infos), logging_cycle_count, key_id_mappings,
       checkpoint_feeds_order);
 
   executable->loaded_from_cache_ = true;
@@ -423,7 +427,7 @@ Status ExportInternal(
 /*static*/ Status PoplarExecutable::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
     const CompilerAnnotations& annotations, uint32 replication_count,
-    const poplar::OptionFlags& opts,
+    const poplar::OptionFlags& opts, bool logging_cycle_count,
     const VerifiedStreamsIndices::KeyIdMappings& mappings,
     const std::vector<string>& checkpoint_feeds_order) {
   TENSORFLOW_TRACEPOINT();
@@ -525,6 +529,8 @@ Status ExportInternal(
     std::string* proto_feed = proto.add_checkpoint_feeds_order();
     *proto_feed = feed;
   }
+
+  proto.set_logging_cycle_count(logging_cycle_count);
 
   return WriteBinaryProto(tensorflow::Env::Default(),
                           filenames.CachedEngineFilename(), proto);

@@ -1406,6 +1406,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
   std::string map_json;
+  bool logging_cycle_count;
 
   if (compile) {
     TF_ASSIGN_OR_RETURN(const std::string tensorflow_info, GetFrameworkInfo());
@@ -1457,9 +1458,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // Add the main program sequence.
     main_program.add(visitor.GetSequenceAndInitializeCounters());
 
-    if (InitializeCycleCounter(main_graph, main_program)) {
-      poplar_executor->SetHasCycleCounter();
-    }
+    logging_cycle_count = InitializeCycleCounter(main_graph, main_program);
 
     // =======================================================================
     // DO NOT CHANGE THE ORDER OF THESE WITHOUT UPDATING PoplarProgramType IN
@@ -1516,7 +1515,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
         TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
             filenames, exec, resources.annotations, replication_factor,
-            options_to_serialize, resources.streams_indices.GetAssignedIds(),
+            options_to_serialize, logging_cycle_count,
+            resources.streams_indices.GetAssignedIds(),
             resources.streams_indices.CheckpointFeedsOrder()));
       }
 
@@ -1600,7 +1600,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.host_embedding_update_infos),
       std::move(resources.annotations.host_embedding_notify_infos),
       std::move(resources.annotations.remote_parameter_infos),
-      resources.streams_indices.GetAssignedIds(),
+      logging_cycle_count, resources.streams_indices.GetAssignedIds(),
       resources.streams_indices.CheckpointFeedsOrder());
 
   executable.reset(poplar_executable);

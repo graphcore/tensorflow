@@ -590,7 +590,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void ResetSeed(int seed);
 
-  void SetHasCycleCounter() { has_cycle_counter_ = true; }
   static std::string GetCycleCounterStream();
 
   void SetCurrentReplicationFactor(int64 executable_replication_factor);
@@ -919,8 +918,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   SeedGenerator seed_generator_;
 
   std::string ReportFileExtension() const;
-
-  bool has_cycle_counter_;
 
   tensorflow::core::RefCountPtr<tensorflow::Rendezvous> rendezvous_;
 };
