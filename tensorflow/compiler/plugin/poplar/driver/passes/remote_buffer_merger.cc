@@ -247,6 +247,7 @@ Status HoistOffsets(HloInstruction* call,
   TF_RETURN_IF_ERROR(new_call->CopyAllControlDepsFrom(call));
   TF_RETURN_IF_ERROR(call->DropAllControlDeps());
   TF_RETURN_IF_ERROR(call_parent->RemoveInstruction(call));
+  TF_RETURN_IF_ERROR(clone_context.module()->RemoveEmbeddedComputation(comp));
 
   return Status::OK();
 }

@@ -23,11 +23,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/map_util.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
-class HloInstruction;
 namespace poplarplugin {
 
 using Functions = HloInstructionSet;
@@ -56,10 +56,8 @@ class IsomorphicFunctionsMap {
   struct FunctionCompare {
     bool operator()(const HloInstruction* a, const HloInstruction* b) const {
       if (sort_by_increasing_size) {
-        const int64 a_size =
-            ShapeUtil::ByteSizeOf(a->shape(), /*pointer_size=*/1);
-        const int64 b_size =
-            ShapeUtil::ByteSizeOf(b->shape(), /*pointer_size=*/1);
+        const int64 a_size = GetByteSizeOfTotalShape(a->shape());
+        const int64 b_size = GetByteSizeOfTotalShape(b->shape());
 
         if (a_size != b_size) {
           return a_size < b_size;

@@ -249,17 +249,6 @@ bool RemoteBufferInputsOutputsInfos::operator!=(
 }
 
 namespace {
-
-template <typename T>
-T Permute(const T& in, std::vector<int64> permutation) {
-  CHECK_EQ(in.size(), permutation.size());
-  T out(in.size());
-  for (int64 i = 0; i != permutation.size(); ++i) {
-    out[permutation[i]] = in[i];
-  }
-  return out;
-}
-
 StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
   // Get parameter load indices for one function.
   HloInstruction* func = *std::begin(functions);
@@ -413,29 +402,6 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
 }  // namespace
 
 namespace {
-// Check that all users of an instruction are GTEs, and that each GTE appears
-// exactly once.
-bool AllUsersUniqueGTEs(const HloInstruction* inst) {
-  absl::flat_hash_map<int64, int64> gtes;
-  for (const HloInstruction* user : inst->users()) {
-    if (user->opcode() == HloOpcode::kGetTupleElement) {
-      gtes[user->tuple_index()]++;
-    } else {
-      return false;
-    }
-  }
-
-  // Check each output has a GTE.
-  if (gtes.size() != ShapeUtil::TupleElementCount(inst->shape())) {
-    return false;
-  }
-
-  // Check each GTE is unique.
-  return absl::c_all_of(gtes, [](const std::pair<int64, int64>& pair) -> bool {
-    return pair.second == 1;
-  });
-}
-
 bool ShouldOutlineFunctions(const Functions& functions) {
   // Do not outline if the function only appears once.
   if (functions.size() == 1) {

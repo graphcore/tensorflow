@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include <string>
+#include <utility>
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -217,6 +218,15 @@ std::vector<Shape> FlattenedXlaShape(const Shape& shape) {
   }
 
   return out;
+}
+
+int64 GetByteSizeOfTotalShape(const Shape& shape) {
+  auto flat_shapes = FlattenedXlaShape(shape);
+  int64 size = 0;
+  for (auto& s : flat_shapes) {
+    size += ShapeUtil::ByteSizeOf(s);
+  }
+  return size;
 }
 
 template <typename NativeT>
@@ -775,6 +785,27 @@ StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
                                gtes.size(), " users.");
   }
   return *std::begin(gtes);
+}
+
+bool AllUsersUniqueGTEs(const HloInstruction* inst) {
+  absl::flat_hash_map<int64, int64> gtes;
+  for (const HloInstruction* user : inst->users()) {
+    if (user->opcode() == HloOpcode::kGetTupleElement) {
+      gtes[user->tuple_index()]++;
+    } else {
+      return false;
+    }
+  }
+
+  // Check each output has a GTE.
+  if (gtes.size() != ShapeUtil::TupleElementCount(inst->shape())) {
+    return false;
+  }
+
+  // Check each GTE is unique.
+  return absl::c_all_of(gtes, [](const std::pair<int64, int64>& pair) -> bool {
+    return pair.second == 1;
+  });
 }
 
 size_t HloComputationHash::operator()(const HloComputation* comp) const {

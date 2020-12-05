@@ -116,6 +116,7 @@ int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
                       int64 original_index);
 
 std::vector<Shape> FlattenedXlaShape(const Shape& shape);
+int64 GetByteSizeOfTotalShape(const Shape& shape);
 
 template <typename NativeT>
 StatusOr<NativeT> LiteralScalarToNativeType(const Literal& lit);
@@ -229,6 +230,9 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
 // Get a unique GTE user of `inst` at a given tuple index.
 StatusOr<HloInstruction*> GetUniqueGTEUser(HloInstruction* inst,
                                            int64 tuple_index);
+// Check that all users of an instruction are GTEs, and that each GTE appears
+// exactly once.
+bool AllUsersUniqueGTEs(const HloInstruction* inst);
 
 // Poplar's dimShuffle does: return_value.dimensions[i] =
 // argument.dimensions[permutations[i]] Whereas ShapeUtil::PermuteDimensions
@@ -264,6 +268,16 @@ Status CreateDirIfMissing(const std::string& path);
 
 StatusOr<Tileset> GetTileset(const HloInstruction* inst);
 
+// Function for permuting vector like containers.
+template <typename T>
+T Permute(const T& in, const std::vector<int64>& permutation) {
+  CHECK_EQ(in.size(), permutation.size());
+  T out(in.size());
+  for (int64 i = 0; i != permutation.size(); ++i) {
+    out[permutation[i]] = in[i];
+  }
+  return out;
+}
 }  // namespace poplarplugin
 }  // namespace xla
 
