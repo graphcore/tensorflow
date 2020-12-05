@@ -64,6 +64,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/function_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/function_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
@@ -1281,6 +1282,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<InterTilesetCopyInserter>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
     pipeline.AddPass<CopyInserter>();
+    pipeline.AddPass<FunctionCombiner>();
 
     // Passes below this point need to respect the inplace information.
     pipeline.AddPass<InplaceFinder>();

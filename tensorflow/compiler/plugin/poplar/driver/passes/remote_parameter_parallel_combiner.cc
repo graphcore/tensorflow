@@ -458,14 +458,13 @@ StatusOr<bool> RemoteParameterParallelCombiner::Run(HloModule* module) {
 
   bool changed = false;
 
-  // Run it for all resource updates.
   for (auto* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
 
     for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (IsResourceUpdate(inst)) {
+      if (IsResourceUpdate(inst) || IsFunction(inst)) {
         TF_ASSIGN_OR_RETURN(const bool computation_changed,
                             RunOnComputation(inst->to_apply()));
         changed |= computation_changed;
