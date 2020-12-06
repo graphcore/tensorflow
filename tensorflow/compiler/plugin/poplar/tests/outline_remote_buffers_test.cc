@@ -147,7 +147,7 @@ ENTRY main {
   return hlo;
 }
 
-TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctions) {
+TEST_F(OutlineRemoteBuffersTest, TestGetFunctions) {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(GetValidHlo()));
 
@@ -156,7 +156,7 @@ TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctions) {
       OutlineRemoteBuffers::GetFunctionsForOutlining(module.get());
   EXPECT_EQ(all_functions.size(), 1);
 
-  auto functions = std::begin(all_functions)->second;
+  auto functions = *std::begin(all_functions)->second;
   EXPECT_EQ(functions.size(), 2);
 
   auto function = *std::begin(functions);
@@ -174,7 +174,7 @@ TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctions) {
               ::testing::ElementsAre(1, 2, 0));
 }
 
-TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctionsWithPermutation) {
+TEST_F(OutlineRemoteBuffersTest, TestGetFunctionsWithPermutation) {
   TF_ASSERT_OK_AND_ASSIGN(
       auto module, ParseAndReturnVerifiedModule(GetValidHloWithPermutation()));
 
@@ -183,7 +183,7 @@ TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctionsWithPermutation) {
       OutlineRemoteBuffers::GetFunctionsForOutlining(module.get());
   EXPECT_EQ(all_functions.size(), 1);
 
-  auto functions = std::begin(all_functions)->second;
+  auto functions = *std::begin(all_functions)->second;
   EXPECT_EQ(functions.size(), 2);
 
   auto function = *std::begin(functions);
@@ -201,8 +201,7 @@ TEST_F(OutlineRemoteBuffersTest, DISABLED_TestGetFunctionsWithPermutation) {
               ::testing::ElementsAre(2, 1, 0));
 }
 
-TEST_F(OutlineRemoteBuffersTest,
-       DISABLED_TestGetFunctionsInOutPermutationsDontMatch) {
+TEST_F(OutlineRemoteBuffersTest, TestGetFunctionsInOutPermutationsDontMatch) {
   const string& hlo = R"(
 HloModule module
 
@@ -292,7 +291,7 @@ ENTRY main {
               ::testing::ElementsAre(1, 2, 0));
 }
 
-TEST_F(OutlineRemoteBuffersTest, DISABLED_TestOutline) {
+TEST_F(OutlineRemoteBuffersTest, TestOutline) {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(GetValidHlo()));
 

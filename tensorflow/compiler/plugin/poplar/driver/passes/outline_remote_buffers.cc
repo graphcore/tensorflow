@@ -49,15 +49,6 @@ bool IsRemoteBufferStore(const HloInstruction* inst) {
 }
 }  // namespace
 
-bool FunctionComparator::operator()(const HloInstruction* const& lhs,
-                                    const HloInstruction* const& rhs) const {
-  if (HloComputationEquals()(lhs->to_apply(), rhs->to_apply())) {
-    return false;
-  }
-
-  return HloPtrComparator()(lhs, rhs);
-}
-
 RemoteBufferInputsOutputsInfos::RemoteBufferInputsOutputsInfos(
     HloInstruction* inst) {
   absl::flat_hash_set<HloInstruction*> gtes;
@@ -478,9 +469,9 @@ bool ShouldOutlineFunctions(const Functions& functions) {
 }
 }  // namespace
 
-IsomorphicFunctions OutlineRemoteBuffers::GetFunctionsForOutlining(
+SingleShardIsomorphicFunctions OutlineRemoteBuffers::GetFunctionsForOutlining(
     HloModule* module) {
-  IsomorphicFunctions isomorphic_functions;
+  SingleShardIsomorphicFunctions isomorphic_functions;
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
@@ -501,7 +492,7 @@ IsomorphicFunctions OutlineRemoteBuffers::GetFunctionsForOutlining(
 
       if (can_outline_into(inst)) {
         CHECK(inst->shape().IsTuple());
-        isomorphic_functions[inst].insert(inst);
+        isomorphic_functions.insert(inst);
       }
     }
   }
@@ -509,7 +500,7 @@ IsomorphicFunctions OutlineRemoteBuffers::GetFunctionsForOutlining(
   std::vector<HloInstruction*> keys_to_erase;
   // For each set of functions, check whether they should be outlined.
   for (auto& pair : isomorphic_functions) {
-    if (!ShouldOutlineFunctions(pair.second)) {
+    if (!ShouldOutlineFunctions(*pair.second)) {
       keys_to_erase.push_back(pair.first);
     }
   }
@@ -526,9 +517,9 @@ StatusOr<bool> OutlineRemoteBuffers::Run(HloModule* module) {
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
   bool changed = false;
 
-  IsomorphicFunctions functions = GetFunctionsForOutlining(module);
+  SingleShardIsomorphicFunctions functions = GetFunctionsForOutlining(module);
   for (auto& pair : functions) {
-    TF_ASSIGN_OR_RETURN(bool changed_funcs, OutlineIntoFunctions(pair.second));
+    TF_ASSIGN_OR_RETURN(bool changed_funcs, OutlineIntoFunctions(*pair.second));
     changed |= changed_funcs;
   }
 
