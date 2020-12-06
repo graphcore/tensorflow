@@ -465,6 +465,7 @@ cc_library(
         "driver/tools/inplace_util.h",
         "driver/tools/input_output_aliasing_map.h",
         "driver/tools/instruction_colocator_helper.h",
+        "driver/tools/isomorphic_functions_map.h",
         "driver/tools/matcher_predicates.h",
         "driver/tools/matmul_util.h",
         "driver/tools/meta_graph.h",

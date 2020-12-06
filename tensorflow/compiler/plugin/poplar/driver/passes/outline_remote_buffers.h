@@ -19,6 +19,7 @@ limitations under the License.
 #include <map>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/isomorphic_functions_map.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -27,18 +28,6 @@ class HloModule;
 class HloInstruction;
 
 namespace poplarplugin {
-
-// Comparator for function instructions to check whether they call the same
-// function.
-struct FunctionComparator {
-  bool operator()(const HloInstruction* const& lhs,
-                  const HloInstruction* const& rhs) const;
-};
-
-using Functions = HloInstructionSet;
-using IsomorphicFunctions =
-    std::map<HloInstruction*, Functions, FunctionComparator>;
-
 // A helper class to extract information about remote buffer inputs/outputs and
 // how they should alias.
 class RemoteBufferInputsOutputsInfos {
@@ -93,7 +82,8 @@ class OutlineRemoteBuffers : public HloModulePass {
 
   // Returns sets of functions which are all isomorphic and have the same
   // 'RemoteBufferInputsOutputsInfos' configuration.
-  static IsomorphicFunctions GetFunctionsForOutlining(HloModule* module);
+  static SingleShardIsomorphicFunctions GetFunctionsForOutlining(
+      HloModule* module);
 };
 
 }  // namespace poplarplugin
