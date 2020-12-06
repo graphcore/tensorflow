@@ -30,7 +30,10 @@ from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 
 
-def outlined_function(func=None, unique_sharding=False, name=None):
+def outlined_function(func=None,
+                      unique_sharding=False,
+                      keep_input_layouts=False,
+                      name=None):
   """
   An outlined function is a block of organized, reusable code which is used to
   perform a single action. Functions provide better modularity for your
@@ -56,6 +59,10 @@ def outlined_function(func=None, unique_sharding=False, name=None):
       device before the function call is executed. Enabling this can increase
       performance as any inter IPU communication can be more efficiently
       scheduled and any duplicated copies can be elided.
+    keep_input_layouts: Whether to keep the layouts of the function inputs when
+      calling the function or re-allocate them based on the operations inside
+      the function. Reallocating them can improve the performance, but it can
+      also increase the IPU code size.
     name: The name of the function.
 
   Returns:
@@ -78,6 +85,7 @@ def outlined_function(func=None, unique_sharding=False, name=None):
               Tout=func_graph.output_types,
               output_shapes=func_graph.output_shapes,
               unique_sharding=unique_sharding,
+              keep_input_layouts=keep_input_layouts,
               name=name)
 
           # pack_sequence_as requires a list of Tensors, but the gen_ operation
