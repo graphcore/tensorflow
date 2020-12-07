@@ -31,6 +31,33 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+// TODO(T28772): Work around to make sure remote buffers can be rearranged on
+// host.
+poplar::program::Sequence AddRemoteBufferStoreCopy(
+    poplar::Graph& graph, CompilerResources& res, poplar::Tensor source,
+    poplar::RemoteBuffer remote_buffer,
+    absl::optional<poplar::Tensor> offset = absl::nullopt) {
+  poplar::program::Sequence seq;
+
+  const auto& handle = remote_buffer.handle();
+  poplar::Tensor layout_tensor;
+  if (res.remote_buffer_layouts.contains(handle)) {
+    layout_tensor = res.remote_buffer_layouts.at(handle);
+  } else {
+    layout_tensor = source;
+    res.remote_buffer_layouts[handle] = layout_tensor;
+  }
+
+  poplar::Tensor copy_tensor = graph.clone(layout_tensor);
+  seq.add(poplar::program::Copy(source.flatten(), copy_tensor.flatten()));
+
+  if (offset) {
+    seq.add(poplar::program::Copy(copy_tensor, remote_buffer, *offset));
+  } else {
+    seq.add(poplar::program::Copy(copy_tensor, remote_buffer));
+  }
+  return seq;
+}
 
 class RemoteParameterLoadOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -64,6 +91,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     CHECK_EQ(outputs.size(), num_outputs);
 
     for (int64 i = 0; i < num_outputs; ++i) {
+      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       if (store_inst->GetReplicationFactor(i) != res.replication_factor &&
           store_inst->GetReplicationFactor(i) != 1) {
         return xla::FailedPrecondition(
@@ -86,7 +114,8 @@ class RemoteParameterStoreOp : public PoplarOpDef {
             poplar::Tensor tensor,
             FindInstructionInput(tensor_map, res, inst, num_outputs + i, seq));
 
-        seq.add(poplar::program::Copy(tensor, remote_buffer));
+        seq.add(
+            AddRemoteBufferStoreCopy(shard_graph, res, tensor, remote_buffer));
       }
       TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i][0]));
     }
@@ -126,6 +155,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
     CHECK_EQ(outputs.size(), num_outputs);
 
     for (int64 i = 0; i < num_outputs; ++i) {
+      poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
 
@@ -142,7 +172,8 @@ class BufferStoreSliceOp : public PoplarOpDef {
             poplar::Tensor offset,
             FindInstructionInput(tensor_map, res, inst, offset_index, seq));
 
-        seq.add(poplar::program::Copy(value, remote_buffer, offset));
+        seq.add(AddRemoteBufferStoreCopy(shard_graph, res, value, remote_buffer,
+                                         offset));
       }
 
       TF_CHECK_OK(AddOutput(tensor_map, inst, i, output));

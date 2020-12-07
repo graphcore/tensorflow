@@ -1027,6 +1027,36 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
   return Status::OK();
 }
 
+namespace {
+// TODO(T28772): Work around to make sure remote buffers can be rearranged on
+// host.
+poplar::program::Sequence AddRemoteBufferLoadCopy(
+    poplar::Graph& graph, CompilerResources& res,
+    poplar::RemoteBuffer remote_buffer, poplar::Tensor destination,
+    absl::optional<poplar::Tensor> offset = absl::nullopt) {
+  poplar::program::Sequence seq;
+
+  const auto& handle = remote_buffer.handle();
+  poplar::Tensor layout_tensor;
+  if (res.remote_buffer_layouts.contains(handle)) {
+    layout_tensor = res.remote_buffer_layouts.at(handle);
+  } else {
+    layout_tensor = destination;
+    res.remote_buffer_layouts[handle] = layout_tensor;
+  }
+
+  poplar::Tensor copy_tensor = graph.clone(layout_tensor);
+
+  if (offset) {
+    seq.add(poplar::program::Copy(remote_buffer, copy_tensor, *offset));
+  } else {
+    seq.add(poplar::program::Copy(remote_buffer, copy_tensor));
+  }
+  seq.add(poplar::program::Copy(copy_tensor.flatten(), destination.flatten()));
+  return seq;
+}
+}  // namespace
+
 Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
@@ -1079,7 +1109,8 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
 
-        seq.add(poplar::program::Copy(remote_buffer, tensor));
+        seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
+                                        tensor));
 
         // Add grouped such that all copies from the same instruction are
         // grouped together in the sequence, allowing Poplar to merge them.
@@ -1141,13 +1172,14 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
         TensorOrRemoteBufferVector inputs =
             FindInstructionInputs(tensor_map, resources_, inst, i, seq);
         CHECK_EQ(inputs.size(), 1);
-        poplar::RemoteBuffer input = inputs[0].AsRemoteBuffer();
+        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
 
         TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
                             FindInstructionInput(tensor_map, resources_, inst,
                                                  num_outputs + i, seq));
 
-        seq.add(poplar::program::Copy(input, tensor, offset));
+        seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
+                                        tensor, offset));
 
         // Add grouped such that all copies from the same instruction are
         // grouped together in the sequence, allowing Poplar to merge them.
