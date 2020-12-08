@@ -258,5 +258,13 @@ std::vector<std::vector<InfeedQueue*>>& InfeedIterator::GetInfeedQueues() {
   return infeed_queues_ptrs_;
 }
 
+void InfeedIterator::SignalAllQueuesToEnd() {
+  for (auto& queues : infeed_queues_ptrs_) {
+    for (auto& queue : queues) {
+      queue->SignalEndOfQueue();
+    }
+  }
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

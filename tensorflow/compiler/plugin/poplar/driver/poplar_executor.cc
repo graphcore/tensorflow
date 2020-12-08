@@ -958,18 +958,19 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
            ++replica_id) {
         std::vector<tensorflow::Tensor> outputs;
         bool end_of_sequence = false;
-        TF_RETURN_IF_ERROR(
-            infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence));
+        Status s = infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence);
 
+        // Handle the upstream iterator failing to produce an element
+        if (!s.ok()) {
+          // LOG(FATAL) aborts the thread and never returns.
+          LOG(FATAL) << "An infeed dataset iterator has failed with status: "
+                     << s.ToString();
+        }
+
+        // Handle the upstream iterator running out of elements
         if (end_of_sequence) {
           VLOG(1) << "The dataset iterator has reached the end of the dataset.";
-
-          for (auto& queues : infeed_queues) {
-            for (auto& queue : queues) {
-              queue->SignalEndOfQueue();
-            }
-          }
-
+          infeed_dataset_iterator->SignalAllQueuesToEnd();
           // This is not considered an error. However, we will report an
           // error if the consumer tries to pop past the end of the queue.
           return Status::OK();

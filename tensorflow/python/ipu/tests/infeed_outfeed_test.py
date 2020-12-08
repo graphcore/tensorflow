@@ -13,6 +13,9 @@
 # limitations under the License.
 # =============================================================================
 
+import signal
+import subprocess
+import sys
 from threading import Thread
 import numpy as np
 
@@ -20,7 +23,10 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.data.ops import readers
+from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import ops
@@ -30,6 +36,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import lookup_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import parsing_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -376,6 +383,35 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         'The IPUInfeedQueue `initializer` function can only be accessed once.'
     ):
       _ = infeed_queue.initializer
+
+  def _testDatasetExceptionTerminates(self):
+    # Normally we would use the deprecated_graph_mode_only decorator but this
+    # function is being called inside a subprocess independently.
+    with context.graph_mode():
+      BAD_PATH = 'this/path/doesnt/exist/'
+      dataset = readers.FixedLengthRecordDataset([BAD_PATH], 100)
+      dataset = dataset.map(
+          lambda f: parsing_ops.decode_raw(f, dtypes.float32)[0])
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, next_feed_id())
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(infeed_queue._dequeue, [])  # pylint: disable=protected-access
+      with session_lib.Session() as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(r)
+
+  def testDatasetExceptionTerminates(self):
+    TIMEOUT = 10
+    cmd = [
+        sys.executable, __file__, "{}.{}".format(
+            InfeedOutfeedTest.__name__,
+            InfeedOutfeedTest._testDatasetExceptionTerminates.__name__)
+    ]
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, timeout=TIMEOUT)
+    self.assertEqual(result.returncode, -signal.SIGABRT)
+    error = result.stderr.decode()
+    self.assertIn("An infeed dataset iterator has failed", error)
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeed(self):
