@@ -133,6 +133,8 @@ class InfeedIterator {
 
   std::vector<std::vector<InfeedQueue*>>& GetInfeedQueues();
 
+  void SignalAllQueuesToEnd();
+
  private:
   const int64 replication_factor_;
   std::vector<Shape> shapes_;

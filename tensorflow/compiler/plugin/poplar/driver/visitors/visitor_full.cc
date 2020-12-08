@@ -332,8 +332,6 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         break;
       }
       case HloOpcode::kTuple: {
-        // Get the operand index to the tuple instruction given the shape index.
-        const int64 operand_idx = index[0];
         break;
       }
       default: { break; }
