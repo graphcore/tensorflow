@@ -535,6 +535,12 @@ ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
       .IgnoreLayout()(lhs, rhs);
 }
 
+/* static */ bool ShapeUtil::CompatibleKind(
+    const Shape& lhs, const Shape& rhs) {
+  return Shape::Equal().IgnoreElementType().IgnoreLayout().IgnoreDimensions()
+      .IgnoreDynamicDimension()(lhs, rhs);
+}
+
 /* static */ bool ShapeUtil::CompatibleIgnoringFpPrecision(const Shape& lhs,
                                                            const Shape& rhs) {
   return Shape::Equal()
