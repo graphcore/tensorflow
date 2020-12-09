@@ -361,7 +361,7 @@ StatusOr<bool> AddLoadStoreOffsets(
 }
 
 struct RemoteBufferInfo {
-  std::size_t num_elements;
+  std::vector<int64> dimensions;
   PrimitiveType type;
   int64 num_repeats;
   int64 sharding_device;
@@ -369,8 +369,8 @@ struct RemoteBufferInfo {
 
 struct RemoteBufferInfoCmp {
   bool operator()(const RemoteBufferInfo& a, const RemoteBufferInfo& b) const {
-    return std::tie(a.num_elements, a.type, a.num_repeats, a.sharding_device) <
-           std::tie(b.num_elements, b.type, b.num_repeats, b.sharding_device);
+    return std::tie(a.dimensions, a.type, a.num_repeats, a.sharding_device) <
+           std::tie(b.dimensions, b.type, b.num_repeats, b.sharding_device);
   }
 };
 
@@ -396,14 +396,18 @@ RemoteBufferCreators FindRemoteBufferCreators(
         const int64 num_repeats =
             IsRemoteCreateBuffer(inst) ? ShapeUtil::GetDimension(shape, 0) : 1;
 
-        const int64 num_elements = ShapeUtil::ElementsIn(
-            IsRemoteCreateBuffer(inst) ? ShapeUtil::DeleteDimension(0, shape)
-                                       : shape);
+        const auto single_shape = IsRemoteCreateBuffer(inst)
+                                      ? ShapeUtil::DeleteDimension(0, shape)
+                                      : shape;
+        const auto& dimensions = single_shape.dimensions();
 
         const int64 sharding_device = GetSingleShardingDeviceId(inst);
 
-        const auto key = RemoteBufferInfo{num_elements, shape.element_type(),
-                                          num_repeats, sharding_device};
+        const auto key =
+            RemoteBufferInfo{{dimensions.begin(), dimensions.end()},
+                             single_shape.element_type(),
+                             num_repeats,
+                             sharding_device};
 
         remote_buffers[key].push_back(inst);
       }

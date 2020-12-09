@@ -183,6 +183,47 @@ ENTRY top {
   EXPECT_EQ(merged[1].buffer_offset, 1);
 }
 
+TEST_F(RemoteBufferMergerTest, TestRemoteParametersDifferentShapes) {
+  const auto hlo_string = R"(
+HloModule top
+
+load_func1 {
+  buffer = f32[5,2] parameter(0), sharding={maximal device=0}
+  ROOT load = f32[5,2] custom-call(buffer), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+}
+
+load_func2 {
+  buffer = f32[2,5] parameter(0), sharding={maximal device=0}
+  ROOT load = f32[2,5] custom-call(buffer), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+}
+
+ENTRY top {
+  buffer1 = f32[5,2] parameter(0), sharding={maximal device=0}
+  buffer2 = f32[2,5] parameter(1), sharding={maximal device=0}
+  loaded1 = f32[5,2] call(buffer1), to_apply=load_func1, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
+  loaded2 = f32[2,5] call(buffer2), to_apply=load_func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
+  ROOT ret = (f32[5,2], f32[2,5]) tuple(loaded1, loaded2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
+  // Mark both parameters as remote.
+  CompilerAnnotations annotations(module);
+  annotations.remote_parameter_infos.emplace(0);
+  annotations.remote_parameter_infos.emplace(1);
+
+  EXPECT_FALSE(RemoteBufferMerger(annotations).Run(module).ValueOrDie());
+}
+
 TEST_F(RemoteBufferMergerTest, TestRetainControlDependencies) {
   const auto hlo_string = R"(
 HloModule top
