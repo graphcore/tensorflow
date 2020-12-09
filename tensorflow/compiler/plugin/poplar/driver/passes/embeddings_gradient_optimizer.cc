@@ -157,6 +157,32 @@ std::unique_ptr<HloInstruction> CreateComputationParameter(int64 param_no,
   return HloInstruction::CreateParameter(param_no, shape, param_name);
 }
 
+void AdjustGTEIndices(Replacements& replacements, HloInstruction* call,
+                      int64 removed_index) {
+  // If we remove element from output tuple, we have to adjust indices for GTEs.
+  // For instance, for tuple of four elements returned, we have the following
+  // instructions:
+  //  gte.0 = get-tuple-element call, index=0
+  //  gte.1 = get-tuple-element call, index=1
+  //  gte.2 = get-tuple-element call, index=2
+  //  gte.3 = get-tuple-element call, index=3
+  // For instance, GTE with index of 1 has been removed by this pass, so we have
+  // adjust all GTEs with indices greater than 1
+  //  gte.0 = get-tuple-element call, index=0 [ignored]
+  //  gte.2 = get-tuple-element call, index=1 [index adjusted by -1]
+  //  gte.3 = get-tuple-element call, index=2 [index adjusted by -1]
+  // There should be no users other than GTE.
+
+  for (HloInstruction* gte : call->users()) {
+    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+    if (gte->tuple_index() > removed_index) {
+      auto clone = gte->Clone();
+      clone->set_tuple_index(gte->tuple_index() - 1);
+      replacements.emplace(gte, std::move(clone));
+    }
+  }
+}
+
 struct OptimisationPlan {
   int64 row_num;
   int64 mini_batches_num;
@@ -351,10 +377,14 @@ StatusOr<HloComputation*> ReplaceAccumulatorCaller(
     CHECK(IsTuple(output))
         << "Root instruction of pipeline stage is not a tuple.";
 
+    auto grad_add_output_index = output->operand_index(grad_add);
+    VLOG(2) << "Removing " << grad_add->ToString()
+            << " from output tuple at position " << grad_add_output_index;
     auto new_output = ReplaceInstruction(
         update_repl, output,
         SpliceOperands(output, output->shape(), {grad_add},
                        {grads_update.get(), indices_update.get()}));
+    AdjustGTEIndices(grad_repl, pipeline_stage, grad_add_output_index);
 
     auto grad_create_arg_index = pipeline_stage->operand_index(grad_create);
     VLOG(2) << "Fix pipeline stage arguments, removing arg "
@@ -559,7 +589,7 @@ absl::optional<PipelineCandidate> CheckPipelineEmbeddingsCandidate(
     VLOG(2) << "Checking result of resource_update: " << gte->ToString();
     if (gte->opcode() == HloOpcode::kGetTupleElement &&
         gte->tuple_index() == grad_add_output_index) {
-      VLOG(2) << "Found matching GTE...";
+      VLOG(2) << "Found matching GTE: " << gte->ToString();
       for (auto user : gte->users()) {
         if (IsGradientAccumulatorSink(user)) {
           VLOG(2) << "Found GradientAccumulatorSink: " << user->ToString();
