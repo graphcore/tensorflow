@@ -46,8 +46,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kFusion, NodeOperands({}), IsPopOpsConvolution},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), Is1DVector}
-    })
-  ),
+    })),
 
   // BiasAdd on convolution (w/ broadcast)
   HloMatcherPattern(
@@ -61,8 +60,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kConvolution, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), Is1DVector}
-    })
-  ),
+    })),
 
   // BiasAdd on convolution (w/ reshape)
   HloMatcherPattern(
@@ -76,8 +74,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kReshape, NodeOperands({3}), IsExpandingReshape},
       {HloOpcode::kConvolution, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), Is1DVector}
-    })
-  ),
+    })),
 
   // BiasAdd on a MatMul (w/ broadcast)
   HloMatcherPattern(
@@ -91,8 +88,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kDot, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), Is1DVector}
-    })
-  ),
+    })),
 
   // External padding with constant zero
   HloMatcherPattern(
@@ -105,8 +101,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kPad, NodeOperands({2, 1}), IsExternalPadding},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
+    })),
 
   // Random normal with post scale and add
   HloMatcherPattern(
@@ -122,8 +117,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kRng, NodeOperands({5, 6}), IsRandomNormal},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement}
-    })
-  ),
+    })),
 
   // Random normal with broadcasted post scale and add
   HloMatcherPattern(
@@ -141,8 +135,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kRng, NodeOperands({7, 8}), IsRandomNormal},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement}
-    })
-  ),
+    })),
 
   // Random uniform with post scale and add
   HloMatcherPattern(
@@ -158,8 +151,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kRng, NodeOperands({5, 6}), IsRandomUniform},
       {HloOpcode::kConstant, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({})}
-    })
-  ),
+    })),
 
   // Random uniform with broadcasted post scale and add
   HloMatcherPattern(
@@ -177,8 +169,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kRng, NodeOperands({7, 8}), IsRandomUniform},
       {HloOpcode::kConstant, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({})}
-    })
-  ),
+    })),
 
   // Bias reduction and application.
   HloMatcherPattern(
@@ -196,8 +187,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
-    })
-  ),
+    })),
 
   // Convolution followed by scaled add/subtract to - A = A +/- B * c
   HloMatcherPattern(
@@ -215,8 +205,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
-    })
-  ),
+    })),
 
   // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are constants)
   HloMatcherPattern(
@@ -316,8 +305,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant}
-    })
-  ),
+    })),
 
   // Scaled add/subtract to/from - X = a * X +/- Y (tensor)
   // (mixed precision)
@@ -370,8 +358,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
-    })
-  ),
+    })),
 
   // Scaled add/subtract to/from - X = X +/- b * Y (constant)
   HloMatcherPattern(
@@ -387,8 +374,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant}
-    })
-  ),
+    })),
 
   // Scaled add/subtract to/from - X = X +/- b * Y (tensor)
   // (mixed precision)
@@ -441,8 +427,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
-    })
-  ),
+    })),
 
   // Reduce window with a window size of 1x1, stride 1 and identity reduction
   // function (param 1 is returned)
@@ -456,8 +441,21 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kReduceWindow, NodeOperands({1, 2}), IsPaddingReduceWindow},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
+    })),
+
+  // Reduce sum a squared input.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(0),
+    PatternInputs({2, 3}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kReduce, NodeOperands({1, 3}), IsReduceAdd},
+      {HloOpcode::kMultiply, NodeOperands({2, 2})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
 
   // Reduction from FP16 to F32.
   HloMatcherPattern(
@@ -471,8 +469,7 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
-    })
-  ),
+    })),
 };
 // clang-format on
 

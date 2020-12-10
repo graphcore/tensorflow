@@ -27,6 +27,7 @@ limitations under the License.
 #include <poplin/Convolution.hpp>
 #include <popnn/Pooling.hpp>
 #include <popops/Expr.hpp>
+#include <popops/Operation.hpp>
 #include <poputil/exceptions.hpp>
 #include <vector>
 
@@ -122,6 +123,11 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output,
     TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateSimpleReduction(
+    CompilerResources& res, popops::Operation reduction_operation,
+    const HloInstruction* inst, const HloInstruction* reduce_inst,
+    const xla::Shape& output, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     CompilerResources& res, const HloInstruction* inst,

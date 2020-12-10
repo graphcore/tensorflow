@@ -47,7 +47,7 @@ bool ForwardAllocationGraphComparator::operator()(
   // Make sure parameters are last.
   const bool lhs_parameter = lhs->opcode() == HloOpcode::kParameter;
   const bool rhs_parameter = rhs->opcode() == HloOpcode::kParameter;
-   if (lhs_parameter == rhs_parameter) {
+  if (lhs_parameter == rhs_parameter) {
     return HloPtrComparator()(lhs, rhs);
   }
 
@@ -429,7 +429,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
         break;
       }
       case HloOpcode::kFusion: {
-        is_input = IsPopOpsFusion(inst, "reduction_fp16_input");
+        is_input = IsReductionFusion(inst);
         break;
       }
       case HloOpcode::kCustomCall: {

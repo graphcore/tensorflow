@@ -587,5 +587,22 @@ class ReductionFp16InputOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Reduction_fp16_input, ReductionFp16InputOp)
 
+class ReductionSquareAddOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    const HloInstruction* reduce_inst = inst->fused_expression_root();
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Program prog,
+        CreateSimpleReduction(res, popops::Operation::SQUARE_ADD, inst,
+                              reduce_inst, output_shape, tensor_map));
+    return prog;
+  }
+};
+
+REGISTER_POPLAR_OP(Reduction_square_add, ReductionSquareAddOp)
+
 }  // namespace poplarplugin
 }  // namespace xla

@@ -559,8 +559,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/AddTo',
           'vs/gradients/vs/Square_grad/Mul/fusion*/Op/Multiply',
           'vs/bias_add/fusion/Op/Add',
-          'vs/Sum/reduce',
-          'vs/Square/square*/Op/Square',
+          'vs/Sum/fusion*/Reduce',
       ]
       report.assert_all_compute_sets_and_list(ok)
 

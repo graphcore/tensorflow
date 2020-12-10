@@ -1184,6 +1184,24 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
+  def testSquareSum(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [3], name="a")
+        c = math_ops.reduce_sum(pa * pa)
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      fd = {pa: [-6.0, 0.0, 6.0]}
+      result = sess.run(c, fd)
+      self.assertAllClose(result, 72)
+
+      report.parse_log(assert_len=4)
+
+      ok = ['__seed*', 'Sum/fusion*/Reduce']
+      report.assert_all_compute_sets_and_list(ok)
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
