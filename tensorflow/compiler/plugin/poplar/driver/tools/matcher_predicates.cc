@@ -487,6 +487,11 @@ bool IsAnySliceApply(const HloInstruction* inst) {
   return false;
 }
 
+bool IsReductionFusion(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "reduction_fp16_input") ||
+         IsPopOpsFusion(inst, "reduction_square_add");
+}
+
 bool IsWideConstant(const HloInstruction* inst) {
   return IsPopOpsFusion(inst, "wide_const");
 }
@@ -524,22 +529,26 @@ bool IsSingleElement(const HloInstruction* inst) {
   return ShapeUtil::ElementsIn(inst->shape()) == 1;
 }
 
-bool IsReduceAddOrMultiply(const HloInstruction* inst) {
+namespace {
+bool IsReduceWithRootOp(const HloInstruction* inst, HloOpcode opcode) {
   if (inst->opcode() == HloOpcode::kReduce) {
     HloInstruction* root(inst->to_apply()->root_instruction());
     if (!hlo_query::AllOperandsAreParameters(*root)) {
       return false;
     }
-
-    switch (root->opcode()) {
-      case HloOpcode::kAdd:
-      case HloOpcode::kMultiply:
-        return true;
-      default:
-        return false;
-    }
+    return root->opcode() == opcode;
   }
   return false;
+}
+}  // namespace
+
+bool IsReduceAdd(const HloInstruction* inst) {
+  return IsReduceWithRootOp(inst, HloOpcode::kAdd);
+}
+
+bool IsReduceAddOrMultiply(const HloInstruction* inst) {
+  return IsReduceWithRootOp(inst, HloOpcode::kAdd) ||
+         IsReduceWithRootOp(inst, HloOpcode::kMultiply);
 }
 
 bool IsSerializedGradientAccumulation(const HloInstruction* inst) {

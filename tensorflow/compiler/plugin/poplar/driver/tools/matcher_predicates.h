@@ -35,6 +35,7 @@ bool IsCompareGreater(const HloInstruction*);
 bool IsCompareGreaterOrEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
+bool IsReductionFusion(const HloInstruction*);
 bool IsWideConstant(const HloInstruction*);
 bool IsWideConstantZero(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
@@ -80,6 +81,7 @@ bool IsMultiSliceGather(const HloInstruction*);
 bool IsAnySliceApply(const HloInstruction*);
 bool IsUniformSingleDimSlice(const HloInstruction*);
 bool IsSingleElement(const HloInstruction*);
+bool IsReduceAdd(const HloInstruction*);
 bool IsReduceAddOrMultiply(const HloInstruction*);
 bool IsSerializedGradientAccumulation(const HloInstruction*);
 /**

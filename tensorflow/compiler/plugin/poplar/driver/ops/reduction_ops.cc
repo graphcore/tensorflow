@@ -333,6 +333,16 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output_shape,
     TensorMap& tensor_map) {
+  const HloInstruction* root = reduce_inst->to_apply()->root_instruction();
+  popops::Operation reduction_operation = PoplibsReductionOperation(root);
+  return CreateSimpleReduction(res, reduction_operation, inst, reduce_inst,
+                               output_shape, tensor_map);
+}
+
+StatusOr<poplar::program::Program> CreateSimpleReduction(
+    CompilerResources& res, popops::Operation reduction_operation,
+    const HloInstruction* inst, const HloInstruction* reduce_inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
   poplar::program::Sequence seq;
   poplar::Tensor out;
 
@@ -348,7 +358,6 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
 
     const HloInstruction* root = reduce_inst->to_apply()->root_instruction();
-    popops::Operation op = PoplibsReductionOperation(root);
 
     std::vector<std::size_t> reduction_dims;
     for (auto d : reduce_inst->dimensions()) {
@@ -377,8 +386,8 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
           std::max<unsigned>(1, out.numElements() / tiles.size()));
     }
 
-    popops::reduceWithOutput(graph, to_reduce, out, reduction_dims, op, seq,
-                             GetDebugName(inst));
+    popops::reduceWithOutput(graph, to_reduce, out, reduction_dims,
+                             reduction_operation, seq, GetDebugName(inst));
 
     // Apply initial value
     Literal identity_literal = GetIdentityConstantLiteral(root, inst);

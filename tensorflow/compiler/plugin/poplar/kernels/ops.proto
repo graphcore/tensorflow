@@ -111,4 +111,5 @@ enum PoplarOp {
   Implicit_ternary_inplace = 218;
   Scaled_inplace_axy = 219;
   Reduction_fp16_input = 220;
+  Reduction_square_add = 221;
 }
