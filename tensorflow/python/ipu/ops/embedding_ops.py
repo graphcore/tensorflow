@@ -106,7 +106,7 @@ def embedding_lookup(params,
         assert (table_shape[0] % serialization_factor) == 0
         split_size = table_shape[0] // serialization_factor
 
-        @functional_ops.outlined_function
+        @functional_ops.outlined_function(keep_input_layouts=False)
         def func(sliced_table, indices, min_idx):
           with ops.name_scope(scope_name):
             # Do a serialized embedding lookup by adjusting the indices.
