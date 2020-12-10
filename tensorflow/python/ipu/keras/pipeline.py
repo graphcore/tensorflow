@@ -61,13 +61,13 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   of layers becomes a list of lists of layers, where each list contains the
   layers for a particular stage.
 
-  The pipeline depth argument describes the number of mini-batches which are
-  sent through the pipeline in a single operation of the pipeline.  The
-  effective batch size is therefore the mini-batch size multipled by the
-  pipeline depth.
+  The `gradient_accumulation_count` argument describes the number of
+  mini-batches which are sent through the pipeline in a single operation of the
+  pipeline.  The effective batch size is therefore the mini-batch size multipled
+  by the gradient accumulation count.
 
   There are some limitations with the SequentialPipelineModel compared to the
-  standard Keras Model.
+  standard Keras Model:
 
   - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
@@ -76,6 +76,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
   - It cannot be used in a custom training loop.
+  - The model cannot be saved using the `save` interface.
 
   The model will only be constructed after the first call to the `fit` method,
   so a summary of the model will not be possible until after some training
@@ -125,10 +126,10 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                layer_replacement=False,
                **kwargs):
     """
-    Creates a pipelined model.
+    Creates a sequential pipelined model.
 
     Args:
-        stages: A python list of lists of Layers.
+        stages: A Python list of lists of Layers.
         gradient_accumulation_count: The number of mini-batches processed by
             the pipeline on each iteration.
         gradient_accumulation_dtype: The data type used for the gradient
@@ -150,24 +151,28 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             represents which IPU the computational stage
             `computational_stages[i]` should reside on.
             This can be used to make sure computational stages which share
-            tf.Variable`s are resident on the same IPU.
+            `tf.Variable` objects are resident on the same IPU.
         pipeline_schedule: the scheduling algorithm to use for pipeline
             lowering. Must be of type
             :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
         recomputation_mode: the recomputation mode to use for training pipeline
             models. Must be of type
             :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
-        forward_propagation_stages_poplar_options: If provided, a list of
-            length equal to the number of computational stages. Each element is
-            a PipelineStageOptions object which allows for fine grain control
+        forward_propagation_stages_poplar_options: If provided, a list of length
+            equal to the number of computational stages. Each element is a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
+            object which allows for fine grain control
             of the Poplar options for a given forward propagation computational
             stage.
         backward_propagation_stages_poplar_options: If provided, a list of
             length equal to the number of computational stages. Each element is
-            a PipelineStageOptions object which allows for fine grained control
+            a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
+            object which allows for fine grained control
             of the Poplar options for a given backward propagation
             computational stage.
-        weight_update_poplar_options: If provided, a PipelineStageOptions
+        weight_update_poplar_options: If provided, a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
             object which allows for fine grained control of the Poplar options
             for the weight update stage.
         replicated_optimizer_state_sharding: If True, any `tf.Variable` which
@@ -175,7 +180,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             `tf.MomentumOptimizer`), will be partitioned across the replicas.
             This can exploit the additional bandwidth of the IPU-Links to
             improve overall throughput.
-            Note that this option has no effect for inference only pipelines.
+            Note that this option has no effect for inference-only pipelines.
         offload_activations: When enabled, all the activations for the batches
             which are not being executed by the pipeline stages at the given
             time are stored in remote memory. Requires the machine to be
@@ -196,11 +201,11 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             `Poplar remote buffers`.
             When set to `None`, the `offload_gradient_accumulation_buffers`
             might be offloaded when beneficial.
-            Note that this option has no effect for inference only pipelines.
+            Note that this option has no effect for inference-only pipelines.
         replicated_weight_sharding: When enabled and running a replicated
-            model, any `tf.Variable`s used by the pipeline stage computations
-            (excluding those only used by the weight update), will be
-            partitioned across the replicas. Whenever the a partitioned
+            model any `tf.Variable` objects used by the pipeline stage
+            computations (excluding those only used by the weight update) will
+            be partitioned across the replicas. Whenever a partitioned
             `tf.Variable` is accessed, it will be first all-gathered across
             replicas to make sure each replica has access to the whole
             `tf.Variable`. This can exploit the additional bandwidth of the
@@ -268,6 +273,12 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     self.offload_weights = offload_weights
 
   def build(self, input_shape):
+    """Builds the model based on input shapes received.
+
+    Args:
+     input_shape: Single tuple, TensorShape, or list of shapes, where shapes
+         are tuples, integers, or TensorShapes.
+    """
     s = input_shape
     for l in self.layers:
       l.build(s)
@@ -290,9 +301,10 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     method.
 
     Certain features are not supported by the IPU SequentialPipelineModel:
-    - sample_weight_mode
-    - weighted_metrics
-    - target_tensors
+
+      - sample_weight_mode
+      - weighted_metrics
+      - target_tensors
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -409,9 +421,9 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     training run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().fit(x,
                        y,
@@ -444,9 +456,9 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     evaluation run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().evaluate(x,
                             y,
@@ -481,9 +493,9 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     prediction run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -501,8 +513,10 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
            save_format=None,
            signatures=None,
            options=None):
+    """ IPU Keras models do not support the `save` interface.
+    """
     raise NotImplementedError(
-        "IPU models do not support the `save` interface.")
+        "IPU Keras models do not support the `save` interface.")
 
 
 class PipelineStage(object):
@@ -541,8 +555,8 @@ class PipelineModel(ipu_model.Model):
   the stages.
 
   The different stages are specified when defining the graph structure via use
-  of the PipelineStage context manager, as follows for a simple two
-  stage pipeline:
+  of the `PipelineStage` context manager, as follows for a simple two stage
+  pipeline:
 
   .. code-block:: python
 
@@ -555,20 +569,22 @@ class PipelineModel(ipu_model.Model):
       with PipelineStage(1):
         x = Dense(4)(x)
 
-  The pipeline depth argument describes the number of mini-batches which are
-  sent through the pipeline in a single operation of the pipeline.  The
-  effective batch size is therefore the mini-batch size multipled by the
-  pipeline depth.
+  The `gradient_accumulation_count` argument describes the number of
+  mini-batches which are sent through the pipeline in a single operation of the
+  pipeline. The effective batch size is therefore the mini-batch size multipled
+  by the gradient accumulation count.
 
   There are some limitations with the PipelineModel compared to the
-  standard Keras Model.
+  standard Keras Model:
 
+  - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
   - Loss weightings can only be specified as a list, not a callable.
   - Weighted metrics, target tensors and sample weight mode are not supported.
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
   - It cannot be used in a custom training loop.
+  - The model cannot be saved using the `save` interface.
 
   Example:
 
@@ -640,14 +656,14 @@ class PipelineModel(ipu_model.Model):
           dtype a cast is needed at some point to make them compatible. This can
           be done by using a custom optimizer.
         batch_serialization_iterations: number of times a loop executes to
-        compute a batch on each pipeline stage execution. Currently only
-        supported with the `PipelineSchedule.Sequential`.
+            compute a batch on each pipeline stage execution. Currently only
+            supported with the `PipelineSchedule.Sequential`.
         device_mapping: If provided, a list of length equal to the number of
             computational stages. An element at index `i` in the list
             represents which IPU the computational stage
             `computational_stages[i]` should reside on.
             This can be used to make sure computational stages which share
-            tf.Variable`s are resident on the same IPU.
+            `tf.Variable` objects are resident on the same IPU.
         pipeline_schedule: the scheduling algorithm to use for pipeline
             lowering. Must be of type
             :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
@@ -656,15 +672,20 @@ class PipelineModel(ipu_model.Model):
             :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
         forward_propagation_stages_poplar_options: If provided, a list of
             length equal to the number of computational stages. Each element is
-            a PipelineStageOptions object which allows for fine grain control of
+            a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
+            object which allows for fine grain control of
             the Poplar options for a given forward propagation computational
             stage.
         backward_propagation_stages_poplar_options: If provided, a list of
             length equal to the number of computational stages. Each element is
-            a PipelineStageOptions object which allows for fine grained control
+            a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
+            object which allows for fine grained control
             of the Poplar options for a given backward propagation computational
             stage.
-        weight_update_poplar_options: If provided, a PipelineStageOptions
+        weight_update_poplar_options: If provided, a
+            :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
             object which allows for fine grained control of the Poplar options
             for the weight update stage.
         replicated_optimizer_state_sharding: If True, any `tf.Variable` which
@@ -672,7 +693,7 @@ class PipelineModel(ipu_model.Model):
             `tf.MomentumOptimizer`), will be partitioned across the replicas.
             This can exploit the additional bandwidth of the IPU-Links to
             improve overall throughput.
-            Note that this option has no effect for inference only pipelines.
+            Note that this option has no effect for inference-only pipelines.
         offload_activations: When enabled, all the activations for the batches
             which are not being executed by the pipeline stages at the given
             time are stored in remote memory. Requires the machine to be
@@ -693,11 +714,11 @@ class PipelineModel(ipu_model.Model):
             `Poplar remote buffers`.
             When set to `None`, the `offload_gradient_accumulation_buffers`
             might be offloaded when beneficial.
-            Note that this option has no effect for inference only pipelines.
+            Note that this option has no effect for inference-only pipelines.
         replicated_weight_sharding: When enabled and running a replicated
-            model, any `tf.Variable`s used by the pipeline stage computations
-            (excluding those only used by the weight update), will be
-            partitioned across the replicas. Whenever the a partitioned
+            model any `tf.Variable` objects used by the pipeline stage
+            computations (excluding those only used by the weight update) will
+            be partitioned across the replicas. Whenever a partitioned
             `tf.Variable` is accessed, it will be first all-gathered across
             replicas to make sure each replica has access to the whole
             `tf.Variable`. This can exploit the additional bandwidth of the
@@ -946,10 +967,11 @@ class PipelineModel(ipu_model.Model):
     """
     This provides the same functionality as the Keras Model ``compile`` method.
 
-    Certain features are not supported by the IPU Pipelined Model:
-    - sample_weight_mode
-    - weighted_metrics
-    - target_tensors
+    Certain features are not supported by the IPU PipelineModel:
+
+      - sample_weight_mode
+      - weighted_metrics
+      - target_tensors
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -975,9 +997,9 @@ class PipelineModel(ipu_model.Model):
     training run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().fit(x,
                        y,
@@ -1010,9 +1032,9 @@ class PipelineModel(ipu_model.Model):
     evaluation run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().evaluate(x,
                             y,
@@ -1047,9 +1069,9 @@ class PipelineModel(ipu_model.Model):
     prediction run in a single call to hardware.  The `steps_per_run` argument
     is needed to describe how many steps should be performed on each hardware
     execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    for the mini-batch size multiplied by the gradient accumulation count
+    multiplied by the steps_per_run value.  If the dataset is infinite, because
+    it has been repeated indefinitely, then this condition is satisfied.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -1067,5 +1089,7 @@ class PipelineModel(ipu_model.Model):
            save_format=None,
            signatures=None,
            options=None):
+    """ IPU Keras models do not support the `save` interface.
+    """
     raise NotImplementedError(
-        "IPU models do not support the `save` interface.")
+        "IPU Keras models do not support the `save` interface.")

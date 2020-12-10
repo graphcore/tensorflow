@@ -125,9 +125,11 @@ Keras
 .. automodule:: tensorflow.python.ipu.keras
   :members: Model, Sequential, PipelineStage, PipelineModel, SequentialPipelineModel
   :imported-members: Model, Sequential, PipelineModel, PipelineStage, SequentialPipelineModel
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.keras.model
   :members: IPUModel, IPUSequential
+  :special-members: __init__
 
 .. _keras-layers-api:
 

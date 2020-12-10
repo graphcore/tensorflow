@@ -146,7 +146,7 @@ def _autocast_dataset(dataset):
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
-  """A class which wraps a standard Tensorflow optimizer, giving it a TF
+  """A class which wraps a standard TensorFlow optimizer, giving it a TF
   optimizer interface, but generating gradients against the Keras Model.
   """
   def __init__(self, model, opt):
@@ -688,7 +688,7 @@ class IPUSequential(_IpuModelBase):
   accumulation of gradient deltas, and an on-device training loop.
 
   There are some limitations with this Sequential class compared to the
-  standard Keras Sequential class.
+  standard Keras Sequential class:
 
   - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
@@ -696,11 +696,7 @@ class IPUSequential(_IpuModelBase):
   - Weighted metrics, target tensors and sample weight mode are not supported.
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
-
-  The model will only be constructed after the first call to the `fit` method,
-  so a summary of the model will not be possible until after some training
-  has occurred.  Related to this, the `build` method does not build the
-  model.
+  - The model cannot be saved using the `save` interface.
 
   Example:
 
@@ -727,10 +723,10 @@ class IPUSequential(_IpuModelBase):
                accumulation_dtype=None,
                layer_replacement=False):
     """
-    Creates a Keras model, optimized to run on the IPU.
+    Creates a Keras sequential model, optimized to run on the IPU.
 
     Args:
-        layers: A python list of Keras Layers.
+        layers: A Python list of Keras Layers.
         accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
@@ -765,6 +761,12 @@ class IPUSequential(_IpuModelBase):
     self.model_layers = layers
 
   def build(self, input_shape):
+    """Builds the model based on input shapes received.
+
+    Args:
+     input_shape: Single tuple, TensorShape, or list of shapes, where shapes
+         are tuples, integers, or TensorShapes.
+    """
     s = input_shape
     for l in self.model_layers:
       l.build(s)
@@ -783,9 +785,10 @@ class IPUSequential(_IpuModelBase):
     method.
 
     Certain features are not supported by the IPU Sequential class:
-    - sample_weight_mode
-    - weighted_metrics
-    - target_tensors
+
+      - sample_weight_mode
+      - weighted_metrics
+      - target_tensors
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -879,13 +882,12 @@ class IPUSequential(_IpuModelBase):
     """
     This provides the same functionality as the Keras Sequential `fit` method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return super().fit(x,
                        y,
@@ -916,13 +918,12 @@ class IPUSequential(_IpuModelBase):
     This provides the same functionality as the Keras Sequential `evaluate`
     method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    evaluation run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return super().evaluate(x,
                             y,
@@ -949,19 +950,12 @@ class IPUSequential(_IpuModelBase):
     This provides the same functionality as the Keras Sequential `predict`
     method.
 
-    The predict method operates on a DataSet, because the IPU pipelining
-    mechanism relies on feeding data to the system in a stream.  So single
-    predictions cannot be performed using this method.  Exporting the model
-    parameters, and importing them into the same model but not pipelined will
-    allow single mini-batches.
-
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    prediction run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
+    The `steps_per_run` argument is needed to describe how many steps should be
+    performed on each hardware execution.
+    The dataset should be able to provide enough samples to run for the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -979,8 +973,10 @@ class IPUSequential(_IpuModelBase):
            save_format=None,
            signatures=None,
            options=None):
+    """ IPU Keras models do not support the `save` interface.
+    """
     raise NotImplementedError(
-        "IPU keras models do not support the `save` interface.")
+        "IPU Keras models do not support the `save` interface.")
 
 
 class IPUModel(_IpuModelBase):
@@ -989,13 +985,15 @@ class IPUModel(_IpuModelBase):
   gradient deltas, and an on-device training loop.
 
   There are some limitations with the IPU Model class compared to the standard
-  Keras Model class.
+  Keras Model class:
 
+  - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
   - Loss weightings can only be specified as a list, not a callable.
   - Weighted metrics, target tensors and sample weight mode are not supported.
   - Validation cannot be performed as part of the `fit` loop.
   - The model cannot be called using the __call__() interface.
+  - The model cannot be saved using the `save` interface.
 
   Example:
 
@@ -1028,8 +1026,10 @@ class IPUModel(_IpuModelBase):
                layer_replacement=False,
                **kwargs):
     """
-    Creates a Keras model, optimized to run on the IPU. ``inputs`` and
-    ``outputs`` must be passed in as either arguments or keyword arguments.
+    Creates a Keras model, optimized to run on the IPU.
+
+    ``inputs`` and ``outputs`` must be passed in as either arguments or keyword
+    arguments.
 
     Args:
         accumulation_count: The number of mini-batches to process
@@ -1392,9 +1392,10 @@ class IPUModel(_IpuModelBase):
     This provides the same functionality as the Keras Model ``compile`` method.
 
     Certain features are not supported by the IPU Model:
-    - sample_weight_mode
-    - weighted_metrics
-    - target_tensors
+
+      - sample_weight_mode
+      - weighted_metrics
+      - target_tensors
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -1420,9 +1421,9 @@ class IPUModel(_IpuModelBase):
     The `steps_per_run` argument is needed to describe how many steps should be
     performed on each hardware execution.
     The dataset should be able to provide enough samples to run for the
-    mini-batch size multiplied by the steps_per_run value. If the dataset is
-    infinite, because it has been repeated indefinitely, then this condition is
-    satisfied.
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return super().fit(x,
                        y,
@@ -1455,9 +1456,9 @@ class IPUModel(_IpuModelBase):
     The `steps_per_run` argument is needed to describe how many steps should be
     performed on each hardware execution.
     The dataset should be able to provide enough samples to run for the
-    mini-batch size multiplied by the steps_per_run value. If the dataset is
-    infinite, because it has been repeated indefinitely, then this condition is
-    satisfied.
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return super().evaluate(x,
                             y,
@@ -1486,9 +1487,9 @@ class IPUModel(_IpuModelBase):
     The `steps_per_run` argument is needed to describe how many steps should be
     performed on each hardware execution.
     The dataset should be able to provide enough samples to run for the
-    mini-batch size multiplied by the steps_per_run value. If the dataset is
-    infinite, because it has been repeated indefinitely, then this condition is
-    satisfied.
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the steps_per_run value. If the dataset is infinite, because it has been
+    repeated indefinitely, then this condition is satisfied.
     """
     return self._format_output(super().predict(x,
                                                batch_size=batch_size,
@@ -1506,8 +1507,10 @@ class IPUModel(_IpuModelBase):
            save_format=None,
            signatures=None,
            options=None):
+    """ IPU Keras models do not support the `save` interface.
+    """
     raise NotImplementedError(
-        "IPU keras models do not support the `save` interface.")
+        "IPU Keras models do not support the `save` interface.")
 
 
 Model = IPUModel
