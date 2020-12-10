@@ -156,35 +156,6 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
     InplaceCandidates& inplace_read_only_candidates =
         inplace_candidates[HloInstructionType::kInplaceReadOnly];
 
-    // For each route in map mark inplace ops as high priority inplace
-    // candidates.
-    for (auto& r : routes) {
-      for (auto& inst : r.second) {
-        switch (inst->opcode()) {
-          case HloOpcode::kAdd:
-          case HloOpcode::kFusion:
-          case HloOpcode::kDynamicUpdateSlice:
-          case HloOpcode::kMultiply:
-          case HloOpcode::kSubtract: {
-            inplace_read_write_candidates[InplacePriority::kHigh].push_back(
-                inst);
-            break;
-          }
-          case HloOpcode::kAddDependency: {
-            inplace_read_only_candidates[InplacePriority::kHigh].push_back(
-                inst);
-            break;
-          }
-          case HloOpcode::kGetTupleElement: {
-            inplace_gte_candidates[InplacePriority::kHigh].push_back(inst);
-            break;
-          }
-          default:
-            break;
-        }
-      }
-    }
-
     auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
       auto inst_description = HloInstructionDescription(inst);
       switch (inst_description.GetType()) {
@@ -205,6 +176,27 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       }
     };
 
+    // For each route in map mark inplace ops as high priority inplace
+    // candidates.
+    for (auto& r : routes) {
+      for (auto& inst : r.second) {
+        switch (inst->opcode()) {
+          case HloOpcode::kAdd:
+          case HloOpcode::kFusion:
+          case HloOpcode::kDynamicUpdateSlice:
+          case HloOpcode::kMultiply:
+          case HloOpcode::kSubtract:
+          case HloOpcode::kAddDependency:
+          case HloOpcode::kGetTupleElement: {
+            AddToQueue(inst, InplacePriority::kHigh);
+            break;
+          }
+          default:
+            break;
+        }
+      }
+    }
+
     // Get all possible remaining inplace instructions.
     // Give medium priority to outlined poplibs calls.
     for (auto* inst : comp->MakeInstructionPostOrder()) {
@@ -214,8 +206,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         switch (inst->opcode()) {
           case HloOpcode::kCustomCall:
           case HloOpcode::kFusion: {
-            inplace_read_write_candidates[InplacePriority::kMedium].push_back(
-                inst);
+            AddToQueue(inst, InplacePriority::kMedium);
             break;
           }
           default: {
