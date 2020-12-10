@@ -32,7 +32,7 @@ from tensorflow.python.util import nest
 
 def outlined_function(func=None,
                       unique_sharding=False,
-                      keep_input_layouts=False,
+                      keep_input_layouts=None,
                       name=None):
   """
   An outlined function is a block of organized, reusable code which is used to
@@ -62,7 +62,8 @@ def outlined_function(func=None,
     keep_input_layouts: Whether to keep the layouts of the function inputs when
       calling the function or re-allocate them based on the operations inside
       the function. Reallocating them can improve the performance, but it can
-      also increase the IPU code size.
+      also increase the IPU code size. When set to 'None', this option will be
+      decided automatically.
     name: The name of the function.
 
   Returns:

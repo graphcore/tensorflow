@@ -252,7 +252,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
   def testFunctionSerializedLookup(self):
     with tu.ipu_session() as sess:
 
-      @ipu.outlined_function
+      @ipu.outlined_function(keep_input_layouts=False)
       def func(table, indices, min_idx, max_idx):
         # Do a serialized embedding lookup by adjusting the indices.
         adjusted_indices = indices - min_idx
