@@ -135,6 +135,22 @@ uint64 GetUpdateDimSize(const HloMultiUpdateInstruction* inst) {
   return inst->operand(2)->shape().dimensions(inst->GetUpdateSliceDimension());
 }
 
+bool IndicesCastable(const HloInstruction* inst) {
+  switch (inst->shape().element_type()) {
+    case PrimitiveType::S32:
+    case PrimitiveType::S64:
+    case PrimitiveType::U32:
+    case PrimitiveType::U64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IndicesCastable(const HloInstruction* inst1, const HloInstruction* inst2) {
+  return IndicesCastable(inst1) && IndicesCastable(inst2);
+}
+
 }  // namespace
 
 MultiUpdateCombiner::MultiUpdateCombiner(
@@ -163,9 +179,22 @@ StatusOr<bool> MultiUpdateCombiner::HandleMatch(
     return false;
   }
 
-  // Concat the indices.
+  // Check the indices are the same type, or castable to the same type
   HloInstruction* indices1 = multi_update1->mutable_operand(1);
   HloInstruction* indices2 = multi_update2->mutable_operand(1);
+  PrimitiveType indices2_type = indices2->shape().element_type();
+  if (indices1->shape().element_type() != indices2_type) {
+    if (IndicesCastable(indices1, indices2)) {
+      Shape indices1_new_shape = indices1->shape();
+      indices1_new_shape.set_element_type(indices2_type);
+      indices1 = computation->AddInstruction(
+          HloInstruction::CreateConvert(indices1_new_shape, indices1));
+    } else {
+      return false;
+    }
+  }
+
+  // Concat the indices.
   std::vector<HloInstruction*> indices = {indices1, indices2};
   HloInstruction* new_indices =
       computation->AddInstruction(HloInstruction::CreateConcatenate(

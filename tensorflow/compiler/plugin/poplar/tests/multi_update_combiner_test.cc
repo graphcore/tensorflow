@@ -331,6 +331,116 @@ main {
                                  m::Scatter())));
 }
 
+TEST_F(MultiUpdateCombinerTest, CompatibleMultiUpdateAddIndexTypes) {
+  std::string hlo_string = R"(
+HloModule top
+scatter-combiner1 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+scatter-combiner2 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+scatter-combiner3 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+
+main {
+  arg0 = s32[15] parameter(0)
+  arg1 = f16[15,1200] parameter(1)
+  arg2 = s64[75] parameter(2)
+  arg3 = f16[75,1200] parameter(3)
+	zero = f16[] constant(0)
+	big_zero = f16[2000,1200] broadcast(zero), dimensions={}
+  s1 = f16[2000,1200] scatter(big_zero, arg0, arg1), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner1
+  s2 = f16[2000,1200] scatter(big_zero, arg2, arg3), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner2
+  ROOT add = f16[2000,1200] add(s2, s1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  ScatterSimplifier sc;
+  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  HloCSE cse(false);
+  cse.Run(module).ValueOrDie();
+  MultiUpdateCombiner mu_combiner(annotations);
+  bool changed = mu_combiner.Run(module).ValueOrDie();
+  EXPECT_TRUE(changed);
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 1);
+}
+
+TEST_F(MultiUpdateCombinerTest, IncompatibleMultiUpdateAddIndexTypes) {
+  std::string hlo_string = R"(
+HloModule top
+scatter-combiner1 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+scatter-combiner2 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+scatter-combiner3 {
+  p0 = f16[] parameter(0)
+  p1 = f16[] parameter(1)
+  ROOT add = f16[] add(p0, p1)
+}
+
+main {
+  arg0 = s32[15] parameter(0)
+  arg1 = f16[15,1200] parameter(1)
+  arg2 = s16[75] parameter(2)
+  arg3 = f16[75,1200] parameter(3)
+	zero = f16[] constant(0)
+	big_zero = f16[2000,1200] broadcast(zero), dimensions={}
+  s1 = f16[2000,1200] scatter(big_zero, arg0, arg1), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner1
+  s2 = f16[2000,1200] scatter(big_zero, arg2, arg3), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner2
+  ROOT add = f16[2000,1200] add(s2, s1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  ScatterSimplifier sc;
+  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  HloCSE cse(false);
+  cse.Run(module).ValueOrDie();
+  MultiUpdateCombiner mu_combiner(annotations);
+  bool changed = mu_combiner.Run(module).ValueOrDie();
+  EXPECT_FALSE(changed);
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
