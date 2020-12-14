@@ -169,11 +169,6 @@ struct CompilerResources {
                       std::pair<poplar::program::Sequence, poplar::Tensor>>
       outfeed_cache;
 
-  // Store a map from a reference key to the reference tensor and the IPU which
-  // it resides on.
-  absl::flat_hash_map<std::string, std::pair<poplar::Tensor, unsigned>>
-      reference_tensors;
-
   // TODO(T28772): remove this mapping and the extra copy.
   absl::flat_hash_map<std::string, poplar::Tensor> remote_buffer_layouts;
 
