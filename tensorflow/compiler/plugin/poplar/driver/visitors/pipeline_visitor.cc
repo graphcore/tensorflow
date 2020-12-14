@@ -1632,9 +1632,6 @@ Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   absl::c_transform(inter_ipu_copy_sequences_,
                     inter_ipu_copy_sequences_.begin(), to_function);
   absl::c_transform(fifo_sequences_, fifo_sequences_.begin(), to_function);
-  absl::c_transform(infeed_sequences_, infeed_sequences_.begin(), to_function);
-  absl::c_transform(outfeed_sequences_, outfeed_sequences_.begin(),
-                    to_function);
   absl::c_transform(program_sequences_, program_sequences_.begin(),
                     to_function);
   absl::c_transform(recomputation_sequences_, recomputation_sequences_.begin(),
