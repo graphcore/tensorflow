@@ -128,7 +128,7 @@ def _group_norm_impl(inputs,
       gamma = array_ops.constant(1.0, dtype=dtype, shape=params_shape)
 
     if training:
-      outputs, _, _, _ = gen_popnn_ops.popnn_group_norm_training(
+      outputs, _, _ = gen_popnn_ops.popnn_group_norm_training(
           inputs=inputs,
           gamma=gamma,
           beta=beta,

@@ -147,7 +147,7 @@ class GroupNorm(ipu_layer.IPULayer):
                                       shape=params_shape)
 
     def group_norm_training():
-      outputs, _, _, _ = gen_popnn_ops.popnn_group_norm_training(
+      outputs, _, _ = gen_popnn_ops.popnn_group_norm_training(
           inputs=inputs,
           gamma=self.gamma,
           beta=self.beta,

@@ -174,21 +174,23 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
     input_whitened = np.reshape(input_whitened, original_shape)
     output = input_whitened * gamma + beta
 
+    # Undo the shuffle.
+    if strided_channel_grouping:
+      output = np.swapaxes(output, 0, feature_index)
+
+      reshuffled_output = np.empty(output.shape, output.dtype)
+      for to_idx in range(num_channels):
+        from_idx = (to_idx % groups) * group_size + to_idx // groups
+        reshuffled_output[to_idx] = output[from_idx]
     inv_std_dev = np.power(variance + epsilon, -0.5)
+
     mean_out = np.reshape(np.squeeze(mean), (mean.size))
     var_out = np.reshape(np.squeeze(inv_std_dev), (inv_std_dev.size))
 
-    def reorder(x):
-      if strided_channel_grouping:
-        x = np.swapaxes(x, 0, feature_index)
-        reshuffled_x = np.empty(x.shape, x.dtype)
-        for to_idx in range(num_channels):
-          from_idx = (to_idx % groups) * group_size + to_idx // groups
-          reshuffled_x[to_idx] = x[from_idx]
-        x = np.swapaxes(reshuffled_x, 0, feature_index)
-      return x
-
-    return reorder(output), mean_out, var_out, reorder(input_whitened)
+    if strided_channel_grouping:
+      return (np.swapaxes(reshuffled_output, 0,
+                          feature_index), mean_out, var_out)
+    return (output, mean_out, var_out)
 
   def _refGroupNormStatistics(self,
                               inputs,
@@ -297,8 +299,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
         pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
         pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
         pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
-        norm, mean, inv_std_dev, \
-          whitened_inputs = gen_popnn_ops.popnn_group_norm_training(
+        norm, mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_training(
             inputs=pinputs,
             gamma=pgamma,
             beta=pbeta,
@@ -312,7 +313,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           pgamma: gamma,
           pbeta: beta,
       }
-      return sess.run((norm, mean, inv_std_dev, whitened_inputs), fd)
+      return sess.run((norm, mean, inv_std_dev), fd)
 
   def _implGroupNormStatistics(self,
                                inputs,
@@ -374,7 +375,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           data_format=data_format,
           strided_channel_grouping=strided_channel_grouping)
 
-      expected, _, _, _ = self._refGroupNormFwd(
+      expected, _, _ = self._refGroupNormFwd(
           activations,
           gamma,
           beta,
@@ -409,7 +410,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
       activations = np.random.rand(*acts_shape).astype(dataType)
       gamma = np.random.rand(*gamma_beta_shape).astype(dataType)
       beta = np.random.rand(*gamma_beta_shape).astype(dataType)
-      norm, mean, inv_std_dev, withened_acts = self._implGroupNormTraining(
+      norm, mean, inv_std_dev = self._implGroupNormTraining(
           activations,
           gamma,
           beta,
@@ -418,8 +419,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           data_format=data_format,
           strided_channel_grouping=strided_channel_grouping)
 
-      expected_norm, expected_mean, expected_inv_std_dev, \
-        expected_withened_acts = self._refGroupNormFwd(
+      expected_norm, expected_mean, expected_inv_std_dev = self._refGroupNormFwd(
           activations,
           gamma,
           beta,
@@ -437,10 +437,6 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                           atol=training_abs_tolerance)
       self.assertAllClose(expected_norm,
                           norm,
-                          rtol=training_rel_tolerance,
-                          atol=training_abs_tolerance)
-      self.assertAllClose(expected_withened_acts,
-                          withened_acts,
                           rtol=training_rel_tolerance,
                           atol=training_abs_tolerance)
 
@@ -518,11 +514,11 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
       beta = np.zeros([channels])
       expected = data
       for _ in range(2):
-        expected, _, _, _ = self._refGroupNormFwd(expected,
-                                                  gamma=gamma,
-                                                  beta=beta,
-                                                  groups=groups,
-                                                  epsilon=epsilon)
+        expected, _, _ = self._refGroupNormFwd(expected,
+                                               gamma=gamma,
+                                               beta=beta,
+                                               groups=groups,
+                                               epsilon=epsilon)
 
       self.assertAllClose(actual, expected)
 
