@@ -199,18 +199,66 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         ValueError, "must contain `optimizer_function` when training"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
+  def testIterationsPerLoopAndGradientAccumulationValidation(self):
+    def make_model_fn(gradient_accumulation_count):
+      def model_fn(mode):
+        def stage1(features, labels):
+          return features, labels
+
+        def stage2(partial, labels):
+          return partial + labels
+
+        def optimizer_function():
+          pass
+
+        return IPUPipelineEstimatorSpec(
+            mode,
+            computational_stages=[stage1, stage2],
+            gradient_accumulation_count=gradient_accumulation_count,
+            count_gradient_accumulation_as_iterations=True,
+            optimizer_function=optimizer_function)
+
+      return model_fn
+
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
+
+    with self.assertRaisesRegex(
+        ValueError, (r"`IPURunConfig.iterations_per_loop` \(got 4\) must be "
+                     r"divisible by `gradient_accumulation_count` \(got 3\)")):
+      estimator = IPUPipelineEstimator(
+          model_fn=make_model_fn(gradient_accumulation_count=3),
+          config=_make_config(iterations_per_loop=4))
+      estimator.train(input_fn=my_input_fn, steps=4)
+
+    with self.assertRaisesRegex(
+        ValueError, (r"`IPURunConfig.iterations_per_loop` \(got 1\) cannot be "
+                     r"less than `gradient_accumulation_count` \(got 2\)")):
+      estimator = IPUPipelineEstimator(
+          model_fn=make_model_fn(gradient_accumulation_count=2),
+          config=_make_config(iterations_per_loop=1))
+      estimator.train(input_fn=my_input_fn, steps=1)
+
   @combinations.generate(
       combinations.combine(
           gradient_accumulation_count=[4, 8],
-          iterations_per_loop=[1, 2],
+          num_weight_updates_per_loop=[1, 2],
+          count_gradient_accumulation_as_iterations=[False, True],
       ))
-  def testTrainWithAnalyticalGradientReference(self,
-                                               gradient_accumulation_count,
-                                               iterations_per_loop):
+  def testTrainWithAnalyticalGradientReference(
+      self, gradient_accumulation_count, num_weight_updates_per_loop,
+      count_gradient_accumulation_as_iterations):
     x = 1.5
     y = 1.0
     initial_w = 2.0
     learning_rate = 0.5
+
+    if count_gradient_accumulation_as_iterations:
+      iterations_per_loop = (gradient_accumulation_count *
+                             num_weight_updates_per_loop)
+    else:
+      # Deprecated behaviour.
+      iterations_per_loop = num_weight_updates_per_loop
 
     def my_model_fn(mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -232,11 +280,14 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           mode,
           computational_stages=[stage1, stage2],
           optimizer_function=optimizer_function,
-          gradient_accumulation_count=gradient_accumulation_count)
+          gradient_accumulation_count=gradient_accumulation_count,
+          count_gradient_accumulation_as_iterations=
+          count_gradient_accumulation_as_iterations)
 
     def my_input_fn():
-      features = [x] * gradient_accumulation_count * iterations_per_loop
-      labels = [y] * gradient_accumulation_count * iterations_per_loop
+      num_batches = gradient_accumulation_count * num_weight_updates_per_loop
+      features = [x] * num_batches
+      labels = [y] * num_batches
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       return dataset
 
@@ -252,7 +303,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
                        estimator.get_variable_value("global_step"))
 
       step_losses = []
-      for _ in range(iterations_per_loop):
+      for _ in range(num_weight_updates_per_loop):
         # L(x) = w * x + y
         step_losses.append(expected_w * x + y)
         # dL(x)/dw = x
