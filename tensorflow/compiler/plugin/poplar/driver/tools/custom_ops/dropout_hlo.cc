@@ -25,34 +25,24 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloDropoutBase::HloDropoutBase(HloInstruction* operand, HloInstruction* seed,
-                               PoplarOp dropout_type, float rate, float scale,
-                               const std::vector<int64>& noise_shape)
+HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
+                       float rate, float scale,
+                       const std::vector<int64>& noise_shape)
     : HloPoplarInstruction(
           ShapeUtil::MakeTupleShape({operand->shape(), seed->shape()}),
-          {operand, seed}, dropout_type, rate, scale, noise_shape),
+          {operand, seed}, PoplarOp::Dropout, rate, scale, noise_shape),
       scale(scale),
       rate(rate),
       noise_shape(noise_shape) {}
 
-HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
-                       float rate, float scale,
-                       const std::vector<int64>& noise_shape,
-                       bool can_create_reference_tensor)
-    : HloDropoutBase(operand, seed, PoplarOp::Dropout, rate, scale,
-                     noise_shape),
-      can_create_reference_tensor_(can_create_reference_tensor) {}
-
 std::vector<std::string> HloDropout::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
-  attributes.push_back("rate=" + std::to_string(Rate()));
-  attributes.push_back("scale=" + std::to_string(Scale()));
+  attributes.push_back("scale=" + std::to_string(scale));
+  attributes.push_back("rate=" + std::to_string(rate));
   if (HasNoiseShape()) {
-    attributes.push_back("noise_shape=" + absl::StrJoin(NoiseShape(), ","));
+    attributes.push_back("noise_shape=" + absl::StrJoin(noise_shape, ","));
   }
-  attributes.push_back("can_create_reference_tensor=" +
-                       std::to_string(CanCreateReferenceTensor()));
 
   return attributes;
 }
@@ -62,53 +52,13 @@ std::unique_ptr<HloInstruction> HloDropout::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   CHECK_EQ(new_operands.size(), 2);
   return absl::make_unique<HloDropout>(new_operands[0], new_operands[1], Rate(),
-                                       Scale(), NoiseShape(),
-                                       CanCreateReferenceTensor());
+                                       Scale(), NoiseShape());
 }
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    const std::vector<int64>& noise_shape, bool can_create_reference_tensor) {
-  return absl::make_unique<HloDropout>(operand, seed, rate, scale, noise_shape,
-                                       can_create_reference_tensor);
-}
-
-HloDropoutWithReference::HloDropoutWithReference(
-    HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    const std::vector<int64>& noise_shape, const std::string& reference_key)
-    : HloDropoutBase(operand, seed, PoplarOp::DropoutWithReference, rate, scale,
-                     noise_shape),
-      reference_key_(reference_key) {}
-
-std::vector<std::string>
-HloDropoutWithReference::ExtraPoplarAttributesToStringImpl(
-    const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back("rate=" + std::to_string(Rate()));
-  attributes.push_back("scale=" + std::to_string(Scale()));
-  attributes.push_back("reference_key=" + reference_key_);
-  if (HasNoiseShape()) {
-    attributes.push_back("noise_shape=" + absl::StrJoin(NoiseShape(), ","));
-  }
-
-  return attributes;
-}
-
-std::unique_ptr<HloInstruction>
-HloDropoutWithReference::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  CHECK_EQ(new_operands.size(), 2);
-  return absl::make_unique<HloDropoutWithReference>(
-      new_operands[0], new_operands[1], Rate(), Scale(), NoiseShape(),
-      ReferenceKey());
-}
-
-std::unique_ptr<HloInstruction> CreateDropoutWithReference(
-    HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    const std::vector<int64>& noise_shape, const std::string& reference_key) {
-  return absl::make_unique<HloDropoutWithReference>(operand, seed, rate, scale,
-                                                    noise_shape, reference_key);
+    const std::vector<int64>& noise_shape) {
+  return absl::make_unique<HloDropout>(operand, seed, rate, scale, noise_shape);
 }
 
 namespace {
@@ -119,9 +69,6 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutFactoryFunc(
   // Get the attribute values
   TF_ASSIGN_OR_RETURN(float rate, attribute_map.GetAttributeAsFloat("rate"));
   TF_ASSIGN_OR_RETURN(float scale, attribute_map.GetAttributeAsFloat("scale"));
-  TF_ASSIGN_OR_RETURN(
-      bool can_create_reference_tensor,
-      attribute_map.GetAttributeAsBool("can_create_reference_tensor"));
 
   // If the noise_shape attribute is not present (defaults to empty list), we
   // want the corresponding std::vector to also be empty.
@@ -131,7 +78,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutFactoryFunc(
                         attribute_map.GetAttributeInt64Vector("noise_shape"));
   }
   return CreateDropout(call->mutable_operand(0), call->mutable_operand(1), rate,
-                       scale, noise_shape, can_create_reference_tensor);
+                       scale, noise_shape);
 }
 
 static HloPoplarInstructionFactory dropout_factory(PoplarOp::Dropout,

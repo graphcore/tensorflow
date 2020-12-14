@@ -153,7 +153,6 @@ cc_library(
         "driver/passes/copy_inserter.cc",
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
-        "driver/passes/dropout_with_reference_finder.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
         "driver/passes/elementwise_simplifier.cc",
         "driver/passes/embeddings_gradient_optimizer.cc",
@@ -325,7 +324,6 @@ cc_library(
         "driver/passes/copy_inserter.h",
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dependency_replacer.h",
-        "driver/passes/dropout_with_reference_finder.h",
         "driver/passes/elementwise_broadcast_converter.h",
         "driver/passes/elementwise_simplifier.h",
         "driver/passes/embeddings_gradient_optimizer.h",
@@ -495,7 +493,6 @@ cc_library(
         "//tensorflow/compiler/xla/service:gather_expander",
         "//tensorflow/compiler/xla/service:hlo_memory_scheduler",
         "//tensorflow/compiler/xla/service:hlo_pass",
-        "//tensorflow/compiler/xla/service:hlo_pass_pipeline",
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:scatter_expander",
         "//tensorflow/compiler/xla/service:tuple_simplifier",
@@ -3106,18 +3103,6 @@ xla_test(
     ],
 )
 
-xla_test(
-    name = "dropout_with_reference_finder_test",
-    srcs = ["tests/dropout_with_reference_finder_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    deps = [
-        ":optimizers",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4771,7 +4756,6 @@ test_suite(
         "deferred_visitor_test",
         "dependency_replacer_test",
         "device_connection_test",
-        "dropout_with_reference_finder_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
         "dynamic_slice_test",

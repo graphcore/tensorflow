@@ -38,9 +38,6 @@ void ModuleFlatten::RemoveMapEntry(HloInstruction* inst) {
 }
 
 StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
-  annotations_.flattened_inst_map_fwd.clear();
-  annotations_.flattened_inst_map_bwd.clear();
-
   annotations_.flattened_module = absl::make_unique<HloModule>(
       absl::StrCat(module->name(), "-flattened"), module->config());
 
