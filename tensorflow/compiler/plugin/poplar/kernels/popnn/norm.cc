@@ -62,7 +62,6 @@ void GetAndSetNormOpts(OpKernelConstruction* ctx,
 };
 }  // namespace
 
-template <bool is_training>
 class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGroupNorm(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
@@ -113,7 +112,7 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
         errors::InvalidArgument(absl::StrFormat(
             "The offset tensor needs to be of shape [%u].", num_channels)));
 
-    if (!is_training) {
+    if (ctx->num_inputs() == 5) {
       // Inference
       // Validate mean/inv_std_dev shape is per group
       TensorShape expected_mean_inv_std_dev_shape;
@@ -133,27 +132,26 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
           xla::CustomCall(&b, PoplarOp_Name(PoplarOp::GroupNormInference), args,
                           output_shape, attribute_map_.Serialise());
       ctx->SetOutput(0, call_output);
-    } else {
+    } else if (ctx->num_inputs() == 3) {
       // Training
       xla::Shape output_shape = TensorShapeToXLAShape(input_type, input_shape);
       xla::Shape mean_inv_std_dev_shape =
           xla::ShapeUtil::MakeShape(input_type, {num_groups_ * num_batches});
 
       xla::Shape output_tuple_shape = xla::ShapeUtil::MakeTupleShape(
-          {output_shape, mean_inv_std_dev_shape, mean_inv_std_dev_shape,
-           output_shape});
+          {output_shape, mean_inv_std_dev_shape, mean_inv_std_dev_shape});
       xla::XlaOp call_output =
           xla::CustomCall(&b, PoplarOp_Name(PoplarOp::GroupNormTraining), args,
                           output_tuple_shape, attribute_map_.Serialise());
       xla::XlaOp output = xla::GetTupleElement(call_output, 0);
       xla::XlaOp mean = xla::GetTupleElement(call_output, 1);
       xla::XlaOp inv_std_dev = xla::GetTupleElement(call_output, 2);
-      xla::XlaOp whitened_input = xla::GetTupleElement(call_output, 3);
 
       ctx->SetOutput(0, output);
       ctx->SetOutput(1, mean);
       ctx->SetOutput(2, inv_std_dev);
-      ctx->SetOutput(3, whitened_input);
+    } else {
+      LOG(FATAL) << "Unsupported use of PopnnGroupNorm.";
     }
   }
 
@@ -163,8 +161,8 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
   bool strided_channel_grouping_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGroupNorm);
 };
-REGISTER_IPU_OP("PopnnGroupNormInference", PopnnGroupNorm<false>);
-REGISTER_IPU_OP("PopnnGroupNormTraining", PopnnGroupNorm<true>);
+REGISTER_IPU_OP("PopnnGroupNormInference", PopnnGroupNorm);
+REGISTER_IPU_OP("PopnnGroupNormTraining", PopnnGroupNorm);
 
 class PopnnGroupNormGrad : public XlaOpKernel, IpuOpKernel {
  public:
