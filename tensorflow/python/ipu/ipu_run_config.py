@@ -29,9 +29,11 @@ class IPURunConfig(
   """IPU related configuration required by `IPUEstimator`.
 
   Args:
-    iterations_per_loop: This is the number of iterations running on the IPU device
-      before returning to the CPU host for each `Session.run`. This means that the
-      global step is increased `iterations_per_loop` times in one `Session.run`.
+    iterations_per_loop: The number of mini-batches consumed on the IPU device
+      before returning to the CPU host for each `Session.run`. The global step
+      counter is increased by `iterations_per_loop` for every `Session.run`.
+      The number of weight updates can be less than the number of iterations if
+      gradient accumulation is used.
     ipu_options: An IpuOptions configuration protobuf which is populated prior
       to being passed into IPURunConfig. Note that if more than one device is
       being used then `ipu_options` needs to be populated with a `device_config`.

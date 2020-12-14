@@ -26,8 +26,8 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.util import deprecation
 from tensorflow.python.util import function_utils
-from tensorflow.python.util.deprecation import deprecated_args
 
 _HOST_DEVICE = ipu_estimator._HOST_DEVICE  # pylint: disable=protected-access
 
@@ -37,6 +37,7 @@ class IPUPipelineEstimatorSpec(
         'mode',
         'computational_stages',
         'gradient_accumulation_count',
+        'count_gradient_accumulation_as_iterations',
         'gradient_accumulation_dtype',
         'eval_metrics_fn',
         'optimizer_function',
@@ -48,14 +49,24 @@ class IPUPipelineEstimatorSpec(
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
-  @deprecated_args(
+  @deprecation.deprecated_args(
       None,
       "pipeline_depth is deprecated, use gradient_accumulation_count instead",
       "pipeline_depth")
+  @deprecation.deprecated_arg_values(
+      None,
+      "You are using the deprecated definition of `iterations_per_loop` with "
+      "the IPUPipelineEstimator, where the number of iterations is defined as "
+      "the number of weight updates performed. The new definition is the "
+      "number of mini-batches consumed, which makes it consistent with the "
+      "IPUEstimator when using gradient accumulation. Switch to the new "
+      "definition by setting `count_gradient_accumulation_as_iterations=True`.",
+      count_gradient_accumulation_as_iterations=False)
   def __new__(cls,
               mode,
               computational_stages,
               gradient_accumulation_count=None,
+              count_gradient_accumulation_as_iterations=False,
               gradient_accumulation_dtype=None,
               pipeline_depth=None,
               eval_metrics_fn=None,
@@ -83,6 +94,13 @@ class IPUPipelineEstimatorSpec(
         outputs of the previous pipeline state as its inputs.
       gradient_accumulation_count: the number of times each pipeline stage will
         be executed.
+      count_gradient_accumulation_as_iterations: Whether to count gradient
+        accumulation as iterations for `iterations_per_loop`. If False,
+        the deprecated behaviour is used, where `iterations_per_loop` gives
+        the number of weight updates to perform per loop. If True, it instead
+        gives the number of mini-batches consumed per loop (per replica). The
+        latter behaviour is consistent with the IPUEstimator and will be the
+        only supported behaviour in the future.
       gradient_accumulation_dtype: The data type used for the gradient
         accumulation buffer. One of:
           - `None`: Use an accumulator of the same type as the variable type.
@@ -152,6 +170,8 @@ class IPUPipelineEstimatorSpec(
         computational_stages=computational_stages,
         eval_metrics_fn=eval_metrics_fn,
         gradient_accumulation_count=gradient_accumulation_count,
+        count_gradient_accumulation_as_iterations=
+        count_gradient_accumulation_as_iterations,
         gradient_accumulation_dtype=gradient_accumulation_dtype,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
@@ -178,6 +198,30 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def captured_hooks(self):
     return []
 
+  def _calc_repeat_count(self, spec):
+    iterations_per_loop = self._config.ipu_run_config.iterations_per_loop
+
+    if not spec.count_gradient_accumulation_as_iterations:
+      # Deprecated behaviour.
+      return iterations_per_loop
+
+    if iterations_per_loop < spec.gradient_accumulation_count:
+      raise ValueError(
+          ("`IPURunConfig.iterations_per_loop` (got {}) cannot be less than "
+           "`gradient_accumulation_count` (got {})").format(
+               iterations_per_loop, spec.gradient_accumulation_count))
+
+    repeat_count, remainder = divmod(iterations_per_loop,
+                                     spec.gradient_accumulation_count)
+
+    if remainder != 0:
+      raise ValueError(
+          ("`IPURunConfig.iterations_per_loop` (got {}) must be divisible by "
+           "`gradient_accumulation_count` (got {})").format(
+               iterations_per_loop, spec.gradient_accumulation_count))
+
+    return repeat_count
+
   def create_training_loop(self):
     def training_pipeline():
       spec = self._call_model_fn(model_fn_lib.ModeKeys.TRAIN)
@@ -187,7 +231,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
           gradient_accumulation_dtype=spec.gradient_accumulation_dtype,
-          repeat_count=self._config.ipu_run_config.iterations_per_loop,
+          repeat_count=self._calc_repeat_count(spec),
           inputs=spec.inputs,
           optimizer_function=spec.optimizer_function,
           device_mapping=spec.device_mapping,
@@ -224,7 +268,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
-          repeat_count=self._config.ipu_run_config.iterations_per_loop,
+          repeat_count=self._calc_repeat_count(spec),
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
@@ -262,7 +306,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
-          repeat_count=self._config.ipu_run_config.iterations_per_loop,
+          repeat_count=self._calc_repeat_count(spec),
           inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
@@ -385,13 +429,14 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
                config=None,
                params=None,
                warm_start_from=None):
-    # pylint: disable=protected-access
-
     ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
+
+    # pylint: disable=protected-access
     model_function = ipu_estimator._augment_model_fn(model_fn,
                                                      _ModelFnPipelineWrapper,
                                                      ipu_device)
     # pylint: enable=protected-access
+
     super().__init__(model_fn=model_function,
                      model_dir=model_dir,
                      config=config,
