@@ -4404,8 +4404,9 @@ py_test(
     size = "large",
     srcs = ["docs/ipu_pipeline_estimator_example.py"],
     args = [
-        "--iterations-per-loop=1",
-        "--training-steps=1",
+        "--gradient-accumulation-count=4",
+        "--iterations-per-loop=4",
+        "--training-steps=4",
     ],
     tags = ["isolated_poplar_tests"],
     deps = [
