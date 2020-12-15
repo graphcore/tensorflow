@@ -1093,9 +1093,17 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
          shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      if (!UseSyntheticData()) {
-        poplar::program::Sequence seq;
-
+      poplar::program::Sequence seq;
+      if (UseSyntheticData()) {
+        if (UseSyntheticDataInitializer()) {
+          // Initialize the tensor to a constant value.
+          auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+          TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
+          TF_RETURN_IF_ERROR(
+              SetInitialTensorValue(shard_graph, tensor, literal));
+        }
+        seq.add(poplar::program::WriteUndef(tensor));
+      } else {
         TensorOrRemoteBufferVector inputs =
             FindInstructionInputs(tensor_map, resources_, inst, i, seq, true);
 
@@ -1111,16 +1119,11 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 
         seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
                                         tensor));
-
-        // Add grouped such that all copies from the same instruction are
-        // grouped together in the sequence, allowing Poplar to merge them.
-        TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
-      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-        // Initialize the tensor to a constant value.
-        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
       }
+
+      // Add grouped such that all copies from the same instruction are
+      // grouped together in the sequence, allowing Poplar to merge them.
+      TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
 
       return tensor;
     };
@@ -1165,9 +1168,17 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
          shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      if (!UseSyntheticData()) {
-        poplar::program::Sequence seq;
-
+      poplar::program::Sequence seq;
+      if (UseSyntheticData()) {
+        if (UseSyntheticDataInitializer()) {
+          // Initialize the tensor to a constant value.
+          auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+          TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
+          TF_RETURN_IF_ERROR(
+              SetInitialTensorValue(shard_graph, tensor, literal));
+        }
+        seq.add(poplar::program::WriteUndef(tensor));
+      } else {
         // Get the remote buffer input.
         TensorOrRemoteBufferVector inputs =
             FindInstructionInputs(tensor_map, resources_, inst, i, seq);
@@ -1180,16 +1191,11 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
 
         seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
                                         tensor, offset));
-
-        // Add grouped such that all copies from the same instruction are
-        // grouped together in the sequence, allowing Poplar to merge them.
-        TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
-      } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-        // Initialize the tensor to a constant value.
-        auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-        TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-        TF_RETURN_IF_ERROR(SetInitialTensorValue(shard_graph, tensor, literal));
       }
+
+      // Add grouped such that all copies from the same instruction are
+      // grouped together in the sequence, allowing Poplar to merge them.
+      TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
 
       return tensor;
     };
