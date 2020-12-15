@@ -194,6 +194,14 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   hashable_config.clear_multi_replica_process_count();
   hashable_config.clear_multi_replica_process_index();
 
+  // Clear the target options set by `set_ipu_connection_type` that are already
+  // included in the target hash. This allows for doing offline compilation
+  // and then loading the executable onto a hardware device, given that it has
+  // the same target configuration as the offline compilation target.
+  hashable_config.clear_ipu_version();
+  hashable_config.clear_has_ipu_version();
+  hashable_config.clear_enable_remote_buffers_without_device();
+
   std::string config_proto_str;
   tensorflow::SerializeToStringDeterministic(hashable_config,
                                              &config_proto_str);
@@ -1760,6 +1768,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
   target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
   target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
+  if (ipu_.Target().getTargetType() == poplar::TargetType::IPU) {
+    target_hash.push_back(
+        std::hash<string>()(ipu_.Target().getTargetArchString()));
+  }
 
   // Generate Options hash
   target_hash.push_back(GetConfigHash(current_config_));
