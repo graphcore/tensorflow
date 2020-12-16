@@ -1218,7 +1218,14 @@ Status PipelineVisitor::AddSequenceForInstruction(
   }
 }
 
-Status PipelineVisitor::AddSequenceGroupedByInstruction(
+Status PipelineVisitor::AppendSequenceGroupedByInstruction(
+    const HloInstruction* inst, const poplar::program::Sequence&) {
+  return UnimplementedStrCat(
+      "Sequence grouping not implemented in the PipelineVisitor: ",
+      inst->ToString());
+}
+
+Status PipelineVisitor::PrependSequenceGroupedByInstruction(
     const HloInstruction* inst, const poplar::program::Sequence&) {
   return UnimplementedStrCat(
       "Sequence grouping not implemented in the PipelineVisitor: ",
