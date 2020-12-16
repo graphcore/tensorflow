@@ -27,6 +27,7 @@ limitations under the License.
 #include <mutex>
 #include <popfloat/experimental/codelets.hpp>
 #include <poplar/CSRFunctions.hpp>
+#include <poplar/CodeletFileType.hpp>
 #include <poplar/CycleCount.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplar/replication_factor.hpp>
@@ -652,13 +653,19 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     }
   }
 
-  std::stringstream codelets_src{
+  std::stringstream codelets_cpp_src{
 #include "tensorflow/compiler/plugin/poplar/tf.cppembed"
+  };
+  std::stringstream codelets_asm_src{
+#include "tensorflow/compiler/plugin/poplar/tf.Sembed"
   };
 
   std::stringstream compile_output;
   try {
-    main_graph.addCodelets(codelets_src, "-DNDEBUG -O3", compile_output);
+    main_graph.addCodelets(codelets_cpp_src, "-DNDEBUG -O3", compile_output,
+                           poplar::CodeletFileType::CppSource);
+    main_graph.addCodelets(codelets_asm_src, "-DNDEBUG -O3", compile_output,
+                           poplar::CodeletFileType::AsmSource);
   } catch (const poplar::graph_program_compilation_error&) {
     return xla::InternalError("Failed to compile Poplar TF codelets: %s",
                               compile_output.str());
