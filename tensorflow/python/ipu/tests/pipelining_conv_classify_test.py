@@ -221,7 +221,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       report.parse_log()
 
       # 1 conv in stage1, 2 conv in stage2, 1 matmul in stage3 = 4
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
+      # minus one bwd converted by conv_bwd_input_to_fwd_weights_transpose pass
+      self.assertAllEqual(report.get_ml_type_counts(), [0, 6, 2, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoMatMuls(self):
