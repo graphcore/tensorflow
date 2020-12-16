@@ -65,15 +65,5 @@ void MappingHelper::MapTensorLinearly(LinearMapperState& state,
       graph, tensor.shape(), min_elements_per_tile, grain_size);
   MapTensorLinearlyImpl(state, graph, tensor, mapping);
 }
-
-const uint64 MappingHelper::YieldNextTile(LinearMapperState& state,
-                                          poplar::Graph& graph) {
-  uint64& next_tile = state[&graph];
-  const uint64 tile = next_tile;
-  next_tile += 1;
-  next_tile = next_tile % graph.getTarget().getNumTiles();
-  return tile;
-}
-
 }  // namespace poplarplugin
 }  // namespace xla

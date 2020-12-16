@@ -19,42 +19,7 @@ limitations under the License.
 #include <poplar/HalfFloat.hpp>
 #include <poplar/Vertex.hpp>
 
-// Macro to only use assembly implementations when using hardware
-#if defined(__IPU__)
-#define EXTERNAL_CODELET static const bool isExternalCodelet = true
-#else
-#define EXTERNAL_CODELET static const bool isExternalCodelet = false
-#endif
-
 using namespace poplar;
-
-// Unique sampling codelets
-
-// NOTE: There is no CPU implementation, which means on the IPUModel this
-// codelet gives garbage samples. Random number generation should not be relied
-// upon when using the IPUModel, as a general rule.
-#define UNIQUE_SEQ_SAMPLE(DIST)                                          \
-  class DIST##UniqueSeqSample : public Vertex {                          \
-   public:                                                               \
-    DIST##UniqueSeqSample();                                             \
-                                                                         \
-    const float scale;                                                   \
-    InOut<int> num_tries;                                                \
-    Output<Vector<int, poplar::VectorLayout::SPAN, 8>> samples;          \
-    InOut<Vector<unsigned int, poplar::VectorLayout::SPAN, 8>> bitmasks; \
-                                                                         \
-    EXTERNAL_CODELET;                                                    \
-                                                                         \
-    bool compute() {                                                     \
-      for (auto i = 0U; i < samples.size(); ++i) {                       \
-        samples[i] = 42;                                                 \
-      }                                                                  \
-      return true;                                                       \
-    }                                                                    \
-  };
-
-UNIQUE_SEQ_SAMPLE(Uniform)
-UNIQUE_SEQ_SAMPLE(LogUniform)
 
 // Simple reductions
 

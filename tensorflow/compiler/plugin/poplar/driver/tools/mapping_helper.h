@@ -46,11 +46,6 @@ class MappingHelper {
                                 poplar::Tensor& tensor,
                                 uint32 min_elements_per_tile,
                                 uint32 grain_size);
-  // Return the next tile to be mapped to. When allocating the next tensor, the
-  // mapping helper starts allocating after the tile returned.
-  // Useful for e.g. spreading vertex mapping based on previous allocations.
-  static const uint64 YieldNextTile(LinearMapperState& state,
-                                    poplar::Graph& graph);
 };
 
 }  // namespace poplarplugin
