@@ -281,4 +281,4 @@ T Permute(const T& in, const std::vector<int64>& permutation) {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_UTIL_H_

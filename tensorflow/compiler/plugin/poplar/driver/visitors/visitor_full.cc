@@ -361,7 +361,8 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
             out.AsTensor().elementType().toString().cloneAsString(),
-            ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+            ") and XLA (", expected_type.toString().cloneAsString(), ") type",
+            " for output tuple index ", tuple_index, ".");
       }
     }
 

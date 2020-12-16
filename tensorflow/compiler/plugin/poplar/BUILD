@@ -9,8 +9,9 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "i
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load("//tensorflow/core/platform:default/build_config.bzl", "tf_proto_library")
 
+# Rule for generating internal cpp codelets
 genrule(
-    name = "convert_tf_graph_sources_to_literal",
+    name = "convert_tf_cpp_graph_sources_to_literal",
     srcs = ["vertices/tf.cpp"],
     outs = ["tf.cppembed"],
     cmd = """
@@ -20,9 +21,24 @@ genrule(
         """,
 )
 
+# Rule for generating internal assembly codelets
+genrule(
+    name = "convert_tf_asm_graph_sources_to_literal",
+    srcs = ["vertices/tf.S"],
+    outs = ["tf.Sembed"],
+    cmd = """
+        echo 'R"(' > $@
+        cat $(SRCS) >> $@
+        echo ')"'>> $@
+        """,
+)
+
 cc_library(
     name = "tf_graph_sources",
-    hdrs = [":convert_tf_graph_sources_to_literal"],
+    hdrs = [
+        ":convert_tf_asm_graph_sources_to_literal",
+        ":convert_tf_cpp_graph_sources_to_literal",
+    ],
 )
 
 # Rule for generating the custom codelet example
@@ -259,6 +275,7 @@ cc_library(
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/inter_tileset_copy.cc",
+        "driver/tools/custom_ops/candidate_sampler.cc",
         "driver/tools/custom_ops/lstm.cc",
         "driver/tools/custom_ops/multi_conv.cc",
         "driver/tools/custom_ops/multi_slice.cc",
@@ -417,6 +434,7 @@ cc_library(
         "driver/tools/conv_util.h",
         "driver/tools/custom_ops/all_gather.h",
         "driver/tools/custom_ops/arg_min_max.h",
+        "driver/tools/custom_ops/candidate_sampler.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/copy_into.h",
@@ -601,6 +619,7 @@ cc_library(
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/popops/slice_apply.cc",
         "driver/ops/custom_ops/popops/sort_ops.cc",
+        "driver/ops/custom_ops/poprand/candidate_sampler.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
         "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
@@ -644,6 +663,7 @@ cc_library(
         "driver/tools/io_thread.cc",
         "driver/tools/mapping_helper.cc",
         "driver/tools/matmul_preplanning.cc",
+        "driver/tools/poplar_range_sampler.cc",
         "driver/tools/poplar_util.cc",
         "driver/tools/rnn_util.cc",
         "driver/tools/seed_generator.cc",
@@ -688,6 +708,7 @@ cc_library(
         "driver/tools/io_thread.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/matmul_preplanning.h",
+        "driver/tools/poplar_range_sampler.h",
         "driver/tools/poplar_util.h",
         "driver/tools/rnn_util.h",
         "driver/tools/seed_generator.h",
@@ -816,6 +837,21 @@ cc_library(
 )
 
 cc_library(
+    name = "tf2xla_util",
+    srcs = [
+        "driver/tools/tf2xla_util.cc",
+    ],
+    hdrs = [
+        "driver/tools/tf2xla_util.h",
+    ],
+    deps = [
+        ":ops_cc_impl",
+        "//tensorflow/compiler/xla/client:xla_builder",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
@@ -840,6 +876,7 @@ cc_library(
         "kernels/popops/multi_slice.cc",
         "kernels/popops/reduce_scatter.cc",
         "kernels/popops/sparse_softmax_cross_entropy.cc",
+        "kernels/poprand/candidate_sampler.cc",
         "kernels/poprand/categorical.cc",
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
@@ -865,6 +902,7 @@ cc_library(
         ":custom_kernels_util",
         ":dataset_exporters_kernel",
         ":driver",
+        ":tf2xla_util",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -3992,6 +4030,21 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "candidate_sampler_test",
+    size = "small",
+    srcs = ["tests/candidate_sampler_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:candidate_sampling_ops",
+        "//tensorflow/python:framework",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
