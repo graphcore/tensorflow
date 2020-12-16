@@ -165,6 +165,7 @@ cc_library(
         "driver/passes/computation_flattener.cc",
         "driver/passes/constant_nan.cc",
         "driver/passes/constant_slice_folding.cc",
+        "driver/passes/conv_bwd_input_to_fwd_weights_transpose.cc",
         "driver/passes/convolution_classifier.cc",
         "driver/passes/copy_inserter.cc",
         "driver/passes/custom_op_replacer.cc",
@@ -338,6 +339,7 @@ cc_library(
         "driver/passes/computation_flattener.h",
         "driver/passes/constant_nan.h",
         "driver/passes/constant_slice_folding.h",
+        "driver/passes/conv_bwd_input_to_fwd_weights_transpose.h",
         "driver/passes/convolution_classifier.h",
         "driver/passes/copy_inserter.h",
         "driver/passes/custom_op_replacer.h",
@@ -2645,6 +2647,21 @@ xla_test(
 )
 
 xla_test(
+    name = "conv_bwd_input_to_fwd_weights_transpose_test",
+    size = "small",
+    srcs = ["tests/conv_bwd_input_to_fwd_weights_transpose_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "multi_update_canonicalize_test",
     size = "small",
     srcs = ["tests/multi_update_canonicalize_test.cc"],
@@ -4813,6 +4830,7 @@ test_suite(
         "constant_nan_test",
         "constant_slice_folding_test",
         "conv3d_test",
+        "conv_bwd_input_to_fwd_weights_transpose_test",
         "conv_graph_caching_sharded_test",
         "conv_graph_caching_test",
         "conv_test",

@@ -96,7 +96,7 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
 
   Literal result = ExecuteNoHloPasses(std::move(module), {});
 
-  Literal expected = LiteralUtil::CreateR4<float>({{{{1, 2}, {3, 4}}}});
+  Literal expected = LiteralUtil::CreateR4<float>({{{{1, 3}, {2, 4}}}});
 
   EXPECT_TRUE(
       LiteralTestUtil::NearOrEqual(expected, result, ErrorSpec{1e-4, 1e-4}));
