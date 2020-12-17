@@ -17,11 +17,6 @@
 import subprocess
 import sys
 import os
-import multiprocessing
-
-
-def get_num_threads(num_processes):
-  return min(2, multiprocessing.cpu_count() // int(num_processes))
 
 
 def main():
@@ -43,9 +38,8 @@ def main():
 
   # The buildbot runs as root, so let's allow that.
   command = [
-      "mpirun", "--allow-run-as-root", "--tag-output", "-x",
-      "TF_NUM_INTEROP_THREADS=" + str(get_num_threads(num_processes)), "-x",
-      "LD_LIBRARY_PATH=" + ld_library_path, "-np", num_processes,
+      "mpirun", "--allow-run-as-root", "--tag-output", "--bind-to", "none",
+      "-x", "LD_LIBRARY_PATH=" + ld_library_path, "-np", num_processes,
       sys.executable, test_file
   ]
 

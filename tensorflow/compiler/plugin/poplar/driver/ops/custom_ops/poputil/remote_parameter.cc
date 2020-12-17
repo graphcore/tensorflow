@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -33,11 +34,13 @@ namespace poplarplugin {
 namespace {
 // TODO(T28772): Work around to make sure remote buffers can be rearranged on
 // host.
-poplar::program::Sequence AddRemoteBufferStoreCopy(
+std::pair<poplar::program::Sequence, poplar::program::Sequence>
+AddRemoteBufferStoreCopy(
     poplar::Graph& graph, CompilerResources& res, poplar::Tensor source,
     poplar::RemoteBuffer remote_buffer,
     absl::optional<poplar::Tensor> offset = absl::nullopt) {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence temporary_copy_seq;
+  poplar::program::Sequence stream_copy_seq;
 
   const auto& handle = remote_buffer.handle();
   poplar::Tensor layout_tensor;
@@ -49,14 +52,17 @@ poplar::program::Sequence AddRemoteBufferStoreCopy(
   }
 
   poplar::Tensor copy_tensor = graph.clone(layout_tensor);
-  seq.add(poplar::program::Copy(source.flatten(), copy_tensor.flatten()));
+
+  temporary_copy_seq.add(
+      poplar::program::Copy(source.flatten(), copy_tensor.flatten()));
 
   if (offset) {
-    seq.add(poplar::program::Copy(copy_tensor, remote_buffer, *offset));
+    stream_copy_seq.add(
+        poplar::program::Copy(copy_tensor, remote_buffer, *offset));
   } else {
-    seq.add(poplar::program::Copy(copy_tensor, remote_buffer));
+    stream_copy_seq.add(poplar::program::Copy(copy_tensor, remote_buffer));
   }
-  return seq;
+  return {temporary_copy_seq, stream_copy_seq};
 }
 
 class RemoteParameterLoadOp : public PoplarOpDef {
@@ -78,6 +84,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     VLOG(1) << "Processing " << GetDebugName(inst);
+    poplar::program::Sequence seq;
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
     const int64 num_outputs = store_inst->RemoteBuffers().size();
@@ -85,11 +92,12 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
 
-    poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
                         FindInplaceOutputs(tensor_map, res, inst, seq));
     CHECK_EQ(outputs.size(), num_outputs);
 
+    poplar::program::Sequence temporary_copies_seq;
+    poplar::program::Sequence stream_copies_seq;
     for (int64 i = 0; i < num_outputs; ++i) {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       if (store_inst->GetReplicationFactor(i) != res.replication_factor &&
@@ -114,11 +122,15 @@ class RemoteParameterStoreOp : public PoplarOpDef {
             poplar::Tensor tensor,
             FindInstructionInput(tensor_map, res, inst, num_outputs + i, seq));
 
-        seq.add(
-            AddRemoteBufferStoreCopy(shard_graph, res, tensor, remote_buffer));
+        auto pair_seq =
+            AddRemoteBufferStoreCopy(shard_graph, res, tensor, remote_buffer);
+        temporary_copies_seq.add(pair_seq.first);
+        stream_copies_seq.add(pair_seq.second);
       }
       TF_CHECK_OK(AddOutput(tensor_map, inst, i, outputs[i][0]));
     }
+    seq.add(temporary_copies_seq);
+    seq.add(stream_copies_seq);
 
     return seq;
   }
@@ -154,6 +166,8 @@ class BufferStoreSliceOp : public PoplarOpDef {
                         FindInplaceOutputs(tensor_map, res, inst, seq));
     CHECK_EQ(outputs.size(), num_outputs);
 
+    poplar::program::Sequence temporary_copies_seq;
+    poplar::program::Sequence stream_copies_seq;
     for (int64 i = 0; i < num_outputs; ++i) {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
@@ -172,12 +186,16 @@ class BufferStoreSliceOp : public PoplarOpDef {
             poplar::Tensor offset,
             FindInstructionInput(tensor_map, res, inst, offset_index, seq));
 
-        seq.add(AddRemoteBufferStoreCopy(shard_graph, res, value, remote_buffer,
-                                         offset));
+        auto pair_seq = AddRemoteBufferStoreCopy(shard_graph, res, value,
+                                                 remote_buffer, offset);
+        temporary_copies_seq.add(pair_seq.first);
+        stream_copies_seq.add(pair_seq.second);
       }
 
       TF_CHECK_OK(AddOutput(tensor_map, inst, i, output));
     }
+    seq.add(temporary_copies_seq);
+    seq.add(stream_copies_seq);
 
     return seq;
   }

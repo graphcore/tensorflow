@@ -328,7 +328,7 @@ Status DeferredVisitor::AddSequenceForInstruction(
   if (inst->opcode() == HloOpcode::kInfeed &&
       resources_.merge_infeed_io_copies) {
     // Group all the copies for the infeed together in one sequence.
-    return BaseVisitor::AddSequenceGroupedByInstruction(inst, seq);
+    return BaseVisitor::AppendSequenceGroupedByInstruction(inst, seq);
   } else {
     return FullVisitor::AddSequenceForInstruction(inst, seq);
   }
@@ -1030,11 +1030,13 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 namespace {
 // TODO(T28772): Work around to make sure remote buffers can be rearranged on
 // host.
-poplar::program::Sequence AddRemoteBufferLoadCopy(
-    poplar::Graph& graph, CompilerResources& res,
-    poplar::RemoteBuffer remote_buffer, poplar::Tensor destination,
-    absl::optional<poplar::Tensor> offset = absl::nullopt) {
-  poplar::program::Sequence seq;
+std::pair<poplar::program::Sequence, poplar::program::Sequence>
+AddRemoteBufferLoadCopy(poplar::Graph& graph, CompilerResources& res,
+                        poplar::RemoteBuffer remote_buffer,
+                        poplar::Tensor destination,
+                        absl::optional<poplar::Tensor> offset = absl::nullopt) {
+  poplar::program::Sequence stream_copy_seq;
+  poplar::program::Sequence temporary_copy_seq;
 
   const auto& handle = remote_buffer.handle();
   poplar::Tensor layout_tensor;
@@ -1048,12 +1050,14 @@ poplar::program::Sequence AddRemoteBufferLoadCopy(
   poplar::Tensor copy_tensor = graph.clone(layout_tensor);
 
   if (offset) {
-    seq.add(poplar::program::Copy(remote_buffer, copy_tensor, *offset));
+    stream_copy_seq.add(
+        poplar::program::Copy(remote_buffer, copy_tensor, *offset));
   } else {
-    seq.add(poplar::program::Copy(remote_buffer, copy_tensor));
+    stream_copy_seq.add(poplar::program::Copy(remote_buffer, copy_tensor));
   }
-  seq.add(poplar::program::Copy(copy_tensor.flatten(), destination.flatten()));
-  return seq;
+  temporary_copy_seq.add(
+      poplar::program::Copy(copy_tensor.flatten(), destination.flatten()));
+  return {stream_copy_seq, temporary_copy_seq};
 }
 }  // namespace
 
@@ -1093,7 +1097,8 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
          shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      poplar::program::Sequence seq;
+      poplar::program::Sequence stream_copy_seq;
+      poplar::program::Sequence temporary_copy_seq;
       if (UseSyntheticData()) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1102,10 +1107,10 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
           TF_RETURN_IF_ERROR(
               SetInitialTensorValue(shard_graph, tensor, literal));
         }
-        seq.add(poplar::program::WriteUndef(tensor));
+        stream_copy_seq.add(poplar::program::WriteUndef(tensor));
       } else {
-        TensorOrRemoteBufferVector inputs =
-            FindInstructionInputs(tensor_map, resources_, inst, i, seq, true);
+        TensorOrRemoteBufferVector inputs = FindInstructionInputs(
+            tensor_map, resources_, inst, i, stream_copy_seq, true);
 
         CHECK_EQ(inputs.size(), 1);
 
@@ -1116,14 +1121,18 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
         }
 
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
-
-        seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
-                                        tensor));
+        auto pair_seq = AddRemoteBufferLoadCopy(shard_graph, resources_,
+                                                remote_buffer, tensor);
+        stream_copy_seq.add(pair_seq.first);
+        temporary_copy_seq.add(pair_seq.second);
       }
 
       // Add grouped such that all copies from the same instruction are
       // grouped together in the sequence, allowing Poplar to merge them.
-      TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
+      TF_RETURN_IF_ERROR(
+          PrependSequenceGroupedByInstruction(inst, stream_copy_seq));
+      TF_RETURN_IF_ERROR(
+          AppendSequenceGroupedByInstruction(inst, temporary_copy_seq));
 
       return tensor;
     };
@@ -1168,7 +1177,8 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
          shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      poplar::program::Sequence seq;
+      poplar::program::Sequence stream_copy_seq;
+      poplar::program::Sequence temporary_copy_seq;
       if (UseSyntheticData()) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1177,25 +1187,31 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
           TF_RETURN_IF_ERROR(
               SetInitialTensorValue(shard_graph, tensor, literal));
         }
-        seq.add(poplar::program::WriteUndef(tensor));
+        stream_copy_seq.add(poplar::program::WriteUndef(tensor));
       } else {
         // Get the remote buffer input.
-        TensorOrRemoteBufferVector inputs =
-            FindInstructionInputs(tensor_map, resources_, inst, i, seq);
+        TensorOrRemoteBufferVector inputs = FindInstructionInputs(
+            tensor_map, resources_, inst, i, stream_copy_seq);
         CHECK_EQ(inputs.size(), 1);
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
 
-        TF_ASSIGN_OR_RETURN(poplar::Tensor offset,
-                            FindInstructionInput(tensor_map, resources_, inst,
-                                                 num_outputs + i, seq));
+        TF_ASSIGN_OR_RETURN(
+            poplar::Tensor offset,
+            FindInstructionInput(tensor_map, resources_, inst, num_outputs + i,
+                                 stream_copy_seq));
 
-        seq.add(AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
-                                        tensor, offset));
+        auto pair_seq = AddRemoteBufferLoadCopy(shard_graph, resources_,
+                                                remote_buffer, tensor, offset);
+        stream_copy_seq.add(pair_seq.first);
+        temporary_copy_seq.add(pair_seq.second);
       }
 
       // Add grouped such that all copies from the same instruction are
       // grouped together in the sequence, allowing Poplar to merge them.
-      TF_RETURN_IF_ERROR(AddSequenceGroupedByInstruction(inst, seq));
+      TF_RETURN_IF_ERROR(
+          PrependSequenceGroupedByInstruction(inst, stream_copy_seq));
+      TF_RETURN_IF_ERROR(
+          AppendSequenceGroupedByInstruction(inst, temporary_copy_seq));
 
       return tensor;
     };

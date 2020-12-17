@@ -765,7 +765,7 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
                     [](HloInstruction* inst) { return &inst->shape(); });
   auto statusor = ShapeInference::InferConcatOpShape(inst_shapes, dimension);
   if (!statusor.ok()) {
-    LOG(FATAL) << "Failed concatentating shapes together.";
+    LOG(FATAL) << "Failed concatenating shapes together.";
   }
   return statusor.ValueOrDie();
 }
