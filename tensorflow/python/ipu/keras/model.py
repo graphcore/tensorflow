@@ -690,7 +690,6 @@ class IPUSequential(_IpuModelBase):
   There are some limitations with this Sequential class compared to the
   standard Keras Sequential class:
 
-  - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
   - Loss weightings can only be specified as a list, not a callable.
   - Weighted metrics, target tensors and sample weight mode are not supported.
@@ -987,7 +986,6 @@ class IPUModel(_IpuModelBase):
   There are some limitations with the IPU Model class compared to the standard
   Keras Model class:
 
-  - The input must be provided by a tf.DataSet.
   - Keras V1 optimizers cannot be used.
   - Loss weightings can only be specified as a list, not a callable.
   - Weighted metrics, target tensors and sample weight mode are not supported.
@@ -1016,7 +1014,7 @@ class IPUModel(_IpuModelBase):
         optimizer=keras.optimizers.RMSprop(),
         metrics=["accuracy"])
 
-      model.fit(training_data, epochs=2, steps_per_epoch=128)
+      model.fit(dataset, epochs=2, steps_per_epoch=128)
 
   """
   def __init__(self,
