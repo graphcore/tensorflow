@@ -1622,7 +1622,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   if (!DeviceConfigurationsEqual(cfg, current_config_) && has_user_config) {
     XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
                           "\nNew config: " + cfg.DebugString());
-    return InternalError("IPU system configuration can only be set once.");
+    return InternalError(
+        "IPU system configuration can only be set once within a process. "
+        "To use multiple configurations, use separate Python processes for "
+        "each.");
   }
   if (device_attached_) {
     if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
