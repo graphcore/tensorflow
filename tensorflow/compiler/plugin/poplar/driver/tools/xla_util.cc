@@ -24,6 +24,7 @@ namespace poplarplugin {
 
 xla::XlaOp CombineHashes(xla::XlaOp from, xla::XlaOp to) {
   xla::XlaBuilder* builder = from.builder();
+  Shape from_shape = builder->GetShape(from).ConsumeValueOrDie();
   from = xla::BitcastConvertType(from, U32);
   to = xla::BitcastConvertType(to, U32);
   // Create constants
@@ -31,7 +32,6 @@ xla::XlaOp CombineHashes(xla::XlaOp from, xla::XlaOp to) {
       xla::ConstantLiteral(builder, LiteralUtil::CreateR0<uint32>(0x9E3779B9U));
   XlaOp six = xla::ConstantLiteral(builder, LiteralUtil::CreateR0<uint32>(6U));
   XlaOp two = xla::ConstantLiteral(builder, LiteralUtil::CreateR0<uint32>(2U));
-  Shape from_shape = builder->GetShape(from).ConsumeValueOrDie();
   auto from_dims = from_shape.dimensions();
   auto to_dims = builder->GetShape(to).ConsumeValueOrDie().dimensions();
 
