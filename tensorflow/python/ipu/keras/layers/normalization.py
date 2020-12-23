@@ -16,6 +16,8 @@
 Normalization Keras layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+from functools import reduce
+import operator
 
 from tensorflow.python.framework import dtypes
 from tensorflow.python.keras import backend as K
@@ -27,7 +29,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
 
 # We implement all three algorithms through a common generic group norm algorithm.
-class GroupNorm(Layer):
+class GroupNormalization(Layer):
   """Group normalization layer optimized for running on the IPU.
 
   This layer is used like the standard Keras BatchNormalization layer.
@@ -54,6 +56,7 @@ class GroupNorm(Layer):
       PopLibs implementation more efficient but is unconventional. Among other
       things this will mean that using pre-trained weights would not be possible
       if not produced with this unconventional implementation.
+    trainable: Boolean, if `True` the variables will be marked as trainable.
     name: Optional name for the layer.
   """
   def __init__(self,
@@ -66,8 +69,9 @@ class GroupNorm(Layer):
                beta_initializer=None,
                gamma_initializer=None,
                strided_channel_grouping=True,
+               trainable=True,
                name=None):
-    super(GroupNorm, self).__init__(dtype=dtype, name=name)
+    super().__init__(dtype=dtype, name=name)
 
     self.groups = groups
     self.channels_axis = channels_axis
@@ -82,6 +86,7 @@ class GroupNorm(Layer):
 
     self.data_format = ""
     self.channels = 1
+    self.trainable = trainable
 
   def build(self, input_shape):
 
@@ -119,13 +124,15 @@ class GroupNorm(Layer):
       self.beta = self.add_weight("beta",
                                   dtype=self.dtype,
                                   initializer=self.beta_initializer,
-                                  shape=params_shape)
+                                  shape=params_shape,
+                                  trainable=self.trainable)
 
     if self.scale:
       self.gamma = self.add_weight("gamma",
                                    dtype=self.dtype,
                                    initializer=self.gamma_initializer,
-                                   shape=params_shape)
+                                   shape=params_shape,
+                                   trainable=self.trainable)
 
     self.built = True
 
@@ -183,10 +190,10 @@ class GroupNorm(Layer):
     return outputs
 
 
-class InstanceNorm(GroupNorm):
+class InstanceNormalization(GroupNormalization):
   """Instance normalization layer optimized for use on the IPU.
 
-  This layer is used like the standard Keras BatchNormalization layer.
+  This layer is used like the standard Keras InstanceNormalization layer.
   However, it has beta and gamma trainable parameters, but no statistics
   gathering.
 
@@ -195,7 +202,6 @@ class InstanceNorm(GroupNorm):
 
   Arguments:
     dtype: The data type for the trainable weights.
-    groups: The number of groups to use in the normalization.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
     center: If True, add offset of `beta` to normalized tensor.
@@ -215,60 +221,9 @@ class InstanceNorm(GroupNorm):
                epsilon=1e-3,
                beta_initializer=None,
                gamma_initializer=None,
+               trainable=True,
                name=None):
-    super(InstanceNorm, self).__init__(dtype=dtype,
-                                       groups=1,
-                                       channels_axis=channels_axis,
-                                       center=center,
-                                       scale=scale,
-                                       epsilon=epsilon,
-                                       beta_initializer=beta_initializer,
-                                       gamma_initializer=gamma_initializer,
-                                       name=name)
-
-  # pylint: disable=useless-super-delegation
-  def build(self, input_shape):
-    super(InstanceNorm, self).build(input_shape)
-
-  # pylint: disable=useless-super-delegation
-  def call(self, inputs, training=None):
-    return super(InstanceNorm, self).call(inputs, training)
-
-
-class LayerNorm(GroupNorm):
-  """Layer normalization layer optimized for use on the IPU.
-
-  This layer is used like the standard Keras BatchNormalization layer.
-  However, it has beta and gamma trainable parameters, but no statistics
-  gathering.
-
-  Layer normalization is described in this paper:
-  https://arxiv.org/abs/1607.06450.
-
-  Arguments:
-    dtype: The data type for the trainable weights.
-    groups: The number of groups to use in the normalization.
-    channels_axis: Integer, the axis that should be normalized
-      (typically the features axis).
-    center: If True, add offset of `beta` to normalized tensor.
-      If False, `beta` is ignored.
-    scale: If True, multiply by `gamma`.
-      If False, `gamma` is not used.
-    epsilon: Small float added to variance to avoid dividing by zero.
-    beta_initializer: Initializer for the beta weight.
-    gamma_initializer: Initializer for the gamma weight.
-    name: Optional name for the layer.
-  """
-  def __init__(self,
-               dtype=dtypes.float32,
-               channels_axis=-1,
-               center=True,
-               scale=True,
-               epsilon=1e-3,
-               beta_initializer=None,
-               gamma_initializer=None,
-               name=None):
-    super(LayerNorm, self).__init__(
+    super().__init__(
         dtype=dtype,
         # We set this in the build function, once we know what the shape is.
         groups=0,
@@ -278,13 +233,145 @@ class LayerNorm(GroupNorm):
         epsilon=epsilon,
         beta_initializer=beta_initializer,
         gamma_initializer=gamma_initializer,
+        trainable=trainable,
         name=name)
 
+  # pylint: disable=useless-super-delegation
   def build(self, input_shape):
     # Change the groups based on the input shape.
     self.groups = input_shape[self.channels_axis]
-    super(LayerNorm, self).build(input_shape)
+    super().build(input_shape)
 
   # pylint: disable=useless-super-delegation
   def call(self, inputs, training=None):
-    return super(LayerNorm, self).call(inputs, training)
+    return super().call(inputs, training)
+
+
+class LayerNormalization(GroupNormalization):
+  """Layer normalization layer optimized for use on the IPU.
+
+  This layer is used like the standard Keras LayerNormalization layer.
+  However, it has beta and gamma trainable parameters, but no statistics
+  gathering.
+
+  Layer normalization is described in this paper:
+  https://arxiv.org/abs/1607.06450.
+
+  Arguments:
+    axis: Integer or List/Tuple. The axis that should be normalized
+      (typically the features axis).
+    epsilon: Small float added to variance to avoid dividing by zero.
+    center: If True, add offset of `beta` to normalized tensor. If False, `beta`
+      is ignored.
+    scale: If True, multiply by `gamma`. If False, `gamma` is not used.
+      When the next layer is linear (also e.g. `nn.relu`), this can be disabled
+      since the scaling will be done by the next layer.
+    beta_initializer: Initializer for the beta weight.
+    gamma_initializer: Initializer for the gamma weight.
+    trainable: Boolean, if `True` the variables will be marked as trainable.
+    name: Optional name for the layer.
+  """
+  def __init__(self,
+               dtype=dtypes.float32,
+               axis=-1,
+               epsilon=1e-3,
+               center=True,
+               scale=True,
+               beta_initializer='zeros',
+               gamma_initializer='ones',
+               trainable=True,
+               name=None,
+               **kwargs):
+    if isinstance(axis, (list, tuple)):
+      self.axis = axis[:]
+    elif isinstance(axis, int):
+      self.axis = axis
+    else:
+      raise ValueError('Expected an int or a list/tuple of ints for the '
+                       'argument \'axis\', but received instead: %s' % axis)
+
+    channels_axis = -1
+    super().__init__(dtype=dtype,
+                     groups=1,
+                     channels_axis=channels_axis,
+                     center=center,
+                     scale=scale,
+                     epsilon=epsilon,
+                     beta_initializer=beta_initializer,
+                     gamma_initializer=gamma_initializer,
+                     trainable=trainable,
+                     name=name)
+
+  def build(self, input_shape):
+    ndims = len(input_shape)
+    if ndims is None:
+      raise ValueError('Input shape %s has undefined rank.' % input_shape)
+
+    # Convert axis to list and resolve negatives
+    if isinstance(self.axis, int):
+      self.axis = [self.axis]
+    elif isinstance(self.axis, tuple):
+      self.axis = list(self.axis)
+    for idx, x in enumerate(self.axis):
+      if x < 0:
+        self.axis[idx] = ndims + x
+    self.axis = sorted(self.axis)
+
+    # Validate axes
+    for x in self.axis:
+      if x < 0 or x >= ndims:
+        raise ValueError('Invalid axis: %d' % x)
+    if len(self.axis) != len(set(self.axis)):
+      raise ValueError('Duplicate axis: {}'.format(tuple(self.axis)))
+
+    if any([input_shape[dim] is None for dim in self.axis]):
+      raise ValueError('Input shape %s has unknown dimensions.' % input_shape)
+
+    # Reshape into a 2D tensor, with the 0th dimension corresponding to the
+    # non-reduced dimensions and the 1st dimension corresponding to the reduced
+    # dimensions.
+
+    # Find all the dimensions which are not reduced and find the permutation.
+    self.non_reduced_dims = sorted(list(set(range(ndims)) - set(self.axis)))
+    self.permutation = self.non_reduced_dims + self.axis
+
+    # Get the number of elements which are reduced.
+    self.num_reduced_elements = reduce(operator.mul,
+                                       [input_shape[dim] for dim in self.axis],
+                                       1)
+
+    super().build([None, self.num_reduced_elements])
+
+  # pylint: disable=useless-super-delegation
+  def call(self, inputs, training=None):
+    input_shape = inputs.shape
+
+    # Create the 2D shape.
+    num_non_reduced_elements = reduce(
+        operator.mul, [input_shape[dim] for dim in self.non_reduced_dims], 1)
+    input_shape_2d = [num_non_reduced_elements, self.num_reduced_elements]
+
+    # Permute the inputs to move the reduction and non reduction dimensions.
+    permuted = array_ops.transpose(inputs, self.permutation)
+    permuted_shape = permuted.shape
+    # Reshape into 2D.
+    permuted = array_ops.reshape(permuted, input_shape_2d)
+
+    # Call the group norm.
+    outputs = super().call(permuted, training)
+
+    # Reshape back to the original shape.
+    outputs = array_ops.reshape(outputs, permuted_shape)
+    # Inverse the transpose.
+    outputs = array_ops.transpose(
+        outputs, array_ops.invert_permutation(self.permutation))
+
+    # If some components of the shape got lost due to adjustments, fix that.
+    outputs.set_shape(input_shape)
+
+    return outputs
+
+
+GroupNorm = GroupNormalization
+InstanceNorm = InstanceNormalization
+LayerNorm = LayerNormalization
