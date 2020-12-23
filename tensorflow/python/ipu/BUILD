@@ -330,7 +330,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 2,
+    shard_count = 10,
 )
 
 tf_py_test(
@@ -430,6 +430,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
+    shard_count = 12,
 )
 
 tf_py_test(

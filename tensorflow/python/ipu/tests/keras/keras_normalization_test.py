@@ -19,12 +19,14 @@ import numpy as np
 from tensorflow.python.eager import def_function
 from tensorflow.python.platform import test
 from tensorflow.python import ipu
+from tensorflow.python import keras
+from tensorflow.python.framework import test_util
 
 dataType = np.float32
 
 
 def keras_instance(x, training=True, **kwargs):
-  layer = ipu.layers.InstanceNorm(**kwargs)
+  layer = ipu.layers.InstanceNormalization(**kwargs)
   layer.build(x.shape)
 
   @def_function.function
@@ -35,7 +37,18 @@ def keras_instance(x, training=True, **kwargs):
 
 
 def keras_layer(x, training=True, **kwargs):
-  layer = ipu.layers.LayerNorm(**kwargs)
+  layer = ipu.layers.LayerNormalization(**kwargs)
+  layer.build(x.shape)
+
+  @def_function.function
+  def impl(x, training):
+    return layer(inputs=x, training=training)
+
+  return impl(x, training)
+
+
+def keras_upstream_layer(x, training=True, **kwargs):
+  layer = keras.layers.LayerNormalization(**kwargs)
   layer.build(x.shape)
 
   @def_function.function
@@ -46,7 +59,7 @@ def keras_layer(x, training=True, **kwargs):
 
 
 def keras_group(x, training=True, **kwargs):
-  layer = ipu.layers.GroupNorm(**kwargs)
+  layer = ipu.layers.GroupNormalization(**kwargs)
   layer.build(x.shape)
 
   @def_function.function
@@ -166,7 +179,7 @@ class GroupNorm(test.TestCase):
                       groups=2)
 
 
-class InstanceTest(test.TestCase):
+class LayerTest(test.TestCase):
   def doTest(self,
              input_shape,
              channels_axis=None,
@@ -177,6 +190,7 @@ class InstanceTest(test.TestCase):
     if channels_axis < 0:
       channels_axis += len(input_shape)
     reduced_axes = [channels_axis + 1]
+    axis = [channels_axis]
     for a in reduction_axes:
       if a < 0:
         a += len(input_shape)
@@ -184,6 +198,7 @@ class InstanceTest(test.TestCase):
         reduced_axes.append(a)
       else:
         reduced_axes.append(a + 1)
+      axis.append(a)
     reduced_axes = tuple(reduced_axes)
     channels = input_shape[channels_axis]
     # Calculate the final shape for the output Tensor.
@@ -205,11 +220,11 @@ class InstanceTest(test.TestCase):
     expected_var = np.ones(reduced_shape)
 
     inputs = np.random.rand(*input_shape).astype(dataType) * sigma + mu
-    result = keras_instance(inputs,
-                            center=False,
-                            scale=False,
-                            channels_axis=channels_axis,
-                            training=True)
+    result = keras_layer(inputs,
+                         center=False,
+                         scale=False,
+                         axis=axis,
+                         training=True)
     # Make sure that there are no NaNs
     self.assertFalse(np.isnan(result).any())
 
@@ -256,8 +271,30 @@ class InstanceTest(test.TestCase):
   def testOutput5D_NCXXX(self):
     self.doTest([4, 4, 4, 10, 4], channels_axis=1, reduction_axes=[2, 3, 4])
 
+  def doComparisonTest(self, input_shape, axis):
+    inputs = np.random.rand(*input_shape).astype(dataType) + 0.1
+    result = keras_layer(inputs, axis=axis)
+    result_upstream = keras_upstream_layer(inputs, axis=axis)
+    self.assertAllClose(result, result_upstream, rtol=1e-3)
 
-class LayerTest(test.TestCase):
+  @test_util.run_v2_only
+  def test3D(self):
+    input_shape = [10, 10, 30]
+    # Specify axes with positive values.
+    self.doComparisonTest(input_shape, axis=[1, 2])
+    # Specify axes with negative values.
+    self.doComparisonTest(input_shape, axis=[-2, -1])
+
+  @test_util.run_v2_only
+  def test4D_single_axis(self):
+    input_shape = [10, 10, 30, 10]
+    # Specify axes with positive values.
+    self.doComparisonTest(input_shape, axis=[2])
+    # Specify axes with negative values.
+    self.doComparisonTest(input_shape, axis=[-1])
+
+
+class InstanceTest(test.TestCase):
   def doTest(self,
              input_shape,
              channels_axis=None,
@@ -296,11 +333,11 @@ class LayerTest(test.TestCase):
     expected_var = np.ones(reduced_shape)
 
     inputs = np.random.rand(*input_shape).astype(dataType) * sigma + mu
-    outputs = keras_layer(inputs,
-                          center=False,
-                          scale=False,
-                          axis=channels_axis,
-                          training=True)
+    outputs = keras_instance(inputs,
+                             center=False,
+                             scale=False,
+                             channels_axis=channels_axis,
+                             training=True)
 
     # Implementation detail - in Poplibs group norm, the groups are not
     # contiguous, but strided - we replicate that here
