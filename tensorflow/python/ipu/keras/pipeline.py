@@ -796,8 +796,9 @@ class PipelineModel(ipu_model.Model):
       # Verify that a pipeline stage has been assigned.
       if not hasattr(layer, "_pipeline_stage"):
         raise ValueError(
-            "All layers of a pipelined model must have an associated "
-            "pipeline stage")
+            f"All layers of a pipelined model must have an associated "
+            f"pipeline stage. \nHowever, {layer} has not been assigned to one."
+        )
 
       layer_id = id(layer)
       stages[layer_id] = layer._pipeline_stage  # pylint: disable=protected-access
