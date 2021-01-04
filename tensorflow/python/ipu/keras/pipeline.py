@@ -117,6 +117,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                forward_propagation_stages_poplar_options=None,
                backward_propagation_stages_poplar_options=None,
                weight_update_poplar_options=None,
+               offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=False,
                offload_activations=None,
                offload_gradient_accumulation_buffers=None,
@@ -174,6 +175,19 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
             :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
             object which allows for fine grained control of the Poplar options
             for the weight update stage.
+        offload_weight_update_variables: When enabled, any `tf.Variable` which
+            is only used by the weight update of the pipeline (for example the
+            accumulator variable when using the `tf.MomentumOptimizer`), will
+            be stored in the remote memory. During the weight update this
+            variable will be streamed onto the device and then streamed back
+            to the remote memory after it has been updated. Requires the
+            machine to be configured with support for `Poplar remote buffers`.
+            Offloading variables into remote memory can reduce maximum memory
+            liveness, but can also increase the computation time of the weight
+            update. When set to `None` the variables will be placed in either
+            in-processor or remote memory automatically based on the current
+            best placement strategy.
+            Note that this option has no effect for inference only pipelines.
         replicated_optimizer_state_sharding: If True, any `tf.Variable` which
             is offloaded (for example the accumulator variable when using the
             `tf.MomentumOptimizer`), will be partitioned across the replicas.
@@ -263,6 +277,8 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     self.backward_propagation_stages_poplar_options = \
       backward_propagation_stages_poplar_options
     self.weight_update_poplar_options = weight_update_poplar_options
+    self.offload_weight_update_variables = \
+      offload_weight_update_variables
     self.replicated_optimizer_state_sharding = \
       replicated_optimizer_state_sharding
     self.offload_activations = offload_activations
@@ -386,6 +402,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
         backward_propagation_stages_poplar_options=self.
         backward_propagation_stages_poplar_options,
         weight_update_poplar_options=self.weight_update_poplar_options,
+        offload_weight_update_variables=self.offload_weight_update_variables,
         replicated_optimizer_state_sharding=self.
         replicated_optimizer_state_sharding,
         offload_activations=self.offload_activations,
@@ -626,6 +643,7 @@ class PipelineModel(ipu_model.Model):
                forward_propagation_stages_poplar_options=None,
                backward_propagation_stages_poplar_options=None,
                weight_update_poplar_options=None,
+               offload_weight_update_variables=None,
                replicated_optimizer_state_sharding=False,
                offload_activations=None,
                offload_gradient_accumulation_buffers=None,
@@ -686,6 +704,19 @@ class PipelineModel(ipu_model.Model):
             :class:`~tensorflow.python.ipu.pipelining_ops.PipelineStageOptions`
             object which allows for fine grained control of the Poplar options
             for the weight update stage.
+        offload_weight_update_variables: When enabled, any `tf.Variable` which
+            is only used by the weight update of the pipeline (for example the
+            accumulator variable when using the `tf.MomentumOptimizer`), will
+            be stored in the remote memory. During the weight update this
+            variable will be streamed onto the device and then streamed back
+            to the remote memory after it has been updated. Requires the
+            machine to be configured with support for `Poplar remote buffers`.
+            Offloading variables into remote memory can reduce maximum memory
+            liveness, but can also increase the computation time of the weight
+            update. When set to `None` the variables will be placed in either
+            in-processor or remote memory automatically based on the current
+            best placement strategy.
+            Note that this option has no effect for inference only pipelines.
         replicated_optimizer_state_sharding: If True, any `tf.Variable` which
             is offloaded (for example the accumulator variable when using the
             `tf.MomentumOptimizer`), will be partitioned across the replicas.
@@ -769,6 +800,8 @@ class PipelineModel(ipu_model.Model):
     self.backward_propagation_stages_poplar_options = \
       backward_propagation_stages_poplar_options
     self.weight_update_poplar_options = weight_update_poplar_options
+    self.offload_weight_update_variables = \
+      offload_weight_update_variables
     self.replicated_optimizer_state_sharding = \
       replicated_optimizer_state_sharding
     self.offload_activations = offload_activations
@@ -936,6 +969,7 @@ class PipelineModel(ipu_model.Model):
         backward_propagation_stages_poplar_options=self.
         backward_propagation_stages_poplar_options,
         weight_update_poplar_options=self.weight_update_poplar_options,
+        offload_weight_update_variables=self.offload_weight_update_variables,
         replicated_optimizer_state_sharding=self.
         replicated_optimizer_state_sharding,
         offload_activations=self.offload_activations,
