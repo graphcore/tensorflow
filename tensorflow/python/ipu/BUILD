@@ -247,9 +247,9 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "gelu_test",
-    size = "small",
-    srcs = ["tests/gelu_test.py"],
+    name = "nn_ops_test",
+    size = "medium",
+    srcs = ["tests/nn_ops_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
