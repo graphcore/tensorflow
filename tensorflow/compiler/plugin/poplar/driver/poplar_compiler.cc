@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_nan.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_slice_folding.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/conv_bwd_input_to_fwd_weights_transpose.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
@@ -1297,6 +1298,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<PipelineCopyInserter>();
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+    pipeline.AddPass<ConvBwdInputToFwdWeightsTranspose>();
     pipeline.AddPass<PipelineRecomputationStageInserter>(
         poplar_executor->RecomputationEnabled(),
         resources.remote_memory_supported);

@@ -78,8 +78,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     const ConvolutionDimensionNumbers& conv_dimension_numbers =
         weights_transpose_inst->convolution_dimension_numbers();
 
-    in_weights = ShuffleConvolutionWeightsToPoplar(conv_dimension_numbers,
-                                                   in_weights, true);
+    in_weights = ShuffleConvolutionWeightsToPoplar(
+        conv_dimension_numbers, in_weights, /* swap_features= */ false);
 
     const std::vector<size_t>& conv_input_shape =
         weights_transpose_inst->ConvInputShape();
@@ -92,7 +92,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
         GetConvolutionParametersForWeightsTranspose(
             weights_transpose_inst, conv_input_shape, conv_output_shape));
 
-    in_weights = AddGroupsDimensionToWeights(conv_params, in_weights, true);
+    in_weights = AddGroupsDimensionToWeights(conv_params, in_weights,
+                                             /* swap_features= */ false);
 
     const std::string debug_prefix = GetDebugName(inst);
     auto func = [&graph, &res, conv_dimension_numbers, conv_params,

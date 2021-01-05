@@ -24,6 +24,18 @@ Window GetConvolutionWindow(const HloInstruction* inst);
 
 ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst);
 
+// Checks that forward and backward convolution dimension number match: input
+// and output feature dimensions are swapped and the rest of the parameters are
+// equivalent.
+bool ForwardBackwardConvolutionDimensionNumbersMatch(
+    const ConvolutionDimensionNumbers& fwd,
+    const ConvolutionDimensionNumbers& bwd);
+
+// Returns ConvolutionDimensionNumbers with kernel input/output feature
+// dimension flipped.
+ConvolutionDimensionNumbers FlipConvolutionDimensionNumbersFeatureAxis(
+    const ConvolutionDimensionNumbers& dims);
+
 int64 GetFeatureGroupCount(const HloInstruction* inst);
 
 int64 GetBatchGroupCount(const HloInstruction* inst);
