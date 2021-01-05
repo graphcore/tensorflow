@@ -21,8 +21,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 
-#include "google/protobuf/util/message_differencer.h"
-
 namespace xla {
 namespace poplarplugin {
 
@@ -67,23 +65,6 @@ ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst) {
     }
     return inst->convolution_dimension_numbers();
   }
-}
-
-bool ForwardBackwardConvolutionDimensionNumbersMatch(
-    const ConvolutionDimensionNumbers& fwd,
-    const ConvolutionDimensionNumbers& bwd) {
-  return google::protobuf::util::MessageDifferencer::Equivalent(
-      FlipConvolutionDimensionNumbersFeatureAxis(fwd), bwd);
-}
-
-ConvolutionDimensionNumbers FlipConvolutionDimensionNumbersFeatureAxis(
-    const ConvolutionDimensionNumbers& dims) {
-  auto result = dims;
-  auto output_dim = dims.kernel_output_feature_dimension();
-  auto input_dim = dims.kernel_input_feature_dimension();
-  result.set_kernel_output_feature_dimension(input_dim);
-  result.set_kernel_input_feature_dimension(output_dim);
-  return result;
 }
 
 int64 GetFeatureGroupCount(const HloInstruction* inst) {
