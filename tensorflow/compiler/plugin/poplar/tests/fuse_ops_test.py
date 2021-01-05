@@ -477,7 +477,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Transpose',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightTranspose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/fusion*/*Transpose',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
       # pylint: enable=line-too-long
@@ -1201,80 +1201,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'Sum/fusion*/Reduce']
-
-  def testConvolutionWithReverseWeights(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        x = array_ops.placeholder(np.float32, [1, 4, 4, 2], name="x")
-        lr = array_ops.placeholder(np.float32, [], name="lr")
-
-        with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(2,
-                            2,
-                            kernel_initializer=init_ops.constant_initializer(
-                                [[[[1, -1], [1, 1]], [[2, -1], [-1, -2]]],
-                                 [[[1, 2], [3, 4]], [[1, 2], [3, 4]]]]),
-                            use_bias=False)(x)
-          y = layers.Conv2D(2,
-                            1,
-                            kernel_initializer=init_ops.constant_initializer([
-                                [
-                                    [[0.3, 0.6], [-1, 0.5]],
-                                ],
-                            ]),
-                            use_bias=False)(y)
-
-        loss = math_ops.reduce_mean(y)
-        optimizer = gradient_descent.GradientDescentOptimizer(lr)
-        train = optimizer.minimize(loss)
-
-      report = tu.ReportJSON(self, sess)
-      sess.run(variables.global_variables_initializer())
-      report.reset()
-
-      train, loss = sess.run(
-          [train, loss], {
-              x:
-              np.array([[
-                  [[1, 2], [3, 4], [-1, -2], [-3, -4]],
-                  [[2, 1], [2, 1], [-1, -2], [-1, -2]],
-                  [[1, 1], [2, 2], [3, 3], [4, 4]],
-                  [[1, 2], [-1, -2], [-1, -1], [-2, -2]],
-              ]]),
-              lr:
-              1
-          })
-
-      k1, k2 = sess.run(variables.trainable_variables())
-      self.assertAllClose(loss, 2.3611107)
-      self.assertAllClose(
-          k1,
-          np.array([[[[0.39999998, -0.6666667], [0.5, 1.2777778]],
-                     [[1.6, -0.7777778], [-1.2, -1.8888888]]],
-                    [[[0.6, 2.2222223], [2.75, 4.138889]],
-                     [[0.75, 2.1388888], [2.95, 4.0277777]]]]))
-      self.assertAllClose(
-          k2, np.array([[[[-3.3111112, -3.0111113], [-2.7777781,
-                                                     -1.277778]]]]))
-
-      report.parse_log(
-          assert_len=6,
-          assert_msg=
-          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'copy*/OnTileCopy-',
-          'vs/conv2d_1/Conv2D/convolution*/Conv_1x1/Convolve',
-          'vs/conv2d/Conv2D/convolution*/Conv_2x2/Convolve',
-          'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_3x3/',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightTranspose',
-          'Mean/',
-      ]
-      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
 

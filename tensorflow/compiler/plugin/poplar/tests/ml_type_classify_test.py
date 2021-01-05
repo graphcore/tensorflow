@@ -175,9 +175,8 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       sess.run(output, {x: np.ones(x.shape), l: [1]})
       report.parse_log()
 
-      # 4 convs, 3 grads, 4 updates
-      # minus one bwd converted by conv_bwd_input_to_fwd_weights_transpose pass
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 6, 2, 4])
+      # 3 convs, 1 matmul = 4
+      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoMatMuls(self):
