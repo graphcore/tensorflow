@@ -245,6 +245,7 @@ Optimisers
 
 It is also possible to access the optimisers via the
 `tensorflow.python.ipu.optimizers` namespace, for example:
+`tensorflow.python.ipu.optimizers.CrossReplicaOptimizer` or
 `tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`.
 
 .. automodule:: tensorflow.python.ipu.cross_replica_optimizer
