@@ -135,6 +135,7 @@ py_library(
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
+        "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
         "optimizers/map_gradient_optimizer.py",
