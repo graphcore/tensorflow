@@ -16,12 +16,16 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SPSC_QUEUE_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SPSC_QUEUE_H_
 
+#include <immintrin.h>
 #include <atomic>
 #include <bitset>
 #include <cassert>
 #include <functional>
 #include <memory>
+#include <thread>
 #include <vector>
+
+#include "tensorflow/core/platform/default/logging.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -61,16 +65,12 @@ class SPSCQueue {
    *       element.
    */
   explicit SPSCQueue(T init, std::function<void(T&)> post_apply)
-      : size_(0),
-        write_position_(0),
-        read_position_(0),
-        post_apply_(post_apply) {
+      : push_count_(0), pop_count_(0), post_apply_(post_apply) {
     assert(post_apply);
     std::fill(buffer_.begin(), buffer_.end(), init);
   }
 
   ~SPSCQueue() {
-    std::atomic_store(&size_, std::size_t{0});
     for (auto& elem : buffer_) {
       post_apply_(elem);
     }
@@ -82,8 +82,10 @@ class SPSCQueue {
    *
    */
   inline void AdvanceWritePosition() {
-    write_position_ = (write_position_ + 1) % Capacity;
-    std::atomic_fetch_add(&size_, std::size_t{1});
+    const std::size_t push_count =
+        std::atomic_load_explicit(&push_count_, std::memory_order_relaxed);
+    std::atomic_store_explicit(&push_count_, push_count + 1,
+                               std::memory_order_release);
   }
 
   /**
@@ -95,10 +97,14 @@ class SPSCQueue {
    *       (i.e. IsFull() == false) and it does not advance the write position.
    */
   inline void Push(const T& item) {
-    assert(!IsFull());
+    assert(!IsFull(0));
 
-    post_apply_(buffer_[write_position_]);
-    buffer_[write_position_] = item;
+    const std::size_t push_count =
+        std::atomic_load_explicit(&push_count_, std::memory_order_relaxed) %
+        Capacity;
+
+    post_apply_(buffer_[push_count]);
+    buffer_[push_count] = item;
   }
 
   /**
@@ -108,6 +114,7 @@ class SPSCQueue {
    */
   inline void BlockPush(const T& item) {
     while (IsFull()) {
+      _mm_pause();
     }
 
     Push(item);
@@ -136,8 +143,10 @@ class SPSCQueue {
    *
    */
   inline void AdvanceReadPosition() {
-    read_position_ = (read_position_ + 1) % Capacity;
-    std::atomic_fetch_sub(&size_, std::size_t{1});
+    const std::size_t pop_count =
+        std::atomic_load_explicit(&pop_count_, std::memory_order_relaxed);
+    std::atomic_store_explicit(&pop_count_, pop_count + 1,
+                               std::memory_order_release);
   }
 
   /**
@@ -151,9 +160,9 @@ class SPSCQueue {
    */
   inline void Pop(T& item, std::size_t look_ahead = 0) {
     assert(!IsEmpty());
-    assert(std::atomic_load(&size_) > look_ahead);
+    assert(HasLookAhead(look_ahead));
 
-    item = buffer_[(read_position_ + look_ahead) % Capacity];
+    item = buffer_[(pop_count_ + look_ahead) % Capacity];
   }
 
   /**
@@ -162,7 +171,8 @@ class SPSCQueue {
    * \param item The element to pop into.
    */
   inline void BlockPop(T& item, std::size_t look_ahead = 0) {
-    while (std::atomic_load(&size_) <= look_ahead) {
+    while (!HasLookAhead(look_ahead)) {
+      _mm_pause();
     }
 
     Pop(item, look_ahead);
@@ -177,7 +187,7 @@ class SPSCQueue {
    * \return true if the element was successfully poped, otherwise false.
    */
   inline bool TryPop(T& item, std::size_t look_ahead = 0) {
-    if (std::atomic_load(&size_) <= look_ahead) {
+    if (!HasLookAhead(look_ahead)) {
       return false;
     }
 
@@ -190,8 +200,13 @@ class SPSCQueue {
    *
    * \return True if the queue is full, otherwise false.
    */
-  inline bool IsFull() const {
-    return std::atomic_load(&size_) >= Capacity - 8;
+  inline bool IsFull(std::size_t backoff = 8) const {
+    const std::size_t push_count =
+        std::atomic_load_explicit(&push_count_, std::memory_order_consume);
+    const std::size_t pop_count =
+        std::atomic_load_explicit(&pop_count_, std::memory_order_consume);
+
+    return __builtin_expect((push_count - pop_count) >= Capacity - backoff, 1);
   }
 
   /**
@@ -199,14 +214,35 @@ class SPSCQueue {
    *
    * \return True if the queue is empty, otherwise false.
    */
-  inline bool IsEmpty() const { return std::atomic_load(&size_) == 0; }
+  inline bool IsEmpty() const {
+    const std::size_t push_count =
+        std::atomic_load_explicit(&push_count_, std::memory_order_consume);
+    const std::size_t pop_count =
+        std::atomic_load_explicit(&pop_count_, std::memory_order_consume);
+
+    return __builtin_expect(push_count == pop_count, 0);
+  }
+
+  /**
+   * Test whether the queue has at least `look_ahead` elements.
+   *
+   * \return True if the queue is has at least `look_ahead` elements, otherwise
+   * false.
+   */
+  inline bool HasLookAhead(std::size_t look_ahead) const {
+    const std::size_t push_count =
+        std::atomic_load_explicit(&push_count_, std::memory_order_consume);
+    const std::size_t pop_count =
+        std::atomic_load_explicit(&pop_count_, std::memory_order_consume);
+
+    return __builtin_expect((push_count - pop_count) > look_ahead, 1);
+  }
 
  protected:
   std::array<T, Capacity> buffer_;
 
-  alignas(64) std::atomic<std::size_t> size_;
-  alignas(64) std::size_t write_position_;
-  alignas(64) std::size_t read_position_;
+  alignas(64) std::atomic<std::size_t> push_count_;
+  alignas(64) std::atomic<std::size_t> pop_count_;
 
   std::function<void(T&)> post_apply_;
 };

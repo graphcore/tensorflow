@@ -44,14 +44,12 @@ class SPSCOutfeedQueue : SPSCQueue<void*, Capacity> {
    * \param element_size The size of each buffer in the queue.
    */
   explicit SPSCOutfeedQueue(std::size_t element_size)
-      : SPSCQueue<void*, Capacity>(nullptr,
-                                   [](void*& ptr) {
-                                     if (ptr) {
-                                       tensorflow::port::AlignedFree(ptr);
-                                       ptr = nullptr;
-                                     }
-                                   }),
-        items_waiting_(0) {
+      : SPSCQueue<void*, Capacity>(nullptr, [](void*& ptr) {
+          if (ptr) {
+            tensorflow::port::AlignedFree(ptr);
+            ptr = nullptr;
+          }
+        }) {
     for (std::size_t i = 0; i != Capacity; ++i) {
       buffer_[i] = tensorflow::port::AlignedMalloc(element_size, 64);
     }
@@ -65,11 +63,11 @@ class SPSCOutfeedQueue : SPSCQueue<void*, Capacity> {
    * \param item The element to push.
    */
   inline void*& BlockBack() {
-    std::atomic_fetch_add(&items_waiting_, std::size_t{1});
     while (SPSCQueue<void*, Capacity>::IsFull()) {
+      _mm_pause();
     }
 
-    return buffer_[write_position_];
+    return buffer_[push_count_ % Capacity];
   }
 
   /**
@@ -89,17 +87,19 @@ class SPSCOutfeedQueue : SPSCQueue<void*, Capacity> {
    */
   inline void*& BlockFront() {
     while (SPSCQueue<void*, Capacity>::IsEmpty()) {
+      _mm_pause();
     }
 
-    return buffer_[read_position_];
+    return buffer_[pop_count_ % Capacity];
   }
+
+  inline void* Front() { return buffer_[pop_count_ % Capacity]; }
 
   /**
    * Called when reading from the front of the queue is finished.
    *
    */
   inline void FinishedFront() {
-    std::atomic_fetch_sub(&items_waiting_, std::size_t{1});
     SPSCQueue<void*, Capacity>::AdvanceReadPosition();
   }
 
@@ -111,14 +111,12 @@ class SPSCOutfeedQueue : SPSCQueue<void*, Capacity> {
    * \return True if the queue has items waiting, otherwise false.
    */
   inline bool HasItemsWaiting() const {
-    return std::atomic_load(&items_waiting_);
+    return !SPSCQueue<void*, Capacity>::IsEmpty();
   }
 
   using SPSCQueue<void*, Capacity>::buffer_;
-  using SPSCQueue<void*, Capacity>::write_position_;
-  using SPSCQueue<void*, Capacity>::read_position_;
-
-  alignas(64) std::atomic<std::size_t> items_waiting_;
+  using SPSCQueue<void*, Capacity>::push_count_;
+  using SPSCQueue<void*, Capacity>::pop_count_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

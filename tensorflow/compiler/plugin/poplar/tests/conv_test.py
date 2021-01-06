@@ -224,12 +224,10 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      # pylint: disable=line-too-long
       ok = [
           '__seed*', 'Copy_', 'Conv2DBackpropInput/fusion*/Conv_2x2',
           'Conv2DBackpropInput/fusion*/*Transpose'
       ]
-      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testConvBackpropFilter(self):
@@ -346,13 +344,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      # pylint: disable=line-too-long
       ok = [
           '__seed*', 'copy*OnTileCopy-',
           'DepthwiseConv2dNativeBackpropInput/fusion/Conv_3x3/Convolve',
           'DepthwiseConv2dNativeBackpropInput/fusion/Conv_3x3/WeightsTranspose'
       ]
-      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testDepthwiseConvBackpropInput1x1(self):
@@ -376,14 +372,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'Copy_',
           'DepthwiseConv2dNativeBackpropInput/fusion*/*Transpose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
-      # pylint: enable=line-too-long
 
       report.assert_all_compute_sets_and_list(ok)
 
