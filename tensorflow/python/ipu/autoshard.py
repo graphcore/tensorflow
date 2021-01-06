@@ -22,8 +22,11 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu import autoshard_cnn
 from tensorflow.python.ipu import sharding
 from tensorflow.python.util import tf_contextlib
+from tensorflow.python.util import deprecation
 
 
+@deprecation.deprecated(None, "Use alternative execution modes, such as "
+                        "pipelining, instead.")
 def automatic_sharding(num_shards,
                        input_ts,
                        loss_ts,

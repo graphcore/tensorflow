@@ -19,6 +19,7 @@ Run configs
 import collections
 
 from tensorflow.python.estimator import run_config as run_config_lib
+from tensorflow.python.util import deprecation
 
 
 class IPURunConfig(
@@ -45,6 +46,12 @@ class IPURunConfig(
     ordinal: The IPU device ordinal to use.  For instance `0` corresponds
       to `/device:IPU:0`.
   """
+  @deprecation.deprecated_arg_values(
+      None,
+      "autosharding is deprecated, use alternative execution modes, such as "
+      "pipelining, instead",
+      warn_once=True,
+      autosharding=True)
   def __new__(cls,
               iterations_per_loop=1,
               ipu_options=None,
