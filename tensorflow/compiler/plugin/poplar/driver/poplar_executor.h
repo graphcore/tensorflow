@@ -366,11 +366,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.speed_size_config().merge_infeed_io_copies();
   }
 
-  bool DisableGraphConvCaching() const {
-    return current_config_.speed_size_config()
-        .disable_graph_convolution_caching();
-  }
-
   bool DisableGraphOutlining() const {
     return current_config_.speed_size_config().disable_graph_outlining();
   }

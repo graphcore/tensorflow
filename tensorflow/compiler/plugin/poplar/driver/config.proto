@@ -117,13 +117,14 @@ message IpuOptions {
     // Option controlling whether to rearrange streamed copies on the host
     bool always_rearrange_copies_on_the_host = 1;
 
-    // Option to disable caching of sub-graphs containing convolutions
-    bool disable_graph_convolution_caching = 2;
+    // retired = 2;
+
     // Option to disable caching of sub-graphs containing convolutions
     bool disable_graph_outlining = 3;
 
     // Option to enable re-computation.
     bool allow_recompute = 4;
+
     // retired = 5;
 
     // Merge all streaming reads into a block to reduce the host-sync round-trip

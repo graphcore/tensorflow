@@ -82,36 +82,65 @@ class Conv2DOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence prog;
+    poplar::program::Sequence seq;
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in,
-        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
     // Find the kernel tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor kernel,
-        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));
 
-    in = ShuffleConvolutionInputToPoplar(inst, in);
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                        GetConvolutionOptionsForInst(inst, res));
 
-    kernel = ShuffleConvolutionWeightsToPoplar(inst, kernel, false);
+    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
-    kernel = AddGroupsDimensionToWeights(params, kernel, false);
+    const std::string debug_prefix = GetDebugName(inst);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                        conv_graph_caching::DoCachedConvolution(
-                            graph, res, in, kernel, params, inst, false, prog));
+    auto func = [&graph, &res, params, opts, conv_dims, debug_prefix](
+                    std::vector<poplar::Tensor>& args,
+                    poplar::program::Sequence& prog) {
+      poplar::Tensor in_f = args[0];
+      poplar::Tensor kernel_f = args[1];
 
-    out = ShuffleConvolutionOutputToTensorflow(inst, out);
+      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
+
+      kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, false);
+
+      kernel_f = AddGroupsDimensionToWeights(params, kernel_f, false);
+
+      poplar::Tensor out_f =
+          poplin::convolution(graph, in_f, kernel_f, params, false, prog,
+                              debug_prefix, opts, &res.convolution_cache);
+
+      out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
+
+      args[2] = out_f;
+    };
+
+    poplar::Tensor out;
+    std::vector<poplar::Tensor> args = {in, kernel, out};
+    poputil::graphfn::Signature signature = {
+        poputil::graphfn::input(in, "in"),
+        poputil::graphfn::input(kernel, "kernel"),
+        poputil::graphfn::created("out"),
+    };
+
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+
+    out = args[2];
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
-    return prog;
+    return seq;
   }
 
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
@@ -154,36 +183,65 @@ class Conv2DReverseOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence prog;
+    poplar::program::Sequence seq;
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in,
-        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
     // Find the kernel tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor kernel,
-        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));
 
-    in = ShuffleConvolutionInputToPoplar(inst, in);
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                        GetConvolutionOptionsForInst(inst, res));
 
-    kernel = ShuffleConvolutionWeightsToPoplar(inst, kernel, true);
+    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
-    kernel = AddGroupsDimensionToWeights(params, kernel, true);
+    const std::string debug_prefix = GetDebugName(inst);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                        conv_graph_caching::DoCachedConvolution(
-                            graph, res, in, kernel, params, inst, true, prog));
+    auto func = [&graph, &res, params, opts, conv_dims, debug_prefix](
+                    std::vector<poplar::Tensor>& args,
+                    poplar::program::Sequence& prog) {
+      poplar::Tensor in_f = args[0];
+      poplar::Tensor kernel_f = args[1];
 
-    out = ShuffleConvolutionOutputToTensorflow(inst, out);
+      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
+
+      kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, true);
+
+      kernel_f = AddGroupsDimensionToWeights(params, kernel_f, true);
+
+      poplar::Tensor out_f =
+          poplin::convolution(graph, in_f, kernel_f, params, true, prog,
+                              debug_prefix, opts, &res.convolution_cache);
+
+      out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
+
+      args[2] = out_f;
+    };
+
+    poplar::Tensor out;
+    std::vector<poplar::Tensor> args = {in, kernel, out};
+    poputil::graphfn::Signature signature = {
+        poputil::graphfn::input(in, "in"),
+        poputil::graphfn::input(kernel, "kernel"),
+        poputil::graphfn::created("out"),
+    };
+
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+
+    out = args[2];
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
-    return prog;
+    return seq;
   }
 };
 
@@ -215,40 +273,69 @@ class DepthwiseBackpropFilterOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence prog;
+    poplar::program::Sequence seq;
 
     // Find the input tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in,
-        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
     // Find the kernel tensor
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor kernel,
-        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));
 
-    in = ShuffleConvolutionInputToPoplar(inst, in);
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                        GetConvolutionOptionsForInst(inst, res));
 
-    in = DepthwiseFilterShuffleInput(params, in);
+    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
-    kernel = ShuffleConvolutionWeightsToPoplar(inst, kernel, false);
+    const std::string debug_prefix = GetDebugName(inst);
 
-    kernel = AddGroupsDimensionToWeights(params, kernel, false);
+    auto func = [&graph, &res, params, opts, conv_dims, debug_prefix](
+                    std::vector<poplar::Tensor>& args,
+                    poplar::program::Sequence& prog) {
+      poplar::Tensor in_f = args[0];
+      poplar::Tensor kernel_f = args[1];
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                        conv_graph_caching::DoCachedConvolution(
-                            graph, res, in, kernel, params, inst, false, prog));
+      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
 
-    out = DepthwiseFilterShuffleOutput(params, out);
+      in_f = DepthwiseFilterShuffleInput(params, in_f);
 
-    out = ShuffleConvolutionOutputToTensorflow(inst, out);
+      kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, false);
+
+      kernel_f = AddGroupsDimensionToWeights(params, kernel_f, false);
+
+      poplar::Tensor out_f =
+          poplin::convolution(graph, in_f, kernel_f, params, false, prog,
+                              debug_prefix, opts, &res.convolution_cache);
+
+      out_f = DepthwiseFilterShuffleOutput(params, out_f);
+
+      out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
+
+      args[2] = out_f;
+    };
+
+    poplar::Tensor out;
+    std::vector<poplar::Tensor> args = {in, kernel, out};
+    poputil::graphfn::Signature signature = {
+        poputil::graphfn::input(in, "in"),
+        poputil::graphfn::input(kernel, "kernel"),
+        poputil::graphfn::created("out"),
+    };
+
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+
+    out = args[2];
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
-    return prog;
+    return seq;
   }
 };
 

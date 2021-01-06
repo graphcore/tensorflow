@@ -1094,7 +1094,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
       poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
-      poplar_executor->DisableGraphConvCaching(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
       local_replication_factor, poplar_executor->FloatingPointBehaviour(),

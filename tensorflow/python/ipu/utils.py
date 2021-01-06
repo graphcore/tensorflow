@@ -276,6 +276,11 @@ def running_on_ipu_model():
 @deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
                              "max_cross_replica_sum_buffer_size",
                              "max_inter_ipu_copies_buffer_size")
+@deprecation.deprecated_args(
+    None,
+    "disable_graph_convolution_caching is deprecated and it has no effect. "
+    "Use disable_graph_outlining instead.",
+    "disable_graph_convolution_caching")
 def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
@@ -331,16 +336,11 @@ def create_ipu_config(profiling=False,
       host->device input copies into one larger copy.  This may reduce the time
       to copy data from the host, at the expense of increasing the live tensor
       memory on the device.
-    disable_graph_convolution_caching: By default, the convolution operation
-      searches for an equivalent cached operation, and uses this  instead of
-      creating a new convolution. Setting this flag forces the creation of a
-      new convolution. This can improve runtime at the expense of graph size.
     disable_graph_outlining: By default, some operations, such as matrix
       multiplications, which occur in the graph multiple times but with
       different input tensors might be optimised to reduce the total code size
       of the graph at the expense of the execution time. Setting this flag will
-      disable these optimisations. This option is not valid for the convolution
-      operation (also see disable_graph_convolution_caching)
+      disable these optimisations.
     retain_control_dependencies: Deprecated.
     max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
       waiting before a cross replica sum op is scheduled.
@@ -415,8 +415,6 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.always_rearrange_copies_on_the_host = \
       always_rearrange_copies_on_the_host
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
-  opts.speed_size_config.disable_graph_convolution_caching = \
-      disable_graph_convolution_caching
   opts.speed_size_config.disable_graph_outlining = \
       disable_graph_outlining
   opts.speed_size_config.scheduler_selection = scheduler_selection

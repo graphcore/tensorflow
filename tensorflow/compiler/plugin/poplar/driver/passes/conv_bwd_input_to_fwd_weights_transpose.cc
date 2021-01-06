@@ -96,7 +96,8 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
       comp->AddInstruction(HloInstruction::CreateConvolve(
           inst_conv_with_reverse->shape(), conv_input, weights_transpose_flip,
           feature_group_count, batch_group_count, window,
-          conv_dimension_numbers, root_inst->precision_config()));
+          FlipConvolutionDimensionNumbersFeatureAxis(conv_dimension_numbers),
+          root_inst->precision_config()));
 
   inst_conv_with_reverse->SetupDerivedInstruction(conv_fwd);
   if (inst_conv_with_reverse->has_sharding()) {
