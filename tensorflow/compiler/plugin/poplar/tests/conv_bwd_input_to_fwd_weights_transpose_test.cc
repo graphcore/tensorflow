@@ -176,8 +176,8 @@ TEST_P(ConvBwdInputToFwdWeightsTransposeTest, DoTest) {
   EXPECT_EQ(inst_wt->users().size(), 1);
   HloInstruction* fwd_conv = inst_wt->users()[0];
   auto fwd_dims = GetConvolutionDims(fwd_conv);
-  EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equivalent(fwd_dims,
-                                                                     bwd_dims));
+  EXPECT_TRUE(
+      ForwardBackwardConvolutionDimensionNumbersMatch(fwd_dims, bwd_dims));
 
   const std::vector<HloInstruction*>& users_of_wt = inst_wt->users();
   EXPECT_EQ(users_of_wt.size(), 1);

@@ -34,7 +34,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/execution_counter_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
@@ -92,8 +91,6 @@ struct CompilerResources {
 
   bool clear_matmul_pass_type;
 
-  bool disable_graph_convolution_caching;
-
   bool disable_graph_outlining;
 
   /* The global number of replicas that we are compiling for. */
@@ -112,10 +109,6 @@ struct CompilerResources {
   TensorMaps tensor_maps;
 
   LinearMapperState linear_mapping_state;
-
-  conv_graph_caching::ConvolutionGraphCache conv_graph_cache;
-
-  conv_graph_caching::BwdWeightGraphCache bwd_weight_graph_cache;
 
   generic_graph_caching::GenericGraphCache graph_cache;
 
@@ -177,9 +170,9 @@ struct CompilerResources {
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
       const poplar::OptionFlags& pooling_options, bool verified_transfers,
-      bool clear_matmul_pass_type, bool disable_graph_convolution_caching,
-      bool disable_graph_outlining, bool merge_infeed_io_copies,
-      uint32 replication_factor, uint32 local_replication_factor,
+      bool clear_matmul_pass_type, bool disable_graph_outlining,
+      bool merge_infeed_io_copies, uint32 replication_factor,
+      uint32 local_replication_factor,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
       const std::string& scheduler_selection, bool recomputation_enabled,
@@ -196,7 +189,6 @@ struct CompilerResources {
         default_pooling_options(pooling_options),
         use_verified_transfers(verified_transfers),
         clear_matmul_pass_type(clear_matmul_pass_type),
-        disable_graph_convolution_caching(disable_graph_convolution_caching),
         disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
         local_replication_factor(local_replication_factor),
@@ -223,7 +215,6 @@ struct CompilerResources {
         /*matmul_options=*/poplar::OptionFlags(),
         /*pooling_options=*/poplar::OptionFlags(), /*verified_transfers=*/false,
         /*clear_matmul_pass_type=*/false,
-        /*disable_graph_convolution_caching=*/false,
         /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
         /*replication_factor=*/1, /*local_replication_factor=*/1,
         /*floating_point_behaviour=*/IpuOptions::FloatingPointBehaviour(),

@@ -69,8 +69,9 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in_weights,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in_weights,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
     const HloWeightsTransposeChansFlipXYInstruction* weights_transpose_inst =
         Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
@@ -127,8 +128,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
 
     out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
 
-    out_weights = ShuffleConvolutionWeightsToTensorflow(conv_dimension_numbers,
-                                                        out_weights);
+    out_weights = ShuffleConvolutionWeightsToTensorflow(
+        conv_dimension_numbers, out_weights, /* swap_features = */ true);
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out_weights));
 
