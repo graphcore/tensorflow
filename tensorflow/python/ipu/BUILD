@@ -1256,6 +1256,7 @@ test_suite(
         "math_layers_test",
         "math_ops_test",
         "multi_conv_test",
+        "nn_ops_test",
         "outfeed_ordinal_test",
         "pipelining_batch_serial_sequential_recomputation_test",
         "pipelining_batch_serial_sequential_test",
