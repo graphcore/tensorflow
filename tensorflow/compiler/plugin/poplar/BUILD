@@ -309,6 +309,7 @@ cc_library(
         "driver/tools/find_all_users.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
+        "driver/tools/hlo_poplar_buffer.cc",
         "driver/tools/inplace_util.cc",
         "driver/tools/input_output_aliasing_map.cc",
         "driver/tools/instruction_colocator_helper.cc",
@@ -482,6 +483,7 @@ cc_library(
         "driver/tools/find_all_users.h",
         "driver/tools/hlo_hash.h",
         "driver/tools/hlo_matcher.h",
+        "driver/tools/hlo_poplar_buffer.h",
         "driver/tools/inplace_util.h",
         "driver/tools/input_output_aliasing_map.h",
         "driver/tools/instruction_colocator_helper.h",
@@ -3645,6 +3647,18 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "hlo_poplar_buffer_test",
+    srcs = ["tests/hlo_poplar_buffer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -4873,6 +4887,7 @@ test_suite(
         "hlo_computation_name_uniquify_test",
         "hlo_hash_test",
         "hlo_matcher_test",
+        "hlo_poplar_buffer_test",
         "host_compute_barrier_inserter_test",
         "host_compute_schedule_optimizer_test",
         "infeed_prefetch_test",
