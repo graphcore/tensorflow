@@ -4790,6 +4790,7 @@ test_suite(
         "auto_report_directory_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
+        "candidate_sampler_test",
         "case_test",
         "casts_elimination_test",
         "cholesky_test",
