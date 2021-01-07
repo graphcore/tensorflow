@@ -18,20 +18,6 @@ load("//tensorflow:tensorflow.bzl", "tf_cc_shared_object", "tf_custom_op_py_libr
 load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test")
 
 cc_library(
-    name = "mpi_libs",
-    srcs = [
-        "@local_config_ipu_horovod//:mpi_libs",
-    ],
-)
-
-cc_library(
-    name = "mpi_headers",
-    hdrs = [
-        "@local_config_ipu_horovod//:mpi_headers",
-    ],
-)
-
-cc_library(
     name = "lbfgspp_headers",
     hdrs = [
         "@lbfgspp_repo//:lbfgspp_headers",
@@ -54,7 +40,6 @@ cc_library(
     ],
     copts = [
         "-DHAVE_MPI=1",
-        "-Iexternal/local_config_ipu_horovod/mpi/include",
         "-Iexternal/lbfgspp_repo/include",
         "-Iexternal/horovod_boost",
     ],
@@ -62,9 +47,9 @@ cc_library(
     deps = [
         ":boost_headers",
         ":lbfgspp_headers",
-        ":mpi_headers",
         "//tensorflow/core:framework",
         "@flatbuffers",
+        "@local_config_poplar//poplar:poplar_headers",
     ],
     alwayslink = True,
 )
@@ -87,7 +72,7 @@ tf_cc_shared_object(
     name = "horovod_plugin.so",
     deps = [
         ":horovod_ops",
-        ":mpi_libs",
+        "@local_config_poplar//poplar:mpi_lib",
     ],
 )
 
