@@ -53,6 +53,8 @@ class CandidateSamplerOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
                         FindInstructionInput(tensor_map, res, inst, 1, seq));
+    // Seed must be unsigned for the later call to poprand::setSeed
+    poplar::Tensor seed_unsigned = seed.reinterpret(poplar::UNSIGNED_INT);
     const Shape sample_shape = output_shape.tuple_shapes()[0];
     // Note: Map each sample onto a single tile with grain size 1
     TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(sample_shape));
@@ -66,7 +68,7 @@ class CandidateSamplerOp : public PoplarOpDef {
     // Create a sampler, sample from it and calculate expectations
     TF_ASSIGN_OR_RETURN(std::unique_ptr<RangeSampler> sampler,
                         RangeSamplerFactory(distribution, debug_name, range_max,
-                                            tile, seed, unique));
+                                            tile, seed_unsigned, unique));
     sampler->Sample(graph, samples, seq);
     TF_ASSIGN_OR_RETURN(poplar::Tensor sampled_expectation,
                         sampler->Expectation(graph, samples, k, seq));

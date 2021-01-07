@@ -135,6 +135,7 @@ py_library(
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
+        "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
         "optimizers/map_gradient_optimizer.py",
@@ -247,9 +248,9 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "gelu_test",
-    size = "small",
-    srcs = ["tests/gelu_test.py"],
+    name = "nn_ops_test",
+    size = "medium",
+    srcs = ["tests/nn_ops_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
@@ -1085,6 +1086,7 @@ test_suite(
         "map_gradient_optimizer_test",
         "math_ops_test",
         "multi_conv_test",
+        "nn_ops_test",
         "outfeed_ordinal_test",
         "pipelining_batch_serial_sequential_recomputation_test",
         "pipelining_batch_serial_sequential_test",
