@@ -6,7 +6,6 @@ them available as filegroups.
 """
 
 _TF_NEED_IPU_HOROVOD = "TF_NEED_IPU_HOROVOD"
-_MPI_COMPILER = "mpic++"
 
 def _exec(repository_ctx, cmd):
     result = repository_ctx.execute(cmd)
@@ -20,18 +19,15 @@ def _exec(repository_ctx, cmd):
 def _enable_horovod(repository_ctx):
     return int(repository_ctx.os.environ.get(_TF_NEED_IPU_HOROVOD, 0)) == 1
 
-def _create_dummy_repository(repository_ctx):
+def _impl(repository_ctx):
     repository_ctx.file("BUILD", "")
 
+    enabled = _enable_horovod(repository_ctx)
     repository_ctx.template(
         "build_defs_horovod.bzl",
         Label("//third_party/ipus/horovod:build_defs_horovod.tpl"),
-        {"{IF_HOROVOD}": "if_false"},
+        {"{IF_HOROVOD}": "if_true" if enabled else "if_false"},
     )
-
-def _impl(repository_ctx):
-    # TODO(T29900): Horovod disabled during transition to embedded OpenMPI.
-    _create_dummy_repository(repository_ctx)
 
 ipu_horovod_configure = repository_rule(
     implementation = _impl,

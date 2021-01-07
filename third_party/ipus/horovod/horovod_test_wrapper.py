@@ -20,27 +20,22 @@ import os
 
 
 def main():
-  if len(sys.argv) < 3:
+  if len(sys.argv) < 4:
     sys.stderr.write("Error: Missing required arguments\n")
-    sys.stderr.write("Usage: {} num_processes test_file [args...]\n".format(
-        sys.argv[0]))
+    sys.stderr.write(
+        "Usage: {} mpirun num_processes test_file [args...]\n".format(
+            sys.argv[0]))
     sys.exit(1)
 
-  num_processes = sys.argv[1]
-  test_file = sys.argv[2]
-  remaining_args = sys.argv[3:]
-
-  # Add the MPI library dirs on the LD_LIBRARY_PATH, as these are not
-  # always searched by default (e.g. on CentOS).
-  libdirs = subprocess.check_output(["mpic++", "--showme:libdirs"])
-  libdirs = libdirs.decode().strip().replace(" ", ":")
-  ld_library_path = "{}:{}".format(os.environ["LD_LIBRARY_PATH"], libdirs)
+  mpirun = sys.argv[1]
+  num_processes = sys.argv[2]
+  test_file = sys.argv[3]
+  remaining_args = sys.argv[4:]
 
   # The buildbot runs as root, so let's allow that.
   command = [
-      "mpirun", "--allow-run-as-root", "--tag-output", "--bind-to", "none",
-      "-x", "LD_LIBRARY_PATH=" + ld_library_path, "-np", num_processes,
-      sys.executable, test_file
+      mpirun, "--allow-run-as-root", "--tag-output", "--bind-to", "none",
+      "-np", num_processes, sys.executable, test_file
   ]
 
   subprocess.check_call(command + remaining_args)
