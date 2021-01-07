@@ -450,7 +450,9 @@ class _IpuModelBase(KerasModel):
 
     total_batches = mini_batches_per_epoch * (epochs - initial_epoch)
 
-    # Prepare for progress reporting
+    # Prepare for progress reporting.
+    # Note that the steps_per_epoch here is the value passed to this
+    # function divided by the replication factor.
     callbacks = cbks.configure_callbacks(callbacks,
                                          self,
                                          epochs=epochs,
@@ -525,6 +527,8 @@ class _IpuModelBase(KerasModel):
 
           # After the first call we can update the callbacks to include
           # the metrics.
+          # Note that the steps_per_epoch here is the value passed to this
+          # function divided by the replication factor.
           if epoch == initial_epoch and run == 0:
             cbks.set_callback_parameters(callbacks,
                                          self,
@@ -540,8 +544,25 @@ class _IpuModelBase(KerasModel):
 
         # Fetch the outfeed for the history
         results = self.outfeed.dequeue()
-        results = map(lambda x: x.numpy(), results)
+
+        # For fit() and evaluate() the shape of results is
+        #   (1+num_metrics, steps_per_epoch X GA)
+        # or with replication:
+        #   (1+num_metrics, steps_per_epoch x GA / RF, RF)
+        #
+        # For predict() the shape of results is
+        #   (num_outputs, steps_per_epoch x GA, batch_size, output_shape)
+        # or with replication:
+        #   (num_outputs, RF, steps_per_epoch x GA/RF, batch_size, output_shape)
+        #
+        # where steps_per_epoch is the value passed to this function
+        #       GA is gradient accumulation count
+        #       RF is replication factor
+        #       output_shape may have multiple dimensions
+
+        results = [map(lambda x: x.numpy(), r) for r in results]
         results = zip(*results)
+
         if self.replication_factor > 1:
           # "Transpose" all the outfeed elements.
           def gen(results):
@@ -562,7 +583,10 @@ class _IpuModelBase(KerasModel):
         aggregator.finalize()
         results = aggregator.results
 
-        # Store only the final losses/metrics for the epoch log
+        # Store only the final losses/metrics for the epoch log.
+        # Loss is the average across the epoch.
+        # For other metrics, if there is replication, the value
+        # is the final value for one of the replicas.
         cbks.make_logs(self, epoch_logs, results, mode)
         callbacks.on_epoch_end(epoch, epoch_logs)
 
@@ -662,8 +686,17 @@ class _IpuModelBase(KerasModel):
     _validate_args(kwargs, "predict")
     _validate_dataset_element_count(ds, 1, "predict")
 
-    return self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose, callbacks,
-                             0, steps, steps_per_run, prefetch_depth, **kwargs)
+    result = self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose,
+                               callbacks, 0, steps, steps_per_run,
+                               prefetch_depth, **kwargs)
+
+    # Sequential models only support a single output
+    # but Model/PipelineModel may have multiple outputs
+    if len(result) == 1:
+      return result[0]
+
+    # Convert from tuple to list to match output from Keras Model
+    return list(result)
 
   @property
   def replication_factor(self):
@@ -1238,54 +1271,6 @@ class IPUModel(_IpuModelBase):
                                            output_tensors)
     return output_tensors
 
-  def _format_output(self, outputs):
-    def reshape_multi_output(x):
-      # Input Dims: (dataset_length / batch_size, batch_size, output_dim)
-      ds_len = x.shape[0] * x.shape[1]
-      return np.reshape(x, (ds_len, *x.shape[2:]))
-
-    def reshape_single_output(x):
-      # Input Dims: (batch_size * output_dim0, output_dim1...)
-      a = x.shape[0]
-      b = self.outputs[0].shape[1]  # shape[0] is None (unknown batch size)
-      assert a % b == 0
-
-      split_factor = a / b
-
-      x_split = np.split(x, split_factor)
-      x_split = map(lambda x: np.expand_dims(x, 0), x_split)
-      return np.vstack(x_split)
-
-    def squeeze(x):
-      # If each output is a single value, reduce to single rank tensor.
-      if x.ndim == 2 and x.shape[1] == 1:
-        return np.squeeze(x, 1)
-      return x
-
-    def verify_shape():
-      shapes_ok = True
-      for t, o in zip(outputs, self.outputs):
-        shapes_ok &= t.shape[1:] == o.shape[1:]
-      return shapes_ok
-
-    assert isinstance(outputs, tuple)
-
-    # Multi output model.
-    if verify_shape():
-      return tuple(map(squeeze, outputs))
-
-    # Each tuple element is a per output tensor of dimensions:
-    # (dataset_length / batch_size, batch_size, output_dim)
-    if len(outputs) == len(self.outputs) and len(self.outputs) > 1:
-      return tuple(map(reshape_multi_output, outputs))
-
-    # Each input tuple element is a batch of outputs of dimensions:
-    # (batch_size * output_dim0, output_dim1...)
-    # Output is a tensor of dimensions:
-    # (dataset_length, output_dim0, output_dim1...)
-    stacked = np.vstack(list(map(reshape_single_output, outputs)))
-    return squeeze(stacked)
-
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
     training = mode == ModeKeys.TRAIN
@@ -1317,7 +1302,11 @@ class IPUModel(_IpuModelBase):
       return output_tensors
 
     def inference_body(*args):
-      outfeed_queue.enqueue(main_body(args))
+      x = main_body(args)
+      if isinstance(x, (list, tuple)):
+        outfeed_queue.enqueue(x)
+      else:
+        outfeed_queue.enqueue([x])
       return []
 
     def training_body(*args):
@@ -1489,14 +1478,14 @@ class IPUModel(_IpuModelBase):
     the steps_per_run value. If the dataset is infinite, because it has been
     repeated indefinitely, then this condition is satisfied.
     """
-    return self._format_output(super().predict(x,
-                                               batch_size=batch_size,
-                                               verbose=verbose,
-                                               steps=steps,
-                                               callbacks=callbacks,
-                                               steps_per_run=steps_per_run,
-                                               prefetch_depth=prefetch_depth,
-                                               **kwargs))
+    return super().predict(x,
+                           batch_size=batch_size,
+                           verbose=verbose,
+                           steps=steps,
+                           callbacks=callbacks,
+                           steps_per_run=steps_per_run,
+                           prefetch_depth=prefetch_depth,
+                           **kwargs)
 
   def save(self,
            filepath,

@@ -730,22 +730,17 @@ class IPUModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
-      result = m.predict(test_inference_dataset(length=96))
+      # Generate predictions
+      ipu_output = m.predict(test_inference_dataset(length=96))
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result[0]), np.ndarray)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(ipu_output), np.ndarray)
+      self.assertEqual(ipu_output.shape, (96, 2))
 
     cpu_out = run_model_on_cpu(fixed_weight_model(), test_dataset(length=96),
                                12, 8, None, None)
     cpu_out = list(map(lambda x: x.numpy(), cpu_out))
     cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
-
-    # result is the predicted values
-    ipu_output = result[0]
 
     self.assertAllClose(ipu_output, cpu_out)
 
@@ -759,22 +754,17 @@ class IPUModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
-      result = m.predict(test_inference_dataset(length=96, batch_size=2))
+      # Generate predictions
+      ipu_output = m.predict(test_inference_dataset(length=96, batch_size=2))
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result[0]), np.ndarray)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(ipu_output), np.ndarray)
+      self.assertEqual(ipu_output.shape, (96, 2))
 
     cpu_out = run_model_on_cpu(fixed_weight_model(), test_dataset(length=96),
                                12, 8, None, None)
     cpu_out = list(map(lambda x: x.numpy(), cpu_out))
     cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
-
-    # result is the predicted values
-    ipu_output = result[0]
 
     self.assertAllClose(ipu_output, cpu_out)
 
@@ -918,14 +908,12 @@ class IPUModelTest(test.TestCase):
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
 
-      # Fit the weights to the dataset
+      # Get predictions
       result = m.predict(input_x, batch_size=1)
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result[0]), np.ndarray)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(result), np.ndarray)
+      self.assertEqual(result.shape, (96, 2))
 
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2(self):
@@ -943,14 +931,12 @@ class IPUModelTest(test.TestCase):
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       result = m.predict(input_x, batch_size=2)
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result[0]), np.ndarray)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(result), np.ndarray)
+      self.assertEqual(result.shape, (96, 2))
 
   @test_util.run_v2_only
   def testAutocast_V2DtypeBehaviourTrue(self):
@@ -1047,13 +1033,14 @@ class IPUModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       ipu_out = m.predict(data, batch_size=4)
 
     # Compute output with vanilla keras model.
     m_cpu = keras.Sequential(f())
     cpu_out = m_cpu.predict(data, batch_size=4)
 
+    self.assertEqual(cpu_out.shape, ipu_out.shape)
     self.assertAllClose(np.squeeze(ipu_out), np.squeeze(cpu_out))
 
 

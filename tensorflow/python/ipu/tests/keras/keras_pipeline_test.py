@@ -840,23 +840,18 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
-      result = m.predict(test_inference_dataset(length=96))
+      # Generate predictions
+      ipu_output = m.predict(test_inference_dataset(length=96))
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result[0]), np.ndarray)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(ipu_output), np.ndarray)
+      self.assertEqual(ipu_output.shape, (96, 2))
 
     cpu_out = run_model_on_cpu(
         self, simple_sequential_pipeline([32, 2], [0, 1], w=0.2), [], 12, 8,
         None, None)
     cpu_out = list(map(lambda x: x.numpy(), cpu_out))
     cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
-
-    # result is the predicted values
-    ipu_output = result[0]
 
     self.assertAllClose(ipu_output, cpu_out)
 
@@ -938,12 +933,12 @@ class IPUPipelineTest(test.TestCase):
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       result = m.predict(input_x, batch_size=1)
 
-      # The result is the tuple of concatenated output tensors
-      self.assertEqual(type(result), tuple)
-      self.assertEqual(result[0].shape, (96, 2))
+      # The result is the Numpy array of concatenated output tensors
+      self.assertEqual(type(result), np.ndarray)
+      self.assertEqual(result.shape, (96, 2))
 
   @test_util.run_v2_only
   def testModelToDot(self):

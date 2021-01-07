@@ -596,13 +596,19 @@ class IPUModelModelTest(test.TestCase):
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       result = m.predict(input_x, batch_size=1)
 
       self.assertEqual(type(result), np.ndarray)
       self.assertEqual(result.shape[0], 96)
       for i, r in enumerate(result):
         self.assertAllEqual(r, result[i - 1])
+
+    # Compare with CPU
+    m = keras.Model(inputs=input_layer, outputs=x)
+    cpu_result = m.predict(input_x, batch_size=1)
+
+    self.assertEqual(cpu_result.shape, result.shape)
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizer(self):
@@ -973,7 +979,7 @@ class IPUModelModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       ipu_out = m.predict(test_inference_dataset(length=96))
 
     m_cpu = simple_cpu_model([32, 32, 2], w=0.4)
@@ -982,7 +988,8 @@ class IPUModelModelTest(test.TestCase):
     cpu_out = list(map(lambda x: x.numpy(), cpu_out))
     cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
 
-    self.assertAllClose(ipu_out, cpu_out)
+    self.assertEqual(cpu_out.shape, ipu_out.shape)
+    self.assertAllClose(cpu_out, ipu_out)
 
   @test_util.run_v2_only
   def testTrainMultipleInput(self):
@@ -1063,9 +1070,9 @@ class IPUModelModelTest(test.TestCase):
     x = simple_model(input_layer, [32, 32, 1], w=1)
     m = keras.Model(inputs=input_layer, outputs=x)
     cpu_out = m.predict(xs, batch_size=2)
-    cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
 
-    self.assertAllClose(ipu_out, cpu_out)
+    self.assertEqual(cpu_out.shape, ipu_out.shape)
+    self.assertAllClose(cpu_out, ipu_out)
 
   @test_util.run_v2_only
   def testPredictNumpyDataTwoOutput(self):
@@ -1089,9 +1096,9 @@ class IPUModelModelTest(test.TestCase):
     x = simple_model(input_layer, [32, 32, 1], w=1)
     m = keras.Model(inputs=input_layer, outputs=[x, x])
     cpu_out = m.predict(xs, batch_size=2)
+
     for t_cpu, t_ipu in zip(cpu_out, ipu_out):
-      t_cpu = aggregate_cpu_out(training_utils.OutputsAggregator, t_cpu)
-      self.assertAllClose(t_ipu, t_cpu)
+      self.assertAllClose(t_cpu, t_ipu)
 
   @test_util.run_v2_only
   def testPredictNumpyData3D(self):
@@ -1118,7 +1125,8 @@ class IPUModelModelTest(test.TestCase):
     m = keras.Model(inputs=input_layer, outputs=x)
     cpu_out = m.predict(xs, batch_size=2)
 
-    self.assertAllClose(ipu_out, cpu_out)
+    self.assertEqual(cpu_out.shape, ipu_out.shape)
+    self.assertAllClose(cpu_out, ipu_out)
 
   @test_util.run_v2_only
   def testPredictNumpyDataTwoOutput3D(self):
@@ -1144,8 +1152,10 @@ class IPUModelModelTest(test.TestCase):
     x = keras.layers.Reshape((4, 4, 3))(x)
     m = keras.Model(inputs=input_layer, outputs=[x, x])
     cpu_out = m.predict(xs, batch_size=2)
+
+    self.assertEqual(np.shape(cpu_out), np.shape(ipu_out))
     for t_cpu, t_ipu in zip(cpu_out, ipu_out):
-      self.assertAllClose(t_ipu, t_cpu)
+      self.assertAllClose(t_cpu, t_ipu)
 
   @test_util.run_v2_only
   def testFitVanillaKerasMatch(self):
@@ -1232,7 +1242,136 @@ class IPUModelModelTest(test.TestCase):
     cpu_out = cpu_model.fit(*data_fn(), batch_size=4)
 
     # Comparison.
+    self.assertEqual(np.shape(cpu_out), np.shape(out))
     self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
+
+  @test_util.run_v2_only
+  def testPredictMultipleOutput(self):
+    def predict_input_fn():
+      x1 = np.ones((64, 32), dtype=np.float32)
+      x2 = np.ones((64, 32), dtype=np.float32)
+      x3 = np.ones((64, 32), dtype=np.float32)
+
+      return (x1, x2, x3)
+
+    # Intentional skip from input to middle of model.
+    def model_fn():
+      input_1 = keras.Input(32)
+      input_2 = keras.Input(32)
+      input_3 = keras.Input(32)
+
+      init = keras.initializers.Constant(1)
+
+      dense_1 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_1)
+      dense_2 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_2)
+
+      cat = keras.layers.Concatenate()([dense_1, dense_2, input_3])
+
+      dense_3 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+      dense_4 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+
+      return ((input_1, input_2, input_3), (dense_3, dense_4))
+
+    # IPU Test.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      model = ipu.keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'])
+
+      ipu_predict_out = model.predict(predict_input_fn(), batch_size=4)
+
+    # CPU Test.
+    cpu_model = keras.Model(*model_fn())
+    cpu_model.compile('sgd', ['mse', 'mse'])
+
+    cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
+
+    # Comparison.
+    self.assertEqual(np.shape(cpu_predict_out), np.shape(ipu_predict_out))
+
+    for output in range(2):
+      for cpu_predict, ipu_predict in zip(cpu_predict_out[output],
+                                          ipu_predict_out[output]):
+        self.assertAllClose(cpu_predict, ipu_predict)
+
+  @test_util.run_v2_only
+  def testPredictMultipleOutputDifferentShapes(self):
+    def predict_input_fn():
+      x1 = np.ones((64, 32), dtype=np.float32)
+      x2 = np.ones((64, 32), dtype=np.float32)
+      x3 = np.ones((64, 32), dtype=np.float32)
+
+      return (x1, x2, x3)
+
+    # Intentional skip from input to middle of model.
+    def model_fn():
+      input_1 = keras.Input(32)
+      input_2 = keras.Input(32)
+      input_3 = keras.Input(32)
+
+      init = keras.initializers.Constant(1)
+
+      dense_1 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_1)
+      dense_2 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_2)
+
+      cat = keras.layers.Concatenate()([dense_1, dense_2, input_3])
+
+      dense_3 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+      dense_4 = keras.layers.Dense(2,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+
+      return ((input_1, input_2, input_3), (dense_3, dense_4))
+
+    # CPU Test.
+    cpu_model = keras.Model(*model_fn())
+    cpu_model.compile('sgd', ['mse', 'mse'])
+
+    cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
+
+    # IPU Test.
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    ipu.utils.configure_ipu_system(cfg)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      model = ipu.keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'])
+
+      ipu_predict_out = model.predict(predict_input_fn(), batch_size=4)
+
+    # Comparison.
+    self.assertEqual(np.shape(cpu_predict_out[0]),
+                     np.shape(ipu_predict_out[0]))
+    for cpu_predict, ipu_predict in zip(cpu_predict_out[0],
+                                        ipu_predict_out[0]):
+      np.testing.assert_almost_equal(cpu_predict, ipu_predict)
+
+    self.assertEqual(np.shape(cpu_predict_out[1]),
+                     np.shape(ipu_predict_out[1]))
+    for cpu_predict, ipu_predict in zip(cpu_predict_out[1],
+                                        ipu_predict_out[1]):
+      np.testing.assert_almost_equal(cpu_predict[0], ipu_predict[0])
+      np.testing.assert_almost_equal(cpu_predict[1], ipu_predict[1])
 
   @test_util.run_v2_only
   def testPredictReplaceableLayers(self):
@@ -1276,14 +1415,15 @@ class IPUModelModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Fit the weights to the dataset
+      # Generate predictions
       ipu_out = m.predict(data, batch_size=4)
 
     # Compute output with vanilla keras model.
     m_cpu = keras.Model(*f())
     cpu_out = m_cpu.predict(data, batch_size=4)
 
-    self.assertAllClose(ipu_out, cpu_out)
+    self.assertEqual(cpu_out.shape, ipu_out.shape)
+    self.assertAllClose(cpu_out, ipu_out)
 
 
 if __name__ == '__main__':
