@@ -72,6 +72,23 @@ poplar::Graph& GetMasterGraph(CompilerResources&);
 // Get the appropriate virtual graph, or the replicated/master graph if not
 poplar::Graph& GetGraph(CompilerResources&, const HloInstruction*);
 
+// Get the current process ID
+int32 GetPID();
+
+// Get the current time in ISO format %Y-%m-%d_%H-%M-%S localized
+std::string GetCurrentTimeInISOFormat();
+
+// Generate a directory name of format "{prefix}_{ISO date}_{PID}"
+std::string GenerateDirectoryName(const std::string& prefix);
+
+// Parses a JSON string in 'json_str' to a Json::Value object in 'attributes'
+// Returns if it was successful
+bool JsonParse(const std::string& json_str, Json::Value& attributes);
+
+// Check if the string 'opt' is a key of the POPLAR_ENGINE_OPTIONS env var.
+// Return its value if it exists.
+absl::optional<std::string> GetPoplarEngineOption(const std::string& opt);
+
 // Get the shard Id for a given output of the given instruction.
 uint64 GetShardForOutputIndex(const HloInstruction* inst,
                               int flattened_output_tuple_index);
