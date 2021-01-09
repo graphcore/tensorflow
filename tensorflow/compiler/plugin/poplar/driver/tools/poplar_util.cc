@@ -47,6 +47,61 @@ poplar::Graph& GetMasterGraph(CompilerResources& res) {
   return *res.main_graph;
 }
 
+int32 GetPID() {
+#ifdef PLATFORM_WINDOWS
+  return static_cast<int32>(GetCurrentProcessId());
+#else
+  return static_cast<int32>(getpid());
+#endif
+}
+std::string GetCurrentTimeInISOFormat() {
+  uint64 now_micros = tensorflow::Env::Default()->NowMicros();
+  time_t now_seconds = static_cast<time_t>(now_micros / 1000000);
+  constexpr size_t kTimeBufferSize = 30;
+  char time_buffer[kTimeBufferSize];
+  std::strftime(time_buffer, kTimeBufferSize, "%Y-%m-%d__%H-%M-%S",
+                std::localtime(&now_seconds));
+  std::string iso_time(time_buffer);
+  return iso_time;
+}
+
+std::string GenerateDirectoryName(const std::string& prefix) {
+  std::string iso_date = GetCurrentTimeInISOFormat();
+  int32 pid = GetPID();
+  return absl::StrCat(prefix, "__", iso_date, "__", std::to_string(pid));
+}
+
+bool JsonParse(const std::string& json_str, Json::Value& attributes) {
+  Json::CharReaderBuilder builder;
+  std::string errs;
+  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+  bool parsed = reader->parse(
+      json_str.c_str(), json_str.c_str() + json_str.size(), &attributes, &errs);
+  return parsed;
+}
+
+absl::optional<std::string> GetPoplarEngineOption(const std::string& opt) {
+  // Check for non-empty POPLAR_ENGINE_OPTIONS
+  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
+  if (env_flags == nullptr) {
+    return absl::nullopt;
+  }
+
+  // Try to parse the contents
+  Json::Value attributes;
+  bool parsed = JsonParse(env_flags, attributes);
+  if (!parsed) {
+    return absl::nullopt;
+  }
+
+  // Existence check
+  if (!attributes.isMember(opt)) {
+    return absl::nullopt;
+  }
+
+  return attributes[opt].asString();
+}
+
 uint64 GetShardForOutputIndex(const HloInstruction* inst,
                               int flattened_output_tuple_index) {
   if (inst->has_sharding()) {

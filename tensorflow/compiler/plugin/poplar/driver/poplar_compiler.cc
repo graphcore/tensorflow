@@ -774,14 +774,15 @@ Status GetOperatingSystemInfo(utsname& details) {
   return Status::OK();
 }
 
-StatusOr<std::string> GetFrameworkInfo() {
+StatusOr<std::string> GetFrameworkInfo(const std::string& module_name) {
   // tf info
   Json::Value tf_info;
   tf_info["Version"] = TF_VERSION_STRING;
   tf_info["Githash"] = tf_git_version();
+  tf_info["Cluster"] = module_name;
 
   Json::Value root;
-  root["Tensorflow"] = tf_info;
+  root["TensorFlow"] = tf_info;
 
   // system info
   Json::Value system_info;
@@ -791,10 +792,10 @@ StatusOr<std::string> GetFrameworkInfo() {
   system_info["Operating system version"] = details.version;
   system_info["Machine"] = details.machine;
 
-  system_info["Nominal cpu frequency [GHz]"] = absl::StrFormat(
+  system_info["Nominal CPU frequency [GHz]"] = absl::StrFormat(
       "%.2f", tensorflow::port::NominalCPUFrequency() / 1000000000.0);
   system_info["Number of total cpus"] = tensorflow::port::NumTotalCPUs();
-  root["System info"] = system_info;
+  root["System Information"] = system_info;
 
   Json::StreamWriterBuilder json_builder;
   json_builder["indentation"] = "";
@@ -804,53 +805,16 @@ StatusOr<std::string> GetFrameworkInfo() {
   return tensorflow_info;
 }
 
-bool JsonParse(const std::string& env_flags, Json::Value& attributes) {
-  Json::CharReaderBuilder builder;
-  std::string errs;
-  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-  bool parsed =
-      reader->parse(env_flags.c_str(), env_flags.c_str() + env_flags.size(),
-                    &attributes, &errs);
-  return parsed;
-}
-
-void AddFrameworkFileToAutoReportDirectory(const std::string& tensorflow_info,
-                                           const std::string& module_name) {
-  std::string report_directory;
-  bool report_directory_set = false;
-  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
-
-  if (env_flags == nullptr) {
-    return;
-  }
-
-  Json::Value attributes;
-  bool parsed = JsonParse(env_flags, attributes);
-  if (parsed) {
-    if (!attributes.isMember("autoReport.directory") &&
-        !attributes.isMember("autoReport.all")) {
-      return;
-    }
-
-    if (attributes.isMember("autoReport.directory")) {
-      report_directory = attributes["autoReport.directory"].asString();
-      report_directory_set = true;
-    }
-  }
-
-  if (!report_directory_set) {
-    report_directory = tensorflow::io::JoinPath("", module_name);
-  }
-
-  CreateDirIfMissing(report_directory);
-
+void AddFrameworkFileToDirectory(const std::string& tensorflow_info,
+                                 const std::string& directory) {
+  CreateDirIfMissing(directory);
   Json::Value attrib_dummy;
   bool is_json_str = JsonParse(tensorflow_info, attrib_dummy);
 
   if (tensorflow_info.size() > 0 && is_json_str) {
     std::unique_ptr<tensorflow::WritableFile> wfile;
     std::string file_name =
-        tensorflow::io::JoinPath(report_directory, "framework.json");
+        tensorflow::io::JoinPath(directory, "framework.json");
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(file_name, &wfile));
     TF_CHECK_OK(wfile->Append(tensorflow_info));
     TF_CHECK_OK(wfile->Close());
@@ -969,10 +933,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   poplar::OptionFlags opt_flags = poplar_executor->GetOptionsFlags();
 
-  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
-  if (env_flags == nullptr ||
-      !absl::StrContains(std::string(env_flags), "autoReport.directory")) {
-    opt_flags.set("autoReport.directory", module->name());
+  // If the user hasn't set autoReport.directory, set it for them.
+  absl::optional<std::string> auto_dir =
+      GetPoplarEngineOption("autoReport.directory");
+  if (!auto_dir.has_value()) {
+    auto_dir.emplace(poplar_executor->GetModuleReportDirectory(module->name()));
+    opt_flags.set("autoReport.directory", *auto_dir);
   }
 
   std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
@@ -1422,8 +1388,19 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   bool logging_cycle_count;
 
   if (compile) {
-    TF_ASSIGN_OR_RETURN(const std::string tensorflow_info, GetFrameworkInfo());
-    AddFrameworkFileToAutoReportDirectory(tensorflow_info, module->name());
+    // Generate a framework.json if autoReport.all or directory is configured.
+    TF_ASSIGN_OR_RETURN(std::string tensorflow_info,
+                        GetFrameworkInfo(module->name()));
+    if (GetPoplarEngineOption("autoReport.all").has_value()) {
+      AddFrameworkFileToDirectory(tensorflow_info, *auto_dir);
+    }
+    std::string tf_report_dir = poplar_executor->ReportDirectory();
+    if (tf_report_dir.size() > 0) {
+      AddFrameworkFileToDirectory(
+          tensorflow_info,
+          tensorflow::io::JoinPath(tf_report_dir, module->name()));
+    }
+
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
         CreatePoplarGraphs(resources, module.get(), poplar_executor));
