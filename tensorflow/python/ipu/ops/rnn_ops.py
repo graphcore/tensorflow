@@ -170,7 +170,7 @@ class _PopnnRNN(base_layer.Layer):
 
   # pylint: disable=unused-argument
   # pylint: disable=arguments-differ
-  def call(self, inputs, seq_len=None, initial_state=None, training=True):
+  def call(self, inputs, initial_state=None, training=True):
     raise ValueError("This method needs to be overridden.")
 
   def state_shape(self, batch_size):
@@ -272,7 +272,7 @@ class PopnnLSTM(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, seq_len=None, initial_state=None, training=True):
+  def call(self, inputs, initial_state=None, training=True):
     """Runs the forward step for the LSTM model.
 
     Args:
@@ -435,7 +435,7 @@ class PopnnGRU(_PopnnRNN):
     """
     self._build(input_shape)
 
-  def call(self, inputs, seq_len=None, initial_state=None, training=True):
+  def call(self, inputs, initial_state=None, training=True):
     """Runs the forward step for the GRU model.
 
     Args:
@@ -459,11 +459,6 @@ class PopnnGRU(_PopnnRNN):
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
 
     batch_size = array_ops.shape(inputs)[1]
-
-    if seq_len is not None:
-      raise NotImplementedError(
-          "This cell does not yet support the seq_len parameter. Use the "
-          "PopnnDynamicGRU instead.")
 
     if initial_state is None:
       # Create a zero state.
@@ -572,7 +567,8 @@ class PopnnDynamicGRU(PopnnGRU):
   def saveable(self):
     return False
 
-  def call(self, inputs, seq_len=None, initial_state=None, training=True):
+  #pylint: disable=arguments-differ
+  def call(self, inputs, seq_len, initial_state=None, training=True):
     """Runs the forward step for the DynamicGRU model.
 
       Args:
