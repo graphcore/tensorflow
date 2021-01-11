@@ -39,10 +39,24 @@ using namespace xla::poplarplugin;
 
 namespace tensorflow {
 
+enum class GruType { GRU = 0, DYNAMIC_GRU, AUGRU };
+
+static PoplarOp get_gru_type(GruType gru_type, bool is_fwd) {
+  switch (gru_type) {
+    case GruType::GRU:
+      return is_fwd ? PoplarOp::GRULayerFwd : PoplarOp::GRULayerBwd;
+    case GruType::DYNAMIC_GRU:
+      return is_fwd ? PoplarOp::DynamicGRULayerFwd
+                    : PoplarOp::DynamicGRULayerBwd;
+    case GruType::AUGRU:
+      return is_fwd ? PoplarOp::AUGRULayerFwd : PoplarOp::AUGRULayerBwd;
+  }
+}
+
 /*
   This XlaOpKernel is used for both the popnn GRU, and the popnn dynamic GRU
 */
-template <bool is_dynamic>
+template <GruType gru_type>
 class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGRULayerOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
@@ -106,8 +120,8 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
                       num_channels_)));
     }
 
-    // Kernel includes a dynamic input
-    if (is_dynamic) {
+    // Kernel includes a dynamic input, AUGRU includes a att_score parameter
+    if (gru_type != GruType::GRU) {
       TensorShape expected_seq_len_shape;
       TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
                                   &expected_seq_len_shape);
@@ -115,6 +129,16 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
           ctx, ctx->InputShape(4) == expected_seq_len_shape,
           errors::InvalidArgument(absl::StrFormat(
               "The seq_len tensor needs to be of shape [%u].", batch_size)));
+      if (gru_type == GruType::AUGRU) {
+        TensorShape expected_att_score_shape;
+        TensorShapeUtils::MakeShape(
+            std::vector<int64>({time_steps, batch_size}),
+            &expected_att_score_shape);
+        OP_REQUIRES(ctx, ctx->InputShape(5) == expected_att_score_shape,
+                    errors::InvalidArgument(absl::StrFormat(
+                        "The att_score tensor needs to be of shape [%u, %u].",
+                        time_steps, batch_size)));
+      }
     }
 
     xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
@@ -142,11 +166,10 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
       args.push_back(ctx->Input(idx));
     }
 
-    auto op_type = is_dynamic ? PoplarOp_Name(PoplarOp::DynamicGRULayerFwd)
-                              : PoplarOp_Name(PoplarOp::GRULayerFwd);
+    auto op_name = PoplarOp_Name(get_gru_type(gru_type, /*is_fwd=*/true));
 
     xla::XlaOp output_tuple = xla::CustomCall(
-        &b, op_type, args, output_tuple_shape, attribute_map_.Serialise());
+        &b, op_name, args, output_tuple_shape, attribute_map_.Serialise());
 
     xla::XlaOp output_seq = xla::GetTupleElement(output_tuple, 0);
     xla::XlaOp output_state = xla::GetTupleElement(output_tuple, 1);
@@ -170,14 +193,15 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGRULayerOp);
 };
-REGISTER_IPU_OP("PopnnGRULayer", PopnnGRULayerOp<false>);
-REGISTER_IPU_OP("PopnnDynamicGRULayer", PopnnGRULayerOp<true>);
+REGISTER_IPU_OP("PopnnGRULayer", PopnnGRULayerOp<GruType::GRU>);
+REGISTER_IPU_OP("PopnnDynamicGRULayer", PopnnGRULayerOp<GruType::DYNAMIC_GRU>);
+REGISTER_IPU_OP("PopnnAUGRULayer", PopnnGRULayerOp<GruType::AUGRU>);
 
 /*
   This XlaOpKernel is used for the Grad op for both the popnn GRU, and
   the popnn dynamic GRU
 */
-template <bool is_dynamic>
+template <GruType gru_type>
 class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGRULayerBackpropOp(OpKernelConstruction* ctx)
@@ -225,8 +249,7 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
       args.push_back(ctx->Input(idx));
     }
 
-    auto op_name = is_dynamic ? PoplarOp_Name(PoplarOp::DynamicGRULayerBwd)
-                              : PoplarOp_Name(PoplarOp::GRULayerBwd);
+    auto op_name = PoplarOp_Name(get_gru_type(gru_type, /*is_fwd=*/false));
 
     xla::XlaOp output_tuple = xla::CustomCall(
         &b, op_name, args, output_tuple_shape, attribute_map_.Serialise());
@@ -244,6 +267,9 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGRULayerBackpropOp);
 };
-REGISTER_IPU_OP("PopnnGRULayerBackprop", PopnnGRULayerBackpropOp<false>);
-REGISTER_IPU_OP("PopnnDynamicGRULayerBackprop", PopnnGRULayerBackpropOp<true>);
+REGISTER_IPU_OP("PopnnGRULayerBackprop", PopnnGRULayerBackpropOp<GruType::GRU>);
+REGISTER_IPU_OP("PopnnDynamicGRULayerBackprop",
+                PopnnGRULayerBackpropOp<GruType::DYNAMIC_GRU>);
+REGISTER_IPU_OP("PopnnAUGRULayerBackprop",
+                PopnnGRULayerBackpropOp<GruType::AUGRU>);
 }  // namespace tensorflow
