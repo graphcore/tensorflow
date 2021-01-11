@@ -41,6 +41,8 @@ cc_library(
     copts = [
         "-DHAVE_MPI=1",
         "-Iexternal/lbfgspp_repo/include",
+        "-Iexternal/local_config_poplar/poplar/openmpi/include/openmpi",  # poplar sandbox
+        "-Iexternal/local_config_poplar/poplar/poplar/include/openmpi",  # poplar release
         "-Iexternal/horovod_boost",
     ],
     visibility = ["//visibility:public"],
