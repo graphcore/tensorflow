@@ -18,8 +18,10 @@ def horovod_py_test(
         ],
         main = "horovod_test_wrapper.py",
         args = [
+            "$(location @local_config_poplar//poplar:mpirun)",
             str(num_processes),
             "$(location {})".format(main),
         ] + args,
+        data = ["@local_config_poplar//poplar:mpirun"],
         **kwargs
     )

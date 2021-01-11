@@ -613,7 +613,6 @@ cc_library(
     name = "driver",
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
-        "driver/ops/conv_graph_caching.cc",
         "driver/ops/custom_ops/execution_counter.cc",
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
@@ -705,7 +704,6 @@ cc_library(
     ],
     hdrs = [
         "driver/compiler_resources.h",
-        "driver/ops/conv_graph_caching.h",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.h",
         "driver/ops/custom_ops/poplar_ops.h",
         "driver/ops/custom_ops/popops/expression_helpers.h",

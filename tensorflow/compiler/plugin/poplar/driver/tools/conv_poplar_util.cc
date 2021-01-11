@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 
+#include <utility>
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
@@ -251,21 +252,31 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
 }
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
+    bool swap_features) {
   std::vector<unsigned int> shuffle(2 + dims.kernel_spatial_dimensions_size());
-  shuffle[dims.kernel_output_feature_dimension()] = 0;
-  shuffle[dims.kernel_input_feature_dimension()] = 1;
+  int out_dim = dims.kernel_output_feature_dimension();
+  int in_dim = dims.kernel_input_feature_dimension();
+  shuffle[out_dim] = swap_features ? 1 : 0;
+  shuffle[in_dim] = swap_features ? 0 : 1;
   for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
     shuffle[dims.kernel_spatial_dimensions(i)] = i + 2;
   }
+  auto out = tensor.dimShuffle(shuffle);
+  if (swap_features) {
+    auto shape = out.shape();
+    std::swap(shape[out_dim], shape[in_dim]);
+    out = out.reshape(shape);
+  }
 
-  return tensor.dimShuffle(shuffle);
+  return out;
 }
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor) {
+    const HloInstruction* inst, const poplar::Tensor& tensor,
+    bool swap_features) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
-  return ShuffleConvolutionWeightsToTensorflow(d, tensor);
+  return ShuffleConvolutionWeightsToTensorflow(d, tensor, swap_features);
 }
 
 poplar::Tensor ShuffleConvolutionOutputToTensorflow(

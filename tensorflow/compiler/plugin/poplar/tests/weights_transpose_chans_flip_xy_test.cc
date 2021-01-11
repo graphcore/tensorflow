@@ -43,7 +43,7 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXY0) {
   HloComputation::Builder builder = HloComputation::Builder("BuilderHloComp0");
 
   auto weights = builder.AddInstruction(HloInstruction::CreateConstant(
-      LiteralUtil::CreateR4<float>({{{{1, 2}, {3, 4}}}})));
+      LiteralUtil::CreateR4<float>({{{{1, 3}, {2, 4}}}})));
 
   ConvolutionDimensionNumbers conv_dim_num;
 

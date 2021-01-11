@@ -12,12 +12,13 @@ filegroup(
 
 cc_library(
     name = "poplar_headers",
-    hdrs = glob(["**/*.hpp"]),
+    hdrs = glob(["**/*.hpp", "**/*.h"]),
     includes = [
         "gcl/include",
         "poplar/include",
         "poplibs/include",
         "libpvti/include",
+        "openmpi/include",
     ],
 )
 
@@ -72,4 +73,18 @@ cc_library(
     hdrs = [":popsec_headers"],
     srcs = [":popsec_libs"],
     includes = ["popsec/include"],
+)
+
+cc_library(
+    name = "mpi_lib",
+    srcs = glob(
+        [
+            "lib*/**/libmpi.so",
+        ],
+    ),
+)
+
+filegroup(
+    name = "mpirun",
+    srcs = ["poplar/bin/mpirun"],
 )
