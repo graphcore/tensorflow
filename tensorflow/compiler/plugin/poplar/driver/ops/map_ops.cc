@@ -399,10 +399,9 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 }
 
 namespace {
-TensorOrRemoteBufferVectors GetFunctionInputs(CompilerResources& res,
-                                              const HloInstruction* inst,
-                                              poplar::program::Sequence& seq,
-                                              TensorMap& tensor_map) {
+TensorOrRemoteBufferVectors GetAllInstructionInputs(
+    CompilerResources& res, const HloInstruction* inst,
+    poplar::program::Sequence& seq, TensorMap& tensor_map) {
   TensorOrRemoteBufferVectors inputs(inst->operand_count());
   for (int64 i = 0; i != inst->operand_count(); ++i) {
     inputs[i] = FindInstructionInputs(tensor_map, res, inst, i, seq);
@@ -418,7 +417,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
   poplar::program::Sequence seq;
 
   TensorOrRemoteBufferVectors inputs =
-      GetFunctionInputs(res, inst, seq, tensor_map);
+      GetAllInstructionInputs(res, inst, seq, tensor_map);
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   TF_ASSIGN_OR_RETURN(
@@ -470,7 +469,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
 
   // Now that the all the inputs have been allocated and propagated, get them.
   TensorOrRemoteBufferVectors inputs =
-      GetFunctionInputs(res, inst, seq, tensor_map);
+      GetAllInstructionInputs(res, inst, seq, tensor_map);
   for (int64 o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
     auto& inst_inputs = inputs[o];
@@ -654,9 +653,8 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
                                    inst->name().c_str());
   }
 
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
-  CHECK_EQ(inputs.size(), inst->operand_count());
+  TensorOrRemoteBufferVectors inputs =
+      GetAllInstructionInputs(res, inst, seq, tensor_map);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor pred = inputs[0][0].AsTensor();
 

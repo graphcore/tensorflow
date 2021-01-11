@@ -391,6 +391,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kNot:
     case HloOpcode::kPopulationCount:
     case HloOpcode::kReal:
+    case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kRsqrt:
     case HloOpcode::kSign:
     case HloOpcode::kSin:
@@ -421,7 +422,6 @@ HloInstructionDescription::HloInstructionDescription(
 
     // Inplace on all operands.
     case HloOpcode::kAllReduce:
-    case HloOpcode::kConditional:
     case HloOpcode::kMap:
     case HloOpcode::kSort:
     case HloOpcode::kTuple: {
@@ -645,6 +645,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
     case HloOpcode::kCompare:
+    case HloOpcode::kConditional:
     case HloOpcode::kConstant:
     case HloOpcode::kConvert:
     case HloOpcode::kConvolution:
@@ -663,7 +664,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kReducePrecision:
     case HloOpcode::kReduceWindow:
     case HloOpcode::kRng:
-    case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kSelectAndScatter:
     case HloOpcode::kTupleSelect: {
       type_ = HloInstructionType::kNotInplace;
