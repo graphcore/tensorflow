@@ -86,5 +86,5 @@ cc_library(
 
 filegroup(
     name = "mpirun",
-    srcs = ["poplar/bin/mpirun"],
+    srcs = glob(["**/mpirun"]),
 )
