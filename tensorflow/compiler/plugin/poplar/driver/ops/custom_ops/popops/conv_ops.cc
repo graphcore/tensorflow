@@ -234,8 +234,8 @@ class Conv2DReverseOp : public PoplarOpDef {
         poputil::graphfn::created("out"),
     };
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
+                                                     func, signature, args));
 
     out = args[2];
 
@@ -328,8 +328,8 @@ class DepthwiseBackpropFilterOp : public PoplarOpDef {
         poputil::graphfn::created("out"),
     };
 
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
+                                                     func, signature, args));
 
     out = args[2];
 
@@ -661,7 +661,8 @@ class MultiConvOp : public PoplarOpDef {
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
         inst, graph, res, seq, func, signature, args,
-        multi_conv_inst->AllocatingIndices()));
+        multi_conv_inst->AllocatingIndices(),
+        multi_conv_inst->LayoutDependencies()));
 
     // Set the outputs.
     for (int64 i = 0; i != convolution_specs.size(); ++i) {
