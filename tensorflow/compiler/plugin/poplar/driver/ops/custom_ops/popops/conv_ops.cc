@@ -15,7 +15,6 @@ limitations under the License.
 #include <poplar/Graph.hpp>
 #include <poplin/MultiConvolution.hpp>
 #include <popnn/NonLinearity.hpp>
-#include <popops/Collectives.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/ScaledAdd.hpp>

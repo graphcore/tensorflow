@@ -16,7 +16,6 @@ limitations under the License.
 #include <poplin/MatMul.hpp>
 #include <popnn/NonLinearity.hpp>
 #include <popops/Cast.hpp>
-#include <popops/Collectives.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Pad.hpp>
