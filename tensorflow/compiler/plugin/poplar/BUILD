@@ -679,6 +679,7 @@ cc_library(
         "driver/tools/conversions.cc",
         "driver/tools/convolution_preplanning.cc",
         "driver/tools/data_initializer.cc",
+        "driver/tools/debug_info.cc",
         "driver/tools/embedding_plans_preplanning.cc",
         "driver/tools/execution_counter_util.cc",
         "driver/tools/generic_graph_caching.cc",
@@ -723,6 +724,7 @@ cc_library(
         "driver/tools/conversions.h",
         "driver/tools/convolution_preplanning.h",
         "driver/tools/data_initializer.h",
+        "driver/tools/debug_info.h",
         "driver/tools/embedding_plans_preplanning.h",
         "driver/tools/execution_counter_util.h",
         "driver/tools/generic_graph_caching.h",
@@ -2027,6 +2029,19 @@ xla_test(
     name = "root_token_replacer_test",
     size = "small",
     srcs = ["tests/root_token_replacer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "debug_info_test",
+    size = "small",
+    srcs = ["tests/debug_info_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4839,6 +4854,7 @@ test_suite(
         "copy_inserter_test",
         "create_buffer_test",
         "data_initializer_test",
+        "debug_info_test",
         "deferred_visitor_test",
         "dependency_replacer_test",
         "device_connection_test",
