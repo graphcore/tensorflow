@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DebugContext.hpp>
 #include <popops/ElementWise.hpp>
 #include <string>
 
@@ -32,11 +33,10 @@ namespace poplarplugin {
 namespace {
 
 class TruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
                         AddTensor(graph, TensorLocation{inst, 0}, output_shape,
                                   res, tensor_map));
@@ -54,11 +54,10 @@ class TruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(TruncatedNormal, TruncatedNormalOp);
 
 class StatelessRandomUniformOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
@@ -104,11 +103,10 @@ class StatelessRandomUniformOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniform, StatelessRandomUniformOp);
 
 class StatelessRandomUniformIntOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
@@ -155,11 +153,10 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomUniformInt, StatelessRandomUniformIntOp);
 
 class StatelessRandomNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
@@ -196,11 +193,10 @@ class StatelessRandomNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessRandomNormal, StatelessRandomNormalOp);
 
 class StatelessTruncatedNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
@@ -237,11 +233,10 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(StatelessTruncatedNormal, StatelessTruncatedNormalOp);
 
 class SeedOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const std::string debug_name = GetDebugName(inst);
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed_ref,

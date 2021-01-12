@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplin/Norms.hpp>
 #include <popnn/BatchNorm.hpp>
@@ -197,11 +198,10 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
 }
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
     absl::optional<const HloInstruction*> layout = tensor_target.layout;
@@ -229,11 +229,10 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
 };
 
 class NormInferenceOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     poplar::program::Sequence seq;
 
@@ -331,11 +330,10 @@ REGISTER_POPLAR_OP(GroupNormInference, NormInferenceOp);
 REGISTER_HLO_OP(kBatchNormInference, NormInferenceOp);
 
 class NormTrainingOp : public NormInferenceAndTrainingOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     poplar::program::Sequence seq;
 
@@ -445,11 +443,10 @@ REGISTER_POPLAR_OP(GroupNormTraining, NormTrainingOp);
 REGISTER_HLO_OP(kBatchNormTraining, NormTrainingOp);
 
 class NormGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     poplar::program::Sequence seq;
 
@@ -578,11 +575,10 @@ REGISTER_POPLAR_OP(GroupNormGrad, NormGradOp);
 REGISTER_HLO_OP(kBatchNormGrad, NormGradOp);
 
 class NormStatisticsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) {
     TF_ASSIGN_OR_RETURN(const NormOptions norm_opts, GetNormOptions(inst));
     poplar::program::Sequence seq;
 

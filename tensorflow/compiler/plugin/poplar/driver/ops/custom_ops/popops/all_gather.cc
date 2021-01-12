@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 
 #include <gcl/Collectives.hpp>
+#include <poplar/DebugContext.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <poputil/Util.hpp>
 
@@ -50,11 +51,10 @@ std::function<poplar::Tensor(int64, int64)> OffsetSlice(
 }
 
 class AllGatherOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     const int64 num_inputs = inst->operand_count();
 

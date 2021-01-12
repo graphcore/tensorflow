@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/DebugContext.hpp>
 #include <poputil/TileMapping.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -29,11 +30,10 @@ namespace poplarplugin {
 namespace {
 
 class IpuInterCopyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override;
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override;
 };
 
 namespace {
@@ -91,7 +91,8 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
 
 StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
     poplar::Graph&, CompilerResources& res, const HloInstruction* inst,
-    const Shape& output_shape, TensorMap& tensor_map) {
+    const Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugContext& debug_context) {
   poplar::program::Sequence seq;
 
   if (!inst->has_sharding()) {

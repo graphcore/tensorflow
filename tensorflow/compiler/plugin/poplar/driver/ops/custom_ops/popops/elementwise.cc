@@ -12,6 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
@@ -30,11 +32,10 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class UnaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
@@ -91,11 +92,10 @@ REGISTER_POPLAR_OP(Inverse, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Square, UnaryElementwiseOp);
 
 class BinaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
@@ -142,11 +142,10 @@ REGISTER_HLO_OP(kShiftRightArithmetic, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftRightLogical, BinaryElementwiseOp);
 
 class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     CHECK_EQ(inst->operand_count(), 2);
     const int64 input_index = tensor_target.input_index;
@@ -211,11 +210,10 @@ REGISTER_POPLAR_OP(Implicit_binary_inplace, ImplicitBinaryElementwiseOp);
 REGISTER_POPLAR_OP(Implicit_binary, ImplicitBinaryElementwiseOp);
 
 class TernaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Get the ternary operation.

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DebugContext.hpp>
 #include <popops/ElementWise.hpp>
 #include <poputil/TileMapping.hpp>
 
@@ -35,11 +36,10 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class ReplicationFactorOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto output = graph.addConstant(poplar::INT, {}, res.replication_factor,
                                     GetDebugName(inst));
     graph.setTileMapping(output, 0);
@@ -52,11 +52,10 @@ class ReplicationFactorOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(ReplicationFactor, ReplicationFactorOp);
 
 class ReplicationNormaliseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Get the inplace input.

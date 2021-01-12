@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/onehot.h"
 
+#include <poplar/DebugContext.hpp>
 #include <popops/Encoding.hpp>
 
 #include "absl/container/flat_hash_map.h"
@@ -33,11 +34,10 @@ namespace poplarplugin {
 namespace {
 
 class OneHotOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     // Create the control program.
     poplar::program::Sequence seq;
 

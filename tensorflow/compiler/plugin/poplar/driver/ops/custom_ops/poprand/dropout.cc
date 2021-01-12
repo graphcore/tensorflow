@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DebugContext.hpp>
 #include <poputil/Util.hpp>
 #include <random>
 
@@ -37,11 +38,10 @@ namespace {
 namespace pe = popops::expr;
 
 class DropoutOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const std::string debug_name = GetDebugName(inst);
     const HloDropout* dropout_instruction = Cast<HloDropout>(inst);
     const float rate = dropout_instruction->Rate();

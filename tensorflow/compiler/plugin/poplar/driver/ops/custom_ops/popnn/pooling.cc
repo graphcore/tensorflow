@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 
+#include <poplar/DebugContext.hpp>
 #include <popnn/Pooling.hpp>
 #include <popnn/PoolingDef.hpp>
 
@@ -38,11 +39,10 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class MaxPoolOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsPooling(res, inst, tensor_map, popnn::PoolingType::MAX,
@@ -52,11 +52,10 @@ class MaxPoolOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MaxPool, MaxPoolOp);
 
 class AvgPoolOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsPooling(res, inst, tensor_map, popnn::PoolingType::AVG,
@@ -66,11 +65,10 @@ class AvgPoolOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(AvgPool, AvgPoolOp);
 
 class MaxPoolGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsMaxPoolGrad(res, inst, tensor_map, pool_inst->window());
@@ -79,11 +77,10 @@ class MaxPoolGradOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(MaxPoolGrad, MaxPoolGradOp);
 
 class AvgPoolGradOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsPoolingGrad(

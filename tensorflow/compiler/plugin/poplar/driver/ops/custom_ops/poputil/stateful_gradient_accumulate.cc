@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 
 #include <gcl/Collectives.hpp>
+#include <poplar/DebugContext.hpp>
 #include <poplar/Program.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Expr.hpp>
@@ -43,11 +44,10 @@ namespace poplarplugin {
 namespace {
 
 class StatefulGradientAccumulateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     const HloStatefulGradientAccumulate* grad_inst =
@@ -132,11 +132,10 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
                    StatefulGradientAccumulateOp);
 
 class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 accumulator_index = tensor_target.input_index;
     // Expect to allocate for the accumulator.
@@ -159,11 +158,10 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
     return graph.clone(outputs[0], GetDebugName(inst));
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloStatefulGradientAccumulate* grad_inst =
         Cast<HloStatefulGradientAccumulate>(inst);
 
@@ -298,11 +296,10 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
 // which can be used by multiple pipeline stages on the same IPU.
 // It is however handeled by the deferred allocation visitor.
 class GradientAccumulatorCreateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     return InternalErrorStrCat(
         "Instruction ", inst->name(),
         " should have been allocated by the DeferredVisitor. This error is "
@@ -315,11 +312,10 @@ REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);
 // A gradient accumulation sink combines accumulators from different pipeline
 // stages on the same IPU into a single buffer.
 class GradientAccumulatorSinkOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     if (!IsLoweredInplace(inst)) {
       return InternalErrorStrCat("Expected the instruction ", inst->name(),
                                  " to have been lowered inplace.");
