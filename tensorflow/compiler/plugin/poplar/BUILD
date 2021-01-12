@@ -103,6 +103,16 @@ tf_proto_library(
     ],
 )
 
+tf_proto_library(
+    name = "alias_info",
+    srcs = [
+        "driver/tools/alias_info.proto",
+    ],
+    cc_api_version = 2,
+    j2objc_api_version = 1,
+    make_default_target_header_only = True,
+)
+
 xla_proto_library(
     name = "xla_backend_protos",
     srcs = [
@@ -111,6 +121,7 @@ xla_proto_library(
         "driver/poplar_feed_config.proto",
     ],
     deps = [
+        ":alias_info_cc",
         ":option_flag_cc",
         ":pipeline_config_cc",
         ":threestate_cc",
@@ -127,6 +138,7 @@ tf_proto_library_py(
         "driver/poplar_feed_config.proto",
     ],
     deps = [
+        ":alias_info_py",
         ":option_flag_py",
         ":pipeline_config_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
@@ -521,6 +533,7 @@ cc_library(
         "driver/tools/while_loop_util.h",
     ],
     deps = [
+        ":alias_info_cc_impl",
         ":common",
         ":config_protos_cc_impl",
         ":custom_kernels_util",

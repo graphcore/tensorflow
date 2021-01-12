@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/types/span.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/alias_info.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -49,16 +50,41 @@ struct HloPoplarPosition {
 
 std::ostream& operator<<(std::ostream& out, const HloPoplarPosition& position);
 
-enum class HloPoplarUseKind {
-  // A use of an HloPoplarBuffer which reads a buffer, but it is not aliased by
-  // any outputs.
-  kNoAlias = 0,
-  // A use of an HloPoplarBuffer which reads a buffer and outputs alias that
-  // buffer without modifying the values in it.
-  kAliasReadOnly,
-  // A use of an HloPoplarBuffer which reads a buffer, modifies the values and
-  // outputs alias that buffer.
-  kAliasReadWrite,
+// Class used to describe a single buffer alias.
+class HloPoplarUseDescription {
+ public:
+  HloPoplarUseDescription(int64 operand_number, const ShapeIndex& operand_index,
+                          const ShapeIndex& output_index, BufferUseKind kind);
+
+  // The operand number in which the buffer appears.
+  int64 operand_number() const { return operand_number_; }
+
+  // The shape index within the operand in which the buffer appears.
+  const ShapeIndex& operand_index() const { return operand_index_; }
+
+  // The shape index within the instruction in which the buffer appears as an
+  // output.
+  const ShapeIndex& output_index() const { return output_index_; }
+
+  // Get what kind of usage this is.
+  BufferUseKind kind() const { return kind_; }
+
+  // Convert to protobuf version of this class.
+  PoplarUseDescription ToProto() const;
+
+  // Get the class instance from the protobuf.
+  static HloPoplarUseDescription FromProto(const PoplarUseDescription& proto);
+
+  std::string ToString() const;
+
+  bool operator==(const HloPoplarUseDescription& other) const;
+  bool operator!=(const HloPoplarUseDescription& other) const;
+
+ private:
+  const int64 operand_number_;
+  const ShapeIndex operand_index_;
+  const ShapeIndex output_index_;
+  const BufferUseKind kind_;
 };
 
 // Base class for defining a single use of a buffer.
@@ -67,26 +93,26 @@ class HloPoplarUse {
   // Instruction at which the buffer is used.
   HloInstruction* instruction() const { return instruction_; }
 
-  // The operand number in which the buffer is appears.
+  // The operand number in which the buffer appears.
   int64 operand_number() const { return operand_number_; }
 
   // The shape index within the operand in which the buffer appears.
   const ShapeIndex& operand_index() const { return operand_index_; }
 
   // Get what kind of usage this is.
-  HloPoplarUseKind kind() const { return kind_; }
+  BufferUseKind kind() const { return kind_; }
 
   virtual std::string ToString() const = 0;
 
  protected:
   HloPoplarUse(HloInstruction* instruction, int64 operand_number,
-               const ShapeIndex& operand_index, HloPoplarUseKind kind);
+               const ShapeIndex& operand_index, BufferUseKind kind);
 
  private:
   HloInstruction* instruction_;
   const int64 operand_number_;
   const ShapeIndex operand_index_;
-  const HloPoplarUseKind kind_;
+  const BufferUseKind kind_;
 };
 
 std::ostream& operator<<(std::ostream& out, const HloPoplarUse& use);
@@ -117,7 +143,7 @@ class HloPoplarAliasUseBase : public HloPoplarUse {
   HloPoplarAliasUseBase(HloInstruction* instruction, int64 operand_number,
                         const ShapeIndex& operand_index,
                         const std::vector<ShapeIndex> output_indices,
-                        HloPoplarUseKind kind);
+                        BufferUseKind kind);
 
  private:
   const std::vector<ShapeIndex> output_indices_;

@@ -1368,7 +1368,7 @@ ENTRY cluster {
   dot.17 = f16[1024,3000] dot(arg1.2, convert.16), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   arg4.5 = f32[3000] parameter(4), parameter_replication={false}, control-predecessors={dot.17}
   convert.15 = f16[3000] convert(arg4.5)
-  fusion.1 = f16[1024,3000] fusion(dot.17, convert.15), kind=kCustom, calls=_pop_op_matmul_biasadd.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.1 = f16[1024,3000] fusion(dot.17, convert.15), kind=kCustom, calls=_pop_op_matmul_biasadd.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   tanh.20 = f16[1024,3000] tanh(fusion.1), backend_config="{\"isInplace\":true}"
   dot.21 = f16[1024,3000] dot(convert.12, tanh.20), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   arg2.3 = f16[1024,128] parameter(2), parameter_replication={false}
@@ -1377,16 +1377,16 @@ ENTRY cluster {
   dot.22 = f16[1024,3000] dot(arg2.3, convert.14), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   arg6.7 = f32[3000] parameter(6), parameter_replication={false}, control-predecessors={dot.22}
   convert.13 = f16[3000] convert(arg6.7)
-  fusion = f16[1024,3000] fusion(dot.22, convert.13), kind=kCustom, calls=_pop_op_matmul_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion = f16[1024,3000] fusion(dot.22, convert.13), kind=kCustom, calls=_pop_op_matmul_biasadd, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   tanh.25 = f16[1024,3000] tanh(fusion), backend_config="{\"isInplace\":true}"
   add.26 = f16[1024,3000] add(dot.21, tanh.25), backend_config="{\"isInplace\":true}"
   constant.11 = f16[] constant(-inf)
   reduce.54 = f16[1024] reduce(add.26, constant.11), dimensions={1}, to_apply=max_half_.50
-  fusion.8 = f16[1024,3000] fusion(add.26, reduce.54), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.8 = f16[1024,3000] fusion(add.26, reduce.54), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   exponential.57 = f16[1024,3000] exponential(fusion.8)
   constant.8 = f16[] constant(0)
   reduce.64.clone = f16[1024] reduce(exponential.57, constant.8), dimensions={1}, to_apply=add_float_.60
-  fusion.9 = f16[1024,3000] fusion(exponential.57, reduce.64.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.9 = f16[1024,3000] fusion(exponential.57, reduce.64.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   arg0.1 = s32[1024] parameter(0), parameter_replication={false}
   iota.31 = s32[1024,3000] iota(), iota_dimension=1
   fusion.12 = pred[1024,3000] fusion(arg0.1, iota.31), kind=kCustom, calls=_pop_op_implicit_binary.1, backend_config="{\"fusionConfig\":{}}"
@@ -1395,35 +1395,35 @@ ENTRY cluster {
   fusion.13 = pred[1024] fusion(arg0.1), kind=kCustom, calls=_pop_op_implicit_binary.2, backend_config="{\"fusionConfig\":{}}"
   and.45 = pred[1024] and(fusion.7, fusion.13), backend_config="{\"isInplace\":true}"
   fusion.14 = f16[1024] fusion(and.45), kind=kCustom, calls=_pop_op_implicit_ternary, backend_config="{\"fusionConfig\":{}}"
-  fusion.11 = f16[1024,3000] fusion(fusion.15, fusion.14), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.11 = f16[1024,3000] fusion(fusion.15, fusion.14), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   subtract.81 = f16[1024,3000] subtract(fusion.9, fusion.11), backend_config="{\"isInplace\":true}"
   negate.69 = f16[1024,3000] negate(fusion.11), control-predecessors={subtract.81}, backend_config="{\"isInplace\":true}"
   log.66 = f16[1024] log(reduce.64.clone), control-predecessors={fusion.9}, backend_config="{\"isInplace\":true}"
-  fusion.10 = f16[1024,3000] fusion(fusion.8, log.66), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.10 = f16[1024,3000] fusion(fusion.8, log.66), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   multiply.70 = f16[1024,3000] multiply(negate.69, fusion.10), backend_config="{\"isInplace\":true}"
   reduce = f16[] reduce(multiply.70, constant.8), dimensions={0,1}, to_apply=add_float_.60
   transpose.95 = f16[3000,1024] transpose(tanh.20), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.96 = f16[1024,1024] dot(subtract.81, transpose.95), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   convert.102 = f32[1024,1024] convert(dot.96)
-  fusion.6 = f32[1024,1024] fusion(arg3.4, convert.102), kind=kCustom, calls=_pop_op_scaled_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.6 = f32[1024,1024] fusion(arg3.4, convert.102), kind=kCustom, calls=_pop_op_scaled_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   transpose.98 = f16[1024,1024] transpose(convert.12), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.99 = f16[1024,3000] dot(transpose.98, subtract.81), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   custom-call = f16[1024,3000] custom-call(tanh.20, dot.99), custom_call_target="TanhGrad"
   reduce.117.clone = f16[3000] reduce(custom-call, constant.8), dimensions={0}, to_apply=add_float_.60
   convert.121 = f32[3000] convert(reduce.117.clone)
-  fusion.5 = f32[3000] fusion(arg4.5, convert.121), kind=kCustom, calls=_pop_op_scaled_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.5 = f32[3000] fusion(arg4.5, convert.121), kind=kCustom, calls=_pop_op_scaled_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   transpose.132 = f16[128,1024] transpose(arg1.2), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.133 = f16[128,3000] dot(transpose.132, custom-call), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   convert.136 = f32[128,3000] convert(dot.133)
-  fusion.4 = f32[128,3000] fusion(arg5.6, convert.136), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.4 = f32[128,3000] fusion(arg5.6, convert.136), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   custom-call.1 = f16[1024,3000] custom-call(tanh.25, subtract.81), custom_call_target="TanhGrad"
   reduce.153.clone = f16[3000] reduce(custom-call.1, constant.8), dimensions={0}, to_apply=add_float_.60
   convert.157 = f32[3000] convert(reduce.153.clone)
-  fusion.3 = f32[3000] fusion(arg6.7, convert.157), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.3 = f32[3000] fusion(arg6.7, convert.157), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   transpose.168 = f16[128,1024] transpose(arg2.3), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.169 = f16[128,3000] dot(transpose.168, custom-call.1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   convert.172 = f32[128,3000] convert(dot.169)
-  fusion.2 = f32[128,3000] fusion(arg7.8, convert.172), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.2 = f32[128,3000] fusion(arg7.8, convert.172), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   ROOT tuple.190 = (f16[], f32[1024,1024], f32[3000], f32[128,3000], f32[3000], f32[128,3000]) tuple(reduce, fusion.6, fusion.5, fusion.4, fusion.3, fusion.2), backend_config="{\"isInplace\":true}"
 }
   )";
@@ -1569,11 +1569,11 @@ ENTRY cluster {
   custom-call.2 = f16[1,64] custom-call(reshape.34), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   constant.3 = f16[] constant(-inf)
   reduce.30 = f16[1] reduce(custom-call.2, constant.3), dimensions={1}, to_apply=max_half_.26
-  fusion.3 = f16[1,64] fusion(custom-call.2, reduce.30), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+  fusion.3 = f16[1,64] fusion(custom-call.2, reduce.30), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
   exponential.33 = f16[1,64] exponential(fusion.3), backend_config="{\"isInplace\":true}"
   constant.9 = f16[] constant(0)
   reduce.40.clone = f16[1] reduce(exponential.33, constant.9), dimensions={1}, to_apply=add_float_.36
-  fusion.7 = f16[1,64] fusion(exponential.33, reduce.40.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.7 = f16[1,64] fusion(exponential.33, reduce.40.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   arg1.2 = f16[1,64] parameter(1), parameter_replication={false}
   subtract.57 = f16[1,64] subtract(fusion.7, arg1.2), backend_config="{\"isInplace\":true}"
   custom-call.3 = f16[1,64] custom-call(custom-call.2, subtract.57), custom_call_target="ReluGrad"
@@ -1589,17 +1589,17 @@ ENTRY cluster {
   custom-call.5 = f16[1,32] custom-call(custom-call, reshape.14), custom_call_target="ReluGrad"
   reshape.17 = f16[32] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.5 = f16[50176,32] dot(reshape, reshape.17), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion.2 = f16[50176,32] fusion(arg2.3, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.2 = f16[50176,32] fusion(arg2.3, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   fusion.6 = f16[1,32] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary.2, backend_config="{\"fusionConfig\":{}}"
   reshape.40 = f16[32] reshape(fusion.6), backend_config="{\"isInplace\":true}"
   subtract.134 = f16[32] subtract(arg3.4, reshape.40), backend_config="{\"isInplace\":true}"
   dot.6 = f16[32,64] dot(reshape.3, reshape.13), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion.1 = f16[32,64] fusion(arg4.5, dot.6), kind=kCustom, calls=_pop_op_scaled_inplace.1, control-predecessors={transpose.108, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.1 = f16[32,64] fusion(arg4.5, dot.6), kind=kCustom, calls=_pop_op_scaled_inplace.1, control-predecessors={transpose.108, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   fusion.5 = f16[1,64] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary.1, backend_config="{\"fusionConfig\":{}}"
   reshape.39 = f16[64] reshape(fusion.5), backend_config="{\"isInplace\":true}"
   subtract.105 = f16[64] subtract(arg5.6, reshape.39), backend_config="{\"isInplace\":true}"
   dot.7 = f16[64,64] dot(reshape.6, reshape.11), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion = f16[64,64] fusion(arg6.7, dot.7), kind=kCustom, calls=_pop_op_scaled_inplace, control-predecessors={transpose.79, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion = f16[64,64] fusion(arg6.7, dot.7), kind=kCustom, calls=_pop_op_scaled_inplace, control-predecessors={transpose.79, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   fusion.4 = f16[1,64] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary, backend_config="{\"fusionConfig\":{}}"
   reshape.38 = f16[64] reshape(fusion.4), backend_config="{\"isInplace\":true}"
   subtract.76 = f16[64] subtract(arg7.8, reshape.38), backend_config="{\"isInplace\":true}"
@@ -1728,11 +1728,11 @@ ENTRY cluster {
   custom-call.2 = f32[1,4] custom-call(reshape.33), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   constant.44 = f32[] constant(-inf)
   reduce.49 = f32[1] reduce(custom-call.2, constant.44), dimensions={1}, to_apply=max_float_.45
-  fusion.2 = f32[1,4] fusion(custom-call.2, reduce.49), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+  fusion.2 = f32[1,4] fusion(custom-call.2, reduce.49), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
   exponential.52 = f32[1,4] exponential(fusion.2), backend_config="{\"isInplace\":true}"
   constant.54 = f32[] constant(0)
   reduce.59 = f32[1] reduce(exponential.52, constant.54), dimensions={1}, to_apply=add_float_.55
-  fusion.1 = f32[1,4] fusion(exponential.52, reduce.59), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.1 = f32[1,4] fusion(exponential.52, reduce.59), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   arg1.2 = f32[4] parameter(1), parameter_replication={false}
   reshape.9 = f32[1,4] reshape(arg1.2), inferred_dimension=0, backend_config="{\"isInplace\":true}"
   subtract.76 = f32[1,4] subtract(fusion.1, reshape.9), backend_config="{\"isInplace\":true}"
@@ -1748,20 +1748,20 @@ ENTRY cluster {
   custom-call.5 = f32[1,4] custom-call(custom-call, reshape.15), custom_call_target="ReluGrad"
   reshape.27 = f32[4] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.7 = f32[4,4] dot(reshape, reshape.27), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion.5 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.4, control-predecessors={reshape.27, dot.7}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.5 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.4, control-predecessors={reshape.27, dot.7}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.36 = f32[4] reshape(fusion.5), backend_config="{\"isInplace\":true}"
   subtract.144 = f32[4] subtract(arg2.3, reshape.36), backend_config="{\"isInplace\":true}"
   dot.5 = f32[4,4] dot(reshape.3, reshape.14), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion.4 = f32[1,4] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, control-predecessors={reshape.14, dot.5, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.4 = f32[1,4] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, control-predecessors={reshape.14, dot.5, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.35 = f32[4] reshape(fusion.4), backend_config="{\"isInplace\":true}"
   subtract.120 = f32[4] subtract(arg3.4, reshape.35), backend_config="{\"isInplace\":true}"
   dot.6 = f32[4,4] dot(reshape.6, reshape.12), lhs_contracting_dims={}, rhs_contracting_dims={}
-  fusion.3 = f32[1,4] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, control-predecessors={reshape.12, dot.3, dot.6}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.3 = f32[1,4] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, control-predecessors={reshape.12, dot.3, dot.6}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.34 = f32[4] reshape(fusion.3), backend_config="{\"isInplace\":true}"
   subtract.93 = f32[4] subtract(arg4.5, reshape.34), backend_config="{\"isInplace\":true}"
   add.157 = f32[4,4] add(dot.5, dot.6), backend_config="{\"isInplace\":true}"
   add.158 = f32[4,4] add(add.157, dot.7), backend_config="{\"isInplace\":true}"
-  fusion = f32[4,4] fusion(arg5.6, add.158), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion = f32[4,4] fusion(arg5.6, add.158), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   ROOT tuple.172 = (f32[4], f32[4], f32[4], f32[4,4]) tuple(subtract.144, subtract.120, subtract.93, fusion), backend_config="{\"isInplace\":true}"
 }
 )";
@@ -1907,35 +1907,35 @@ ENTRY cluster {
   add.25 = f32[1,4] add(custom-call.2, add.20), backend_config="{}"
   constant.49 = f32[] constant(-inf), backend_config="{}"
   reduce.54 = f32[1] reduce(add.25, constant.49), dimensions={1}, to_apply=max_float_.50, backend_config="{}"
-  fusion.3 = f32[1,4] fusion(add.25, reduce.54), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.3 = f32[1,4] fusion(add.25, reduce.54), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   exponential.57 = f32[1,4] exponential(fusion.3), backend_config="{\"isInplace\":true}"
   constant.59 = f32[] constant(0), backend_config="{}"
   reduce.64 = f32[1] reduce(exponential.57, constant.59), dimensions={1}, to_apply=add_float_.60, backend_config="{}"
-  fusion.7 = f32[1,4] fusion(exponential.57, reduce.64), kind=kCustom, calls=_pop_op_implicit_binary_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.7 = f32[1,4] fusion(exponential.57, reduce.64), kind=kCustom, calls=_pop_op_implicit_binary_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   arg1.2 = f32[4] parameter(1), parameter_replication={false}, backend_config="{}"
   reshape.11 = f32[1,4] reshape(arg1.2), inferred_dimension=0, backend_config="{\"isInplace\":true}"
   subtract.81 = f32[1,4] subtract(fusion.7, reshape.11), backend_config="{\"isInplace\":true}"
   custom-call.4 = f32[1,4] custom-call(custom-call, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.17 = f32[4] reshape(custom-call.4), backend_config="{\"isInplace\":true}"
   dot.3 = f32[4,4] dot(reshape, reshape.17), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
-  fusion.4 = f32[1,4] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, control-predecessors={reshape.17, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.4 = f32[1,4] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, control-predecessors={reshape.17, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.30 = f32[4] reshape(fusion.4), backend_config="{\"isInplace\":true}"
   subtract.128 = f32[4] subtract(arg2.3, reshape.30), backend_config="{\"isInplace\":true}"
   custom-call.3 = f32[1,4] custom-call(custom-call.1, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.19 = f32[4] reshape(custom-call.3), backend_config="{\"isInplace\":true}"
   dot.4 = f32[4,4] dot(reshape, reshape.19), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
-  fusion.5 = f32[1,4] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, control-predecessors={reshape.19, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.5 = f32[1,4] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, control-predecessors={reshape.19, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.29 = f32[4] reshape(fusion.5), backend_config="{\"isInplace\":true}"
   subtract.98 = f32[4] subtract(arg3.4, reshape.29), backend_config="{\"isInplace\":true}"
   custom-call.5 = f32[1,4] custom-call(custom-call.2, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.21 = f32[4] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.5 = f32[4,4] dot(reshape, reshape.21), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
-  fusion.6 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, control-predecessors={reshape.21, dot.5}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.6 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, control-predecessors={reshape.21, dot.5}, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   reshape.31 = f32[4] reshape(fusion.6), backend_config="{\"isInplace\":true}"
   subtract.161 = f32[4] subtract(arg4.5, reshape.31), backend_config="{\"isInplace\":true}"
-  fusion.2 = f32[4,4] fusion(arg5.6, dot.3), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
-  fusion.1 = f32[4,4] fusion(arg6.7, dot.4), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
-  fusion = f32[4,4] fusion(arg7.8, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.2 = f32[4,4] fusion(arg5.6, dot.3), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
+  fusion.1 = f32[4,4] fusion(arg6.7, dot.4), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
+  fusion = f32[4,4] fusion(arg7.8, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]},\"isInplace\":true}"
   ROOT tuple.189 = (f32[4], f32[4], f32[4], f32[4,4], f32[4,4], f32[4,4]) tuple(subtract.128, subtract.98, subtract.161, fusion.2, fusion.1, fusion), backend_config="{\"isInplace\":true}"
 }
 )";

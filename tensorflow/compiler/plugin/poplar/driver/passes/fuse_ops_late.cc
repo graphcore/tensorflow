@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
@@ -23,6 +24,17 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+// Function for describing fusions which are "inplace" on the 0th input with no
+// tuple shapes involved.
+PatternInplaceDescriptions GetSimpleInplaceUseDescription(
+    const HloMatcherMatched&) {
+  return {HloPoplarUseDescription{/*operand_number=*/0,
+                                  /*operand_index=*/ShapeIndex{},
+                                  /*output_index=*/ShapeIndex{},
+                                  BufferUseKind::USE_ALIAS_READ_WRITE}};
+}
+};  // namespace
 
 /*
  * Note about constructing these patterns.  Due to the behaviour of the fuser
@@ -39,8 +51,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
-    PatternInplaceInputs({2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
       {HloOpcode::kBroadcast, NodeOperands({3})},
@@ -53,8 +65,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
-    PatternInplaceInputs({2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
       {HloOpcode::kBroadcast, NodeOperands({3})},
@@ -67,8 +79,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
-    PatternInplaceInputs({2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
       {HloOpcode::kReshape, NodeOperands({3}), IsExpandingReshape},
@@ -81,8 +93,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("matmul_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
-    PatternInplaceInputs({2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
       {HloOpcode::kBroadcast, NodeOperands({3})},
@@ -95,8 +107,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("zero_pad"),
     PatternMetaTarget(0),
     PatternInputs({2}),
-    PatternInplaceInputs({2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kPad, NodeOperands({2, 1}), IsExternalPadding},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
@@ -176,8 +188,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("bias_apply"),
     PatternMetaTarget(0),
     PatternInputs({5, 6, 7}),
-    PatternInplaceInputs({5}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloOpcode::kSubtract, NodeOperands({5, 1})},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
@@ -194,8 +206,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_scaled_inplace"),
     PatternMetaTarget(3),
     PatternInputs({4, 5, 6, 7}),
-    PatternInplaceInputs({4}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
@@ -212,8 +224,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axby"),
     PatternMetaTarget(0),
     PatternInputs({5, 6}),
-    PatternInplaceInputs({5}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({5, 3})},
@@ -232,8 +244,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axby"),
     PatternMetaTarget(0),
     PatternInputs({9, 10, 11, 12}),
-    PatternInplaceInputs({9}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({9, 3})},
@@ -256,8 +268,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axby"),
     PatternMetaTarget(0),
     PatternInputs({7, 8, 9, 10}),
-    PatternInplaceInputs({7}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({7, 3})},
@@ -277,8 +289,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axby"),
     PatternMetaTarget(0),
     PatternInputs({5, 6, 7, 8}),
-    PatternInplaceInputs({5}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({5, 3})},
@@ -296,8 +308,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({3, 4}),
-    PatternInplaceInputs({3}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 4}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
@@ -313,8 +325,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({5, 6, 7}),
-    PatternInplaceInputs({5}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 6}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({5, 2})},
@@ -332,8 +344,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({4, 5, 6}),
-    PatternInplaceInputs({4}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 5}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({4, 2})},
@@ -349,8 +361,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_axy"),
     PatternMetaTarget(0),
     PatternInputs({3, 4, 5}),
-    PatternInplaceInputs({3}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 4}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
@@ -365,8 +377,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({3, 4}),
-    PatternInplaceInputs({3}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({3, 1}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({4, 2})},
@@ -382,8 +394,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({5, 6, 7}),
-    PatternInplaceInputs({5}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({5, 1}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({6, 2})},
@@ -401,8 +413,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({4, 5, 6}),
-    PatternInplaceInputs({4}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({5, 2})},
@@ -418,8 +430,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace_xby"),
     PatternMetaTarget(0),
     PatternInputs({3, 4, 5}),
-    PatternInplaceInputs({3}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({3, 1}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({4, 2})},
@@ -435,8 +447,18 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("padding_reduce_window"),
     PatternMetaTarget(0),
     PatternInputs({1, 2}),
-    PatternInplaceInputs({1, 2}),
     PatternOutputs({0}),
+    PatternInplaceDescriptionFn(
+      [] (const HloMatcherMatched&) -> PatternInplaceDescriptions {
+      return {HloPoplarUseDescription{/*operand_number=*/0,
+                                      /*operand_index=*/ShapeIndex{},
+                                      /*output_index=*/ShapeIndex{},
+                                      BufferUseKind::USE_ALIAS_READ_ONLY},
+              HloPoplarUseDescription{/*operand_number=*/1,
+                                      /*operand_index=*/ShapeIndex{},
+                                      /*output_index=*/ShapeIndex{},
+                                      BufferUseKind::USE_ALIAS_READ_ONLY}};
+    }),
     Pattern({
       {HloOpcode::kReduceWindow, NodeOperands({1, 2}), IsPaddingReduceWindow},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
