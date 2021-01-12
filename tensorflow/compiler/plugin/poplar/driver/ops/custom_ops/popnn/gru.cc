@@ -35,8 +35,13 @@ limitations under the License.
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popnn/Gru.hpp>
+#include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
+#include <popops/Encoding.hpp>
+#include <poputil/Broadcast.hpp>
 #include <poputil/Util.hpp>
+
+namespace pe = popops::expr;
 
 namespace xla {
 namespace poplarplugin {
@@ -139,6 +144,15 @@ class GRULayerBaseOp : public PoplarOpDef {
         // Allocate GRU weights biases.
         return popnn::gru::createWeightsBiases(graph, gru_params, name,
                                                gru_opts, &res.dot_cache);
+      }
+      case 4: {
+        // Allocate AUGRU seq_len
+        return popops::createSliceableTensor(
+            graph, poplar::INT, {gru_params.batchSize}, {0}, {1}, 0, name);
+      }
+      case 5: {
+        // Allocate AUGRU attention
+        return popnn::gru::createAttention(graph, gru_params, name);
       }
       default: {
         return xla::FailedPrecondition(
@@ -411,7 +425,7 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
 
  protected:
   const std::string ClassName() const override {
-    return "DynamicGRULayerBwdOP";
+    return "DynamicGRULayerBwdOp";
   }
 
   std::vector<const char*> NameList() const override {
@@ -466,6 +480,152 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
   }
 };
 REGISTER_POPLAR_OP(DynamicGRULayerBwd, DynamicGRULayerBwdOp);
+
+class AUGRULayerFwdOp : public GRULayerFwdOp {
+ public:
+  AUGRULayerFwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override { return "AUGRULayerFwdOp"; }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq", "input_state", "kernel", "bias",
+        "seq_len",   "attention",   "output", "output_state"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 6; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+    poplar::Tensor seq_len = args[4];
+    poplar::Tensor attention = args[5].transpose();
+
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+    auto intermediates_ptr = training ? &args[8] : nullptr;
+    args[6] =
+        popnn::gru::auGruFwd(graph, gru_params, input_state, input_seq, seq_len,
+                             weights, intermediates_ptr, attention, prog,
+                             debug_prefix, gru_opts, &res.dot_cache);
+    auto one = graph.addConstant(poplar::UNSIGNED_INT, {1}, 1);
+    graph.setTileMapping(one, 0);
+    auto real_time_step_casted =
+        popops::cast(graph, seq_len, poplar::UNSIGNED_INT, prog);
+    auto updated_time_step =
+        popops::sub(graph, real_time_step_casted, one, prog);
+
+    args[7] = popnn::gru::createInitialState(graph, gru_params, "fwdState",
+                                             gru_opts, &res.dot_cache);
+    for (unsigned i = 0; i < gru_params.batchSize; ++i) {
+      auto tmp_fwd_tensor = args[6].slice(i, i + 1, 1).squeeze({1});
+      auto offset = updated_time_step.slice(i, i + 1);
+      auto tmp_tensor = popops::dynamicSlice(graph, tmp_fwd_tensor, offset, {0},
+                                             {1}, prog, "loopedDynamic");
+      prog.add(poplar::program::Copy(tmp_tensor, args[7][i]));
+    }
+  }
+};
+REGISTER_POPLAR_OP(AUGRULayerFwd, AUGRULayerFwdOp);
+
+class AUGRULayerBwdOp : public GRULayerBwdOp {
+ public:
+  AUGRULayerBwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override { return "AUGRULayerBwdOp"; }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {"input_seq",
+                                                 "input_state",
+                                                 "kernel",
+                                                 "bias",
+                                                 "seq_len",
+                                                 "attention",
+                                                 "output",
+                                                 "output_state",
+                                                 "intermediates",
+                                                 "output_backprop",
+                                                 "output_state_backprop",
+                                                 "input_backprop",
+                                                 "input_state_backprop",
+                                                 "kernel_backprop",
+                                                 "biases_backprop",
+                                                 "attention_backprop"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 11; }
+
+  int64 OutputTensorCount() const override { return 4; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::gru::GruParams gru_params,
+                     const poplar::OptionFlags& gru_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training, const std::string& debug_prefix,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_state = args[1];
+    poplar::Tensor kernel = args[2];
+    poplar::Tensor biases = args[3];
+    poplar::Tensor seq_len = args[4];
+    poplar::Tensor attention = args[5].transpose();
+    poplar::Tensor output = args[6];
+    poplar::Tensor intermediates = args[8];
+    poplar::Tensor output_backprop = args[9];
+    poplar::Tensor output_state_backprop = args[10];
+
+    auto real_time_step_casted =
+        popops::cast(graph, seq_len, poplar::UNSIGNED_INT, prog);
+    auto indices = graph.addVariable(poplar::UNSIGNED_INT,
+                                     {output_backprop.dim(0)}, "iotaIndices");
+
+    graph.setTileMapping(indices, 0);
+    popops::iota(graph, indices, (uint32_t)1, prog, "iotaIdx");
+    indices = indices.expand({1, 1});
+    real_time_step_casted = real_time_step_casted.expand({0, 1});
+    auto mask = popops::eq(graph, indices, real_time_step_casted, prog);
+    output_state_backprop = output_state_backprop.expand({0});
+    output_state_backprop =
+        output_state_backprop.broadcast(output_backprop.dim(0), 0);
+    mask = popops::cast(graph, mask, output_state_backprop.elementType(), prog);
+    output_state_backprop =
+        popops::mul(graph, output_state_backprop, mask, prog);
+    auto step_output_backprop =
+        popops::add(graph, output_backprop, output_state_backprop, prog);
+
+    popnn::gru::GruWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackGruKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+
+    popnn::gru::GruWeights weights_backprop;
+    args[12] = popnn::gru::auGruBwdWithWU(
+        graph, gru_params, prog, input_state, intermediates, weights, input_seq,
+        seq_len, output, step_output_backprop, &args[11], weights_backprop,
+        attention, &args[15], debug_prefix, gru_opts, &res.dot_cache);
+    args[13] = PackGruKernel(weights_backprop.inputWeights,
+                             weights_backprop.outputWeights);
+    args[14] = weights_backprop.biases;
+  }
+};
+REGISTER_POPLAR_OP(AUGRULayerBwd, AUGRULayerBwdOp);
 
 }  // namespace
 }  // namespace poplarplugin
