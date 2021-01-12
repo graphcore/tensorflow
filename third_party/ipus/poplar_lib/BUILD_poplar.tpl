@@ -77,14 +77,10 @@ cc_library(
 
 cc_library(
     name = "mpi_lib",
-    srcs = glob(
-        [
-            "lib*/**/libmpi.so",
-        ],
-    ),
+    srcs = glob(["**/libmpi.so"]),
 )
 
 filegroup(
     name = "mpirun",
-    srcs = ["poplar/bin/mpirun"],
+    srcs = glob(["**/mpirun"]),
 )
