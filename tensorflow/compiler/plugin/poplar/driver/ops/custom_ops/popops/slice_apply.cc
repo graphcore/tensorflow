@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/slice_apply.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <popops/ElementWise.hpp>
 
@@ -63,11 +64,10 @@ poplar::Tensor CreateInputFromSlice(poplar::Graph& graph,
 
 // All the slice apply ops allocate on the first two operands.
 class SliceApplyAllocatorOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
     if (input_index != 0 && input_index != 1) {
@@ -94,11 +94,10 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
 };
 
 class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -129,11 +128,10 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXbY, SliceApplyaXbYOp);
 
 class SliceApplyabYOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -162,11 +160,10 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyabY, SliceApplyabYOp);
 
 class SliceApplyaXbOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -202,11 +199,10 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
 REGISTER_POPLAR_OP(SliceApplyaXb, SliceApplyaXbOp);
 
 class SliceApplyOp : public SliceApplyAllocatorOp {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     // Get the inputs.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,

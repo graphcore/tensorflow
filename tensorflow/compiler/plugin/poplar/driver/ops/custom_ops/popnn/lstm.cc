@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popnn/Lstm.hpp>
@@ -72,11 +73,10 @@ poplar::Tensor PackLstmKernel(poplar::Tensor input_weights,
 }
 
 class LstmLayerFwdOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
 
@@ -123,11 +123,10 @@ class LstmLayerFwdOp : public PoplarOpDef {
     }
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Do not expand aliasing when creating a cached op - the input will be
@@ -222,11 +221,10 @@ class LstmLayerFwdOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(LstmLayerFwd, LstmLayerFwdOp);
 
 class LstmLayerBwdOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Do not expand aliasing when creating a cached op - the input will be

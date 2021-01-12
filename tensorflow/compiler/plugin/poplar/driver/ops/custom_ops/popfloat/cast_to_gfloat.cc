@@ -37,6 +37,7 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 
 #include <popfloat/experimental/CastToGfloat.hpp>
+#include <poplar/DebugContext.hpp>
 
 #include <string>
 
@@ -45,11 +46,10 @@ namespace poplarplugin {
 namespace {
 
 class CalcGfloatParamsOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloGfloatParamsInstruction* param_inst =
         Cast<HloGfloatParamsInstruction>(inst);
 
@@ -74,11 +74,10 @@ class CalcGfloatParamsOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(CalcGfloatParams, CalcGfloatParamsOp);
 
 class CastNativeToGfloatOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloCastNativeToGfloatInstruction* cast_inst =
         Cast<HloCastNativeToGfloatInstruction>(inst);
 
@@ -119,11 +118,10 @@ class CastNativeToGfloatOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(CastNativeToGfloat, CastNativeToGfloatOp);
 
 class CastGfloatToNativeOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloCastGfloatToNativeInstruction* cast_inst =
         Cast<HloCastGfloatToNativeInstruction>(inst);
 

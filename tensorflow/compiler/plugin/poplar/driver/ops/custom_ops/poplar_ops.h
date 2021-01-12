@@ -42,18 +42,18 @@ class PoplarOpDef {
  public:
   PoplarOpDef() = default;
   // By default the op is not allocating.
-  virtual StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const std::string& name,
-                                             const TensorTarget& tensor_target,
-                                             const TensorMap& tensor_map) {
+  virtual StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) {
     return xla::FailedPrecondition(
         "Non-allocating op should not be allocating - %s.", name);
   }
 
   virtual StatusOr<poplar::program::Program> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) = 0;
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) = 0;
 };
 
 // The following singleton class is used to register and access custom poplar

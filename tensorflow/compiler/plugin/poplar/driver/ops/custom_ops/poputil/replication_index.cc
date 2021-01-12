@@ -28,17 +28,17 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 class ReplicationIndexOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     // TensorFlow requires slices to be signed integers, we therefore type cast
     // to int32.
     auto output = graph.addReplicationIndexConstant();

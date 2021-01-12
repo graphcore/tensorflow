@@ -48,7 +48,7 @@ StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
   TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor out,
-      op_def->Allocator(graph, res, name, tensor_target, tensor_map));
+      op_def->Allocator(graph, res, name, tensor_target, tensor_map, {}));
   return out;
 }
 
@@ -58,7 +58,7 @@ StatusOr<poplar::program::Program> CreatePoplarOp(
   TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      op_def->Creator(graph, res, inst, output_shape, tensor_map));
+      op_def->Creator(graph, res, inst, output_shape, tensor_map, {}));
   return prog;
 }
 
@@ -72,7 +72,7 @@ StatusOr<poplar::Tensor> AllocateHloOpTensor(poplar::Graph& graph,
   TF_ASSIGN_OR_RETURN(auto op_def, HloOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor out,
-      op_def->Allocator(graph, res, name, tensor_target, tensor_map));
+      op_def->Allocator(graph, res, name, tensor_target, tensor_map, {}));
   return out;
 }
 
@@ -84,7 +84,7 @@ StatusOr<poplar::program::Program> CreateHloOp(poplar::Graph& graph,
   TF_ASSIGN_OR_RETURN(auto op_def, HloOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      op_def->Creator(graph, res, inst, output_shape, tensor_map));
+      op_def->Creator(graph, res, inst, output_shape, tensor_map, {}));
   return prog;
 }
 

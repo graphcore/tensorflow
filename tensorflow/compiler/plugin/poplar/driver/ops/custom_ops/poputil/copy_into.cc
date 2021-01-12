@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DebugContext.hpp>
 #include <poputil/TileMapping.hpp>
 
 #include "absl/container/flat_hash_map.h"
@@ -33,11 +34,10 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 class CopyIntoOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,

@@ -12,6 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
+#include <poplar/DebugContext.hpp>
 #include <popops/Gather.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -46,11 +48,11 @@ StatusOr<poplar::Tensor> AddIndicesTensor(poplar::Graph& graph,
 }
 
 class GatherOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& resources,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& resources,
+      const std::string& name, const TensorTarget& tensor_target,
+      const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
@@ -82,11 +84,10 @@ class GatherOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const auto slice_sizes = inst->gather_slice_sizes();
     const auto dim_numbers = inst->gather_dimension_numbers();
 

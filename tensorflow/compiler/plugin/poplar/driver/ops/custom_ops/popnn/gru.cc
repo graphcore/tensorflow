@@ -32,6 +32,7 @@ limitations under the License.
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popnn/Gru.hpp>
@@ -109,11 +110,10 @@ class GRULayerBaseOp : public PoplarOpDef {
   }
 
  public:
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
 
@@ -164,7 +164,8 @@ class GRULayerBaseOp : public PoplarOpDef {
 
   virtual StatusOr<poplar::program::Program> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) {
     poplar::program::Sequence seq;
     auto gru_inst = Cast<HloRNNInstruction>(inst);
     bool training = gru_inst->is_training();

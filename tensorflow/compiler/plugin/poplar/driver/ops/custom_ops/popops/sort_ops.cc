@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/DebugContext.hpp>
 #include <popops/Gather.hpp>
 #include <popops/Sort.hpp>
 
@@ -59,11 +60,10 @@ bool ReverseSortOutput(const HloInstruction* inst) {
 }
 
 class SortOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloSortInstruction* sort = Cast<HloSortInstruction>(inst);
 
     if (!IsSimpleComparison(inst)) {

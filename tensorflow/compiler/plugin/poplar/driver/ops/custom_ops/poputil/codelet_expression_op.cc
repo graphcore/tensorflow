@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poputil/Broadcast.hpp>
 
 #include <fstream>
@@ -72,11 +73,10 @@ std::stringstream GenerateVertexSource(
 }
 
 class CodeletExpressionOpOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto op_inst = Cast<HloCodeletExpressionOpInstruction>(inst);
     poplar::program::Sequence seq;
 

@@ -13,10 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
+#include <poplar/DebugContext.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
@@ -62,11 +64,10 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
 }
 
 class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(
@@ -136,11 +137,10 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const int64 input_index = tensor_target.input_index;
     const HloInstruction* inst = tensor_target.tgt;
 

@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <poplin/MultiConvolution.hpp>
 #include <popnn/NonLinearity.hpp>
@@ -76,11 +77,10 @@ StatusOr<poplar::Tensor> AddConvolutionWeights(poplar::Graph& graph,
 }
 
 class Conv2DOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Find the input tensor
@@ -142,11 +142,10 @@ class Conv2DOp : public PoplarOpDef {
     return seq;
   }
 
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const int64 input_index = tensor_target.input_index;
 
     const HloInstruction* inst = tensor_target.tgt;
@@ -177,11 +176,10 @@ REGISTER_HLO_OP(kConvolution, Conv2DOp);
 REGISTER_POPLAR_OP(Depthwise_conv, Conv2DOp);
 
 class Conv2DReverseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Find the input tensor
@@ -267,11 +265,10 @@ poplar::Tensor DepthwiseFilterShuffleOutput(const poplin::ConvParams& params,
 }
 
 class DepthwiseBackpropFilterOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Find the input tensor
@@ -341,11 +338,10 @@ class DepthwiseBackpropFilterOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Depthwise_filter, DepthwiseBackpropFilterOp);
 
 class ConvScaledInplaceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Find the weights tensor
@@ -456,11 +452,10 @@ GetMultiConvCreateArgs(const HloMultiConvInstruction* inst,
 }
 
 class MultiConvOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const int64 input_index = tensor_target.input_index;
     const HloMultiConvInstruction* inst =
         Cast<HloMultiConvInstruction>(tensor_target.tgt);
@@ -507,11 +502,10 @@ class MultiConvOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     const HloMultiConvInstruction* multi_conv_inst =
         Cast<HloMultiConvInstruction>(inst);
