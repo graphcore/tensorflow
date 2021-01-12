@@ -23,6 +23,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/alias_info.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_tree.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -58,29 +59,56 @@ std::ostream& operator<<(std::ostream& out, const HloPoplarPosition& position) {
   return out;
 }
 
-namespace {
-std::string HloPoplarUseKindToString(HloPoplarUseKind kind) {
-  switch (kind) {
-    case HloPoplarUseKind::kNoAlias: {
-      return "NoAlias";
-    }
-    case HloPoplarUseKind::kAliasReadOnly: {
-      return "AliasReadOnly";
-    }
-    case HloPoplarUseKind::kAliasReadWrite: {
-      return "AliasReadWrite";
-    }
-    default: {
-      LOG(FATAL) << "Unknown HloPoplarUseKind";
-      return "";
-    }
-  }
+HloPoplarUseDescription::HloPoplarUseDescription(
+    int64 operand_number, const ShapeIndex& operand_index,
+    const ShapeIndex& output_index, BufferUseKind kind)
+    : operand_number_(operand_number),
+      operand_index_(operand_index),
+      output_index_(output_index),
+      kind_(kind) {}
+
+PoplarUseDescription HloPoplarUseDescription::ToProto() const {
+  PoplarUseDescription proto;
+  proto.set_operand_number(operand_number());
+  *(proto.mutable_operand_index()) = {operand_index().begin(),
+                                      operand_index().end()};
+  *(proto.mutable_output_index()) = {output_index().begin(),
+                                     output_index().end()};
+  proto.set_kind(kind());
+  return proto;
 }
-}  // namespace
+
+/*static*/ HloPoplarUseDescription HloPoplarUseDescription::FromProto(
+    const PoplarUseDescription& proto) {
+  const ShapeIndex operand_index{proto.operand_index().begin(),
+                                 proto.operand_index().end()};
+  const ShapeIndex output_index{proto.output_index().begin(),
+                                proto.output_index().end()};
+  return HloPoplarUseDescription{proto.operand_number(), operand_index,
+                                 output_index, proto.kind()};
+}
+
+std::string HloPoplarUseDescription::ToString() const {
+  return absl::StrCat("alias ", BufferUseKind_Name(kind()), " from operand ",
+                      operand_number(), " index ", operand_index().ToString(),
+                      " to output index ", output_index().ToString());
+}
+
+bool HloPoplarUseDescription::operator==(
+    const HloPoplarUseDescription& other) const {
+  return std::make_tuple(operand_number(), operand_index(), output_index(),
+                         kind()) ==
+         std::make_tuple(other.operand_number(), other.operand_index(),
+                         other.output_index(), other.kind());
+}
+
+bool HloPoplarUseDescription::operator!=(
+    const HloPoplarUseDescription& other) const {
+  return !(*this == other);
+}
 
 HloPoplarUse::HloPoplarUse(HloInstruction* instruction, int64 operand_number,
-                           const ShapeIndex& operand_index,
-                           HloPoplarUseKind kind)
+                           const ShapeIndex& operand_index, BufferUseKind kind)
     : instruction_(instruction),
       operand_number_(operand_number),
       operand_index_(operand_index),
@@ -95,7 +123,7 @@ HloPoplarNoAliasUse::HloPoplarNoAliasUse(HloInstruction* instruction,
                                          int64 operand_number,
                                          const ShapeIndex& operand_index)
     : HloPoplarUse(instruction, operand_number, operand_index,
-                   HloPoplarUseKind::kNoAlias) {}
+                   BufferUseKind::USE_NO_ALIAS) {}
 
 std::string HloPoplarNoAliasUse::ToString() const {
   const std::string operand_index_str =
@@ -103,14 +131,14 @@ std::string HloPoplarNoAliasUse::ToString() const {
           ? (" " + operand_index().ToString())
           : "";
   return absl::StrCat(instruction()->name(), ", alias-kind ",
-                      HloPoplarUseKindToString(kind()), ", operand ",
+                      BufferUseKind_Name(kind()), ", operand ",
                       operand_number(), operand_index_str);
 }
 
 HloPoplarAliasUseBase::HloPoplarAliasUseBase(
     HloInstruction* instruction, int64 operand_number,
     const ShapeIndex& operand_index,
-    const std::vector<ShapeIndex> output_indices, HloPoplarUseKind kind)
+    const std::vector<ShapeIndex> output_indices, BufferUseKind kind)
     : HloPoplarUse(instruction, operand_number, operand_index, kind),
       output_indices_(output_indices) {
   CHECK_GT(output_indices_.size(), 0);
@@ -128,7 +156,7 @@ std::string HloPoplarAliasUseBase::ToString() const {
       });
 
   return absl::StrCat(instruction()->name(), ", alias-kind ",
-                      HloPoplarUseKindToString(kind()), ", operand ",
+                      BufferUseKind_Name(kind()), ", operand ",
                       operand_number(), operand_index_str, ", output ",
                       output_indices_str);
 }
@@ -138,15 +166,16 @@ HloPoplarAliasReadOnlyUse::HloPoplarAliasReadOnlyUse(
     const ShapeIndex& operand_index,
     const std::vector<ShapeIndex> output_indices)
     : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
-                            output_indices, HloPoplarUseKind::kAliasReadOnly) {}
+                            output_indices,
+                            BufferUseKind::USE_ALIAS_READ_ONLY) {}
 
 HloPoplarAliasReadWriteUse::HloPoplarAliasReadWriteUse(
     HloInstruction* instruction, int64 operand_number,
     const ShapeIndex& operand_index,
     const std::vector<ShapeIndex> output_indices)
     : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
-                            output_indices, HloPoplarUseKind::kAliasReadWrite) {
-}
+                            output_indices,
+                            BufferUseKind::USE_ALIAS_READ_WRITE) {}
 
 namespace {
 std::string BufferLocalityToString(BufferLocality locality) {

@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -437,8 +438,13 @@ HloInstructionDescription::HloInstructionDescription(
         auto fusion_config = inst->backend_config<PoplarBackendConfig>()
                                  .ValueOrDie()
                                  .fusion_config();
-        auto inplace_operands = fusion_config.inplace_operands();
-        inplace_operands_ = {inplace_operands.begin(), inplace_operands.end()};
+        auto inplace_descriptions = fusion_config.inplace_descriptions();
+        for (const auto& inplace_description : inplace_descriptions) {
+          inplace_operands_.push_back(
+              HloPoplarUseDescription::FromProto(inplace_description)
+                  .operand_number());
+        }
+        absl::c_sort(inplace_operands_);
         if (inplace_operands_.size()) {
           type_ = HloInstructionType::kInplaceReadWrite;
         } else {

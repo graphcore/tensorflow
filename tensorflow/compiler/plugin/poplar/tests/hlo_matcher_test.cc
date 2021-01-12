@@ -906,8 +906,14 @@ ENTRY c1 {
         PatternType("scatter_update_inplace"),
         PatternMetaTarget(3),
         PatternInputs({7, 8, 9, 10}),
-        PatternInplaceInputs({7}),
         PatternOutputs({0}),
+        PatternInplaceDescriptionFn(
+          [] (const HloMatcherMatched&) -> std::vector<HloPoplarUseDescription>{
+          return {HloPoplarUseDescription{/*operand_number=*/0,
+                                          /*operand_index=*/ShapeIndex{},
+                                          /*output_index=*/ShapeIndex{},
+                                          BufferUseKind::USE_ALIAS_READ_WRITE}};
+        }),
         Pattern({
           {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
           {HloOpcode::kReshape, NodeOperands({2})},
@@ -1122,35 +1128,6 @@ TEST_F(HloMatcherTest, PatternInvalidPatternLabel) {
     EXPECT_EQ(
         std::string(ia.what()),
         "[Pattern abc] Unknown node 4 which was not defined in the pattern.");
-  } catch (...) {
-    FAIL() << "Expected invalid_argument throw.";
-  }
-}
-
-TEST_F(HloMatcherTest, PatternInvalidInplaceInput) {
-  try {
-    // clang-format off
-    std::vector<HloMatcherPattern> patterns = {
-      HloMatcherPattern(
-        PatternType("abc"),
-        PatternMetaTarget(0),
-        PatternInputs({1, 2}),
-        PatternInplaceInputs({0}),
-        PatternOutputs({0}),
-        Pattern({
-          {HloOpcode::kAdd, NodeOperands({2, 1})},
-          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-        })
-      )
-    };
-    // clang-format on
-    FAIL() << "Expected invalid_argument throw.";
-  } catch (const std::invalid_argument& ia) {
-    EXPECT_EQ(
-        std::string(ia.what()),
-        "[Pattern abc] Inplace input with label 0 is not an inplace input to "
-        "the pattern. Inplace inputs need to be inputs to the pattern.");
   } catch (...) {
     FAIL() << "Expected invalid_argument throw.";
   }

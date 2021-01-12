@@ -383,49 +383,40 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInputs inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
-    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs, {},
-                        outputs, pattern_nodes) {}
-
-HloMatcherPattern::HloMatcherPattern(PatternType type,
-                                     PatternReplaceFn replace_fn,
-                                     PatternMetaTarget meta_target,
-                                     PatternInputs inputs,
-                                     PatternOutputs outputs,
-                                     Pattern pattern_nodes)
-    : HloMatcherPattern(type, replace_fn, meta_target, inputs, {}, outputs,
-                        pattern_nodes) {}
-
-HloMatcherPattern::HloMatcherPattern(PatternType type,
-                                     PatternMetaTarget meta_target,
-                                     PatternInputs inputs,
-                                     PatternInplaceInputs inplace_inputs,
-                                     PatternOutputs outputs,
-                                     Pattern pattern_nodes)
     : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs,
-                        inplace_inputs, outputs, pattern_nodes) {}
+                        PatternInplaceDescriptionFn(), outputs, pattern_nodes) {
+}
 
 HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternReplaceFn replace_fn,
                                      PatternMetaTarget meta_target,
                                      PatternInputs inputs,
-                                     PatternInplaceInputs inplace_inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
+    : HloMatcherPattern(type, replace_fn, meta_target, inputs,
+                        PatternInplaceDescriptionFn(), outputs, pattern_nodes) {
+}
+
+HloMatcherPattern::HloMatcherPattern(
+    PatternType type, PatternMetaTarget meta_target, PatternInputs inputs,
+    PatternOutputs outputs, PatternInplaceDescriptionFn inplace_description_fn,
+    Pattern pattern_nodes)
+    : HloMatcherPattern(type, PatternReplaceFn(), meta_target, inputs,
+                        inplace_description_fn, outputs, pattern_nodes) {}
+
+HloMatcherPattern::HloMatcherPattern(
+    PatternType type, PatternReplaceFn replace_fn,
+    PatternMetaTarget meta_target, PatternInputs inputs,
+    PatternInplaceDescriptionFn inplace_description_fn, PatternOutputs outputs,
+    Pattern pattern_nodes)
     : type(type),
       replace_fn(replace_fn),
       meta_target(meta_target),
       inputs(inputs),
-      inplace_inputs(inplace_inputs),
-      inplace_input_indices(inplace_inputs.size()),
+      inplace_description_fn(inplace_description_fn),
       outputs(outputs),
       pattern_nodes(pattern_nodes),
-      pattern_graphs(VerifyAndGetGraphs()) {
-  absl::c_transform(inplace_inputs, inplace_input_indices.begin(),
-                    [&](const NodeId& inplace_input_id) {
-                      auto pos = absl::c_find(inputs, inplace_input_id);
-                      return std::distance(inputs.begin(), pos);
-                    });
-}
+      pattern_graphs(VerifyAndGetGraphs()) {}
 
 const PatternType& HloMatcherPattern::GetType() const { return type; }
 
@@ -439,12 +430,9 @@ const PatternMetaTarget& HloMatcherPattern::GetMetaTarget() const {
 
 const PatternInputs& HloMatcherPattern::GetInputs() const { return inputs; }
 
-const PatternInplaceInputs& HloMatcherPattern::GetInplaceInputs() const {
-  return inplace_inputs;
-}
-
-const std::vector<int64>& HloMatcherPattern::GetInplaceInputIndices() const {
-  return inplace_input_indices;
+const PatternInplaceDescriptionFn& HloMatcherPattern::GetInplaceDescriptionFn()
+    const {
+  return inplace_description_fn;
 }
 
 const PatternOutputs& HloMatcherPattern::GetOutputs() const { return outputs; }
@@ -485,16 +473,6 @@ std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
           " already defined. Pattern inputs need to be unique.");
     }
     inputs_set.insert(input);
-  }
-
-  // Make sure all the inplace inputs are in the inputs set.
-  for (auto inplace_input : inplace_inputs) {
-    if (!inputs_set.count(inplace_input)) {
-      throw std::invalid_argument(
-          prefix + "Inplace input with label " + std::to_string(inplace_input) +
-          " is not an inplace input to the pattern. Inplace inputs need to be "
-          "inputs to the pattern.");
-    }
   }
 
   // Make sure outputs are unique and that they point to a label in the pattern.
@@ -1240,9 +1218,14 @@ StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
     cfg->set_feature_group_count(old->feature_group_count());
     cfg->set_batch_group_count(old->batch_group_count());
   }
-  auto inplace_indices = pattern.GetInplaceInputIndices();
-  *(cfg->mutable_inplace_operands()) = {inplace_indices.begin(),
-                                        inplace_indices.end()};
+
+  if (pattern.GetInplaceDescriptionFn()) {
+    auto inplace_descriptions = pattern.GetInplaceDescriptionFn()(matched);
+    for (const auto& inplace_description : inplace_descriptions) {
+      auto* proto = cfg->add_inplace_descriptions();
+      *proto = inplace_description.ToProto();
+    }
+  }
 
   TF_RETURN_IF_ERROR(fusion->set_backend_config(backend_config));
 
@@ -1311,9 +1294,9 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
     return InternalError("Replace function was not specified in pattern.");
   }
 
-  if (!pattern.GetInplaceInputs().empty()) {
+  if (pattern.GetInplaceDescriptionFn()) {
     return InvalidArgument(
-        "Pattern with replacement function can't have inplace operands "
+        "Pattern with replacement function can't have inplace description "
         "specified.");
   }
 

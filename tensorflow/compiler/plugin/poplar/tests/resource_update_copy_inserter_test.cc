@@ -31,7 +31,7 @@ namespace {
 
 using ResourceUpdateCopyInserterTest = HloTestBase;
 
-std::string GetHlo(const std::vector<int64>& fusion_inplace_operands) {
+std::string GetHlo(const std::string& inplace_descriptions) {
   constexpr absl::string_view hlo_format = R"(
 HloModule top
 
@@ -65,7 +65,7 @@ resource_update {
   ru_arg0 = f32[] parameter(0)
   ru_arg1 = f32[] parameter(1)
   ru_arg2 = f32[] parameter(2)
-  fusion = f32[] fusion(ru_arg0, ru_arg1), kind=kCustom, calls=_pop_op_add_comp, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"%s\"]}}"
+  fusion = f32[] fusion(ru_arg0, ru_arg1), kind=kCustom, calls=_pop_op_add_comp, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[%s]}}"
   add_fusion = f32[] add(ru_arg2, fusion)
   ROOT t = (f32[],f32[]) tuple(add_fusion, fusion)
 }
@@ -96,8 +96,7 @@ ENTRY e {
   ROOT e.call = (f32[], f32[]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0}}}"
 }
 )";
-  return absl::StrFormat(hlo_format,
-                         absl::StrJoin(fusion_inplace_operands, ","));
+  return absl::StrFormat(hlo_format, inplace_descriptions);
 }
 
 TEST_F(ResourceUpdateCopyInserterTest, TestAddCopy) {
@@ -105,7 +104,9 @@ TEST_F(ResourceUpdateCopyInserterTest, TestAddCopy) {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(
-                              GetHlo(/*fusion_inplace_operands=*/{0}), config));
+                              GetHlo(/*inplace_descriptions=*/
+                                     R"({\"kind\":\"USE_ALIAS_READ_WRITE\"})"),
+                              config));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
                           ResourceUpdateCopyInserter().Run(module.get()));
@@ -134,9 +135,12 @@ TEST_F(ResourceUpdateCopyInserterTest, TestAddCopy) {
 TEST_F(ResourceUpdateCopyInserterTest, TestNoCopy) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(
-                              GetHlo(/*fusion_inplace_operands=*/{1}), config));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module,
+      ParseAndReturnVerifiedModule(
+          GetHlo(/*inplace_descriptions=*/
+                 R"({\"kind\":\"USE_ALIAS_READ_WRITE\",\"operand_number\":\"1\"})"),
+          config));
 
   TF_ASSERT_OK_AND_ASSIGN(bool changed,
                           ResourceUpdateCopyInserter().Run(module.get()));

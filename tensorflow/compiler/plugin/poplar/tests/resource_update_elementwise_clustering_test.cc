@@ -156,7 +156,7 @@ std::string GetAdamLikeHloString(int n, int m) {
     all-reduce0 = f32[$N,$M] all-reduce(arg0), to_apply=sum
     all-reduce1 = f32[$N,$M] all-reduce(arg1), to_apply=sum
     replication-normalise = f32[$N,$M] custom-call(all-reduce0), custom_call_target="ReplicationNormalise"
-    fusion.2 = f32[$N,$M] fusion(arg2, replication-normalise), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+    fusion.2 = f32[$N,$M] fusion(arg2, replication-normalise), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
 
     constant.54 = f32[] constant(0.001)
     constant.58 = f32[] constant(1)
@@ -168,9 +168,9 @@ std::string GetAdamLikeHloString(int n, int m) {
 
     fusion.4 = f32[$N,$M] fusion(fusion.2, divide.63), kind=kCustom, calls=scale_xa
     multiply.71 = f32[$N,$M] multiply(replication-normalise, replication-normalise)
-    fusion.1 = f32[$N,$M] fusion(arg3, multiply.71), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+    fusion.1 = f32[$N,$M] fusion(arg3, multiply.71), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
     sqrt.77 = f32[$N,$M] sqrt(fusion.1)
-    fusion.5 = f32[$N,$M] fusion(sqrt.77), kind=kCustom, calls=inplace_xa, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+    fusion.5 = f32[$N,$M] fusion(sqrt.77), kind=kCustom, calls=inplace_xa, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
     divide.82 = f32[$N,$M] divide(fusion.4, fusion.5)
     subtract.83 = f32[$N,$M] subtract(all-reduce1, divide.82)
     ROOT root = (f32[$N,$M], f32[$N,$M], f32[$N,$M], f32[$N,$M]) tuple(subtract.83, fusion.2, arg0, arg1)
@@ -182,8 +182,8 @@ std::string GetMomentumLikeHloString(int n, int m) {
   const std::string wu = R"(
   all-reduce = f32[$N,$M] all-reduce(arg0), to_apply=sum
   replication-normalise = f32[$N,$M] custom-call(all-reduce), custom_call_target="ReplicationNormalise"
-  fusion.1 = f32[$N,$M] fusion(arg2, replication-normalise), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
-  fusion.2 = f32[$N,$M] fusion(arg3, replication-normalise), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+  fusion.1 = f32[$N,$M] fusion(arg2, replication-normalise), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
+  fusion.2 = f32[$N,$M] fusion(arg3, replication-normalise), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
   ROOT root = (f32[$N,$M], f32[$N,$M], f32[$N,$M], f32[$N,$M]) tuple(fusion.1, fusion.2, arg0, arg1)
 )";
   return GetTemplateHloString(wu, n, m);
@@ -195,8 +195,8 @@ std::string GetSGDHloString(int n, int m) {
     all-reduce.2 = f32[$N,$M] all-reduce(arg1), to_apply=sum
     replication-normalise.1 = f32[$N,$M] custom-call(all-reduce.1), custom_call_target="ReplicationNormalise"
     replication-normalise.2 = f32[$N,$M] custom-call(all-reduce.2), custom_call_target="ReplicationNormalise"
-    fusion.1 = f32[$N,$M] fusion(arg2, replication-normalise.1), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
-    fusion.2 = f32[$N,$M] fusion(arg3, replication-normalise.2), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+    fusion.1 = f32[$N,$M] fusion(arg2, replication-normalise.1), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
+    fusion.2 = f32[$N,$M] fusion(arg3, replication-normalise.2), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
 
     ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(arg0, arg1, fusion.1, fusion.2)
   )";

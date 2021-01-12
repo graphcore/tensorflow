@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -32,6 +33,17 @@ namespace poplarplugin {
 namespace {
 
 using ElementwiseBroadcastConvert = HloTestBase;
+
+std::vector<HloPoplarUseDescription> GetInplaceDescriptions(
+    const HloInstruction* inst) {
+  auto fusion_config =
+      inst->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
+  std::vector<HloPoplarUseDescription> output;
+  for (const auto& inplace_description : fusion_config.inplace_descriptions()) {
+    output.push_back(HloPoplarUseDescription::FromProto(inplace_description));
+  }
+  return output;
+}
 
 TEST_F(ElementwiseBroadcastConvert, BinaryRHS) {
   std::string hlo = R"(
@@ -67,13 +79,11 @@ ENTRY c1 {
   EXPECT_EQ(root->operand(1), p1);
   auto* fusion_comp = root->fused_instructions_computation();
   EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_binary_inplace");
-  auto fusion_config =
-      root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
-  auto repeated_inplace_operands = fusion_config.inplace_operands();
-  std::vector<int64> inplace_operands = {repeated_inplace_operands.begin(),
-                                         repeated_inplace_operands.end()};
-  EXPECT_EQ(inplace_operands.size(), 1);
-  EXPECT_EQ(inplace_operands[0], 0);
+  auto inplace_descriptions = GetInplaceDescriptions(root);
+  EXPECT_EQ(inplace_descriptions.size(), 1);
+  EXPECT_EQ(inplace_descriptions[0],
+            HloPoplarUseDescription(0, ShapeIndex{}, ShapeIndex{},
+                                    BufferUseKind::USE_ALIAS_READ_WRITE));
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
@@ -116,13 +126,11 @@ ENTRY c1 {
   EXPECT_EQ(root->operand(0), p0);
   auto* fusion_comp = root->fused_instructions_computation();
   EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_binary_inplace");
-  auto fusion_config =
-      root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
-  auto repeated_inplace_operands = fusion_config.inplace_operands();
-  std::vector<int64> inplace_operands = {repeated_inplace_operands.begin(),
-                                         repeated_inplace_operands.end()};
-  EXPECT_EQ(inplace_operands.size(), 1);
-  EXPECT_EQ(inplace_operands[0], 0);
+  auto inplace_descriptions = GetInplaceDescriptions(root);
+  EXPECT_EQ(inplace_descriptions.size(), 1);
+  EXPECT_EQ(inplace_descriptions[0],
+            HloPoplarUseDescription(0, ShapeIndex{}, ShapeIndex{},
+                                    BufferUseKind::USE_ALIAS_READ_WRITE));
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
@@ -164,13 +172,11 @@ ENTRY c1 {
   EXPECT_EQ(root->operand(0), p0);
   auto* fusion_comp = root->fused_instructions_computation();
   EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_binary_inplace");
-  auto fusion_config =
-      root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
-  auto repeated_inplace_operands = fusion_config.inplace_operands();
-  std::vector<int64> inplace_operands = {repeated_inplace_operands.begin(),
-                                         repeated_inplace_operands.end()};
-  EXPECT_EQ(inplace_operands.size(), 1);
-  EXPECT_EQ(inplace_operands[0], 0);
+  auto inplace_descriptions = GetInplaceDescriptions(root);
+  EXPECT_EQ(inplace_descriptions.size(), 1);
+  EXPECT_EQ(inplace_descriptions[0],
+            HloPoplarUseDescription(0, ShapeIndex{}, ShapeIndex{},
+                                    BufferUseKind::USE_ALIAS_READ_WRITE));
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
@@ -305,7 +311,7 @@ ENTRY c1 {
   EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_ternary");
   auto fusion_config =
       root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
-  EXPECT_EQ(fusion_config.inplace_operands_size(), 0);
+  EXPECT_EQ(fusion_config.inplace_descriptions_size(), 0);
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
@@ -358,7 +364,7 @@ ENTRY c1 {
   EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_ternary");
   auto fusion_config =
       root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
-  EXPECT_EQ(fusion_config.inplace_operands_size(), 0);
+  EXPECT_EQ(fusion_config.inplace_descriptions_size(), 0);
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
