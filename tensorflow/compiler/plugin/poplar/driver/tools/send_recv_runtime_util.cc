@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/send_recv_runtime_util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 
 #include <memory>
 #include <string>
@@ -93,8 +92,13 @@ SendFromFirstReplicaCallbackCreator(const tensorflow::TensorShape& shape,
 bool CanPoplarSendBuffersOverlap(const poplar::OptionFlags& flags,
                                  const IpuOptions& options) {
   // Check if there is an environment variable override.
-  if (GetPoplarEngineOption("exchange.streamBufferOverlap").has_value()) {
-    return true;
+  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
+  if (env_flags) {
+    if (std::string(env_flags).find("streamBufferOverlap") !=
+        std::string::npos) {
+      // Don't bother parsing the value, assume the worst.
+      return true;
+    }
   }
 
   // Otherwise, check the option we passed in.

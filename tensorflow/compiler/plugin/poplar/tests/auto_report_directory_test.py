@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import numpy as np
@@ -32,120 +31,143 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 
-REPORT_DIR_PREFIX = "tf_report_"
+# You should not run multiple instances of this test in parallel.
+# For example bazel test ... --runs_per_test 10.
+# It will fail as there is race for framework.json file.
 
 
-def find_files_by_substring(directory, substring):
-  return [f for f in Path(directory).iterdir() if substring in f.name]
+def check_if_directory_exists(dir_subname, cwd_files):
+  is_dir = False
+  dir_name = ""
+  for file_name in cwd_files:
+    if bool(re.search(dir_subname, file_name)):
+      is_dir = True
+      dir_name = file_name
+  return is_dir, dir_name
 
 
 def is_json(test_str):
   test_s = json.dumps(test_str)
   try:
     json_object = json.loads(test_s)
-  except json.decoder.JSONDecodeError:
-    return False
-  return True
-
-
-# Helper to run a simple graph on the IPU. It doesn't really matter what it is
-def createSimpleGraph():
-  def simple_net(x):
-    return math_ops.square(x)
-
-  with ops.device("cpu"):
-    x = array_ops.placeholder(dtypes.int32, [2, 2])
-
-  with ipu.scopes.ipu_scope("/device:IPU:0"):
-    run_op = ipu.ipu_compiler.compile(simple_net, inputs=[x])
-
-  cfg = ipu.utils.create_ipu_config()
-  ipu.utils.configure_ipu_system(cfg)
-
-  return run_op, x
-
-
-def add_to_poplar_engine_options(new_opts):
-  cur_opts = json.loads(os.environ.get("POPLAR_ENGINE_OPTIONS", "{}"))
-  return {"POPLAR_ENGINE_OPTIONS": json.dumps({**cur_opts, **new_opts})}
+  except ValueError:
+    return False, json_object
+  return True, json_object
 
 
 # pylint: disable=abstract-method
 class AutoReportDirTest(xla_test.XLATestCase):
-  def setUp(self):
-    super().setUp()
-    # Temporarily move to a temp dir
-    os.chdir(self.get_temp_dir())
+  def testIfReportDirCreated0(self):
+    poplar_engine_opts_flags = os.environ.get("POPLAR_ENGINE_OPTIONS", "")
+    poplar_engine_opts_flags += "{\"autoReport.all\":\"true\"}"
 
-  def testAutoReportDirNotCreated(self):
-    with test.mock.patch.dict("os.environ", add_to_poplar_engine_options({})):
-      with self.session() as sess:
-        run_graph_op, x = createSimpleGraph()
-        sess.run(run_graph_op, {x: np.full((2, 2), 10)})
-
-      # Make sure there's no report directories in the cwd
-      repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
-      self.assertTrue(repdirs == [])
-
-  def testAutoReportDirAutoCreated(self):
     with test.mock.patch.dict(
-        "os.environ", add_to_poplar_engine_options({"autoReport.all":
-                                                    "true"})):
+        "os.environ", {"POPLAR_ENGINE_OPTIONS": poplar_engine_opts_flags}):
+
       with self.session() as sess:
-        run_graph_op, x = createSimpleGraph()
-        sess.run(run_graph_op, {x: np.full((2, 2), 10)})
 
-      # Make sure there is at least one report directory in the cwd
-      repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
-      self.assertTrue(repdirs)
+        def simple_net(x):
+          return math_ops.square(x, name="name_simple_net")
 
-      # Make sure there's a JSON framework.json in all of them
-      for repdir in repdirs:
-        framework_file = find_files_by_substring(repdir, "framework.json")
-        self.assertTrue(framework_file)
-        with framework_file[0].open() as fp:
-          self.assertTrue(is_json(json.load(fp)))
+        with ops.device('cpu'):
+          x1 = array_ops.placeholder(dtypes.int32, [2, 2])
 
-  def testAutoReportDirCreatedWhenSpecified(self):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          r1 = ipu.ipu_compiler.compile(simple_net, inputs=[x1])
+          i_x1 = np.full((2, 2), 10)
+
+          cfg = ipu.utils.create_ipu_config(profiling=True)
+          ipu.utils.configure_ipu_system(cfg)
+
+          sess.run(r1, {x1: i_x1})
+
+      cwd = os.getcwd()
+      cwd_files = os.listdir(cwd)
+      dir_subname = 'cluster_'
+      is_dir, dir_name = check_if_directory_exists(dir_subname, cwd_files)
+      self.assertTrue(is_dir)
+      if is_dir:
+        cluster_path = os.path.abspath(dir_name)
+        cluster_dir_files = os.listdir(cluster_path)
+        self.assertTrue("framework.json" in cluster_dir_files)
+        test_file = cluster_path + "/framework.json"
+        with open(test_file) as f:
+          json_txt = json.load(f)
+          is_j, _ = is_json(json_txt)
+          self.assertTrue(is_j)
+        shutil.rmtree(cluster_path)
+
+  def testIfReportDirCreated1(self):
+    poplar_engine_opts_flags = os.environ.get("POPLAR_ENGINE_OPTIONS", "")
+    # pylint: disable=line-too-long
+    poplar_engine_opts_flags += "{\"autoReport.all\":\"true\", \"autoReport.directory\":\"./tommyFlowers\"}"
+    # pylint: enable=line-too-long
+
     with test.mock.patch.dict(
-        "os.environ",
-        add_to_poplar_engine_options({
-            "autoReport.all": "true",
-            "autoReport.directory": "./tommyFlowers"
-        })):
+        "os.environ", {"POPLAR_ENGINE_OPTIONS": poplar_engine_opts_flags}):
+
       with self.session() as sess:
-        run_graph_op, x = createSimpleGraph()
-        sess.run(run_graph_op, {x: np.full((2, 2), 10)})
 
-      # Make sure there's exactly one report directory with the right name
-      repdirs = find_files_by_substring(os.getcwd(), "tommyFlowers")
-      self.assertTrue(repdirs)
+        def simple_net(x):
+          return math_ops.square(x, name="name_simple_net")
 
-      self.assertTrue(len(repdirs) == 1)
-      repdir = repdirs[0]
-      # Make sure there's a JSON framework.json in it
-      framework_file = find_files_by_substring(repdir, "framework.json")
-      self.assertTrue(framework_file)
-      with framework_file[0].open() as fp:
-        self.assertTrue(is_json(json.load(fp)))
+        with ops.device('cpu'):
+          x1 = array_ops.placeholder(dtypes.int32, [2, 2])
 
-  def testAutoGeneratedDirectoryReused(self):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          r1 = ipu.ipu_compiler.compile(simple_net, inputs=[x1])
+          i_x1 = np.full((2, 2), 10)
+
+          cfg = ipu.utils.create_ipu_config(profiling=True)
+          ipu.utils.configure_ipu_system(cfg)
+
+          sess.run(r1, {x1: i_x1})
+
+      cwd = os.getcwd()
+      cwd_files = os.listdir(cwd)
+      dir_subname = 'tommyFlowers'
+      is_dir, dir_name = check_if_directory_exists(dir_subname, cwd_files)
+      self.assertTrue(is_dir)
+      if is_dir:
+        cluster_path = os.path.abspath(dir_name)
+        cluster_dir_files = os.listdir(cluster_path)
+        self.assertTrue("framework.json" in cluster_dir_files)
+        test_file = cluster_path + "/framework.json"
+        with open(test_file) as f:
+          json_txt = json.load(f)
+          is_j, _ = is_json(json_txt)
+          self.assertTrue(is_j)
+        shutil.rmtree(cluster_path)
+
+  def testIfReportDirNotCreated(self):
+    poplar_engine_opts_flags = os.environ.get("POPLAR_ENGINE_OPTIONS", "")
+    poplar_engine_opts_flags += "{}"
+
     with test.mock.patch.dict(
-        "os.environ", add_to_poplar_engine_options({"autoReport.all":
-                                                    "true"})):
+        "os.environ", {"POPLAR_ENGINE_OPTIONS": poplar_engine_opts_flags}):
+
       with self.session() as sess:
-        run_graph_op, x = createSimpleGraph()
-        sess.run(run_graph_op, {x: np.full((2, 2), 10)})
 
-        # Make sure there is at least one report directory in the cwd
-        repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
-        self.assertTrue(repdirs)
-        num_dirs = len(repdirs)
+        def simple_net(x):
+          return math_ops.square(x, name="name_simple_net")
 
-        # Run it again, the report directories should be re-used
-        sess.run(run_graph_op, {x: np.full((2, 2), 10)})
-        repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
-        self.assertTrue(len(repdirs) == num_dirs)
+        with ops.device('cpu'):
+          x1 = array_ops.placeholder(dtypes.int32, [2, 2])
+
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          r1 = ipu.ipu_compiler.compile(simple_net, inputs=[x1])
+          i_x1 = np.full((2, 2), 10)
+
+          cfg = ipu.utils.create_ipu_config(profiling=True)
+          ipu.utils.configure_ipu_system(cfg)
+
+          sess.run(r1, {x1: i_x1})
+
+      cwd = os.getcwd()
+      cwd_files = os.listdir(cwd)
+      dir_subname = 'cluster_'
+      is_dir, _ = check_if_directory_exists(dir_subname, cwd_files)
+      self.assertFalse(is_dir)
 
 
 if __name__ == "__main__":

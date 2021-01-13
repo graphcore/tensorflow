@@ -21,7 +21,6 @@ limitations under the License.
 
 #include <condition_variable>
 #include <list>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <poplar/Device.hpp>
@@ -497,8 +496,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status GetCompilerEvents(std::list<tensorflow::IpuTraceEvent>& out);
 
-  std::string GetModuleReportDirectory(const std::string& name);
-
   StatusOr<se::DeviceMemoryBase> ExecuteEngine(
       se::StreamExecutor* executor, xla::poplarplugin::PoplarExecutable&,
       se::DeviceMemoryAllocator* allocator, const Args&);
@@ -879,10 +876,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   IpuOptions current_config_;
 
   std::list<tensorflow::IpuTraceEvent> reports_;
-
-  // Map corresponding cluster names to their generated report directories,
-  // so that the same generated directory is re-used when the cluster is re-run.
-  std::map<std::string, std::string> cluster_report_directories_;
 
   struct OutfeedContext {
     OutfeedContext(const FeedInfo& outfeed_info);
