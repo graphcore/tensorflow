@@ -1,0 +1,292 @@
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
+
+#include <algorithm>
+#include <utility>
+
+#include "absl/container/flat_hash_set.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/shape_tree.h"
+#include "tensorflow/compiler/xla/shape_util.h"
+
+namespace xla {
+namespace poplarplugin {
+
+const Shape& HloPoplarPosition::shape() const {
+  return ShapeUtil::GetSubshape(instruction->shape(), index);
+}
+
+std::string HloPoplarPosition::ToString() const {
+  return absl::StrCat(instruction->name(), index.ToString());
+}
+
+bool HloPoplarPosition::operator==(const HloPoplarPosition& other) const {
+  return instruction == other.instruction && index == other.index;
+}
+
+bool HloPoplarPosition::operator!=(const HloPoplarPosition& other) const {
+  return !(*this == other);
+}
+
+bool HloPoplarPosition::operator<(const HloPoplarPosition& other) const {
+  // Stable less-than operator using instruction id and index.
+  return instruction->unique_id() < other.instruction->unique_id() ||
+         (instruction->unique_id() == other.instruction->unique_id() &&
+          index < other.index);
+}
+
+std::ostream& operator<<(std::ostream& out, const HloPoplarPosition& position) {
+  out << position.ToString();
+  return out;
+}
+
+namespace {
+std::string HloPoplarUseKindToString(HloPoplarUseKind kind) {
+  switch (kind) {
+    case HloPoplarUseKind::kNoAlias: {
+      return "NoAlias";
+    }
+    case HloPoplarUseKind::kAliasReadOnly: {
+      return "AliasReadOnly";
+    }
+    case HloPoplarUseKind::kAliasReadWrite: {
+      return "AliasReadWrite";
+    }
+    default: {
+      LOG(FATAL) << "Unknown HloPoplarUseKind";
+      return "";
+    }
+  }
+}
+}  // namespace
+
+HloPoplarUse::HloPoplarUse(HloInstruction* instruction, int64 operand_number,
+                           const ShapeIndex& operand_index,
+                           HloPoplarUseKind kind)
+    : instruction_(instruction),
+      operand_number_(operand_number),
+      operand_index_(operand_index),
+      kind_(kind) {}
+
+std::ostream& operator<<(std::ostream& out, const HloPoplarUse& use) {
+  out << use.ToString();
+  return out;
+}
+
+HloPoplarNoAliasUse::HloPoplarNoAliasUse(HloInstruction* instruction,
+                                         int64 operand_number,
+                                         const ShapeIndex& operand_index)
+    : HloPoplarUse(instruction, operand_number, operand_index,
+                   HloPoplarUseKind::kNoAlias) {}
+
+std::string HloPoplarNoAliasUse::ToString() const {
+  const std::string operand_index_str =
+      instruction()->operand(operand_number())->shape().IsTuple()
+          ? (" " + operand_index().ToString())
+          : "";
+  return absl::StrCat(instruction()->name(), ", alias-kind ",
+                      HloPoplarUseKindToString(kind()), ", operand ",
+                      operand_number(), operand_index_str);
+}
+
+HloPoplarAliasUseBase::HloPoplarAliasUseBase(
+    HloInstruction* instruction, int64 operand_number,
+    const ShapeIndex& operand_index,
+    const std::vector<ShapeIndex> output_indices, HloPoplarUseKind kind)
+    : HloPoplarUse(instruction, operand_number, operand_index, kind),
+      output_indices_(output_indices) {
+  CHECK_GT(output_indices_.size(), 0);
+}
+
+std::string HloPoplarAliasUseBase::ToString() const {
+  const std::string operand_index_str =
+      instruction()->operand(operand_number())->shape().IsTuple()
+          ? (" " + operand_index().ToString())
+          : "";
+
+  std::string output_indices_str = absl::StrJoin(
+      output_indices(), ", ", [](std::string* result, const ShapeIndex& index) {
+        result->append(index.ToString());
+      });
+
+  return absl::StrCat(instruction()->name(), ", alias-kind ",
+                      HloPoplarUseKindToString(kind()), ", operand ",
+                      operand_number(), operand_index_str, ", output ",
+                      output_indices_str);
+}
+
+HloPoplarAliasReadOnlyUse::HloPoplarAliasReadOnlyUse(
+    HloInstruction* instruction, int64 operand_number,
+    const ShapeIndex& operand_index,
+    const std::vector<ShapeIndex> output_indices)
+    : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
+                            output_indices, HloPoplarUseKind::kAliasReadOnly) {}
+
+HloPoplarAliasReadWriteUse::HloPoplarAliasReadWriteUse(
+    HloInstruction* instruction, int64 operand_number,
+    const ShapeIndex& operand_index,
+    const std::vector<ShapeIndex> output_indices)
+    : HloPoplarAliasUseBase(instruction, operand_number, operand_index,
+                            output_indices, HloPoplarUseKind::kAliasReadWrite) {
+}
+
+namespace {
+std::string BufferLocalityToString(BufferLocality locality) {
+  switch (locality) {
+    case BufferLocality::kDeviceMemory: {
+      return "DeviceMemory";
+    }
+    case BufferLocality::kRemoteMemory: {
+      return "RemoteMemory";
+    }
+    default: {
+      LOG(FATAL) << "Unknown BufferLocality";
+      return "";
+    }
+  }
+}
+}  // namespace
+
+HloPoplarBuffer::HloPoplarBuffer(HloPoplarBuffer::Id id,
+                                 const HloPoplarPosition& defining_position,
+                                 BufferLocality locality)
+    : id_(id), defining_position_(defining_position), locality_(locality) {}
+
+bool HloPoplarBuffer::operator==(const HloPoplarBuffer& other) const {
+  const bool equal = defining_position() == other.defining_position();
+  if (equal) {
+    CHECK(locality() == other.locality());
+    CHECK_EQ(id(), other.id());
+  }
+  return equal;
+}
+
+bool HloPoplarBuffer::operator!=(const HloPoplarBuffer& other) const {
+  return !(*this == other);
+}
+
+string HloPoplarBuffer::ToString() const {
+  return absl::StrCat("Id ", id_, " ", defining_position().ToString(),
+                      ", locality ", BufferLocalityToString(locality()));
+}
+
+std::ostream& operator<<(std::ostream& out, const HloPoplarBuffer& buffer) {
+  out << buffer.ToString();
+  return out;
+}
+
+HloPoplarBufferSet::HloPoplarBufferSet(
+    absl::Span<const HloPoplarBuffer* const> buffers)
+    : buffers_(buffers.begin(), buffers.end()) {
+  SortAndUniquifyBuffers();
+}
+
+const HloPoplarBuffer& HloPoplarBufferSet::GetUniqueBuffer() const {
+  CHECK_EQ(buffers_.size(), 1);
+  return *buffers_[0];
+}
+
+bool HloPoplarBufferSet::AddBuffer(const HloPoplarBuffer* buffer) {
+  // Find the position where to insert it.
+  auto it = std::lower_bound(buffers_.begin(), buffers_.end(), buffer,
+                             HloPoplarBuffer::IdLessThan);
+  if (it == buffers_.end() || (*it)->id() != buffer->id()) {
+    buffers_.insert(it, buffer);
+    return true;
+  }
+  return false;
+}
+
+bool HloPoplarBufferSet::operator==(const HloPoplarBufferSet& other) const {
+  if (buffers_.size() != other.buffers_.size()) {
+    return false;
+  }
+
+  for (size_t i = 0; i != buffers_.size(); ++i) {
+    if (buffers_[i]->id() != other.buffers_[i]->id()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool HloPoplarBufferSet::operator!=(const HloPoplarBufferSet& other) const {
+  return !(*this == other);
+}
+
+void HloPoplarBufferSet::SortAndUniquifyBuffers() {
+  absl::c_sort(buffers_, HloPoplarBuffer::IdLessThan);
+  buffers_.erase(
+      std::unique(buffers_.begin(), buffers_.end(), HloPoplarBuffer::IdEqual),
+      buffers_.end());
+}
+
+std::string HloPoplarBufferSet::ToString() const {
+  return absl::StrCat(
+      "HloPoplarBufferSet: ",
+      absl::StrJoin(buffers_, ", ",
+                    [](std::string* result, const HloPoplarBuffer* buffer) {
+                      result->append(buffer->ToString());
+                    }));
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const HloPoplarBufferSet& buffer_set) {
+  out << buffer_set.ToString();
+  return out;
+}
+
+InstructionPoplarBufferSet::InstructionPoplarBufferSet(const Shape& shape)
+    : shape_(shape), buffer_sets_(shape) {}
+
+void InstructionPoplarBufferSet::SetOutputBufferSet(
+    const ShapeIndex& output_index, const HloPoplarBufferSet& buffer_set) {
+  ShapeIndexView index_view(output_index);
+  CHECK(buffer_sets_.IsLeaf(index_view));
+  *buffer_sets_.mutable_element(index_view) = buffer_set;
+}
+
+const HloPoplarBufferSet& InstructionPoplarBufferSet::GetOutputBufferSet(
+    const ShapeIndex& output_index) {
+  ShapeIndexView index_view(output_index);
+  CHECK(buffer_sets_.IsLeaf(index_view));
+  return buffer_sets_.element(index_view);
+}
+
+std::string InstructionPoplarBufferSet::ToString() const {
+  std::string out = absl::StrCat("InstructionPoplarBufferSet(",
+                                 ShapeUtil::HumanString(shape_), ")\n");
+  for (auto leaf : buffer_sets_.leaves()) {
+    absl::StrAppend(&out, "  ", leaf.first.ToString(), " : ",
+                    leaf.second.ToString(), "\n");
+  }
+  return out;
+}
+
+std::ostream& operator<<(
+    std::ostream& out,
+    const InstructionPoplarBufferSet& instruction_buffer_set) {
+  out << instruction_buffer_set.ToString();
+  return out;
+}
+
+}  // namespace poplarplugin
+}  // namespace xla
