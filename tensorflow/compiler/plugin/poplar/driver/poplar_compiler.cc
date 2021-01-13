@@ -143,6 +143,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/convolution_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
@@ -150,12 +153,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -1111,7 +1111,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   }
 
   {
-    HloPassPipeline pipeline("IPU");
+    HloPassPipeline pipeline("OptimizerPipeline");
     if (!poplar_executor->RetainControlDependencies()) {
       pipeline.AddPass<DependencyReplacer>(false);
     }
@@ -1431,16 +1431,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     EntryVisitor visitor(resources, entry);
     try {
-      VLOG(1) << "Preplanning of Poplar operations.";
+      // Run a compile only Poplar specific pipeline - these passes do not
+      // modify the module in a functional way.
+      VLOG(1) << "Begin Poplar Pipeline.";
+      HloPassPipeline pipeline("PoplarPipeline");
+      pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
+      pipeline.AddPass<ConvolutionPreplanning>(resources);
+      pipeline.AddPass<MatMulPreplanning>(resources);
+      TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
+      VLOG(1) << "End Poplar Pipeline.";
 
-      EmbeddingPlansPreplanning embeddings_preplanning;
-      TF_RETURN_IF_ERROR(embeddings_preplanning.Plan(module.get(), resources));
-      ConvolutionPreplanning convolution_preplanning;
-      TF_RETURN_IF_ERROR(convolution_preplanning.Plan(module.get(), resources));
-      MatMulPreplanning matmul_preplanning;
-      TF_RETURN_IF_ERROR(matmul_preplanning.Plan(module.get(), resources));
       auto order = module->schedule().sequence(entry).instructions();
-
       TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
           resources, poplar_executor->VerifiedTransfers()));
 

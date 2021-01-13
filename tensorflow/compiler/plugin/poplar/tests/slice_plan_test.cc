@@ -24,8 +24,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -114,8 +114,8 @@ ENTRY main {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EmbeddingPlansPreplanning embeddings_preplanning;
-  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
   auto entry_computation = module->entry_computation();
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -147,8 +147,8 @@ ENTRY main {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EmbeddingPlansPreplanning embeddings_preplanning;
-  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
   auto entry_computation = module->entry_computation();
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -182,8 +182,8 @@ ENTRY main {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EmbeddingPlansPreplanning embeddings_preplanning;
-  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
   auto entry_computation = module->entry_computation();
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -223,8 +223,8 @@ ENTRY main {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EmbeddingPlansPreplanning embeddings_preplanning;
-  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
   auto entry_computation = module->entry_computation();
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -263,8 +263,8 @@ ENTRY main {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EmbeddingPlansPreplanning embeddings_preplanning;
-  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  TF_EXPECT_OK(
+      EmbeddingPlansPreplanning(*resources).Run(module.get()).status());
   auto entry_computation = module->entry_computation();
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
