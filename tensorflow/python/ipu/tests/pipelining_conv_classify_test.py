@@ -160,7 +160,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       report.parse_log()
 
       # 1 conv in each of 2 stages = 2
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 2, 1, 2])
+      # 1 backward converted to forward + flip both marked as forward (bwd - 1, fwd + 2)
+      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 0, 2])
 
   @test_util.deprecated_graph_mode_only
   def testResnetLike(self):

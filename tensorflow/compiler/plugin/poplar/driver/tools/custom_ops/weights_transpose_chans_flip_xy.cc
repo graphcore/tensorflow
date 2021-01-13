@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
@@ -26,6 +27,17 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+namespace {
+Shape GetWeightsShape(const Shape& shape,
+                      const ConvolutionDimensionNumbers& conv_dims) {
+  std::vector<int64> dims;
+  absl::c_copy(shape.dimensions(), std::back_inserter(dims));
+  std::swap(dims[conv_dims.kernel_input_feature_dimension()],
+            dims[conv_dims.kernel_output_feature_dimension()]);
+  return ShapeUtil::MakeShape(shape.element_type(), dims);
+}
+}  // namespace
+
 HloWeightsTransposeChansFlipXYInstruction::
     HloWeightsTransposeChansFlipXYInstruction(
         HloInstruction* operand,
@@ -33,8 +45,9 @@ HloWeightsTransposeChansFlipXYInstruction::
         const std::vector<size_t>& conv_input_shape,
         const std::vector<size_t>& conv_output_shape, xla::Window window,
         int64 feature_group_count)
-    : HloPoplarInstruction(operand->shape(), {operand},
-                           PoplarOp::WeightsTransposeChansFlipXY),
+    : HloPoplarInstruction(
+          GetWeightsShape(operand->shape(), conv_dimension_numbers), {operand},
+          PoplarOp::WeightsTransposeChansFlipXY),
       conv_input_shape_(conv_input_shape),
       conv_output_shape_(conv_output_shape) {
   set_convolution_dimension_numbers(conv_dimension_numbers);

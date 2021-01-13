@@ -169,8 +169,11 @@ TEST_P(WeightsTransposeChansFlipXYTest, TestWeightsTransposeChansFlipXYGroup) {
       builder.AddInstruction(CreateHloWeightsTransposeChansFlipXY(
           weights, conv_dim_num, conv_input_shape, conv_output_shape, window,
           feature_group_count));
+  auto reshape = builder.AddInstruction(HloInstruction::CreateReshape(
+      ShapeUtil::MakeShape(weights->shape().element_type(), {4, 4, 1, 16}),
+      weights_transpose_inst));
 
-  auto computation = builder.Build();
+  auto computation = builder.Build(reshape);
   auto module = CreateNewVerifiedModule();
   module->AddEntryComputation(std::move(computation));
 

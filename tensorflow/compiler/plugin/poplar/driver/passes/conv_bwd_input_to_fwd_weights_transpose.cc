@@ -146,14 +146,15 @@ bool ForwardBackwardConvolutionMatch(HloInstruction* fwd, HloInstruction* bwd) {
     return false;
   }
 
-  if (!ShapeUtil::Compatible(fwd->shape(), bwd->shape()) ||
+  if (!ShapeUtil::Compatible(fwd->shape(), bwd->operand(0)->shape()) ||
       !fwd->has_compatible_sharding(bwd)) {
     return false;
   }
 
   for (int64 i = 0; i < operand_count; ++i) {
-    if (!ShapeUtil::Compatible(fwd->operand(i)->shape(),
-                               bwd->operand(i)->shape())) {
+    if (!ShapeUtil::Compatible(
+            fwd->operand(i)->shape(),
+            i == 0 ? bwd->shape() : bwd->operand(i)->shape())) {
       return false;
     }
   }
