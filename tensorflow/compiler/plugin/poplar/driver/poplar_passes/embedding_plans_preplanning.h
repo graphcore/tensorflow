@@ -13,23 +13,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_EMBEDDING_PLANS_PREPLANNING_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_EMBEDDING_PLANS_PREPLANNING_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_EMBEDDING_PLANS_PREPLANNING_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_EMBEDDING_PLANS_PREPLANNING_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+
+class HloModule;
+
 namespace poplarplugin {
 
 /**
  * Find all the tensors that will require a SlicePlan at creation.
  */
-class EmbeddingPlansPreplanning {
+class EmbeddingPlansPreplanning : public HloModulePass {
  public:
-  Status Plan(const HloModule* module, CompilerResources& resources);
+  explicit EmbeddingPlansPreplanning(CompilerResources& resources)
+      : resources_(resources) {}
+
+  absl::string_view name() const override {
+    return "embedding-plans-preplanning";
+  }
+
+  StatusOr<bool> Run(HloModule* module) override;
+
+ private:
+  CompilerResources& resources_;
 };
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_EMBEDDING_PLANS_PREPLANNING_H_

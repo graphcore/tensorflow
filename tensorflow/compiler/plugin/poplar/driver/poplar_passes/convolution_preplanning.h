@@ -13,25 +13,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONVOLUTION_PREPLANNING_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONVOLUTION_PREPLANNING_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_CONVOLUTION_PREPLANNING_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_CONVOLUTION_PREPLANNING_H_
 
 #include <list>
 #include <set>
 #include <tuple>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+
+class HloInstruction;
+class HloModule;
+
 namespace poplarplugin {
 
 /**
  * Memoization of convolution parameters.
  */
-class ConvolutionPreplanning {
+class ConvolutionPreplanning : public HloModulePass {
  public:
-  Status Plan(const HloModule* module, CompilerResources& resources);
+  explicit ConvolutionPreplanning(CompilerResources& resources)
+      : resources_(resources) {}
+
+  absl::string_view name() const override { return "convolution-preplanning"; }
+
+  StatusOr<bool> Run(HloModule* module) override;
 
  private:
   // Store convolution parameters.
@@ -42,12 +51,13 @@ class ConvolutionPreplanning {
   // OptionsFlags storage location.
   std::list<poplar::OptionFlags> option_flags_store;
 
-  Status StorePreplanConv(const HloInstruction* inst,
-                          CompilerResources& resources, int64 input_index,
+  Status StorePreplanConv(const HloInstruction* inst, int64 input_index,
                           int64 kernel_index);
+
+  CompilerResources& resources_;
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_CONVOLUTION_PREPLANNING_H_

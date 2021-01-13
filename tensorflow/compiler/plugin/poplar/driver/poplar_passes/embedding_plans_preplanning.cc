@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
@@ -167,11 +167,12 @@ Status PopulateWithPlans(const InputToSliceUsersMap& user_map,
  * CompilerResources in order to be later able to retrieve the SlicePlan
  * associated to a given HloInstruction during lowering.
  */
-Status EmbeddingPlansPreplanning::Plan(const HloModule* module,
-                                       CompilerResources& res) {
+StatusOr<bool> EmbeddingPlansPreplanning::Run(HloModule* module) {
+  VLOG(2) << "Preplanning embedding operations.";
+
   absl::flat_hash_map<const HloInstruction*, popops::SlicePlan> slice_plans;
   HloComputation* entry_computation =
-      res.annotations.flattened_module->entry_computation();
+      resources_.annotations.flattened_module->entry_computation();
 
   InputToSliceUsersMap multi_slices;
   InputToSliceUsersMap multi_update_adds;
@@ -192,24 +193,27 @@ Status EmbeddingPlansPreplanning::Plan(const HloModule* module,
 
   // Populate the multi slices.
   TF_ASSIGN_OR_RETURN(SlicePlanMap multi_slice_plans,
-                      GetSlicePlans(multi_slices, res));
+                      GetSlicePlans(multi_slices, resources_));
 
   // Populate multi update add slice plans and try to reuse the
   // multi_slice_plans.
-  TF_ASSIGN_OR_RETURN(SlicePlanMap multi_update_add_plans,
-                      GetSlicePlans(multi_update_adds, res, multi_slice_plans));
+  TF_ASSIGN_OR_RETURN(
+      SlicePlanMap multi_update_add_plans,
+      GetSlicePlans(multi_update_adds, resources_, multi_slice_plans));
 
   // Create empty plans for multi updates.
   TF_ASSIGN_OR_RETURN(SlicePlanMap multi_update_plans,
-                      GetEmptyPlans(multi_updates, res));
+                      GetEmptyPlans(multi_updates, resources_));
 
   // Populate the slice plans in the CompilerResources.
-  TF_RETURN_IF_ERROR(PopulateWithPlans(multi_slices, multi_slice_plans, res));
   TF_RETURN_IF_ERROR(
-      PopulateWithPlans(multi_update_adds, multi_update_add_plans, res));
-  TF_RETURN_IF_ERROR(PopulateWithPlans(multi_updates, multi_update_plans, res));
+      PopulateWithPlans(multi_slices, multi_slice_plans, resources_));
+  TF_RETURN_IF_ERROR(
+      PopulateWithPlans(multi_update_adds, multi_update_add_plans, resources_));
+  TF_RETURN_IF_ERROR(
+      PopulateWithPlans(multi_updates, multi_update_plans, resources_));
 
-  return Status::OK();
+  return false;
 }
 
 }  // namespace poplarplugin
