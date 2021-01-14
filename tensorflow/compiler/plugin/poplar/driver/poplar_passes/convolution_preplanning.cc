@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/convolution_preplanning.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
@@ -31,8 +31,8 @@ namespace poplarplugin {
  *  of things to pass to the poplibs convolution pre-planner.
  */
 
-Status ConvolutionPreplanning::Plan(const HloModule* module,
-                                    CompilerResources& resources) {
+StatusOr<bool> ConvolutionPreplanning::Run(HloModule* module) {
+  VLOG(2) << "Preplanning convolution operations.";
   preplan_convs.clear();
   option_flags_store.clear();
 
@@ -40,31 +40,30 @@ Status ConvolutionPreplanning::Plan(const HloModule* module,
     if (!IsPopOpsFusion(comp)) {
       for (HloInstruction* inst : comp->instructions()) {
         if (inst->opcode() == HloOpcode::kConvolution) {
-          TF_RETURN_IF_ERROR(StorePreplanConv(inst, resources, 0, 1));
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 0, 1));
         } else if (IsPopOpsConvolution(inst)) {
-          TF_RETURN_IF_ERROR(StorePreplanConv(inst, resources, 0, 1));
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 0, 1));
         } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
-          TF_RETURN_IF_ERROR(StorePreplanConv(inst, resources, 1, 2));
+          TF_RETURN_IF_ERROR(StorePreplanConv(inst, 1, 2));
         }
       }
     }
   }
 
-  poplin::preplanConvolutions(preplan_convs, resources.convolution_cache);
-  return Status::OK();
+  poplin::preplanConvolutions(preplan_convs, resources_.convolution_cache);
+  return false;
 }
 
 Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
-                                                CompilerResources& resources,
                                                 int64 input_index,
                                                 int64 kernel_index) {
-  const poplar::Target& target = GetGraph(resources, inst).getTarget();
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
   TF_ASSIGN_OR_RETURN(
       const poplin::ConvParams conv_params,
       GetConvolutionParameters(inst, input_index, kernel_index));
 
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
-                      GetConvolutionOptionsForInst(inst, resources));
+                      GetConvolutionOptionsForInst(inst, resources_));
 
   option_flags_store.push_back(option_flags);
   preplan_convs.insert(

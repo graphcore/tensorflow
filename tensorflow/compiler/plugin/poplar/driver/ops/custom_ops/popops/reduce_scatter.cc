@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <gcl/Collectives.hpp>
+#include <poplar/DebugContext.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Pad.hpp>
 
@@ -58,11 +59,10 @@ poplar::Tensor InterleavePerReplica(poplar::Graph& graph,
 }
 
 class ReduceScatterOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     // Collect all the inputs.

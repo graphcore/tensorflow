@@ -31,12 +31,14 @@ from tensorflow.python.platform import tf_logging as logging
 POPNN_LSTM = "lstm"
 POPNN_GRU = "gru"
 POPNN_DYNAMIC_GRU = "dynamic_gru"
+POPNN_AUGRU = "augru"
 
 POPNN_LSTM_NUM_GATES = 4
 POPNN_GRU_NUM_GATES = 3
 POPNN_DYNAMIC_GRU_NUM_GATES = 3
+POPNN_AUGRU_NUM_GATES = 3
 
-__all__ = ["PopnnLSTM", "PopnnGRU", "PopnnDynamicGRU"]
+__all__ = ["PopnnLSTM", "PopnnGRU", "PopnnDynamicGRU", "PopnnAUGRU"]
 
 
 class _PopnnRNN(base_layer.Layer):
@@ -620,6 +622,123 @@ class PopnnDynamicGRU(PopnnGRU):
         num_channels=self._num_units,
         kernel=self.kernel,
         biases=self.biases,
+        initial_state=initial_state,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        name=self._name,
+        reset_after=self._reset_after)
+    return output, output_c
+
+
+class PopnnAUGRU(PopnnGRU):
+  # pylint:disable=line-too-long
+  """XLA compatible, time-major Popnn implementation of an AUGRU layer.
+
+  Below is a typical workflow:
+
+  .. code-block:: python
+
+    with tf.Graph().as_default():
+      augru = PopnnAUGRU(num_units, ...)
+
+      outputs, output_state = augru(inputs, initial_state, training=True)
+
+  """
+  # pylint:enable=line-too-long
+  _rnn_mode = POPNN_AUGRU
+  _num_gates_per_layer = POPNN_AUGRU_NUM_GATES
+
+  def __init__(self,
+               num_units,
+               dtype=dtypes.float32,
+               partials_dtype=dtypes.float32,
+               seed=None,
+               weights_initializer=None,
+               bias_initializer=None,
+               name=None,
+               reset_after=False):
+    """Creates a PopnnAUGRU model from model spec.
+
+    Args:
+      num_units: the number of units within the RNN model.
+      dtype: tf.float16 or tf.float32
+      partials_dtype: the type used by Popnn to perform partial calculations.
+        Either tf.float16 or tf.float32.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer weights_initializer.
+      weights_initializer: starting value to initialize the weight
+        (default is Glorot uniform initializer).
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      name: VariableScope for the created subgraph; defaults to class name.
+        This only serves the default scope if later no scope is specified when
+        invoking ``__call__()``.
+    """
+    super(PopnnAUGRU, self).__init__(num_units=num_units,
+                                     dtype=dtype,
+                                     partials_dtype=partials_dtype,
+                                     seed=seed,
+                                     weights_initializer=weights_initializer,
+                                     bias_initializer=bias_initializer,
+                                     name=name,
+                                     reset_after=reset_after)
+
+  #pylint: disable=arguments-differ
+  def call(self,
+           inputs,
+           seq_len,
+           attention_score,
+           initial_state=None,
+           training=True):
+    """Runs the forward step for the AUGRU model.
+    Args:
+        inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+        seq_len: 1-D tensor with the sequence length of samples in each batch.
+        attention_score: The output of attention layer, the score of samples
+          in each batch, shaped `[batch_size, max_seq_len]`.
+        initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
+          If not provided, the state is initialized to zeros.
+        training: whether this operation will be used in training or inference.
+
+      Returns:
+        output: a tensor of shape [time_len, batch_size, num_units].
+        output_state: The output state of the last cell.
+
+      Raises:
+        ValueError: if initial_state is not valid.
+
+    """
+
+    dtype = self.dtype
+    inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+
+    batch_size = array_ops.shape(inputs)[1]
+
+    if initial_state is None:
+      # Create a zero state.
+      initial_state = self._zero_state(batch_size)
+
+    initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
+    augru_biases_r_u = vs.get_variable("bias_r_u",
+                                       dtype=inputs.dtype,
+                                       initializer=init_ops.ones_initializer(),
+                                       shape=[2, self._num_units])
+    augru_biases_c = vs.get_variable("bias_c",
+                                     dtype=inputs.dtype,
+                                     initializer=init_ops.zeros_initializer(),
+                                     shape=[1, self._num_units])
+    augru_biases = array_ops.concat([augru_biases_r_u, augru_biases_c], axis=0)
+    if self._reset_after:
+      augru_biases = array_ops.expand_dims(augru_biases, 1)
+      augru_biases = array_ops.concat([augru_biases, augru_biases], axis=1)
+
+    output, output_c, _ = gen_popnn_ops.popnn_augru_layer(
+        inputs=inputs,
+        att_score=attention_score,
+        seq_len=seq_len,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=augru_biases,
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,

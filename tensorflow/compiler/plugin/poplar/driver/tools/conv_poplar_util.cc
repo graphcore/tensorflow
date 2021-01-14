@@ -99,8 +99,7 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
                             {t_l, t_u, d_i, p_l, p_u, flipInput},
                             {zeros, zeros, d_w, zeros, zeros, flipKernel},
                             {zeros, zeros, w_s, zeros, zeros});
-
-  return params;
+  return params.canonicalize();
 }
 
 }  // namespace
@@ -262,14 +261,7 @@ poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
   for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
     shuffle[dims.kernel_spatial_dimensions(i)] = i + 2;
   }
-  auto out = tensor.dimShuffle(shuffle);
-  if (swap_features) {
-    auto shape = out.shape();
-    std::swap(shape[out_dim], shape[in_dim]);
-    out = out.reshape(shape);
-  }
-
-  return out;
+  return tensor.dimShuffle(shuffle);
 }
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(

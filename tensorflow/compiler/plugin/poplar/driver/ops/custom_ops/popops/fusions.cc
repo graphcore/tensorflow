@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <poplin/MatMul.hpp>
 #include <popnn/NonLinearity.hpp>
@@ -99,11 +100,10 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
 }
 
 class WideConstOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     const HloInstruction* root = inst->fused_expression_root();
@@ -143,11 +143,10 @@ class WideConstOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Wide_const, WideConstOp);
 
 class ConvBiasAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence prog;
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -170,11 +169,10 @@ class ConvBiasAddOp : public PoplarOpDef {
   }
 
   // We want the accumulation tensor to be the same layout as the input tensor.
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const int64 input_index = tensor_target.input_index;
     const HloInstruction* layout = *tensor_target.layout;
 
@@ -202,11 +200,10 @@ class ConvBiasAddOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Conv_biasadd, ConvBiasAddOp);
 
 class MatMulBiasAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     // Get the broadcast instruction which is required to get the bias size.
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* broadcast = root->operand(1);
@@ -234,11 +231,10 @@ class MatMulBiasAddOp : public PoplarOpDef {
   }
 
   // We want the accumulation tensor to be the same layout as the input tensor.
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& res,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* layout = *tensor_target.layout;
 
     const auto layout_output_idx = *tensor_target.layout_output_idx;
@@ -267,11 +263,10 @@ class MatMulBiasAddOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Matmul_biasadd, MatMulBiasAddOp);
 
 class BiasApplyOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     const HloInstruction* root = inst->fused_expression_root();
@@ -335,11 +330,10 @@ class BiasApplyOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Bias_apply, BiasApplyOp);
 
 class ZeroPadOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     const HloInstruction* root = inst->fused_expression_root();
     const PaddingConfig& cfg(root->padding_config());
@@ -371,11 +365,10 @@ class ZeroPadOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Zero_pad, ZeroPadOp);
 
 class ScaledInplaceXbYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -419,11 +412,10 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Scaled_inplace_xby, ScaledInplaceXbYOp);
 
 class ScaledInplaceaXYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -475,11 +467,10 @@ class ScaledInplaceaXYOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Scaled_inplace_axy, ScaledInplaceaXYOp);
 
 class ScaledInplaceaXbYOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
@@ -534,11 +525,10 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Scaled_inplace_axby, ScaledInplaceaXbYOp);
 
 class PaddingReduceWindowOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     poplar::program::Sequence seq;
 
     const HloInstruction* root = inst->fused_expression_root();
@@ -571,11 +561,10 @@ class PaddingReduceWindowOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Padding_reduce_window, PaddingReduceWindowOp)
 
 class ReductionFp16InputOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* reduce_inst = inst->fused_expression_root();
     TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
                         CreateSimpleReduction(res, inst, reduce_inst,
@@ -587,11 +576,10 @@ class ReductionFp16InputOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Reduction_fp16_input, ReductionFp16InputOp)
 
 class ReductionSquareAddOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* reduce_inst = inst->fused_expression_root();
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,

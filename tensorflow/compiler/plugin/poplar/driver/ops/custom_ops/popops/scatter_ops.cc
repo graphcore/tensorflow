@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <limits>
+#include <poplar/DebugContext.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Scatter.hpp>
 
@@ -39,11 +40,11 @@ StatusOr<poplar::Tensor> AddIndicesTensor(poplar::Graph& graph,
 }
 
 class ScatterOp : public PoplarOpDef {
-  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
-                                     CompilerResources& resources,
-                                     const std::string& name,
-                                     const TensorTarget& tensor_target,
-                                     const TensorMap& tensor_map) override {
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& resources,
+      const std::string& name, const TensorTarget& tensor_target,
+      const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
@@ -91,11 +92,10 @@ class ScatterOp : public PoplarOpDef {
     return out;
   }
 
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const auto update_computation = inst->to_apply();
     const auto dim_numbers = inst->scatter_dimension_numbers();
 

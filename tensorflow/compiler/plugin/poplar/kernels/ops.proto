@@ -88,6 +88,8 @@ enum PoplarOp {
   DynamicGRULayerBwd = 84;
   DynamicGRULayerFwd = 85;
   CandidateSampler = 86;
+  AUGRULayerFwd = 87;
+  AUGRULayerBwd = 88;
 
   // Supported Fusions.
   Conv_biasadd = 200;

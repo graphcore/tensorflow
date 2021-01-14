@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
 
+#include <poplar/DebugContext.hpp>
 #include <poplar/Program.hpp>
 
 namespace pe = popops::expr;
@@ -32,10 +33,9 @@ namespace poplarplugin {
 namespace {
 
 class StatefulNoopOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph&, CompilerResources&,
-                                             const HloInstruction*,
-                                             const xla::Shape&,
-                                             TensorMap&) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph&, CompilerResources&, const HloInstruction*,
+      const xla::Shape&, TensorMap&, const poplar::DebugContext&) override {
     poplar::program::Sequence seq;
     return seq;
   }

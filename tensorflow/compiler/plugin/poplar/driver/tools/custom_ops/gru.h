@@ -131,6 +131,48 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
     bool reset_after);
 
+class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
+                               public HloGRUInstructionCommon {
+ public:
+  explicit HloAUGRUFwdInstruction(const Shape& shape,
+                                  absl::Span<HloInstruction* const> operands,
+                                  bool is_training, int32 num_channels,
+                                  xla::PrimitiveType partials_type,
+                                  bool reset_after);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* ctx) const override;
+};
+
+class HloAUGRUBwdInstruction : public HloRNNBwdInstruction,
+                               public HloGRUInstructionCommon {
+ public:
+  explicit HloAUGRUBwdInstruction(const Shape& shape,
+                                  absl::Span<HloInstruction* const> operands,
+                                  bool is_training, int32 num_channels,
+                                  xla::PrimitiveType partials_type,
+                                  bool reset_after);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* ctx) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateAUGRUFwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
+
+std::unique_ptr<HloInstruction> CreateAUGRUBwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

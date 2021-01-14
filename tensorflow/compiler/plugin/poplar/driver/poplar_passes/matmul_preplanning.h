@@ -13,24 +13,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MATMUL_PREPLANNING_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MATMUL_PREPLANNING_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_
 
 #include <list>
 #include <set>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+
+class HloInstruction;
+class HloModule;
+
 namespace poplarplugin {
 
 /**
  * Memoization of matmul parameters.
  */
-class MatMulPreplanning {
+class MatMulPreplanning : public HloModulePass {
  public:
-  Status Plan(const HloModule* module, CompilerResources& resources);
+  explicit MatMulPreplanning(CompilerResources& resources)
+      : resources_(resources) {}
+
+  absl::string_view name() const override { return "matmul-preplanning"; }
+
+  StatusOr<bool> Run(HloModule* module) override;
 
  private:
   // Store matmul parameters.
@@ -39,17 +48,16 @@ class MatMulPreplanning {
   // OptionsFlags storage location.
   std::list<poplar::OptionFlags> option_flags_store;
 
-  Status StorePreplanMatMulsLSTM(const HloInstruction* inst,
-                                 CompilerResources& resources);
+  Status StorePreplanMatMulsLSTM(const HloInstruction* inst);
 
-  Status StorePreplanMatMulsGRU(const HloInstruction* inst,
-                                CompilerResources& resources);
+  Status StorePreplanMatMulsGRU(const HloInstruction* inst);
 
-  Status StorePreplanMatMuls(const HloInstruction* inst,
-                             CompilerResources& resources);
+  Status StorePreplanMatMuls(const HloInstruction* inst);
+
+  CompilerResources& resources_;
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MATMUL_PREPLANNING_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_PASSES_MATMUL_PREPLANNING_H_

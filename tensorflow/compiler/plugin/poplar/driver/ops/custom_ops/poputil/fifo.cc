@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 
+#include <poplar/DebugContext.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Zero.hpp>
@@ -194,11 +195,10 @@ poplar::Tensor AddAliasing(const poplar::Tensor& tensor,
 }
 
 class FifoOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     auto fifo_inst = Cast<HloFifoInstruction>(inst);
     const size_t fifo_depth = fifo_inst->depth();
     const bool fifo_offload = fifo_inst->offload();

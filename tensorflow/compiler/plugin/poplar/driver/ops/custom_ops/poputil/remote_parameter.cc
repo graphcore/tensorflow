@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/DebugContext.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 
 #include <utility>
@@ -66,11 +68,10 @@ AddRemoteBufferStoreCopy(
 }
 
 class RemoteParameterLoadOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     // Should have been handled by the deferred visitor.
     return FailedPrecondition("Remote parameter loads cannot be generated.");
   }
@@ -78,11 +79,10 @@ class RemoteParameterLoadOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterLoad, RemoteParameterLoadOp);
 
 class RemoteParameterStoreOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     VLOG(1) << "Processing " << GetDebugName(inst);
     poplar::program::Sequence seq;
 
@@ -138,11 +138,10 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(RemoteParameterStore, RemoteParameterStoreOp);
 
 class BufferLoadSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     // Should have been handled by the deferred visitor.
     return FailedPrecondition("BufferLoadSlice cannot be generated.");
   }
@@ -150,11 +149,10 @@ class BufferLoadSliceOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(BufferLoadSlice, BufferLoadSliceOp);
 
 class BufferStoreSliceOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const auto* store_inst = Cast<HloBufferStoreSlice>(inst);
     const int64 num_outputs = store_inst->RemoteBuffers().size();
 

@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/matmul_preplanning.h"
 
 #include <utility>
 #include <vector>
@@ -112,14 +112,13 @@ Status GetGruOptsForMatMulPreplanning(const HloInstruction* inst,
 
 }  // namespace
 
-Status MatMulPreplanning::StorePreplanMatMulsLSTM(
-    const HloInstruction* inst, CompilerResources& resources) {
-  const poplar::Target& target = GetGraph(resources, inst).getTarget();
+Status MatMulPreplanning::StorePreplanMatMulsLSTM(const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                       GetLstmParameters(inst));
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
-                      GetLstmOpts(inst, resources));
+                      GetLstmOpts(inst, resources_));
 
   const std::vector<std::pair<poplin::MatMulParams, poplar::OptionFlags>>
       mat_muls_to_pre_plan =
@@ -134,15 +133,14 @@ Status MatMulPreplanning::StorePreplanMatMulsLSTM(
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst,
-                                                 CompilerResources& resources) {
-  const poplar::Target& target = GetGraph(resources, inst).getTarget();
+Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params, GetGruParameters(inst));
 
   bool inference_only;
   poplar::Type partials_poplar_type;
-  GetGruOptsForMatMulPreplanning(inst, resources, partials_poplar_type,
+  GetGruOptsForMatMulPreplanning(inst, resources_, partials_poplar_type,
                                  inference_only);
 
   const std::vector<std::pair<poplin::MatMulParams, poplar::OptionFlags>>
@@ -160,15 +158,14 @@ Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst,
   return Status::OK();
 }
 
-Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst,
-                                              CompilerResources& resources) {
-  const poplar::Target& target = GetGraph(resources, inst).getTarget();
+Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
   TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
-                      GetMatMulOptionsForInst(inst, resources));
+                      GetMatMulOptionsForInst(inst, resources_));
 
   TF_ASSIGN_OR_RETURN(poplin::MatMulParams mat_mul_params,
-                      GetMatMulParams(inst, resources));
+                      GetMatMulParams(inst, resources_));
 
   option_flags_store.push_back(option_flags);
   preplan_matmuls.emplace(&target, mat_mul_params,
@@ -182,8 +179,7 @@ Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst,
  * and add the parameters and the options for that matmul to the set
  * of things to pass to the poplibs matmul pre-planner.
  */
-Status MatMulPreplanning::Plan(const HloModule* module,
-                               CompilerResources& resources) {
+StatusOr<bool> MatMulPreplanning::Run(HloModule* module) {
   preplan_matmuls.clear();
   option_flags_store.clear();
 
@@ -191,20 +187,20 @@ Status MatMulPreplanning::Plan(const HloModule* module,
     if (!IsPopOpsFusion(comp)) {
       for (HloInstruction* inst : comp->instructions()) {
         if (inst->opcode() == HloOpcode::kDot) {
-          StorePreplanMatMuls(inst, resources);
+          StorePreplanMatMuls(inst);
         } else if (IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::LstmLayerBwd)(inst)) {
-          StorePreplanMatMulsLSTM(inst, resources);
+          StorePreplanMatMulsLSTM(inst);
         } else if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::GRULayerBwd)(inst)) {
-          StorePreplanMatMulsGRU(inst, resources);
+          StorePreplanMatMulsGRU(inst);
         }
       }
     }
   }
 
-  poplin::preplanMatMuls(preplan_matmuls, resources.matmul_cache);
-  return Status::OK();
+  poplin::preplanMatMuls(preplan_matmuls, resources_.matmul_cache);
+  return false;
 }
 
 }  // namespace poplarplugin

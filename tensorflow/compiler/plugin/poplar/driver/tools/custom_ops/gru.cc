@@ -164,6 +164,60 @@ std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
       shape, operands, is_training, num_channels, partials_type, reset_after);
 }
 
+HloAUGRUFwdInstruction::HloAUGRUFwdInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after)
+    : HloRNNFwdInstruction(PoplarOp::AUGRULayerFwd, shape, operands,
+                           is_training, num_channels, partials_type,
+                           reset_after),
+      HloGRUInstructionCommon(reset_after) {}
+
+absl::flat_hash_set<int64> HloAUGRUFwdInstruction::AllocatingIndices() const {
+  return {0, 1, 2, 3, 4, 5};
+}
+
+std::unique_ptr<HloInstruction>
+HloAUGRUFwdInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext* ctx) const {
+  return CreateAUGRUFwd(shape, operands, is_training(), num_channels(),
+                        partials_type(), reset_after());
+}
+
+std::unique_ptr<HloInstruction> CreateAUGRUFwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after) {
+  return absl::make_unique<HloAUGRUFwdInstruction>(
+      shape, operands, is_training, num_channels, partials_type, reset_after);
+}
+
+HloAUGRUBwdInstruction::HloAUGRUBwdInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after)
+    : HloRNNBwdInstruction(PoplarOp::AUGRULayerBwd, shape, operands,
+                           is_training, num_channels, partials_type,
+                           reset_after),
+      HloGRUInstructionCommon(reset_after) {}
+
+std::unique_ptr<HloInstruction>
+HloAUGRUBwdInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext* ctx) const {
+  return CreateAUGRUBwd(shape, operands, is_training(), num_channels(),
+                        partials_type(), reset_after());
+}
+
+std::unique_ptr<HloInstruction> CreateAUGRUBwd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
+    bool reset_after) {
+  return absl::make_unique<HloAUGRUBwdInstruction>(
+      shape, operands, is_training, num_channels, partials_type, reset_after);
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloGRUFwdFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -220,6 +274,34 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDynamicGRUBwdFactoryFunc(
 
 static HloPoplarInstructionFactory dynamic_gru_bwd_factory(
     PoplarOp::DynamicGRULayerBwd, HloDynamicGRUBwdFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloAUGRUFwdFactoryFunc(
+    HloCustomCallInstruction* call) {
+  TF_ASSIGN_OR_RETURN(auto parsed_attributes,
+                      rnn_helper::GRUAttributes::Parse(call));
+
+  return CreateAUGRUFwd(
+      call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
+      parsed_attributes.reset_after);
+}
+
+static HloPoplarInstructionFactory augru_fwd_factory(PoplarOp::AUGRULayerFwd,
+                                                     HloAUGRUFwdFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloAUGRUBwdFactoryFunc(
+    HloCustomCallInstruction* call) {
+  TF_ASSIGN_OR_RETURN(auto parsed_attributes,
+                      rnn_helper::GRUAttributes::Parse(call));
+
+  return CreateAUGRUBwd(
+      call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.num_channels, parsed_attributes.partials_xla_type,
+      parsed_attributes.reset_after);
+}
+
+static HloPoplarInstructionFactory augru_bwd_factory(PoplarOp::AUGRULayerBwd,
+                                                     HloAUGRUBwdFactoryFunc);
 
 }  // namespace
 

@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/DebugContext.hpp>
 #include <poplar/Graph.hpp>
 #include <popops/ElementWise.hpp>
 
@@ -50,11 +51,10 @@ static StatusOr<poplar::program::Program> RandomNormal(
 }
 
 class RandomNormalScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* mean1 = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(mean1->opcode(), HloOpcode::kConstant);
@@ -103,11 +103,10 @@ static StatusOr<poplar::program::Program> RandomUniform(
 }
 
 class RandomUniformScaleOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* shift = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(shift->opcode(), HloOpcode::kConstant);
@@ -139,11 +138,10 @@ class RandomUniformScaleOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Uniform_scale_add, RandomUniformScaleOp);
 
 class RngOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
     if (inst->operand_count() != 2) {
       return FailedPrecondition("RNG must have two operands.");
     }

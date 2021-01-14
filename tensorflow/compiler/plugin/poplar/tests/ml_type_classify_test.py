@@ -137,7 +137,8 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       report.parse_log()
 
       # 2 convs, one grad, 2 updates
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 2, 1, 2])
+      # 1 backward converted to forward + flip both marked as forward (bwd - 1, fwd + 2)
+      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 0, 2])
 
   @test_util.deprecated_graph_mode_only
   def testResnetLike(self):
