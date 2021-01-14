@@ -112,6 +112,24 @@ HloRecomputationCheckpointInstruction::HloRecomputationCheckpointInstruction(
     : HloPoplarInstruction(operand->shape(), {operand},
                            PoplarOp::RecomputationCheckpoint) {}
 
+absl::flat_hash_set<int64>
+HloRecomputationCheckpointInstruction::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64>
+HloRecomputationCheckpointInstruction::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloRecomputationCheckpointInstruction::NumberOfInplaceOperands() const {
+  return 0;
+}
+
+bool HloRecomputationCheckpointInstruction::IsPopOpsElementwise() const {
+  return false;
+}
+
 std::unique_ptr<HloInstruction>
 HloRecomputationCheckpointInstruction::CloneWithNewOperandsImpl(
     const Shape&, absl::Span<HloInstruction* const> new_operands,
@@ -137,6 +155,24 @@ HloRecomputationInputInstruction::HloRecomputationInputInstruction(
     : HloPoplarInstruction(checkpointed_input->shape(),
                            {checkpointed_input, old_input},
                            PoplarOp::RecomputationInput) {}
+
+absl::flat_hash_set<int64> HloRecomputationInputInstruction::AllocatingIndices()
+    const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64>
+HloRecomputationInputInstruction::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloRecomputationInputInstruction::NumberOfInplaceOperands() const {
+  return 0;
+}
+
+bool HloRecomputationInputInstruction::IsPopOpsElementwise() const {
+  return false;
+}
 
 std::unique_ptr<HloInstruction>
 HloRecomputationInputInstruction::CloneWithNewOperandsImpl(

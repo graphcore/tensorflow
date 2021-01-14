@@ -25,6 +25,19 @@ HloExecutionCounter::HloExecutionCounter()
     : HloPoplarInstruction(ShapeUtil::MakeShape(S32, {}), {},
                            PoplarOp::ExecutionCounter) {}
 
+absl::flat_hash_set<int64> HloExecutionCounter::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64> HloExecutionCounter::LayoutDependencies()
+    const {
+  return {};
+}
+
+uint64 HloExecutionCounter::NumberOfInplaceOperands() const { return 0; }
+
+bool HloExecutionCounter::IsPopOpsElementwise() const { return false; }
+
 std::vector<std::string> HloExecutionCounter::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};

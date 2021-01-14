@@ -28,6 +28,16 @@ HloSeed::HloSeed(const Shape& shape)
   set_custom_call_has_side_effect(true);
 }
 
+absl::flat_hash_set<int64> HloSeed::AllocatingIndices() const { return {}; }
+
+absl::flat_hash_map<int64, int64> HloSeed::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloSeed::NumberOfInplaceOperands() const { return 0; }
+
+bool HloSeed::IsPopOpsElementwise() const { return false; }
+
 std::vector<std::string> HloSeed::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};

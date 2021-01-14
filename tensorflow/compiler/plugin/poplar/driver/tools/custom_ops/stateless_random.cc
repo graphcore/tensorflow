@@ -26,6 +26,19 @@ HloStatelessRandom::HloStatelessRandom(
   set_custom_call_has_side_effect(true);
 }
 
+absl::flat_hash_set<int64> HloStatelessRandom::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64> HloStatelessRandom::LayoutDependencies()
+    const {
+  return {};
+}
+
+uint64 HloStatelessRandom::NumberOfInplaceOperands() const { return 0; }
+
+bool HloStatelessRandom::IsPopOpsElementwise() const { return false; }
+
 std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};
