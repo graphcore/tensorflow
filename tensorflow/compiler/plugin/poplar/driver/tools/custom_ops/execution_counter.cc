@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
 
 #include "absl/memory/memory.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
@@ -34,7 +35,13 @@ absl::flat_hash_map<int64, int64> HloExecutionCounter::LayoutDependencies()
   return {};
 }
 
-uint64 HloExecutionCounter::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloExecutionCounter::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloExecutionCounter::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloExecutionCounter::IsPopOpsElementwise() const { return false; }
 

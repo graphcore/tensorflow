@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -37,7 +38,14 @@ absl::flat_hash_map<int64, int64> HloMultiSliceInstruction::LayoutDependencies()
   return {};
 }
 
-uint64 HloMultiSliceInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloMultiSliceInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloMultiSliceInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloMultiSliceInstruction::IsPopOpsElementwise() const { return false; }
 
@@ -83,7 +91,14 @@ HloMultiUpdateInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloMultiUpdateInstruction::NumberOfInplaceOperands() const { return 1; }
+HloPoplarUseDescriptions HloMultiUpdateInstruction::GetUseDescriptions() const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions HloMultiUpdateInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsNoAllocations();
+}
 
 bool HloMultiUpdateInstruction::IsPopOpsElementwise() const { return false; }
 

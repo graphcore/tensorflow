@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -39,7 +40,14 @@ class HloElementwiseUnaryBase : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
     return {};
   }
-  uint64 NumberOfInplaceOperands() const override { return 1; }
+
+  HloPoplarUseDescriptions GetUseDescriptions() const override {
+    return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+  }
+
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override {
+    return BufferDescriptionsNoAllocations();
+  }
 
   bool IsPopOpsElementwise() const override { return true; }
 

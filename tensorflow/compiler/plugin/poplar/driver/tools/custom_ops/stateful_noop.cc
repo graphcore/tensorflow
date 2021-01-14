@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -34,7 +35,13 @@ absl::flat_hash_map<int64, int64> HloStatefulNoop::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloStatefulNoop::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloStatefulNoop::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloStatefulNoop::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloStatefulNoop::IsPopOpsElementwise() const { return false; }
 

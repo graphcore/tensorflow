@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
@@ -68,7 +69,14 @@ absl::flat_hash_map<int64, int64> HloRNNFwdInstruction::LayoutDependencies()
   return {};
 }
 
-uint64 HloRNNFwdInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloRNNFwdInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloRNNFwdInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
 
@@ -81,7 +89,14 @@ absl::flat_hash_map<int64, int64> HloRNNBwdInstruction::LayoutDependencies()
   return {};
 }
 
-uint64 HloRNNBwdInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloRNNBwdInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloRNNBwdInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloRNNBwdInstruction::IsPopOpsElementwise() const { return false; }
 

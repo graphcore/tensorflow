@@ -69,7 +69,8 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
   TF_ASSIGN_OR_RETURN(poplar::Tensor gf_params,
                       FindInstructionInput(tensor_map, res, inst, 1, seq));
 
-  if (cast_inst->NumberOfInplaceOperands() && gf_cast_cfg.inPlaceOp(in_type)) {
+  if (cast_inst->GetUseDescriptions().size() &&
+      gf_cast_cfg.inPlaceOp(in_type)) {
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq));
     CHECK_EQ(inputs.size(), 1);

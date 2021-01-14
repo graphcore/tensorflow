@@ -33,7 +33,8 @@ class HloArgMinMax : public HloPoplarInstruction {
 
   int64 Axis() const { return axis; }
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 

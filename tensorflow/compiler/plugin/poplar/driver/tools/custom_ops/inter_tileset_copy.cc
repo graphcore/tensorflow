@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_tileset_copy.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -43,7 +44,13 @@ absl::flat_hash_map<int64, int64> HloInterTilesetCopy::LayoutDependencies()
   return {};
 }
 
-uint64 HloInterTilesetCopy::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloInterTilesetCopy::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloInterTilesetCopy::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloInterTilesetCopy::IsPopOpsElementwise() const { return false; }
 

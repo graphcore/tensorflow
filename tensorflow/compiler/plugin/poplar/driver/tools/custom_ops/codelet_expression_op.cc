@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/codelet_expression_op.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -40,8 +42,14 @@ HloCodeletExpressionOpInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloCodeletExpressionOpInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloCodeletExpressionOpInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloCodeletExpressionOpInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloCodeletExpressionOpInstruction::IsPopOpsElementwise() const {

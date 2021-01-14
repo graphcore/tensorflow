@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateless_random.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -35,7 +36,13 @@ absl::flat_hash_map<int64, int64> HloStatelessRandom::LayoutDependencies()
   return {};
 }
 
-uint64 HloStatelessRandom::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloStatelessRandom::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloStatelessRandom::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloStatelessRandom::IsPopOpsElementwise() const { return false; }
 

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -38,7 +39,14 @@ HloRemapDeduceInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloRemapDeduceInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloRemapDeduceInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloRemapDeduceInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloRemapDeduceInstruction::IsPopOpsElementwise() const { return true; }
 

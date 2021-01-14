@@ -19,6 +19,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -39,8 +40,14 @@ HloSendRecvBarrierInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloSendRecvBarrierInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloSendRecvBarrierInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloSendRecvBarrierInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloSendRecvBarrierInstruction::IsPopOpsElementwise() const {

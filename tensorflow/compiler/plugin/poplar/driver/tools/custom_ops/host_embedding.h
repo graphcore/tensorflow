@@ -38,7 +38,8 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
   const xla::Shape& EmbeddingShape() const { return embedding_shape_; }
@@ -79,7 +80,8 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
   const xla::Shape& EmbeddingShape() const { return embedding_shape_; }
@@ -117,7 +119,8 @@ class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
 

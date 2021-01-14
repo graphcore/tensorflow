@@ -40,7 +40,8 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
   uint64 GetReplicationFactor(int64 index) const {
@@ -81,7 +82,8 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -123,7 +125,8 @@ class HloCreateBuffer : public HloPoplarInstruction {
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -161,7 +164,8 @@ class HloBufferLoadSlice : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
 
   absl::Span<HloInstruction* const> RemoteBuffers() const;
@@ -198,7 +202,8 @@ class HloBufferStoreSlice : public HloPoplarInstruction {
     return {};
   }
 
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override { return false; }
 

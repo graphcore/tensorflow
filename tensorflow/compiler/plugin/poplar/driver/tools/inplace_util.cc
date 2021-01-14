@@ -574,14 +574,14 @@ HloInstructionDescription::HloInstructionDescription(
       if (IsPoplibsHloCustomOp(inst)) {
         auto poplar_inst = Cast<HloPoplarInstruction>(inst);
 
-        const auto num_inplace_operands =
-            poplar_inst->NumberOfInplaceOperands();
+        const auto use_descriptions = poplar_inst->GetUseDescriptions();
 
-        if (num_inplace_operands) {
-          OperandIndexes indexes(num_inplace_operands);
-          absl::c_iota(indexes, 0);
+        if (use_descriptions.size()) {
+          for (const HloPoplarUseDescription& description : use_descriptions) {
+            inplace_operands_.push_back(description.operand_number());
+          }
+          absl::c_sort(inplace_operands_);
           type_ = HloInstructionType::kInplaceReadWrite;
-          inplace_operands_ = indexes;
         } else {
           type_ = HloInstructionType::kNotInplace;
         }

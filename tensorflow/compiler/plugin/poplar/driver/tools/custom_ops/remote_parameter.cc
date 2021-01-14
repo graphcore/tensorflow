@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -99,7 +100,14 @@ absl::flat_hash_map<int64, int64> HloRemoteParameterLoad::LayoutDependencies()
   return {};
 }
 
-uint64 HloRemoteParameterLoad::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloRemoteParameterLoad::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloRemoteParameterLoad::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloRemoteParameterLoad::IsPopOpsElementwise() const { return false; }
 
@@ -152,9 +160,15 @@ absl::flat_hash_map<int64, int64> HloRemoteParameterStore::LayoutDependencies()
   return {};
 }
 
-uint64 HloRemoteParameterStore::NumberOfInplaceOperands() const {
-  // The remote buffers are in-place, but not the values.
-  return RemoteBuffers().size();
+HloPoplarUseDescriptions HloRemoteParameterStore::GetUseDescriptions() const {
+  // The remote buffers are in-place, but only on the remote buffers.
+  return UseDescriptionsForwardsBuffers(this, RemoteBuffers().size(),
+                                        BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+HloPoplarBufferDescriptions HloRemoteParameterStore::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloRemoteParameterStore::IsPopOpsElementwise() const { return false; }
@@ -254,7 +268,15 @@ absl::flat_hash_map<int64, int64> HloCreateBuffer::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloCreateBuffer::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloCreateBuffer::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloCreateBuffer::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(
+      this, is_remote_ ? BufferLocality::kRemoteMemory
+                       : BufferLocality::kDeviceMemory);
+}
 
 bool HloCreateBuffer::IsPopOpsElementwise() const { return false; }
 
@@ -331,7 +353,13 @@ absl::flat_hash_map<int64, int64> HloBufferLoadSlice::LayoutDependencies()
   return {};
 }
 
-uint64 HloBufferLoadSlice::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloBufferLoadSlice::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloBufferLoadSlice::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloBufferLoadSlice::IsPopOpsElementwise() const { return false; }
 
@@ -384,9 +412,14 @@ HloBufferStoreSlice::HloBufferStoreSlice(
   CHECK_EQ(rbuffers_values_and_offsets.size() % 3, 0);
 }
 
-uint64 HloBufferStoreSlice::NumberOfInplaceOperands() const {
-  // The remote buffers are in-place.
-  return RemoteBuffers().size();
+HloPoplarUseDescriptions HloBufferStoreSlice::GetUseDescriptions() const {
+  // The remote buffers are in-place, but only on the remote buffers.
+  return UseDescriptionsForwardsBuffers(this, RemoteBuffers().size(),
+                                        BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+HloPoplarBufferDescriptions HloBufferStoreSlice::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 std::unique_ptr<HloInstruction> HloBufferStoreSlice::CloneWithNewOperandsImpl(
