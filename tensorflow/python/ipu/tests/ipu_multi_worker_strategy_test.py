@@ -135,6 +135,20 @@ class IPUMultiWorkerStrategyV1Test(multi_worker_test_base.MultiWorkerTestBase):
     self.assertEqual(False, strategy.extended.should_checkpoint)
     self.assertEqual(False, strategy.extended.should_save_summary)
 
+  def test_initializer_colocation(self):
+    strategy, _, _ = self._create_test_objects(task_type="worker", task_id=0)
+
+    with strategy.scope():
+      v = variables.Variable(1.0)
+
+    assign_op = v.initializer.control_inputs[0]
+
+    # The first input is the variable, the second is the value.
+    initial_value_op = assign_op.inputs[1].op
+
+    # The initial value should be colocated with the CPU.
+    self.assertEqual(initial_value_op.colocation_groups(), [b'loc:@cpu'])
+
   def _test_variables_on_host(self, task_type, task_id, _num_gpus):
     strategy, _, _ = self._create_test_objects(task_type,
                                                task_id,
