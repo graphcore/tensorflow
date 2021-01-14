@@ -686,6 +686,7 @@ cc_library(
         "driver/poplar_executor.cc",
         "driver/poplar_passes/convolution_preplanning.cc",
         "driver/poplar_passes/embedding_plans_preplanning.cc",
+        "driver/poplar_passes/map_hlo_instruction_to_debug_id.cc",
         "driver/poplar_passes/matmul_preplanning.cc",
         "driver/poplar_platform.cc",
         "driver/poplar_platform_id.cc",
@@ -731,6 +732,7 @@ cc_library(
         "driver/poplar_executor.h",
         "driver/poplar_passes/convolution_preplanning.h",
         "driver/poplar_passes/embedding_plans_preplanning.h",
+        "driver/poplar_passes/map_hlo_instruction_to_debug_id.h",
         "driver/poplar_passes/matmul_preplanning.h",
         "driver/poplar_platform.h",
         "driver/poplar_platform_id.h",
@@ -1402,6 +1404,20 @@ xla_test(
 xla_test(
     name = "module_flatten_test",
     srcs = ["tests/module_flatten_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "map_hlo_instruction_to_debug_id_test",
+    srcs = ["tests/map_hlo_instruction_to_debug_id_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4916,6 +4932,7 @@ test_suite(
         "layout_strip_test",
         "lift_recompute_suggestion_test",
         "lstm_test",
+        "map_hlo_instruction_to_debug_id_test",
         "mapping_test",
         "matmul_combiner_test",
         "matmul_graph_caching_test",

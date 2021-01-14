@@ -145,6 +145,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/convolution_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/map_hlo_instruction_to_debug_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
@@ -1438,6 +1439,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
       pipeline.AddPass<ConvolutionPreplanning>(resources);
       pipeline.AddPass<MatMulPreplanning>(resources);
+      pipeline.AddPass<MapHloInstructionToDebugIdPass>(
+          resources.hlo_instruction_to_debug_id_mapping);
+
       TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
       VLOG(1) << "End Poplar Pipeline.";
 

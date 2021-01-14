@@ -165,6 +165,9 @@ struct CompilerResources {
   // TODO(T28772): remove this mapping and the extra copy.
   absl::flat_hash_map<std::string, poplar::Tensor> remote_buffer_layouts;
 
+  absl::flat_hash_map<const HloInstruction*, std::uint64_t>
+      hlo_instruction_to_debug_id_mapping;
+
   CompilerResources(
       HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
