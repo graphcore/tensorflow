@@ -117,8 +117,8 @@ must have the following signature:
 
   extern "C"
   void Build_metadata(std::vector<std::int64_t>& allocating_indices,
-    std::uint32_t& num_inplace, bool& is_elementwise,
-    bool& is_stateless, std::uint32_t num_inputs)
+    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
+    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs)
 
 The arguments are:
 
@@ -126,8 +126,11 @@ The arguments are:
   using the tensor allocation function. See the
   description in :ref:`tensor_allocation`.
 
-* ``num_inplace``: indicates the number of inputs which are 'in place'. The first
-  ``num_inplace`` of the inputs will be considered to be in-place.
+* ``input_to_output_tensor_aliasing``: mappings from input tensors to output
+  tensors which indicate how the tensors alias. For example a mapping from an
+  input tensor 1 to an output tensor 0 indicates that those tensors alias, so
+  calling ``poplar::Tensor::intersectsWith`` returns true when called for these
+  tensors.
 
 * ``is_elementwise``: indicates that this operation is element-wise.
 
@@ -144,14 +147,20 @@ In-place operations
 ___________________
 
 If an operation does an in-place modification of an input tensor, as
-opposed to creating a new output tensor, then the ``num_inplace`` can be
-used to indicate that this is the case. The system will ensure that when
-a tensor is updated in place, that any other uses of that tensor will be
-complete before the operation is run.
+opposed to creating a new output tensor, then
+``input_to_output_tensor_aliasing`` mapping can be used to indicate that this is
+the case and that a buffer has been reused. This mapping indicates the
+relationship between the input and output tensors, for example a mapping from an
+input tensor 1 to an output tensor 0 indicates that those tensors alias, so
+calling ``poplar::Tensor::intersectsWith`` returns true when called for these
+tensors. By indicating that an input tensor aliases an output system, the system
+is able to perform more optimisation. It also ensures that when an input
+tensor is updated in place and used as an output, that any other uses of that
+tensor will be complete before this operation is run, to ensure correctness.
 
-If a tensor is not marked as `in place` then the operation must not modify
-it. If it is modified then other operations which consume it may see an
-incorrect value on their input.
+If an input tensor is not mapped to any output tensor then the operation must
+not modify that particular tensor. If it is modified then other operations which
+consume it may see an incorrect value on their input.
 
 When trying to update tensors in-place you need to ensure that TensorFlow
 sees an assignment of the tensor, otherwise the modified input tensor update
@@ -381,3 +390,6 @@ API level:
 2. ``attributes`` a string argument has been added to the allocation and the
     build functions which allows passing of user defined attributes to the
     operation (and its gradient operation if present).
+3. ``input_to_output_tensor_aliasing`` replaced ``num_inplace`` to allow finer
+    grain description of the operation performed in order to allow more
+    optimisations.
