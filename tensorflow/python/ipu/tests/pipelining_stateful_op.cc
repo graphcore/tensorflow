@@ -22,7 +22,7 @@ limitations under the License.
 #include <poputil/Util.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 2;
+int32_t custom_op_api_level = 3;
 }
 
 namespace pe = popops::expr;
@@ -65,9 +65,9 @@ extern "C" poplar::program::Program Build_grad(
   return seq;
 }
 
-extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
-                               std::uint32_t& num_inplace, bool& is_elementwise,
-                               bool& is_stateless, std::uint32_t num_inputs) {
-  num_inplace = 0;
+extern "C" void Build_metadata(
+    std::vector<std::int64_t>& allocating_indices,
+    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
+    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
   is_elementwise = false;
 }
