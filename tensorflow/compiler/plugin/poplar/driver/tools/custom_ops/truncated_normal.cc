@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/truncated_normal.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -35,8 +36,14 @@ HloTruncatedNormalInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloTruncatedNormalInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloTruncatedNormalInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloTruncatedNormalInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloTruncatedNormalInstruction::IsPopOpsElementwise() const {

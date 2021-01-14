@@ -87,6 +87,8 @@ class HloPoplarUseDescription {
   const BufferUseKind kind_;
 };
 
+using HloPoplarUseDescriptions = std::vector<HloPoplarUseDescription>;
+
 // Base class for defining a single use of a buffer.
 class HloPoplarUse {
  public:
@@ -173,6 +175,31 @@ enum class BufferLocality {
   // Indicated that the buffer is stored in remote memory managed by Poplar.
   kRemoteMemory,
 };
+
+// Class used to describe a buffer being generated at a particular position.
+class HloPoplarBufferDescription {
+ public:
+  HloPoplarBufferDescription(const ShapeIndex& output_index,
+                             BufferLocality locality);
+
+  // The shape index within the instruction in which the buffer appears as an
+  // output.
+  const ShapeIndex& output_index() const { return output_index_; }
+
+  // The memory space this buffer will be stored in.
+  BufferLocality locality() const { return locality_; }
+
+  std::string ToString() const;
+
+  bool operator==(const HloPoplarBufferDescription& other) const;
+  bool operator!=(const HloPoplarBufferDescription& other) const;
+
+ private:
+  const ShapeIndex output_index_;
+  const BufferLocality locality_;
+};
+
+using HloPoplarBufferDescriptions = std::vector<HloPoplarBufferDescription>;
 
 // Class used to represent a single buffer tensor.
 class HloPoplarBuffer {

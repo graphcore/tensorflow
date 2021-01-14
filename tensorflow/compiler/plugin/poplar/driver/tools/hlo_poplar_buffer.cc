@@ -194,6 +194,26 @@ std::string BufferLocalityToString(BufferLocality locality) {
 }
 }  // namespace
 
+HloPoplarBufferDescription::HloPoplarBufferDescription(
+    const ShapeIndex& output_index, BufferLocality locality)
+    : output_index_(output_index), locality_(locality) {}
+
+std::string HloPoplarBufferDescription::ToString() const {
+  return absl::StrCat("output index ", output_index().ToString(), " locality ",
+                      BufferLocalityToString(locality()));
+}
+
+bool HloPoplarBufferDescription::operator==(
+    const HloPoplarBufferDescription& other) const {
+  return std::make_tuple(output_index(), locality()) ==
+         std::make_tuple(other.output_index(), other.locality());
+}
+
+bool HloPoplarBufferDescription::operator!=(
+    const HloPoplarBufferDescription& other) const {
+  return !(*this == other);
+}
+
 HloPoplarBuffer::HloPoplarBuffer(HloPoplarBuffer::Id id,
                                  const HloPoplarPosition& defining_position,
                                  BufferLocality locality)

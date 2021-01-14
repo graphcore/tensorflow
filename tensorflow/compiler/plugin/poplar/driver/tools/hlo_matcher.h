@@ -100,14 +100,13 @@ using PatternType = std::string;
 using PatternMetaTarget = NodeId;
 using PatternInputs = std::vector<NodeId>;
 using PatternOutputs = std::vector<NodeId>;
-using PatternInplaceDescriptions = std::vector<HloPoplarUseDescription>;
 using Pattern = std::vector<HloMatcherNode>;
 
 class HloMatcherPattern;
 struct HloMatcherMatched;
 using PatternInstructionOutputs = std::vector<HloInstruction*>;
 using PatternInplaceDescriptionFn =
-    std::function<PatternInplaceDescriptions(const HloMatcherMatched&)>;
+    std::function<HloPoplarUseDescriptions(const HloMatcherMatched&)>;
 using PatternReplaceFn = std::function<StatusOr<PatternInstructionOutputs>(
     const HloMatcherMatched&)>;
 

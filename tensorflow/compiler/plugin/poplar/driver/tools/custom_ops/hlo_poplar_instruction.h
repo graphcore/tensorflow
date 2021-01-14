@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -69,9 +70,12 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // layout dependency.
   virtual absl::flat_hash_map<int64, int64> LayoutDependencies() const = 0;
 
-  // Return how many of the first n operands are updated in place. If 0, the op
-  // is treated as NotInplace.
-  virtual uint64 NumberOfInplaceOperands() const = 0;
+  // Returns HloPoplarUseDescription to describe any aliasing from the operands
+  // to the output of the instruction.
+  virtual HloPoplarUseDescriptions GetUseDescriptions() const = 0;
+
+  // Returns information about the new buffers created by this instruction.
+  virtual HloPoplarBufferDescriptions GetBufferDescriptions() const = 0;
 
   // Returns whether this is an elementwise instruction.
   virtual bool IsPopOpsElementwise() const = 0;

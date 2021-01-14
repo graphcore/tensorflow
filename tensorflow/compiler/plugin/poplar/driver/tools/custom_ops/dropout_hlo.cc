@@ -18,6 +18,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/core/lib/hash/hash.h"
@@ -41,7 +42,13 @@ absl::flat_hash_map<int64, int64> HloDropout::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloDropout::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloDropout::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloDropout::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloDropout::IsPopOpsElementwise() const { return false; }
 

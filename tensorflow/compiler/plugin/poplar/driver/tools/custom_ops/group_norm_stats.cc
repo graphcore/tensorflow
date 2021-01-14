@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
@@ -41,8 +42,14 @@ HloGroupNormStatsInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloGroupNormStatsInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloGroupNormStatsInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloGroupNormStatsInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloGroupNormStatsInstruction::IsPopOpsElementwise() const { return false; }

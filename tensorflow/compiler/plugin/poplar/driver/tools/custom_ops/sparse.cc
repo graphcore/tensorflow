@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/sparse.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -33,8 +34,14 @@ HloSelectScalarFromRowsInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloSelectScalarFromRowsInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions
+HloSelectScalarFromRowsInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloSelectScalarFromRowsInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloSelectScalarFromRowsInstruction::IsPopOpsElementwise() const {
@@ -74,8 +81,14 @@ HloUpdateScalarInRowsInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloUpdateScalarInRowsInstruction::NumberOfInplaceOperands() const {
-  return 1;
+HloPoplarUseDescriptions HloUpdateScalarInRowsInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions
+HloUpdateScalarInRowsInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloUpdateScalarInRowsInstruction::IsPopOpsElementwise() const {

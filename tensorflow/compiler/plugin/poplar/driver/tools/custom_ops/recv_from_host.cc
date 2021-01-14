@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "include/json/json.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -50,8 +51,20 @@ HloRecvFromHostInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloRecvFromHostInstruction::NumberOfInplaceOperands() const {
-  return operand_count();
+HloPoplarUseDescriptions HloRecvFromHostInstruction::GetUseDescriptions()
+    const {
+  if (operand_count()) {
+    return UseDescriptionsForwardsBuffers(this, operand_count(),
+                                          BufferUseKind::USE_ALIAS_READ_WRITE);
+  } else {
+    return UseDescriptionsNoInputOutputAlias();
+  }
+}
+
+HloPoplarBufferDescriptions HloRecvFromHostInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllUnaliasedBuffers(this,
+                                                        GetUseDescriptions());
 }
 
 bool HloRecvFromHostInstruction::IsPopOpsElementwise() const { return false; }

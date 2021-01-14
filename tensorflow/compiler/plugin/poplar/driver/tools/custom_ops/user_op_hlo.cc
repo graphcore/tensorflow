@@ -19,6 +19,7 @@ limitations under the License.
 #include <utility>
 
 #include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -44,6 +45,9 @@ HloUserOpInstruction::HloUserOpInstruction(
       is_user_read_write_(is_user_read_write),
       attributes_(attributes) {
   num_inputs_ = inputs.size();
+  CHECK(absl::c_all_of(inputs, [](const HloInstruction* inst) {
+    return inst->shape().IsArray();
+  }));
 
   // If there is a metadata function, call it to populate the metadata_ struct.
   bool stateless = false;
@@ -77,11 +81,20 @@ absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
   return {};
 }
 
-uint64 HloUserOpInstruction::NumberOfInplaceOperands() const {
-  // TODO(T10387): Use the information fully.
-  return metadata_.input_to_output_tensor_aliasing_.size()
-             ? metadata_.input_to_output_tensor_aliasing_.rbegin()->first + 1
-             : 0;
+HloPoplarUseDescriptions HloUserOpInstruction::GetUseDescriptions() const {
+  HloPoplarUseDescriptions descriptions;
+  for (auto pair : metadata_.input_to_output_tensor_aliasing_) {
+    descriptions.push_back(HloPoplarUseDescription{
+        pair.first, /*operand_index=*/ShapeIndex{}, ShapeIndex{pair.second},
+        BufferUseKind::USE_ALIAS_READ_WRITE});
+  }
+  return descriptions;
+}
+
+HloPoplarBufferDescriptions HloUserOpInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllUnaliasedBuffers(this,
+                                                        GetUseDescriptions());
 }
 
 bool HloUserOpInstruction::IsPopOpsElementwise() const {

@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -47,8 +48,14 @@ HloHostEmbeddingLookupInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloHostEmbeddingLookupInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloHostEmbeddingLookupInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloHostEmbeddingLookupInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloHostEmbeddingLookupInstruction::IsPopOpsElementwise() const {
@@ -107,8 +114,14 @@ HloHostEmbeddingUpdateInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloHostEmbeddingUpdateInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloHostEmbeddingUpdateInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloHostEmbeddingUpdateInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloHostEmbeddingUpdateInstruction::IsPopOpsElementwise() const {
@@ -164,8 +177,14 @@ HloHostEmbeddingNotifyInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloHostEmbeddingNotifyInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloHostEmbeddingNotifyInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloHostEmbeddingNotifyInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloHostEmbeddingNotifyInstruction::IsPopOpsElementwise() const {

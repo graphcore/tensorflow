@@ -12,8 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/cast_to_gfloat_hlo.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -77,7 +78,15 @@ HloGfloatParamsInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloGfloatParamsInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloGfloatParamsInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloGfloatParamsInstruction::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloGfloatParamsInstruction::IsPopOpsElementwise() const { return false; }
 
@@ -189,8 +198,19 @@ HloCastNativeToGfloatInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloCastNativeToGfloatInstruction::NumberOfInplaceOperands() const {
-  return (in_type_ == out_type_);
+HloPoplarUseDescriptions HloCastNativeToGfloatInstruction::GetUseDescriptions()
+    const {
+  if (in_type_ == out_type_) {
+    return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+  } else {
+    return UseDescriptionsNoInputOutputAlias();
+  }
+}
+
+HloPoplarBufferDescriptions
+HloCastNativeToGfloatInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllUnaliasedBuffers(this,
+                                                        GetUseDescriptions());
 }
 
 bool HloCastNativeToGfloatInstruction::IsPopOpsElementwise() const {
@@ -269,14 +289,19 @@ HloCastGfloatToNativeInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloCastGfloatToNativeInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloCastGfloatToNativeInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloCastGfloatToNativeInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloCastGfloatToNativeInstruction::IsPopOpsElementwise() const {
   return true;
 }
-
 std::unique_ptr<HloInstruction>
 HloCastGfloatToNativeInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,

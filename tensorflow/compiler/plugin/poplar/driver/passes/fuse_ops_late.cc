@@ -27,7 +27,7 @@ namespace poplarplugin {
 namespace {
 // Function for describing fusions which are "inplace" on the 0th input with no
 // tuple shapes involved.
-PatternInplaceDescriptions GetSimpleInplaceUseDescription(
+HloPoplarUseDescriptions GetSimpleInplaceUseDescription(
     const HloMatcherMatched&) {
   return {HloPoplarUseDescription{/*operand_number=*/0,
                                   /*operand_index=*/ShapeIndex{},
@@ -449,7 +449,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({1, 2}),
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(
-      [] (const HloMatcherMatched&) -> PatternInplaceDescriptions {
+      [] (const HloMatcherMatched&) -> HloPoplarUseDescriptions {
       return {HloPoplarUseDescription{/*operand_number=*/0,
                                       /*operand_index=*/ShapeIndex{},
                                       /*output_index=*/ShapeIndex{},

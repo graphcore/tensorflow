@@ -14,7 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/candidate_sampler.h"
+
 #include "absl/container/flat_hash_map.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -30,7 +33,13 @@ absl::flat_hash_map<int64, int64> HloCandidateSampler::LayoutDependencies()
   return {};
 }
 
-uint64 HloCandidateSampler::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloCandidateSampler::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloCandidateSampler::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloCandidateSampler::IsPopOpsElementwise() const { return false; }
 

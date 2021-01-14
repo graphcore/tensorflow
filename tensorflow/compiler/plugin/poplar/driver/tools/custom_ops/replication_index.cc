@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -36,8 +37,14 @@ HloReplicationIndexInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloReplicationIndexInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloReplicationIndexInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloReplicationIndexInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloReplicationIndexInstruction::IsPopOpsElementwise() const {

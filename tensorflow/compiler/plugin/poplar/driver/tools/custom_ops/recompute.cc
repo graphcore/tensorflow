@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recompute.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -39,8 +40,15 @@ HloSuggestRecomputeInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloSuggestRecomputeInstruction::NumberOfInplaceOperands() const {
-  return 1;
+HloPoplarUseDescriptions HloSuggestRecomputeInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsForwardsBuffers(this, 1,
+                                        BufferUseKind::USE_ALIAS_READ_ONLY);
+}
+
+HloPoplarBufferDescriptions
+HloSuggestRecomputeInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloSuggestRecomputeInstruction::IsPopOpsElementwise() const {
@@ -84,8 +92,15 @@ HloBlockRecomputeInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloBlockRecomputeInstruction::NumberOfInplaceOperands() const {
-  return 1;
+HloPoplarUseDescriptions HloBlockRecomputeInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsForwardsBuffers(this, 1,
+                                        BufferUseKind::USE_ALIAS_READ_ONLY);
+}
+
+HloPoplarBufferDescriptions
+HloBlockRecomputeInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloBlockRecomputeInstruction::IsPopOpsElementwise() const { return true; }
@@ -122,8 +137,14 @@ HloRecomputationCheckpointInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloRecomputationCheckpointInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions
+HloRecomputationCheckpointInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloRecomputationCheckpointInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloRecomputationCheckpointInstruction::IsPopOpsElementwise() const {
@@ -166,8 +187,14 @@ HloRecomputationInputInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloRecomputationInputInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloRecomputationInputInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloRecomputationInputInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloRecomputationInputInstruction::IsPopOpsElementwise() const {
