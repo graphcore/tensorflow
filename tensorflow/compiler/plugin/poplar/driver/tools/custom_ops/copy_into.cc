@@ -29,6 +29,15 @@ HloCopyInto::HloCopyInto(HloInstruction* const destination,
     : HloPoplarInstruction(destination->shape(), {destination, value},
                            PoplarOp::CopyInto) {}
 
+absl::flat_hash_set<int64> HloCopyInto::AllocatingIndices() const { return {}; }
+
+absl::flat_hash_map<int64, int64> HloCopyInto::LayoutDependencies() const {
+  return {};
+}
+uint64 HloCopyInto::NumberOfInplaceOperands() const { return 1; }
+
+bool HloCopyInto::IsPopOpsElementwise() const { return false; }
+
 std::unique_ptr<HloInstruction> HloCopyInto::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {

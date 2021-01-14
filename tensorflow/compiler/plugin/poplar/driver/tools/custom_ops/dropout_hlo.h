@@ -29,12 +29,10 @@ class HloDropout : public HloPoplarInstruction {
   HloDropout(HloInstruction* operand, HloInstruction* seed, float rate,
              float scale, const std::vector<int64>& noise_shape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
-    return {};
-  }
-  uint64 NumberOfInplaceOperands() const override { return 0; }
-  bool IsPopOpsElementwise() const override { return false; }
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
 
   // Probability of a given element being set to zero.
   float Rate() const { return rate; }

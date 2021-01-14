@@ -29,15 +29,10 @@ class HloSeed : public HloPoplarInstruction {
  public:
   explicit HloSeed(const Shape& shape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
-
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
-    return {};
-  }
-
-  uint64 NumberOfInplaceOperands() const override { return 0; }
-
-  bool IsPopOpsElementwise() const override { return false; }
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

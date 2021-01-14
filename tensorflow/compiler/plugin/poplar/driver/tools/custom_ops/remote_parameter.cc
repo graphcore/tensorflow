@@ -322,6 +322,19 @@ HloBufferLoadSlice::HloBufferLoadSlice(
   CHECK_EQ(rbuffers_and_offsets.size() % 2, 0);
 }
 
+absl::flat_hash_set<int64> HloBufferLoadSlice::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64> HloBufferLoadSlice::LayoutDependencies()
+    const {
+  return {};
+}
+
+uint64 HloBufferLoadSlice::NumberOfInplaceOperands() const { return 0; }
+
+bool HloBufferLoadSlice::IsPopOpsElementwise() const { return false; }
+
 std::unique_ptr<HloInstruction> HloBufferLoadSlice::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {

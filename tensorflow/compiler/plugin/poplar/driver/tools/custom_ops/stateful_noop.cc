@@ -26,6 +26,18 @@ HloStatefulNoop::HloStatefulNoop()
   set_custom_call_has_side_effect(true);
 }
 
+absl::flat_hash_set<int64> HloStatefulNoop::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64> HloStatefulNoop::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloStatefulNoop::NumberOfInplaceOperands() const { return 0; }
+
+bool HloStatefulNoop::IsPopOpsElementwise() const { return false; }
+
 std::vector<std::string> HloStatefulNoop::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};
