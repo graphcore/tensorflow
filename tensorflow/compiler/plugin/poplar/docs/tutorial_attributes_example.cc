@@ -22,7 +22,7 @@ limitations under the License.
 #include "include/json/json.h"
 
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 2;
 }
 
 namespace {
@@ -49,11 +49,11 @@ std::vector<size_t> GetVectorFromJson(Json::Value& val) {
 }
 }  // namespace
 
-extern "C" void Build_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, std::uint32_t num_inputs) {
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               std::uint32_t num_inputs) {
   allocating_indices = {0, 1};
+  num_inplace = 0;
   is_elementwise = false;
 }
 

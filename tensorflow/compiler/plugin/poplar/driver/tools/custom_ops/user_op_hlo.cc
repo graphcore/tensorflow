@@ -15,9 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 
-#include <map>
-#include <utility>
-
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -47,18 +44,15 @@ HloUserOpInstruction::HloUserOpInstruction(
 
   // If there is a metadata function, call it to populate the metadata_ struct.
   bool stateless = false;
-
   if (metadata_function_ptr_ != nullptr) {
-    void (*metadataSignature)(
-        std::vector<std::int64_t> & allocating_indices,
-        std::map<std::int64_t, std::int64_t> & input_to_output_tensor_aliasing,
-        bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs);
+    void (*metadataSignature)(std::vector<std::int64_t> & allocating_indices,
+                              std::uint32_t & num_inplace, bool& is_elementwise,
+                              bool& is_stateless, std::uint32_t num_inputs);
 
     metadataSignature =
         reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
 
-    metadataSignature(metadata_.allocating_indices_,
-                      metadata_.input_to_output_tensor_aliasing_,
+    metadataSignature(metadata_.allocating_indices_, metadata_.num_inplace_,
                       metadata_.is_elementwise_, stateless, num_inputs_);
   }
   set_custom_call_has_side_effect(!stateless);
@@ -74,14 +68,12 @@ absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
 
 absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
     const {
-  return {};
+  absl::flat_hash_map<int64, int64> map;
+  return map;
 }
 
 uint64 HloUserOpInstruction::NumberOfInplaceOperands() const {
-  // TODO(T10387): Use the information fully.
-  return metadata_.input_to_output_tensor_aliasing_.size()
-             ? metadata_.input_to_output_tensor_aliasing_.rbegin()->first + 1
-             : 0;
+  return metadata_.num_inplace_;
 }
 
 bool HloUserOpInstruction::IsPopOpsElementwise() const {
@@ -110,15 +102,8 @@ std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
 
   attributes.push_back(
       absl::StrCat("metadata_.is_elementwise_=", metadata_.is_elementwise_));
-  attributes.push_back(absl::StrCat(
-      "metadata_.input_to_output_tensor_aliasing_=",
-      absl::StrJoin(
-          metadata_.input_to_output_tensor_aliasing_, ", ",
-          [](std::string* result,
-             const std::pair<std::int64_t, std::int64_t>& alias_info) {
-            result->append(absl::StrCat("[from ", alias_info.first, " to ",
-                                        alias_info.second, "]"));
-          })));
+  attributes.push_back(
+      absl::StrCat("metadata_.num_inplace_=", metadata_.num_inplace_));
 
   attributes.push_back(absl::StrCat("num_inputs_=", num_inputs_));
   attributes.push_back(absl::StrCat("gp_path=", gp_path_));

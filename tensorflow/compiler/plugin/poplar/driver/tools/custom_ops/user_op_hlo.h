@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 
-#include <map>
 #include <string>
 #include <vector>
 
@@ -86,11 +85,9 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   struct MetadataStructure {
     MetadataStructure()
-        : allocating_indices_({}),
-          input_to_output_tensor_aliasing_({}),
-          is_elementwise_(false) {}
+        : allocating_indices_({}), num_inplace_(0), is_elementwise_(false) {}
     std::vector<std::int64_t> allocating_indices_;
-    std::map<std::int64_t, std::int64_t> input_to_output_tensor_aliasing_;
+    std::uint32_t num_inplace_;
     bool is_elementwise_;
   };
 

@@ -23,14 +23,14 @@ limitations under the License.
 
 // Export the API level symbol
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 2;
 }
 
-extern "C" void Build_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               bool& is_stateless, std::uint32_t num_inputs) {
   allocating_indices.clear();
+  num_inplace = 0;
   is_elementwise = true;
 }
 

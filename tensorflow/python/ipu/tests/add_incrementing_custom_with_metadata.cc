@@ -21,7 +21,7 @@ limitations under the License.
 #include <popops/ElementWise.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 2;
 }
 
 namespace pe = popops::expr;
@@ -66,13 +66,10 @@ extern "C" poplar::program::Program Build_grad(
   return seq;
 }
 
-extern "C" void Build_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
-  for (std::uint32_t i = 0; i != num_inputs; ++i) {
-    input_to_output_tensor_aliasing.emplace(i, i);
-  }
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               bool& is_stateless, std::uint32_t num_inputs) {
+  num_inplace = num_inputs;
   is_elementwise = num_inputs < 2;
 }
 
@@ -126,10 +123,10 @@ extern "C" poplar::program::Program AllocTest(
 }
 
 extern "C" void AllocTest_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
+    std::vector<std::int64_t>& allocating_indices, std::uint32_t& num_inplace,
     bool& is_elementwise, std::uint32_t num_inputs) {
   allocating_indices.push_back(0);
+  num_inplace = 0;
   is_elementwise = false;
 }
 
@@ -159,10 +156,10 @@ extern "C" poplar::program::Program Stateful(
   return seq;
 }
 
-extern "C" void Stateful_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+extern "C" void Stateful_metadata(std::vector<std::int64_t>& allocating_indices,
+                                  std::uint32_t& num_inplace,
+                                  bool& is_elementwise, bool& is_stateless,
+                                  std::uint32_t num_inputs) {
   // default value must indicate stateful op
 }
 
@@ -182,8 +179,7 @@ extern "C" poplar::program::Program Stateless(
 }
 
 extern "C" void Stateless_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
+    std::vector<std::int64_t>& allocating_indices, std::uint32_t& num_inplace,
     bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
   is_stateless = true;
 }
