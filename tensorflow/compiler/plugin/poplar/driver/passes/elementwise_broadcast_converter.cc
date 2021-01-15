@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -161,7 +162,11 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
     for (int64 input_index = 0, operand_index = 0;
          input_index != inst->operand_count(); ++input_index) {
       if (input_index == inplace_operands[0]) {
-        cfg->add_inplace_operands(operand_index);
+        HloPoplarUseDescription inplace_description{
+            operand_index, ShapeIndex{}, ShapeIndex{},
+            BufferUseKind::USE_ALIAS_READ_WRITE};
+        auto* proto = cfg->add_inplace_descriptions();
+        *proto = inplace_description.ToProto();
         break;
       } else if (!constant_broadcast_operands.contains(input_index)) {
         operand_index++;

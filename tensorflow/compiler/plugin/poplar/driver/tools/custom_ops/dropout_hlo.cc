@@ -35,6 +35,16 @@ HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
       rate(rate),
       noise_shape(noise_shape) {}
 
+absl::flat_hash_set<int64> HloDropout::AllocatingIndices() const { return {}; }
+
+absl::flat_hash_map<int64, int64> HloDropout::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloDropout::NumberOfInplaceOperands() const { return 0; }
+
+bool HloDropout::IsPopOpsElementwise() const { return false; }
+
 std::vector<std::string> HloDropout::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;

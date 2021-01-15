@@ -159,15 +159,10 @@ class HloBufferLoadSlice : public HloPoplarInstruction {
   HloBufferLoadSlice(const Shape& shape,
                      absl::Span<HloInstruction* const> rbuffers_and_offsets);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
-
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
-    return {};
-  }
-
-  uint64 NumberOfInplaceOperands() const override { return 0; }
-
-  bool IsPopOpsElementwise() const override { return false; }
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
 
   absl::Span<HloInstruction* const> RemoteBuffers() const;
   absl::Span<HloInstruction* const> Offsets() const;

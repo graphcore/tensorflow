@@ -26,6 +26,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -99,12 +100,14 @@ using PatternType = std::string;
 using PatternMetaTarget = NodeId;
 using PatternInputs = std::vector<NodeId>;
 using PatternOutputs = std::vector<NodeId>;
-using PatternInplaceInputs = std::vector<NodeId>;
+using PatternInplaceDescriptions = std::vector<HloPoplarUseDescription>;
 using Pattern = std::vector<HloMatcherNode>;
 
 class HloMatcherPattern;
 struct HloMatcherMatched;
 using PatternInstructionOutputs = std::vector<HloInstruction*>;
+using PatternInplaceDescriptionFn =
+    std::function<PatternInplaceDescriptions(const HloMatcherMatched&)>;
 using PatternReplaceFn = std::function<StatusOr<PatternInstructionOutputs>(
     const HloMatcherMatched&)>;
 
@@ -117,17 +120,18 @@ class HloMatcherPattern {
                     Pattern pattern);
 
   HloMatcherPattern(PatternType type, PatternMetaTarget meta_target,
-                    PatternInputs inputs, PatternInplaceInputs inplace_inputs,
-                    PatternOutputs outputs, Pattern pattern);
-
-  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
-                    PatternMetaTarget meta_target, PatternInputs inputs,
-                    PatternOutputs outputs, Pattern pattern);
-
-  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
-                    PatternMetaTarget meta_target, PatternInputs inputs,
-                    PatternInplaceInputs inplace_inputs, PatternOutputs outputs,
+                    PatternInputs inputs, PatternOutputs outputs,
+                    PatternInplaceDescriptionFn inplace_description_fn,
                     Pattern pattern);
+
+  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
+                    PatternMetaTarget meta_target, PatternInputs inputs,
+                    PatternOutputs outputs, Pattern pattern);
+
+  HloMatcherPattern(PatternType type, PatternReplaceFn replace_fn,
+                    PatternMetaTarget meta_target, PatternInputs inputs,
+                    PatternInplaceDescriptionFn inplace_description_fn,
+                    PatternOutputs outputs, Pattern pattern);
 
   const PatternType& GetType() const;
 
@@ -137,9 +141,7 @@ class HloMatcherPattern {
 
   const PatternInputs& GetInputs() const;
 
-  const PatternInplaceInputs& GetInplaceInputs() const;
-
-  const std::vector<int64>& GetInplaceInputIndices() const;
+  const PatternInplaceDescriptionFn& GetInplaceDescriptionFn() const;
 
   const PatternOutputs& GetOutputs() const;
 
@@ -172,16 +174,9 @@ class HloMatcherPattern {
   // with index 1.
   PatternInputs inputs;
 
-  // Subset of pattern inputs which are used inplace by this fusion.
-  PatternInplaceInputs inplace_inputs;
-
-  // Input indecies which are inplace.
-  // Example:
-  // inputs = {2, 1, 3}
-  // inplace_inputs = {2, 3}
-  // Then the inputs with label 2 and 3 are inplace, and their input inplace
-  // indicies are 0 and 2.
-  std::vector<int64> inplace_input_indices;
+  // Function used to retrieve information how the fusion inputs alias any of
+  // the fusion outputs.
+  PatternInplaceDescriptionFn inplace_description_fn;
 
   // If an op is an output then replace all the uses of this node in the
   // computation with the output tensor from this fusion. If there is more than

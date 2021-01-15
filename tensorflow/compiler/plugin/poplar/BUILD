@@ -103,6 +103,16 @@ tf_proto_library(
     ],
 )
 
+tf_proto_library(
+    name = "alias_info",
+    srcs = [
+        "driver/tools/alias_info.proto",
+    ],
+    cc_api_version = 2,
+    j2objc_api_version = 1,
+    make_default_target_header_only = True,
+)
+
 xla_proto_library(
     name = "xla_backend_protos",
     srcs = [
@@ -111,6 +121,7 @@ xla_proto_library(
         "driver/poplar_feed_config.proto",
     ],
     deps = [
+        ":alias_info_cc",
         ":option_flag_cc",
         ":pipeline_config_cc",
         ":threestate_cc",
@@ -127,6 +138,7 @@ tf_proto_library_py(
         "driver/poplar_feed_config.proto",
     ],
     deps = [
+        ":alias_info_py",
         ":option_flag_py",
         ":pipeline_config_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
@@ -521,6 +533,7 @@ cc_library(
         "driver/tools/while_loop_util.h",
     ],
     deps = [
+        ":alias_info_cc_impl",
         ":common",
         ":config_protos_cc_impl",
         ":custom_kernels_util",
@@ -673,6 +686,7 @@ cc_library(
         "driver/poplar_executor.cc",
         "driver/poplar_passes/convolution_preplanning.cc",
         "driver/poplar_passes/embedding_plans_preplanning.cc",
+        "driver/poplar_passes/map_hlo_instruction_to_debug_id.cc",
         "driver/poplar_passes/matmul_preplanning.cc",
         "driver/poplar_platform.cc",
         "driver/poplar_platform_id.cc",
@@ -718,6 +732,7 @@ cc_library(
         "driver/poplar_executor.h",
         "driver/poplar_passes/convolution_preplanning.h",
         "driver/poplar_passes/embedding_plans_preplanning.h",
+        "driver/poplar_passes/map_hlo_instruction_to_debug_id.h",
         "driver/poplar_passes/matmul_preplanning.h",
         "driver/poplar_platform.h",
         "driver/poplar_platform_id.h",
@@ -1389,6 +1404,20 @@ xla_test(
 xla_test(
     name = "module_flatten_test",
     srcs = ["tests/module_flatten_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "map_hlo_instruction_to_debug_id_test",
+    srcs = ["tests/map_hlo_instruction_to_debug_id_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4903,6 +4932,7 @@ test_suite(
         "layout_strip_test",
         "lift_recompute_suggestion_test",
         "lstm_test",
+        "map_hlo_instruction_to_debug_id_test",
         "mapping_test",
         "matmul_combiner_test",
         "matmul_graph_caching_test",
