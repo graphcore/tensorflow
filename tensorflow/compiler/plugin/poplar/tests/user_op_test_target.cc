@@ -21,7 +21,7 @@ limitations under the License.
 #include <unordered_set>
 
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 2;
 }
 
 namespace pe = popops::expr;
@@ -35,12 +35,10 @@ extern "C" poplar::program::Program Build(
   return seq;
 }
 
-extern "C" void Build_metadata(
-    std::vector<std::int64_t>& allocating_indices,
-    std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               bool& is_stateless, std::uint32_t num_inputs) {
   num_inplace = 12;
-  input_to_output_tensor_aliasing = {{0, 0}, {2, 1}, {3, 2}};
   is_elementwise = true;
 
   allocating_indices.insert(0);

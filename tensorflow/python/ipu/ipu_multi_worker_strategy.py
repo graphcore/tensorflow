@@ -289,9 +289,8 @@ class IPUMultiWorkerExtended(
 
     def initial_value_fn():  # pylint: disable=g-missing-docstring
       # Override colocation and XLA attributes for initializers.
-      colocation_list = attr_value_pb2.AttrValue.ListValue(s=[b'loc:@cpu'])
       attrs = {
-          "_class": attr_value_pb2.AttrValue(list=colocation_list),
+          "_class": attr_value_pb2.AttrValue(s=b'loc:@cpu'),
           "_XlaCompile": attr_value_pb2.AttrValue(b=False),
           "_XlaScope": attr_value_pb2.AttrValue(s=b''),
       }
