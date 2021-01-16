@@ -3,7 +3,7 @@
 Building TensorFlow for the IPU is very similar to the process for building
 TensorFlow described here: <https://www.tensorflow.org/install/source>.
 
-Building TensorFlow for the IPU is supported for Ubuntu 18.04 and CentOS 7.6.
+Building TensorFlow for the IPU is supported for Ubuntu 18.04, Ubuntu 20.04. CentOS 7.6 and CentOS 8.3.
 
 The differences from the standard build process are:
 
@@ -44,6 +44,15 @@ $ cd tensorflow
 You can now build TensorFlow by following the instructions here:
 <https://www.tensorflow.org/install/source>.
 
+
+### Building on Ubuntu 20.04
+
+If you are building on Ubuntu 20.04, you first need to apply a patch to the codebase due to `glibc` changes:
+
+``` {.shell}
+$ cd tensorflow
+$ git apply workspace_grpc_ubuntu20.patch
+```
 
 ### Build options
 
