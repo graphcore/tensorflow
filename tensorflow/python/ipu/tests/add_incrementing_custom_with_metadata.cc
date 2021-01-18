@@ -21,7 +21,7 @@ limitations under the License.
 #include <popops/ElementWise.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 4;
 }
 
 namespace pe = popops::expr;
@@ -69,7 +69,8 @@ extern "C" poplar::program::Program Build_grad(
 extern "C" void Build_metadata(
     std::vector<std::int64_t>& allocating_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs) {
   for (std::uint32_t i = 0; i != num_inputs; ++i) {
     input_to_output_tensor_aliasing.emplace(i, i);
   }
@@ -162,7 +163,8 @@ extern "C" poplar::program::Program Stateful(
 extern "C" void Stateful_metadata(
     std::vector<std::int64_t>& allocating_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs) {
   // default value must indicate stateful op
 }
 
@@ -184,6 +186,7 @@ extern "C" poplar::program::Program Stateless(
 extern "C" void Stateless_metadata(
     std::vector<std::int64_t>& allocating_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs) {
   is_stateless = true;
 }

@@ -31,6 +31,8 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
@@ -357,6 +359,88 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       received1, events1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 4.0)
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(0, _count_ipu_compilations(events1))
+
+  @test_util.deprecated_graph_mode_only
+  def test_unhashable_op(self):
+    if offline_compilation_needed:
+      self.skipTest("Compilation only mode makes outside compilation hang")
+
+    def build_and_run_model():
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([128])],
+      }
+
+      lib_path = os.path.join(cwd, "tensorflow/compiler/plugin/poplar",
+                              "libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y):
+        x = ipu.custom_ops.precompiled_user_op([x, y],
+                                               lib_path,
+                                               op_name="UnhashableTest",
+                                               outs=outputs)
+        return x
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[128])
+        y = array_ops.placeholder(np.float32, shape=[128])
+
+        result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+      with session.Session() as sess:
+        report = ReportJSON(self, sess)
+        sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
+        events = report.get_event_trace(sess)
+        return events
+
+    with _temporary_executable_cache():
+      events0 = self._run_in_new_process(build_and_run_model)
+      events1 = self._run_in_new_process(build_and_run_model)
+      # Expect second compilation as the executable should not be cached
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(1, _count_ipu_compilations(events1))
+
+  @test_util.deprecated_graph_mode_only
+  def test_hashable_op(self):
+    if offline_compilation_needed:
+      self.skipTest("Compilation only mode makes outside compilation hang")
+
+    def build_and_run_model():
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([128])],
+      }
+
+      lib_path = os.path.join(cwd, "tensorflow/compiler/plugin/poplar",
+                              "libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y):
+        x = ipu.custom_ops.precompiled_user_op([x, y],
+                                               lib_path,
+                                               op_name="HashableTest",
+                                               outs=outputs)
+        return x
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[128])
+        y = array_ops.placeholder(np.float32, shape=[128])
+
+        result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+      with session.Session() as sess:
+        report = ReportJSON(self, sess)
+        sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
+        events = report.get_event_trace(sess)
+        return events
+
+    with _temporary_executable_cache():
+      events0 = self._run_in_new_process(build_and_run_model)
+      events1 = self._run_in_new_process(build_and_run_model)
+      # Expect no second compilation as the executable should be cached
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 

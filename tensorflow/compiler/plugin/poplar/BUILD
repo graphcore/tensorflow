@@ -4444,10 +4444,23 @@ tf_xla_py_test(
     ],
 )
 
+cc_binary(
+    name = "libadd_incrementing_custom_with_metadata.so",
+    srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
 tf_xla_py_test(
     name = "executable_cache_test",
     size = "medium",
     srcs = ["tests/executable_cache_test.py"],
+    data = [
+        ":libadd_incrementing_custom_with_metadata.so",
+    ],
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
