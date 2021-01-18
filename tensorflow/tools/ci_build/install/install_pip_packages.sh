@@ -73,18 +73,18 @@ if $(cat /etc/*-release | grep -q 14.04); then
   pip3 install --no-binary=:all: --upgrade numpy==1.14.5
 else
   pip2 install --upgrade numpy==1.14.5
-  pip3 install --upgrade numpy==1.14.5
+  pip3 install --upgrade numpy==1.18.0
 fi
 
 pip2 install scipy==1.1.0
-pip3 install scipy==1.1.0
+pip3 install scipy==1.4.1
 
 pip2 install scikit-learn==0.18.1
-pip3 install scikit-learn==0.18.1
+pip3 install scikit-learn==0.24.0
 
 # pandas required by `inflow`
 pip2 install pandas==0.19.2
-pip3 install pandas==0.19.2
+pip3 install pandas==0.25.2
 
 # Benchmark tests require the following:
 pip2 install psutil
@@ -124,7 +124,7 @@ pip3 install keras_applications==1.0.8 --no-deps
 pip2 install keras_preprocessing==1.0.5 --no-deps
 pip3 install keras_preprocessing==1.0.5 --no-deps
 pip2 install --upgrade h5py==2.8.0 --no-deps
-pip3 install --upgrade h5py==2.8.0 --no-deps
+pip3 install --upgrade h5py==2.10.0 --no-deps
 
 # Estimator
 pip2 install tf-estimator-nightly --no-deps
