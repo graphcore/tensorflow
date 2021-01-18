@@ -21,7 +21,7 @@ limitations under the License.
 #include <poputil/exceptions.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 3;
+int32_t custom_op_api_level = 4;
 }
 
 // If an operation takes one or more tensors of the same shape,
@@ -31,7 +31,8 @@ int32_t custom_op_api_level = 3;
 extern "C" void Build_metadata(
     std::vector<std::int64_t>& allocating_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs) {
   is_elementwise = true;
 }
 

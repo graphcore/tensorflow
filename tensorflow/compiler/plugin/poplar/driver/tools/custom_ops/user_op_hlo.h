@@ -59,6 +59,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   const std::string& GetAttributes() const { return attributes_; }
 
+  bool IsHashable() const { return metadata_.is_hashable_; }
+
  protected:
   std::vector<string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -89,10 +91,12 @@ class HloUserOpInstruction : public HloPoplarInstruction {
     MetadataStructure()
         : allocating_indices_({}),
           input_to_output_tensor_aliasing_({}),
-          is_elementwise_(false) {}
+          is_elementwise_(false),
+          is_hashable_(false) {}
     std::vector<std::int64_t> allocating_indices_;
     std::map<std::int64_t, std::int64_t> input_to_output_tensor_aliasing_;
     bool is_elementwise_;
+    bool is_hashable_;
   };
 
   MetadataStructure metadata_;

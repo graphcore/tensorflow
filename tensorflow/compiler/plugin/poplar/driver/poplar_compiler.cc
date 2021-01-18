@@ -154,9 +154,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -166,6 +168,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_constant_folding.h"
 #include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -270,6 +273,19 @@ bool ShardingEnabled(const HloModule* module) {
     }
   }
   return false;
+}
+
+// Can only be called after CustomOpReplacer
+bool IsCacheable(const HloModule* module) {
+  for (const auto* comp : module->MakeComputationPostOrder()) {
+    for (const auto* inst : comp->MakeInstructionPostOrder()) {
+      if (IsPoplarInstruction(PoplarOp::UserOp)(inst) &&
+          !(Cast<HloUserOpInstruction>(inst)->IsHashable())) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 bool HasPipeliningWithDefaultSharding(const HloModule* module) {
@@ -978,8 +994,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
 
-  const ModuleFilenames filenames =
-      poplar_executor->GetModuleFilenames(*module);
+  ModuleFilenames filenames = poplar_executor->GetModuleFilenames(*module);
+
   if (poplar_executor->HaveExecutableCache()) {
     TF_RETURN_IF_ERROR(poplar_executor->CreateExecutableCacheDirIfMissing());
     TF_ASSIGN_OR_RETURN(executable_cache_lock,
@@ -1521,28 +1537,31 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar::Executable exec =
           poplar::compileGraph(main_graph, progs, opt_flags, progress_logging);
 
-      // If we have the lock, serialize the result to the executable cache.
-      if (executable_cache_lock) {
-        // Serialize some additional options that Poplar does not serialize
-        // on its own.
-        poplar::OptionFlags options_to_serialize =
-            poplar_executor->GetReportExecutionFlags();
+      const bool is_cacheable = IsCacheable(module.get());
+      if (is_cacheable) {
+        // If we have the lock, serialize the result to the executable cache.
+        if (executable_cache_lock) {
+          // Serialize some additional options that Poplar does not serialize
+          // on its own.
+          poplar::OptionFlags options_to_serialize =
+              poplar_executor->GetReportExecutionFlags();
 
-        TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-            filenames, exec, resources.annotations, replication_factor,
-            options_to_serialize, logging_cycle_count,
-            resources.streams_indices.GetAssignedIds(),
-            resources.streams_indices.CheckpointFeedsOrder()));
-      }
+          TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+              filenames, exec, resources.annotations, replication_factor,
+              options_to_serialize, logging_cycle_count,
+              resources.streams_indices.GetAssignedIds(),
+              resources.streams_indices.CheckpointFeedsOrder()));
+        }
 
-      if (poplar_executor->EnableSerialization()) {
-        TF_RETURN_IF_ERROR(
-            poplar_executor->CreateSerializedExecutableDirIfMissing());
+        if (poplar_executor->EnableSerialization()) {
+          TF_RETURN_IF_ERROR(
+              poplar_executor->CreateSerializedExecutableDirIfMissing());
 
-        TF_RETURN_IF_ERROR(PoplarExecutable::Export(
-            filenames, exec, resources, replication_factor,
-            {} /* device_opts */, opt_flags,
-            poplar_executor->GetOrCreatePoplarTarget()));
+          TF_RETURN_IF_ERROR(PoplarExecutable::Export(
+              filenames, exec, resources, replication_factor,
+              {} /* device_opts */, opt_flags,
+              poplar_executor->GetOrCreatePoplarTarget()));
+        }
       }
 
       engine.reset(new poplar::Engine(std::move(exec), opt_flags));

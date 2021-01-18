@@ -118,7 +118,8 @@ must have the following signature:
   extern "C"
   void Build_metadata(std::vector<std::int64_t>& allocating_indices,
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
-    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs)
+    bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+    std::uint32_t num_inputs)
 
 The arguments are:
 
@@ -136,6 +137,9 @@ The arguments are:
 
 * ``is_stateless``: indicates that this operation is stateless. Custom ops
   are stateful by default.
+
+* ``is_hashable``: indicates whether this operation can be uniquely hashed reliably.
+  Custom ops are not hashable by default.
 
 * ``num_inputs``: indicates how many inputs are on the operation.
 
@@ -261,6 +265,19 @@ internally stored state, then the operation is said to be stateless. Marking an
 operation as stateless in the metadata function will allow the TensorFlow
 backend to perform optimisations which would otherwise be disallowed, such as
 common code removal.
+
+Hashable operations
+___________________
+
+The external objects used by custom operations are opaque. The compiler cannot
+detect if these objects or their dependencies change, so compilation graphs
+containing custom operations cannot be uniquely hashed reliably. If you can
+gaurantee that these objects and their dependencies will not change then this
+flag can be set to true.
+
+When compiling a graph, if all ops in the graph are hashable the executable will
+be saved in the executable cache (if enabled). This allows the graph to be run
+subsequent times without needing to recompile it.
 
 .. _operation_attributes:
 
@@ -393,3 +410,4 @@ API level:
 3. ``input_to_output_tensor_aliasing`` replaced ``num_inplace`` to allow finer
     grain description of the operation performed in order to allow more
     optimisations.
+4. ``is_hashable`` parameter has been added to the metadata builder function.
