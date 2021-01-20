@@ -19,6 +19,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -42,7 +43,13 @@ absl::flat_hash_map<int64, int64> HloSliceApplyBase::LayoutDependencies()
   return {{0, 1}, {1, 0}};
 }
 
-uint64 HloSliceApplyBase::NumberOfInplaceOperands() const { return 1; }
+HloPoplarUseDescriptions HloSliceApplyBase::GetUseDescriptions() const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions HloSliceApplyBase::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
+}
 
 bool HloSliceApplyBase::IsPopOpsElementwise() const { return false; }
 

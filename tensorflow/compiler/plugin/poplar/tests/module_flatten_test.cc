@@ -338,9 +338,10 @@ cluster_1  {
   arg0 = f16[] parameter(0)
   arg1 = f16[] parameter(1)
   arg2 = s32[] parameter(2)
+  constant = f16[] constant(0)
   tup = (f16[], f16[]) tuple(arg0, arg1)
   c1 = (f16[], f16[]) conditional(arg2, tup, arg0),
-      branch_computations={body1, body2}
+      branch_computations={body1, body2}, control-predecessors={constant}
   res = f16[] get-tuple-element(c1), index=0
   ROOT %tuple = (f16[]) tuple(res)
 }

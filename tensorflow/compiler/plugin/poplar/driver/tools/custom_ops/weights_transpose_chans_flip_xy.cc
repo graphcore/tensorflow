@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/window_util.h"
 
@@ -75,9 +76,14 @@ HloWeightsTransposeChansFlipXYInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloWeightsTransposeChansFlipXYInstruction::NumberOfInplaceOperands()
-    const {
-  return 0;
+HloPoplarUseDescriptions
+HloWeightsTransposeChansFlipXYInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloWeightsTransposeChansFlipXYInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloWeightsTransposeChansFlipXYInstruction::IsPopOpsElementwise() const {

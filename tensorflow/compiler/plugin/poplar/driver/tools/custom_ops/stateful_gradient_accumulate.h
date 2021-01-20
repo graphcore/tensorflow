@@ -34,7 +34,8 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -77,7 +78,8 @@ class HloStatefulGradientAccumulateWithMomentum
  public:
   explicit HloStatefulGradientAccumulateWithMomentum(
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
  private:
@@ -94,7 +96,8 @@ class HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm
  public:
   explicit HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm(
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
  private:
@@ -131,7 +134,8 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
   bool IsRemote() const { return is_remote_; }
   absl::optional<HloRemoteBufferInfo> RemoteBufferInfo() const;
@@ -164,7 +168,8 @@ class HloGradientAccumulatorAdd : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -187,7 +192,8 @@ class HloGradientAccumulatorSink : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
 
   // The number of mini batches which will be accumulated.

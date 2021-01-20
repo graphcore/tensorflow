@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_factor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -36,8 +37,14 @@ HloReplicationFactorInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloReplicationFactorInstruction::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloReplicationFactorInstruction::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloReplicationFactorInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
 bool HloReplicationFactorInstruction::IsPopOpsElementwise() const {
@@ -80,8 +87,14 @@ HloReplicationNormaliseInstruction::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloReplicationNormaliseInstruction::NumberOfInplaceOperands() const {
-  return 1;
+HloPoplarUseDescriptions
+HloReplicationNormaliseInstruction::GetUseDescriptions() const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions
+HloReplicationNormaliseInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloReplicationNormaliseInstruction::IsPopOpsElementwise() const {

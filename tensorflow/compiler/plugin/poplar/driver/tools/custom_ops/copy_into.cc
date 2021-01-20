@@ -19,6 +19,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
@@ -34,7 +35,14 @@ absl::flat_hash_set<int64> HloCopyInto::AllocatingIndices() const { return {}; }
 absl::flat_hash_map<int64, int64> HloCopyInto::LayoutDependencies() const {
   return {};
 }
-uint64 HloCopyInto::NumberOfInplaceOperands() const { return 1; }
+
+HloPoplarUseDescriptions HloCopyInto::GetUseDescriptions() const {
+  return UseDescriptionsSimpleNoTuple0thOperandAliasing(this);
+}
+
+HloPoplarBufferDescriptions HloCopyInto::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
+}
 
 bool HloCopyInto::IsPopOpsElementwise() const { return false; }
 

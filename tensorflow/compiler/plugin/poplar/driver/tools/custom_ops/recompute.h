@@ -33,7 +33,8 @@ class HloSuggestRecomputeInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -57,7 +58,8 @@ class HloBlockRecomputeInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -83,7 +85,8 @@ class HloRecomputationCheckpointInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -111,7 +114,8 @@ class HloRecomputationInputInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool IsPopOpsElementwise() const override;
 
  protected:

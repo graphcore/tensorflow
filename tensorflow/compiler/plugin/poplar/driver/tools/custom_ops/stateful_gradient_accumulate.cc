@@ -19,6 +19,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -55,8 +56,15 @@ HloStatefulGradientAccumulate::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloStatefulGradientAccumulate::NumberOfInplaceOperands() const {
-  return operand_count();
+HloPoplarUseDescriptions HloStatefulGradientAccumulate::GetUseDescriptions()
+    const {
+  return UseDescriptionsForwardsBuffers(this, operand_count(),
+                                        BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+HloPoplarBufferDescriptions
+HloStatefulGradientAccumulate::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloStatefulGradientAccumulate::IsPopOpsElementwise() const {
@@ -114,9 +122,15 @@ HloStatefulGradientAccumulateWithMomentum::
           operands, num_mini_batches,
           PoplarOp::StatefulGradientAccumulateWithMomentum) {}
 
-uint64 HloStatefulGradientAccumulateWithMomentum::NumberOfInplaceOperands()
-    const {
-  return 2;
+HloPoplarUseDescriptions
+HloStatefulGradientAccumulateWithMomentum::GetUseDescriptions() const {
+  return UseDescriptionsForwardsBuffers(this, 2,
+                                        BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+HloPoplarBufferDescriptions
+HloStatefulGradientAccumulateWithMomentum::GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 absl::flat_hash_map<int64, int64>
@@ -146,9 +160,17 @@ HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
           PoplarOp::
               StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm) {}
 
-uint64 HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
-    NumberOfInplaceOperands() const {
-  return operand_count() - 1;
+HloPoplarUseDescriptions
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    GetUseDescriptions() const {
+  return UseDescriptionsForwardsBuffers(this, operand_count() - 1,
+                                        BufferUseKind::USE_ALIAS_READ_WRITE);
+}
+
+HloPoplarBufferDescriptions
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    GetBufferDescriptions() const {
+  return BufferDescriptionsNoAllocations();
 }
 
 absl::flat_hash_map<int64, int64>
@@ -221,8 +243,16 @@ HloGradientAccumulatorCreate::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloGradientAccumulatorCreate::NumberOfInplaceOperands() const {
-  return 0;
+HloPoplarUseDescriptions HloGradientAccumulatorCreate::GetUseDescriptions()
+    const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions
+HloGradientAccumulatorCreate::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(
+      this, is_remote_ ? BufferLocality::kRemoteMemory
+                       : BufferLocality::kDeviceMemory);
 }
 
 bool HloGradientAccumulatorCreate::IsPopOpsElementwise() const { return false; }
@@ -294,7 +324,14 @@ HloGradientAccumulatorAdd::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloGradientAccumulatorAdd::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloGradientAccumulatorAdd::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloGradientAccumulatorAdd::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloGradientAccumulatorAdd::IsPopOpsElementwise() const { return false; }
 
@@ -334,8 +371,19 @@ HloGradientAccumulatorSink::LayoutDependencies() const {
   return {};
 }
 
-uint64 HloGradientAccumulatorSink::NumberOfInplaceOperands() const {
-  return operand_count();
+HloPoplarUseDescriptions HloGradientAccumulatorSink::GetUseDescriptions()
+    const {
+  HloPoplarUseDescriptions descriptions;
+  for (int64 i = 0; i != operand_count(); ++i) {
+    descriptions.push_back(HloPoplarUseDescription{
+        i, ShapeIndex{}, ShapeIndex{}, BufferUseKind::USE_ALIAS_READ_ONLY});
+  }
+  return descriptions;
+}
+
+HloPoplarBufferDescriptions HloGradientAccumulatorSink::GetBufferDescriptions()
+    const {
+  return BufferDescriptionsNoAllocations();
 }
 
 bool HloGradientAccumulatorSink::IsPopOpsElementwise() const { return false; }

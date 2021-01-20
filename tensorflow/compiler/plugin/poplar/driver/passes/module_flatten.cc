@@ -25,7 +25,14 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-
+namespace {
+Status ReplacePreservingControlDependencies(HloInstruction* old_inst,
+                                            HloInstruction* new_inst) {
+  TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(old_inst));
+  TF_RETURN_IF_ERROR(old_inst->DropAllControlDeps());
+  return old_inst->parent()->ReplaceInstruction(old_inst, new_inst);
+}
+}  // namespace
 ModuleFlatten::ModuleFlatten(CompilerAnnotations& annotations)
     : annotations_(annotations) {}
 
@@ -89,7 +96,9 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
                   caller->parent()->AddInstruction(HloInstruction::CreateCall(
                       caller->shape(), caller->operands(),
                       caller->while_body()));
-              caller->parent()->ReplaceInstruction(caller, call_op);
+
+              TF_RETURN_IF_ERROR(
+                  ReplacePreservingControlDependencies(caller, call_op));
             } else if (caller->opcode() == HloOpcode::kConditional) {
               RemoveMapEntry(caller);
               auto* predicate_op = caller->parent()->AddInstruction(
@@ -112,7 +121,8 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
                         call_op, chain_op));
                 annotations_.flattened_inst_map_bwd[chain_op] = nullptr;
               }
-              caller->parent()->ReplaceInstruction(caller, chain_op);
+              TF_RETURN_IF_ERROR(
+                  ReplacePreservingControlDependencies(caller, chain_op));
             }
           }
         }
@@ -131,7 +141,7 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
           if (call_site.context() == CallContext::kSequential) {
             auto* caller = call_site.instruction();
             if (caller->opcode() == HloOpcode::kCall) {
-              caller->DropAllControlDeps();
+              TF_RETURN_IF_ERROR(caller->DropAllControlDeps());
               RemoveMapEntry(caller);
               TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
                                   CallInliner::Inline(caller));

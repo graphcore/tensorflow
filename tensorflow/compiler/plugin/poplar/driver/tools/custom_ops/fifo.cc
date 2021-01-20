@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -43,7 +44,13 @@ absl::flat_hash_map<int64, int64> HloFifoInstruction::LayoutDependencies()
   return {};
 }
 
-uint64 HloFifoInstruction::NumberOfInplaceOperands() const { return 0; }
+HloPoplarUseDescriptions HloFifoInstruction::GetUseDescriptions() const {
+  return UseDescriptionsNoInputOutputAlias();
+}
+
+HloPoplarBufferDescriptions HloFifoInstruction::GetBufferDescriptions() const {
+  return BufferDescriptionsAllocatesAllOutputs(this);
+}
 
 bool HloFifoInstruction::IsPopOpsElementwise() const { return true; }
 
