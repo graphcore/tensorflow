@@ -109,7 +109,6 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/Cast/convert.*/Cast',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
-          'copy*_host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 

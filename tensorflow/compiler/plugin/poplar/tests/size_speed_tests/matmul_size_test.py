@@ -137,7 +137,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
-      report.assert_total_tile_memory(15850928)
+      report.assert_total_tile_memory(18791166)
 
   def testSerializedMatmul(self):
     with self.session() as sess:
