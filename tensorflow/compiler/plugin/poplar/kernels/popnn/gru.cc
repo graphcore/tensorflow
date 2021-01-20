@@ -134,10 +134,11 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
         TensorShapeUtils::MakeShape(
             std::vector<int64>({time_steps, batch_size}),
             &expected_att_score_shape);
-        OP_REQUIRES(ctx, ctx->InputShape(5) == expected_att_score_shape,
-                    errors::InvalidArgument(absl::StrFormat(
-                        "The att_score tensor needs to be of shape [%u, %u].",
-                        time_steps, batch_size)));
+        OP_REQUIRES(
+            ctx, ctx->InputShape(5) == expected_att_score_shape,
+            errors::InvalidArgument(
+                "The attention_score tensor's dimension need to be the "
+                "same as the first two dimensions of the input tensor."));
       }
     }
 
