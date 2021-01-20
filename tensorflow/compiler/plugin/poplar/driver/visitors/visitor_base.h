@@ -80,6 +80,8 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleAddDependency(HloInstruction* hlo) override;
 
+  Status Postprocess(HloInstruction* hlo) override;
+
   Status HandleHloOp(HloInstruction* hlo);
 
   Status FinishVisit(HloInstruction* root) final;

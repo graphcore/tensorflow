@@ -410,6 +410,12 @@ Status BaseVisitor::HandleInfeed(HloInstruction* inst) {
       "loops.");
 }
 
+Status BaseVisitor::Postprocess(HloInstruction* inst) {
+  // Update the progress bar.
+  resources_.progress_bar->Update(inst);
+  return Status::OK();
+}
+
 Status BaseVisitor::FinishVisit(HloInstruction* root) {
   resources_.execution_counter_scopes.pop();
   return FinishScopedVisit(root);
