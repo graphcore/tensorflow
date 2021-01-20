@@ -134,15 +134,15 @@ def _autocast_dataset(dataset):
                  for spec in nest.flatten(dataset.element_spec))):
     return dataset
 
-  def autocast_tensors(*tensors):
+  def autocast_structure(*structure):
     def autocast_tensor(tensor):
       if tensor.dtype == dtypes.float64:
         return cast(tensor, dtypes.float32)
       return tensor
 
-    return [autocast_tensor(tensor) for tensor in tensors]
+    return nest.map_structure(autocast_tensor, structure)
 
-  return dataset.map(autocast_tensors)
+  return dataset.map(autocast_structure)
 
 
 class _TensorflowOptimizerWrapper(Optimizer):

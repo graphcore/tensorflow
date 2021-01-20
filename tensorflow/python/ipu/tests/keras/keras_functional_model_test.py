@@ -23,6 +23,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.eager import backprop
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
+from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
@@ -1424,6 +1425,65 @@ class IPUModelModelTest(test.TestCase):
 
     self.assertEqual(cpu_out.shape, ipu_out.shape)
     self.assertAllClose(cpu_out, ipu_out)
+
+  @test_util.run_v2_only
+  def testAutocast_ComplexDatasetStructure(self):
+    base_layer_utils.enable_v2_dtype_behavior()
+
+    def f():
+      input_1 = keras.Input(32)
+      input_2 = keras.Input(32)
+      input_3 = keras.Input(32)
+
+      init = keras.initializers.Constant(1)
+
+      dense_1 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_1)
+      dense_2 = keras.layers.Dense(16,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(input_2)
+
+      cat = keras.layers.Concatenate()([dense_1, dense_2, input_3])
+
+      dense_3 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+      dense_4 = keras.layers.Dense(1,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
+
+      return ((input_1, input_2, input_3), (dense_3, dense_4))
+
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    ipu.utils.configure_ipu_system(cfg)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Model(*f(), accumulation_count=8, layer_replacement=True)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      x1 = np.ones((32), dtype=np.float64)
+      x2 = np.ones((32), dtype=np.float64)
+      x3 = np.ones((32), dtype=np.float64)
+      y1 = np.ones((1), dtype=np.float64)
+      y2 = np.ones((1), dtype=np.float64)
+      ds_x = dataset_ops.Dataset.from_tensors((x1, x2, x3))
+      ds_y = dataset_ops.Dataset.from_tensors((y1, y2))
+      ds_xy = dataset_ops.Dataset.zip(
+          (ds_x, ds_y)).repeat(32).batch(4, drop_remainder=True)
+      ds_x = dataset_ops.Dataset.zip(
+          (ds_x,)).repeat(32).batch(4, drop_remainder=True)
+
+      m.fit(ds_xy)
+      m.predict(ds_x)
+      m.evaluate(ds_xy)
+
+      # No exceptions thrown
 
 
 if __name__ == '__main__':
