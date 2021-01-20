@@ -570,7 +570,12 @@ class PopnnDynamicGRU(PopnnGRU):
     return False
 
   #pylint: disable=arguments-differ
-  def call(self, inputs, seq_len, initial_state=None, training=True):
+  def call(self,
+           inputs,
+           seq_len,
+           initial_state=None,
+           training=True,
+           time_major=True):
     """Runs the forward step for the DynamicGRU model.
 
       Args:
@@ -579,6 +584,7 @@ class PopnnDynamicGRU(PopnnGRU):
         initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
         If not provided, the state is initialized to zeros.
         training: whether this operation will be used in training or inference.
+        time_major: whether the time dimension is the first demension.
 
       Returns:
         output: a tensor of shape [time_len, batch_size, num_units].
@@ -592,6 +598,8 @@ class PopnnDynamicGRU(PopnnGRU):
     dtype = self.dtype
 
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+    if not time_major:
+      inputs = array_ops.transpose(inputs, [1, 0, 2])
 
     batch_size = array_ops.shape(inputs)[1]
 
@@ -689,7 +697,8 @@ class PopnnAUGRU(PopnnGRU):
            seq_len,
            attention_score,
            initial_state=None,
-           training=True):
+           training=True,
+           time_major=True):
     """Runs the forward step for the AUGRU model.
     Args:
         inputs: 3-D tensor with shape [time_len, batch_size, input_size].
@@ -699,6 +708,7 @@ class PopnnAUGRU(PopnnGRU):
         initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
           If not provided, the state is initialized to zeros.
         training: whether this operation will be used in training or inference.
+        time_major: whether the time dimension is the first dimension.
 
       Returns:
         output: a tensor of shape [time_len, batch_size, num_units].
@@ -711,6 +721,9 @@ class PopnnAUGRU(PopnnGRU):
 
     dtype = self.dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+    if not time_major:
+      inputs = array_ops.transpose(inputs, [1, 0, 2])
+      attention_score = array_ops.transpose(attention_score, [1, 0])
 
     batch_size = array_ops.shape(inputs)[1]
 

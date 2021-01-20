@@ -14,9 +14,16 @@
 # ==============================================================================
 """Tests covering augru used by the DIEN model."""
 
+from functools import partial
 import numpy as np
+
 from tensorflow.python.framework import test_util
+from tensorflow.python.client import session
 from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import state_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import dtypes
@@ -24,6 +31,10 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu.ops.rnn_ops import PopnnAUGRU
 from tensorflow.python.ops.rnn_cell import RNNCell
 from tensorflow.python.ops.rnn import dynamic_rnn
+from tensorflow.python.ops import variables
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.training import gradient_descent
+from tensorflow.python.util import nest
 
 _BIAS_VARIABLE_NAME = "bias"
 _WEIGHTS_VARIABLE_NAME = "kernel"
@@ -33,7 +44,7 @@ class TestDIENAUGRU(test_util.TensorFlowTestCase):
   """Testing augru layer"""
   @classmethod
   def setUpClass(cls):
-    cls.model_dtype = tf.float32
+    cls.model_dtype = dtypes.float32
     cls.HIDDEN_SIZE = 2
 
   def test_augru(self):
@@ -41,43 +52,56 @@ class TestDIENAUGRU(test_util.TensorFlowTestCase):
     bs = 3
     inputs_value = np.ones([seq_len, bs, self.HIDDEN_SIZE], np.float32)
     seq_len_value = np.array([1, 2, 2], np.int32)
-    alphas_value = np.ones([bs, seq_len], np.float32)
+    alphas_value = np.ones([seq_len, bs], np.float32)
     alphas_value = alphas_value * 0.5
-    inputs_ph = tf.placeholder(shape=[seq_len, bs, self.HIDDEN_SIZE],
-                               dtype=self.model_dtype)
-    seq_len_ph = tf.placeholder(shape=[bs], dtype=tf.int32)
-    alphas_ph = tf.placeholder(shape=[bs, seq_len], dtype=self.model_dtype)
+    inputs_ph = array_ops.placeholder(shape=[seq_len, bs, self.HIDDEN_SIZE],
+                                      dtype=self.model_dtype)
+    seq_len_ph = array_ops.placeholder(shape=[bs], dtype=dtypes.int32)
+    alphas_ph = array_ops.placeholder(shape=[seq_len, bs],
+                                      dtype=self.model_dtype)
     gru_kernel = np.zeros((4, 6))
     cfg = utils.create_ipu_config(profiling=False, profile_execution=False)
     cfg = utils.auto_select_ipus(cfg, 1)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
     with ops.device("/device:IPU:0"):
-      train_ipu = ipu_compiler.compile(
-          self.augru_model, inputs=[inputs_ph, seq_len_ph, alphas_ph])
+      time_major_model = partial(self.augru_model,
+                                 time_major=True,
+                                 scope_name="time_major")
+      batch_major_model = partial(self.augru_model,
+                                  time_major=False,
+                                  scope_name="batch_major")
+      train_ipu_time_major = ipu_compiler.compile(
+          time_major_model, inputs=[inputs_ph, seq_len_ph, alphas_ph])
+      train_ipu_batch_major = ipu_compiler.compile(
+          batch_major_model, inputs=[inputs_ph, seq_len_ph, alphas_ph])
       train_cpu = ipu_compiler.compile(
           self.augru_model_cpu, inputs=[inputs_ph, seq_len_ph, alphas_ph])
-    with tf.Session() as sess:
-      sess.run(tf.global_variables_initializer())
-      for var in tf.global_variables():
-        if var.name == 'popnn_augru/biases:0':
+
+    with session.Session() as sess:
+      sess.run(variables.global_variables_initializer())
+      for var in variables.global_variables():
+        if var.name == 'time_major/popnn_augru/biases:0' \
+            or var.name == 'batch_major/popnn_augru/biases:0':
           gru_bias = np.array([[1, 1], [1, 1], [0, 0]])
           gru_bias_var = var
-      sess.run(tf.assign(gru_bias_var, gru_bias))
-      for var in tf.global_variables():
-        if var.name == 'popnn_augru/kernel:0':
+          sess.run(state_ops.assign(gru_bias_var, gru_bias))
+      for var in variables.global_variables():
+        if var.name == 'time_major/popnn_augru/kernel:0' \
+            or var.name == 'batch_major/popnn_augru/kernel:0':
           gru_kernel_var = var
         if var.name == 'augru2/vec_att_gru_cell/gates/kernel:0':
           gru_u_r_kernel = sess.run(var)
         if var.name == 'augru2/vec_att_gru_cell/candidate/kernel:0':
           gru_c_kernel = sess.run(var)
+
       # need to roll here because the cellorder is different
       # from the implementation of the ipu version
-      gru_kernel = tf.concat(
+      gru_kernel = array_ops.concat(
           [np.roll(gru_u_r_kernel, 2, axis=1), gru_c_kernel], 1)
-
-      for var in tf.global_variables():
-        if var.name == 'popnn_augru/kernel:0':
+      for var in variables.global_variables():
+        if var.name == 'time_major/popnn_augru/kernel:0' \
+            or var.name == 'batch_major/popnn_augru/kernel:0':
           sess.run(tf.assign(var, gru_kernel))
 
       outputs_expected = np.array(
@@ -87,17 +111,25 @@ class TestDIENAUGRU(test_util.TensorFlowTestCase):
                        seq_len_ph: seq_len_value,
                        alphas_ph: alphas_value
                    }))
-      outputs = np.array(
-          sess.run(train_ipu,
+      outputs_time_major = np.array(
+          sess.run(train_ipu_time_major,
                    feed_dict={
                        inputs_ph: inputs_value,
                        seq_len_ph: seq_len_value,
                        alphas_ph: alphas_value
                    }))
+      outputs_batch_major = np.array(
+          sess.run(train_ipu_batch_major,
+                   feed_dict={
+                       inputs_ph: inputs_value,
+                       seq_len_ph: seq_len_value,
+                       alphas_ph: alphas_value
+                   }))
+
       gru_kernel_updated = sess.run(gru_kernel_var)
 
       # get the updated weights
-      for var in tf.global_variables():
+      for var in variables.global_variables():
         if var.name == 'augru2/vec_att_gru_cell/gates/kernel:0':
           gru_kernel_u_r_cpu = sess.run(var)
         if var.name == 'augru2/vec_att_gru_cell/candidate/kernel:0':
@@ -108,40 +140,43 @@ class TestDIENAUGRU(test_util.TensorFlowTestCase):
       kernel_expeted = np.concatenate(
           [np.roll(cpu_kernel_u_r, 2, axis=1), cpu_kernel_c], axis=1)
 
-      self.assertAlmostEqual(np.mean(outputs - outputs_expected),
+      self.assertAlmostEqual(np.mean(outputs_time_major - outputs_expected),
+                             np.float32(0.0),
+                             delta=1e-7)
+      self.assertAlmostEqual(np.mean(outputs_batch_major - outputs_expected),
                              np.float32(0.0),
                              delta=1e-7)
       self.assertAlmostEqual(np.mean(gru_kernel_updated - kernel_expeted),
                              np.float32(0.0),
                              delta=1e-8)
 
-  def augru_model(self, inputs, seq_len, alphas):
-    alphas = tf.reshape(alphas, [tf.shape(inputs)[0], -1])
-    augru = PopnnAUGRU(self.HIDDEN_SIZE)
-    rnn_outputs, _ = augru(inputs, alphas, seq_len)
-    rnn_outputs = tf.transpose(rnn_outputs, [1, 0, 2])
-    loss = tf.reduce_mean(rnn_outputs - 1.0)
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=1)
-    grads_and_vars = optimizer.compute_gradients(loss)
-    train_op = optimizer.apply_gradients(grads_and_vars)
-    return rnn_outputs, train_op
+  def augru_model(self, inputs, seq_len, alphas, time_major, scope_name):
+    with variable_scope.variable_scope(scope_name):
+      augru = PopnnAUGRU(self.HIDDEN_SIZE)
+      if not time_major:
+        inputs = array_ops.transpose(inputs, [1, 0, 2])
+        alphas = array_ops.transpose(alphas, [1, 0])
+      rnn_outputs, _ = augru(inputs, seq_len, alphas, time_major=time_major)
+      rnn_outputs = array_ops.transpose(rnn_outputs, [1, 0, 2])
+      loss = math_ops.reduce_mean(rnn_outputs - 1.0)
+      optimizer = gradient_descent.GradientDescentOptimizer(learning_rate=1)
+      grads_and_vars = optimizer.compute_gradients(loss)
+      train_op = optimizer.apply_gradients(grads_and_vars)
+      return rnn_outputs, train_op
 
   def augru_model_cpu(self, inputs, seq_len, alphas):
-    # the cpu implementation is [batch, time, input]
-    #  so the input and attention_score need to transpose here
     inputs = tf.transpose(inputs, [1, 0, 2])
-    alphas = tf.transpose(alphas, [1, 0])
-    alphas = tf.reshape(alphas, [tf.shape(inputs)[0], -1])
-    alphas = tf.expand_dims(alphas, -1)
-    # concat inputs in front of the attention tensor
+    alphas = array_ops.reshape(alphas, [array_ops.shape(inputs)[0], -1])
+    alphas = array_ops.expand_dims(alphas, -1)
+    # concat attention in front of inputs
     inputs = array_ops.concat([inputs, alphas], axis=2)
     rnn_outputs2, _ = dynamic_rnn(VecAttGRUCell(self.HIDDEN_SIZE),
                                   inputs=inputs,
                                   sequence_length=seq_len,
                                   dtype=self.model_dtype,
                                   scope="augru2")
-    loss = tf.reduce_mean(rnn_outputs2 - 1.0)
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=1)
+    loss = math_ops.reduce_mean(rnn_outputs2 - 1.0)
+    optimizer = gradient_descent.GradientDescentOptimizer(learning_rate=1)
     grads_and_vars = optimizer.compute_gradients(loss)
     train_op = optimizer.apply_gradients(grads_and_vars)
     return rnn_outputs2, train_op
@@ -184,6 +219,7 @@ class VecAttGRUCell(RNNCell):
 
   def call(self, inputs, state):
     """Gated recurrent unit (GRU) with nunits cells."""
+    # [batch, seq_len, input_state]
     # The attention infomation is after the end of inputs data.
     seq_len = inputs.shape[0]
     hidden_size = inputs.shape[1]
@@ -202,7 +238,8 @@ class VecAttGRUCell(RNNCell):
       bias_ones = self._bias_initializer
       if self._bias_initializer is None:
         bias_ones = init_ops.constant_initializer(1.0, dtype=inputs.dtype)
-      with vs.variable_scope("gates"):  # Reset gate and update gate.
+      with variable_scope.variable_scope(
+          "gates"):  # Reset gate and update gate.
         self._gate_linear = _Linear(
             [real_inputs, state],
             2 * self._num_units,
@@ -215,7 +252,7 @@ class VecAttGRUCell(RNNCell):
 
     r_state = r * state
     if self._candidate_linear is None:
-      with vs.variable_scope("candidate"):
+      with variable_scope.variable_scope("candidate"):
         self._candidate_linear = _Linear(
             [real_inputs, r_state],
             self._num_units,
@@ -273,20 +310,21 @@ class _Linear(object):
 
     dtype = [a.dtype for a in args][0]
 
-    scope = vs.get_variable_scope()
-    with vs.variable_scope(scope) as outer_scope:
-      self._weights = vs.get_variable(_WEIGHTS_VARIABLE_NAME,
-                                      [total_arg_size, output_size],
-                                      dtype=dtype,
-                                      initializer=kernel_initializer)
+    scope = variable_scope.get_variable_scope()
+    with variable_scope.variable_scope(scope) as outer_scope:
+      self._weights = variable_scope.get_variable(
+          _WEIGHTS_VARIABLE_NAME, [total_arg_size, output_size],
+          dtype=dtype,
+          initializer=kernel_initializer)
       if build_bias:
-        with vs.variable_scope(outer_scope) as inner_scope:
+        with variable_scope.variable_scope(outer_scope) as inner_scope:
           inner_scope.set_partitioner(None)
           if bias_initializer is None:
             bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
-          self._biases = vs.get_variable(_BIAS_VARIABLE_NAME, [output_size],
-                                         dtype=dtype,
-                                         initializer=bias_initializer)
+          self._biases = variable_scope.get_variable(
+              _BIAS_VARIABLE_NAME, [output_size],
+              dtype=dtype,
+              initializer=bias_initializer)
 
   def __call__(self, args):
     if not self._is_sequence:
