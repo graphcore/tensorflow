@@ -120,7 +120,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/Cast/convert.*/Cast',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/',
-          'copy*_host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
