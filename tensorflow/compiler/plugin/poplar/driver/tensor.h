@@ -134,7 +134,6 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
 
 StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                                             const TensorTarget& tensor_target,
-                                            const xla::Shape& shape,
                                             CompilerResources& resources,
                                             const TensorMap& tensor_map,
                                             const std::string& debug_name);
