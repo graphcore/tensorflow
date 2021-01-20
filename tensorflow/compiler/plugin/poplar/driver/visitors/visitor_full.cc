@@ -426,6 +426,10 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
       }
     }
   }
+
+  // Update the progress bar.
+  resources_.progress_bar->Update(inst);
+
   return Status::OK();
 }
 

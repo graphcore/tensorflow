@@ -481,6 +481,43 @@ bool InitializeCycleCounter(poplar::Graph& graph,
   }
 }
 
+bool EnableProgressBar(const HloModule* module) {
+  const std::string& show_progress_bar =
+      PoplarXlaFlags::Get().show_progress_bar;
+
+  if (show_progress_bar == "true") {
+    return true;
+  } else if (show_progress_bar == "false") {
+    return false;
+  } else if (show_progress_bar == "auto") {
+    int64 num_expensive_ops = 0;
+    for (const HloComputation* comp : module->computations()) {
+      for (const HloInstruction* inst : comp->instructions()) {
+        switch (inst->opcode()) {
+          case HloOpcode::kAllReduce:
+          case HloOpcode::kCholesky:
+          case HloOpcode::kConvolution:
+          case HloOpcode::kCustomCall:
+          case HloOpcode::kDot:
+          case HloOpcode::kInfeed:
+          case HloOpcode::kOutfeed:
+          case HloOpcode::kTriangularSolve: {
+            num_expensive_ops++;
+            break;
+          }
+          default: { break; }
+        }
+      }
+    }
+    return num_expensive_ops >= 2;
+  } else {
+    LOG(FATAL) << "Unknown value for 'show_progress_bar' flag. Needs to be one "
+                  "of 'true', 'false' or 'auto' but got "
+               << show_progress_bar;
+    return true;
+  }
+}
+
 void setFpBehaviour(poplar::Graph& graph,
                     const IpuOptions::FloatingPointBehaviour& fp_control,
                     poplar::program::Sequence& seq) {
@@ -1091,11 +1128,14 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
-      poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles());
+      poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles(),
+      EnableProgressBar(module.get()));
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
+
+  resources.progress_bar->Start();
 
   {
     HloPassPipeline pipeline("OptimizerPipeline");
@@ -1424,6 +1464,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     EntryVisitor visitor(resources, entry);
     try {
+      resources.progress_bar->MoveToNextStage();
       // Run a compile only Poplar specific pipeline - these passes do not
       // modify the module in a functional way.
       VLOG(1) << "Begin Poplar Pipeline.";
@@ -1437,6 +1478,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
       VLOG(1) << "End Poplar Pipeline.";
 
+      resources.progress_bar->MoveToNextStage();
+
       auto order = module->schedule().sequence(entry).instructions();
       TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
           resources, poplar_executor->VerifiedTransfers(),
@@ -1446,6 +1489,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       VLOG(1) << "Begin Poplar graph contruction.";
       TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
       VLOG(1) << "End Poplar graph contruction.";
+      resources.progress_bar->MoveToNextStage();
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Build graph] ", e);
     }
@@ -1502,7 +1546,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     try {
       VLOG(1) << "Begin compiling Poplar engine " << module->name();
 
-      auto progress_logging = [](int progress, int total) {
+      auto progress_logging = [&resources](int progress, int total) {
+        resources.progress_bar->Update(progress, total);
+        // Log into VLOG too.
         float progress_percent = std::floor(
             100.0f * static_cast<float>(progress) / static_cast<float>(total));
         VLOG(1) << "Poplar compilation " << progress_percent << "% complete";
@@ -1597,6 +1643,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           inst_info, tensorflow_info, duration);
     }
   }
+
+  resources.progress_bar->Finish();
 
   std::unique_ptr<Executable> executable = absl::make_unique<PoplarExecutable>(
       std::move(module), std::move(profile_printer),

@@ -235,6 +235,11 @@ For a full list, refer to  :ref:`api-section`.
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be
       executed.
+  * - :samp:`--show_progress_bar {true/false/auto}`
+    - Whether to show the compilation progress bar. Either ``true``, ``false``
+      or ``auto``. When set to ``auto``, the progress bar will only be enabled
+      when compiling a graph which can take more than few seconds to compile.
+      Defaults to ``false``.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
