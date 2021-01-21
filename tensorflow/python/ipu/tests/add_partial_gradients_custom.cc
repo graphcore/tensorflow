@@ -124,7 +124,7 @@ extern "C" poplar::program::Program Build(
       graph.setTileMapping(v, tile);
 
       // Provide a bogus cycle count estimate for the profiler.
-      graph.setCycleEstimate(v, 1);
+      graph.setPerfEstimate(v, 1);
     }
   }
 
