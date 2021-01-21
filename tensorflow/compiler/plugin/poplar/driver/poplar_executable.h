@@ -147,7 +147,7 @@ class PoplarExecutable : public Executable {
     int64 process_count;
   };
 
-  static StatusOr<PoplarExecutable*> Deserialize(
+  static StatusOr<std::unique_ptr<PoplarExecutable>> Deserialize(
       std::unique_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
       std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
