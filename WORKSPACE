@@ -161,13 +161,3 @@ new_git_repository(
     commit = "f047ef4586869855f00e72312e7b4d78d11694b1",
     build_file = "//third_party/ipus/horovod:lbfgspp.BUILD",
 )
-
-http_archive(
-    name = "horovod_boost",
-    build_file = "//third_party/ipus/horovod:boost.BUILD",
-    sha256 = "da3411ea45622579d419bfda66f45cd0f8c32a181d84adfa936f5688388995cf",
-    strip_prefix = "boost_1_68_0",
-    urls = [
-        "https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
-    ],
-)

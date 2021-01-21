@@ -928,6 +928,17 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
         ],
     )
 
+    tf_http_archive(
+        name = "horovod_boost",
+        build_file = clean_dep("//third_party/ipus/horovod:boost.BUILD"),
+        sha256 = "da3411ea45622579d419bfda66f45cd0f8c32a181d84adfa936f5688388995cf",
+        strip_prefix = "boost_1_68_0",
+        urls = [
+            "https://storage.googleapis.com/mirror.tensorflow.org/dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
+            "https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
+        ],
+    )
+
 def tf_bind():
     """Bind targets for some external repositories"""
     ##############################################################################
