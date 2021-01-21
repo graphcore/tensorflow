@@ -31,8 +31,7 @@ SendFromFirstReplicaCallbackCreator(const tensorflow::TensorShape& shape,
                                     tensorflow::DataType type,
                                     tensorflow::Rendezvous::ParsedKey key,
                                     tensorflow::Rendezvous* rendezvous,
-                                    int64 num_replicas,
-                                    bool can_avoid_buffer_copy);
+                                    int64 num_replicas);
 
 bool CanPoplarSendBuffersOverlap(const poplar::OptionFlags& flags,
                                  const IpuOptions& options);
