@@ -56,14 +56,16 @@ HloUserOpInstruction::HloUserOpInstruction(
     void (*metadataSignature)(
         std::vector<std::int64_t> & allocating_indices,
         std::map<std::int64_t, std::int64_t> & input_to_output_tensor_aliasing,
-        bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs);
+        bool& is_elementwise, bool& is_stateless, bool& is_hashable,
+        std::uint32_t num_inputs);
 
     metadataSignature =
         reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
 
     metadataSignature(metadata_.allocating_indices_,
                       metadata_.input_to_output_tensor_aliasing_,
-                      metadata_.is_elementwise_, stateless, num_inputs_);
+                      metadata_.is_elementwise_, stateless,
+                      metadata_.is_hashable_, num_inputs_);
   }
   set_custom_call_has_side_effect(!stateless);
 }
@@ -123,6 +125,8 @@ std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
 
   attributes.push_back(
       absl::StrCat("metadata_.is_elementwise_=", metadata_.is_elementwise_));
+  attributes.push_back(
+      absl::StrCat("metadata_.is_hashable_=", metadata_.is_hashable_));
   attributes.push_back(absl::StrCat(
       "metadata_.input_to_output_tensor_aliasing_=",
       absl::StrJoin(
