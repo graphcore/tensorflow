@@ -477,15 +477,6 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
   const bool can_buffers_overlap =
       CanPoplarSendBuffersOverlap(option_flags_, current_config_);
 
-  // The IPU model uses temporary buffers, so they must be copied.
-  const bool can_avoid_buffer_copy =
-      !can_buffers_overlap && !PoplarXlaFlags::Get().use_ipu_model;
-
-  if (can_avoid_buffer_copy) {
-    VLOG(1)
-        << "Assuming that Poplar send buffer pointers can be used without copy";
-  }
-
   for (const SendRecvInfo& send : send_infos) {
     VLOG(1) << "Connecting Poplar IPU->host stream to rendezvous key '"
             << send.rendezvous_key << "' with shape " << send.shape;
@@ -506,7 +497,7 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     auto* rendezvous = GetRendezvous();
 
     auto callback_creator = SendFromFirstReplicaCallbackCreator(
-        shape, type, key, rendezvous, num_replicas, can_avoid_buffer_copy);
+        shape, type, key, rendezvous, num_replicas);
 
     for (int64 replica_id = 0; replica_id < num_replicas; ++replica_id) {
       current_engine_->connectStreamToCallback(send.stream_handle, replica_id,

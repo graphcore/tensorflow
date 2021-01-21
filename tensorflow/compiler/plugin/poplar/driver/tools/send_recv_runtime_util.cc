@@ -24,64 +24,22 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-namespace {
-
-// Non-owning view of a Poplar tensor buffer. Can be used to make
-// a `tensorflow::Tensor` backed by this buffer without copying
-// memory. The backing memory must outlive the `Tensor`.
-class PoplarTensorBufferView : public tensorflow::TensorBuffer {
- public:
-  PoplarTensorBufferView(void* data, std::size_t size)
-      : TensorBuffer(data), size_(size) {}
-
-  ~PoplarTensorBufferView() override {}
-
-  std::size_t size() const override { return size_; }
-
-  TensorBuffer* root_buffer() override { return this; }
-
-  void FillAllocationDescription(
-      tensorflow::AllocationDescription* proto) const override {}
-
-  bool OwnsMemory() const override { return false; }
-
- private:
-  std::size_t size_;
-};
-
-}  // namespace
-
 std::function<poplar::StreamCallbackHandle(int64)>
 SendFromFirstReplicaCallbackCreator(const tensorflow::TensorShape& shape,
                                     tensorflow::DataType type,
                                     tensorflow::Rendezvous::ParsedKey key,
                                     tensorflow::Rendezvous* rendezvous,
-                                    int64 num_replicas,
-                                    bool can_avoid_buffer_copy) {
+                                    int64 num_replicas) {
   return [=](int64 replica_id) -> poplar::StreamCallbackHandle {
     if (replica_id == 0) {
-      if (can_avoid_buffer_copy) {
-        return [rendezvous, key, type, shape](void* src) mutable {
-          // Create a non-owning view of the source data, avoiding copying.
-          auto buffer = tensorflow::core::RefCountPtr<PoplarTensorBufferView>(
-              new PoplarTensorBufferView(
-                  src, shape.num_elements() * tensorflow::DataTypeSize(type)));
-          auto tensor = tensorflow::Tensor(type, shape, buffer.get());
+      return [rendezvous, key, type, shape](void* src) {
+        auto tensor = tensorflow::Tensor(type, shape);
+        auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+        std::memcpy(dst->data(), src, dst->size());
 
-          rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
-                           /*is_dead=*/false);
-        };
-      } else {
-        // In this case we must copy the data in the callback.
-        return [rendezvous, key, type, shape](void* src) {
-          auto tensor = tensorflow::Tensor(type, shape);
-          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
-          std::memcpy(dst->data(), src, dst->size());
-
-          rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
-                           /*is_dead=*/false);
-        };
-      }
+        rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
+                         /*is_dead=*/false);
+      };
     } else {
       // Discard the output from the remaining replicas.
       return [](void*) {};
