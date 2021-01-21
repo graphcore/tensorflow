@@ -80,8 +80,7 @@ PoplarExecutable::PoplarExecutable(
 }
 
 PoplarExecutable::~PoplarExecutable() {
-  TENSORFLOW_TRACEPOINT();
-  if (poplar_engine_.get() != nullptr) {
+  if (poplar_engine_) {
     auto platform =
         se::MultiPlatformManager::PlatformWithName(tensorflow::PLATFORM_NAME);
     if (platform.ok()) {
@@ -116,8 +115,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   PoplarExecutor* poplarExecutor(
       static_cast<PoplarExecutor*>(executor->implementation()));
 
-  if (!poplarExecutor->PoplarDeviceIsAttached() &&
-      poplar_engine_.get() != nullptr) {
+  if (!poplarExecutor->PoplarDeviceIsAttached() && poplar_engine_) {
     if (poplarExecutor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
       return InvalidArgument(
           "Trying to run an executable on a device that was configured for "
@@ -127,8 +125,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     TF_RETURN_IF_ERROR(poplarExecutor->AttachToPoplarDevice());
   }
 
-  if (poplar_engine_.get() != nullptr &&
-      poplarExecutor->UseVerifiedTransfers()) {
+  if (poplar_engine_ && poplarExecutor->UseVerifiedTransfers()) {
     return InvalidArgument(
         "Executables using verified transfers can't be run "
         "in Tensorflow");
@@ -190,7 +187,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   return ShapeUtil::ByteSizeOf(shape, sizeof(void*));
 }
 
-/*static*/ StatusOr<PoplarExecutable*> PoplarExecutable::Deserialize(
+/*static*/ StatusOr<std::unique_ptr<PoplarExecutable>>
+PoplarExecutable::Deserialize(
     std::unique_ptr<HloModule> hlo_module,
     std::unique_ptr<HloProfilePrinterData> profile_printer,
     std::unique_ptr<HloProfileIndexMap> profile_index_map,
@@ -313,14 +311,17 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   auto iomap = InputOutputAliasingMap(hlo_module.get());
 
-  auto executable = new PoplarExecutable(
-      std::move(hlo_module), std::move(profile_printer),
-      std::move(profile_index_map), std::move(engine), std::move(iomap), false,
-      {}, false, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
-      std::move(lookups), std::move(updates), std::move(notifications),
-      std::move(remote_parameter_infos), logging_cycle_count, key_id_mappings,
-      checkpoint_feeds_order);
+  std::unique_ptr<PoplarExecutable> executable =
+      absl::make_unique<PoplarExecutable>(
+          std::move(hlo_module), std::move(profile_printer),
+          std::move(profile_index_map), std::move(engine), std::move(iomap),
+          false, std::vector<std::vector<Literal>>{}, false, false,
+          std::vector<uint64>{}, replication_factor, std::move(infeeds),
+          std::move(outfeeds), StreamInfos{}, StreamMetaInfos{},
+          std::move(sends), std::move(recvs), std::move(lookups),
+          std::move(updates), std::move(notifications),
+          std::move(remote_parameter_infos), logging_cycle_count,
+          key_id_mappings, checkpoint_feeds_order);
 
   executable->loaded_from_cache_ = true;
 

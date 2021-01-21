@@ -2741,7 +2741,7 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
   TENSORFLOW_TRACEPOINT();
-  if (current_engine_ != nullptr) {
+  if (current_engine_) {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (engine == current_engine_) {
       auto status = MoveDeviceToHost();
@@ -2749,7 +2749,7 @@ void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
         LOG(FATAL) << status.ToString();
       }
       DeferredDeallocation();
-      current_engine_ = NULL;
+      current_engine_ = nullptr;
     }
   }
 }
@@ -3059,7 +3059,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
   const auto& input_output_aliasing_map =
       executable.GetInputOutputAliasingMap();
   const auto& output_shape = executable.result_shape();
-  poplar::Engine* engine = executable.Engine();
+  poplar::Engine* engine(executable.Engine());
 
   perftools::gputools::DeviceMemoryBase retbuf;
 
@@ -3082,7 +3082,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     }
   }
 
-  if (engine == NULL) {
+  if (!engine) {
     // An empty engine is either a graph that just passes its inputs through
     // to its outputs, or a graph which returns a constant.
     if (executable.IsConstantGraph()) {

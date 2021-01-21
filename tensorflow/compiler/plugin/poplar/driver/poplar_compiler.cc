@@ -1011,7 +1011,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
             poplar_executor->GetMultiReplicaProcessCount()};
       }
 
-      TF_ASSIGN_OR_RETURN(PoplarExecutable * poplar_executable,
+      TF_ASSIGN_OR_RETURN(std::unique_ptr<PoplarExecutable> poplar_executable,
                           PoplarExecutable::Deserialize(
                               std::move(module), std::move(profile_printer),
                               std::move(profile_index_map),
@@ -1038,13 +1038,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           return PoplarExceptionToTensorflowStatus(origin, e);
         }
       }
-      std::unique_ptr<Executable> executable;
-      executable.reset(poplar_executable);
 
-      VLOG(1) << "Loaded " << executable->module().name() << " from "
+      VLOG(1) << "Loaded " << poplar_executable->module().name() << " from "
               << filenames.CachedEngineFilename();
 
-      return std::move(executable);
+      return std::unique_ptr<Executable>(std::move(poplar_executable));
     } else {
       VLOG(1) << "Couldn't find " << filenames.CachedEngineFilename()
               << " in executable cache";
@@ -1564,7 +1562,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         }
       }
 
-      engine.reset(new poplar::Engine(std::move(exec), opt_flags));
+      engine = absl::make_unique<poplar::Engine>(std::move(exec), opt_flags);
       VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {
@@ -1617,8 +1615,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
   }
 
-  std::unique_ptr<Executable> executable;
-  PoplarExecutable* poplar_executable = new PoplarExecutable(
+  std::unique_ptr<Executable> executable = absl::make_unique<PoplarExecutable>(
       std::move(module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine),
       std::move(resources.annotations.input_output_aliasing_map),
@@ -1637,9 +1634,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       logging_cycle_count, resources.streams_indices.GetAssignedIds(),
       resources.streams_indices.CheckpointFeedsOrder());
 
-  executable.reset(poplar_executable);
-
-  return std::move(executable);
+  return executable;
 }
 
 StatusOr<std::vector<std::unique_ptr<Executable>>> PoplarCompiler::Compile(
