@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
+#include <poplin/TriangularSolve.hpp>
 #include <popnn/Recurrent.hpp>
 
 namespace xla {
@@ -158,6 +159,39 @@ Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
   return Status::OK();
 }
 
+Status MatMulPreplanning::StorePreplanMatMulsTriangularSolve(
+    const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
+  const HloTriangularSolveInstruction* as_solve =
+      Cast<HloTriangularSolveInstruction>(inst);
+
+  const Shape& aShape = inst->operand(0)->shape();
+  const Shape& bShape = inst->operand(1)->shape();
+  TF_ASSIGN_OR_RETURN(auto aType, PoplarDataType(aShape));
+  TF_ASSIGN_OR_RETURN(auto bType, PoplarDataType(bShape));
+
+  auto aPoplarShape = PoplarShapeFromXlaShape(aShape);
+  auto bPoplarShape = PoplarShapeFromXlaShape(bShape);
+
+  auto& options = as_solve->triangular_solve_options();
+
+  const std::vector<std::pair<poplin::MatMulParams, poplar::OptionFlags>>
+      mat_muls_to_pre_plan = poplin::getTriangularSolveMatMulPrePlanParameters(
+          aType, bType, aPoplarShape, bPoplarShape, options.left_side(),
+          options.lower(), resources_.triangular_solve_expander_block_size, {});
+
+  VLOG(2) << "Preplanned " << mat_muls_to_pre_plan.size() << " mat muls for "
+          << inst->ToString();
+
+  for (const auto& mat_mul : mat_muls_to_pre_plan) {
+    option_flags_store.push_back(mat_mul.second);
+    preplan_matmuls.emplace(&target, mat_mul.first,
+                            &(option_flags_store.back()));
+  }
+
+  return Status::OK();
+}
+
 Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
@@ -188,6 +222,8 @@ StatusOr<bool> MatMulPreplanning::Run(HloModule* module) {
       for (HloInstruction* inst : comp->instructions()) {
         if (inst->opcode() == HloOpcode::kDot) {
           StorePreplanMatMuls(inst);
+        } else if (inst->opcode() == HloOpcode::kTriangularSolve) {
+          StorePreplanMatMulsTriangularSolve(inst);
         } else if (IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::LstmLayerBwd)(inst)) {
           StorePreplanMatMulsLSTM(inst);
