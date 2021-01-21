@@ -111,7 +111,7 @@ class CodeletExpressionOpOp : public PoplarOpDef {
       for (const auto& interval : intervals) {
         auto v = graph.addVertex(cs, "tf::" + vertex_name);
         graph.setTileMapping(v, tile);
-        graph.setCycleEstimate(v, 1);
+        graph.setPerfEstimate(v, 1);
 
         for (auto i = 0ul; i < input_tensors.size(); ++i) {
           graph.connect(v["input" + std::to_string(i)],

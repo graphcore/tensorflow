@@ -151,7 +151,7 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
     std::rethrow_exception(std::current_exception());
   } catch (const poplar::file_load_error& e) {
     return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::missing_cycle_estimate& e) {
+  } catch (const poplar::missing_perf_estimate& e) {
     return tensorflow::errors::NotFound(prefix, e.what());
   } catch (const poplar::symbol_error& e) {
     return tensorflow::errors::NotFound(prefix, e.what());
