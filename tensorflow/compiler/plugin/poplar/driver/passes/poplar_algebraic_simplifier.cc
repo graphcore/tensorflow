@@ -1131,6 +1131,34 @@ Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     return ReplaceInstruction(divide, new_divide);
   }
 
+  // A / Broadcast(B) => A * Broadcast((1 / B))
+  if (enable_fast_math_ &&
+      Match(divide, m::Divide(m::NonConstant(&a), m::Op(&b))) &&
+      Match(b, m::Broadcast(m::Op(&c)))) {
+    const Shape& divisor_shape = c->shape();
+    const PrimitiveType element_type = divisor_shape.element_type();
+    if (primitive_util::IsFloatingPointType(element_type)) {
+      HloInstruction* scalar_one = computation_->AddInstruction(
+          simplifier_->CreateConstantWithLayoutUpdated(
+              LiteralUtil::One(element_type)));
+
+      TF_ASSIGN_OR_RETURN(
+          HloInstruction * inverse,
+          PreserveFrontendAttributesIfNeeded(
+              MakeBinaryHlo(HloOpcode::kDivide, scalar_one, c), divide));
+
+      inverse = computation_->AddInstruction(HloInstruction::CreateBroadcast(
+          b->shape(), inverse, b->dimensions()));
+
+      TF_ASSIGN_OR_RETURN(
+          HloInstruction * new_divide,
+          PreserveFrontendAttributesIfNeeded(
+              MakeBinaryHlo(HloOpcode::kMultiply, a, inverse), divide));
+
+      return ReplaceInstruction(divide, new_divide);
+    }
+  }
+
   // (A / B) / (C / D)  =>  (A / B)*(D / C) => (A * D) / (B * C)
   if (Match(divide, m::Divide(m::Divide(m::Op(&a), m::Op(&b)),
                               m::Divide(m::Op(&c), m::Op(&d))))) {

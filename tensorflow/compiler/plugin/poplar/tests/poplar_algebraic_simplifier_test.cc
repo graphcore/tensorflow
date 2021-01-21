@@ -1085,6 +1085,33 @@ TEST_F(PoplarAlgebraicSimplifierTest, DivideByBroadcastedConstant) {
                   m::Broadcast(m::Op().IsConstantScalar(1.0f / 256.0f)))));
 }
 
+// A / Broadcast(B) => A * Broadcast(InvertedB)
+TEST_F(PoplarAlgebraicSimplifierTest, FastMathDivideByBroadcastedScalarF16) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f16[4] parameter(0)
+      p1 = f16[] parameter(1)
+      b = f16[4] broadcast(p1), dimensions={}
+      ROOT d = f16[4] divide(p0, b)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+
+  ASSERT_FALSE(PoplarAlgebraicSimplifier(/*enable_fast_math*/ false)
+                   .Run(m.get())
+                   .ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier(/*enable_fast_math*/ true)
+                  .Run(m.get())
+                  .ValueOrDie());
+
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(
+          m::Parameter(0), m::Broadcast(m::Divide(m::Op().IsConstantScalar(1.f),
+                                                  m::Parameter(1))))));
+}
+
 // pow(pow(A, X), Y) => pow(A, X*Y)
 TEST_F(PoplarAlgebraicSimplifierTest, PowerOfPower) {
   auto m = CreateNewVerifiedModule();
