@@ -107,7 +107,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
         poplin::createWeights(graph, conv_params, {debug_info, "CreateWeights"},
                               opts, &res.convolution_cache);
 
-    auto func = [&graph, &res, inst, &debug_info](
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, &res, inst, debug_name_and_id](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor in_weights_f = args[0];
@@ -115,7 +116,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
 
       poplin::weightsTransposeChansFlipXY(
           graph, in_weights_f, out_weights_f, prog,
-          {debug_info, "WeightsTransposeChansFlipXY"});
+          {debug_name_and_id, "WeightsTransposeChansFlipXY"});
     };
 
     std::vector<poplar::Tensor> args = {in_weights, out_weights};

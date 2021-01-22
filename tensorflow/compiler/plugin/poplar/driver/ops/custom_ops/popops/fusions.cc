@@ -308,20 +308,21 @@ class BiasApplyOp : public PoplarOpDef {
       reduction_dims.push_back(d);
     }
 
-    auto func = [&graph, reduction_dims, &debug_info](
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, reduction_dims, debug_name_and_id](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor scale_float = args[2];
       if (scale_float.elementType() != poplar::FLOAT) {
         scale_float = popops::cast(graph, scale_float, poplar::FLOAT, prog,
-                                   {debug_info, "ScaleToFloat"});
+                                   {debug_name_and_id, "ScaleToFloat"});
       }
       // Reduce with scale and update in place
       popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE, scale_float,
-                         prog, {debug_info, "negate"});
+                         prog, {debug_name_and_id, "negate"});
       popops::reduceWithOutput(graph, args[1], args[0], reduction_dims,
                                {popops::Operation::ADD, true, scale_float},
-                               prog, {debug_info});
+                               prog, {debug_name_and_id});
     };
 
     // Depending on whether this is performed inplace or not, the output could

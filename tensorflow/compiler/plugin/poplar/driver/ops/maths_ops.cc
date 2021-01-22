@@ -390,8 +390,8 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
 
   // Created a cached dot.
   auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, &opts,
-               &debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                   poplar::program::Sequence& prog) {
+               debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                  poplar::program::Sequence& prog) {
     poplar::Tensor lhs = args[0];
     poplar::Tensor rhs = args[1];
 
