@@ -42,54 +42,38 @@ class OneHotOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "OneHotOp");
     // Create the control program.
     poplar::program::Sequence seq({}, debug_info);
-
-    // We expect only three arguments. Other two, depth and axis, are expected
-    // to be compile time constants.
-    TF_ASSIGN_OR_RETURN(TensorVector indices,
-                        FindInstructionInputTensors(tensor_map, res, inst, 0,
-                                                    seq, {debug_info}, false));
-
-    TF_ASSIGN_OR_RETURN(TensorVector on,
-                        FindInstructionInputTensors(tensor_map, res, inst, 1,
-                                                    seq, {debug_info}, false));
-
-    TF_ASSIGN_OR_RETURN(TensorVector off,
-                        FindInstructionInputTensors(tensor_map, res, inst, 2,
-                                                    seq, {debug_info}, false));
-
     const HloOneHotInstruction* one_hot_op = Cast<HloOneHotInstruction>(inst);
-    if (!one_hot_op) {
-      return xla::FailedPrecondition(
-          "Expected HLO instruction to be HloOneHotInstruction!");
-    }
-    int64 depth = one_hot_op->Depth();
 
-    // flatten all but one-hot axis
-    poplar::Tensor indices_tensor = indices[0].flatten();
+    // Get the inputs.
+    TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info}, false));
 
-    xla::Shape tmp_output_shape = XlaShapeFromPoplarShape(
-        output_shape.element_type(), indices_tensor.shape());
-    tmp_output_shape.add_dimensions(depth);
+    TF_ASSIGN_OR_RETURN(poplar::Tensor on,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
+
+    TF_ASSIGN_OR_RETURN(poplar::Tensor off,
+                        FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                             {debug_info}, false));
+
+    const int64 axis = one_hot_op->Axis();
 
     // Create the output tensor to store the result in (as popops takes this by
-    // reference rather than returning the output).
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor output,
-        AddTensor(graph, TensorLocation{inst, 0}, tmp_output_shape, res,
-                  tensor_map, {debug_info, "output"}));
+    // reference to make sure the output is in this layout).
+    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
+                        AddTensor(graph, TensorLocation{inst, 0}, inst->shape(),
+                                  res, tensor_map, {debug_info, "output"}));
 
-    poplar::Tensor on_tensor = on[0];
-    poplar::Tensor off_tensor = off[0];
+    // popops::encodeOneHot expects the tensor to be 2D with the `axis` at the
+    // back - create a permuted 2D view of that tensor.
+    const std::size_t rank = output.rank();
+    poplar::Tensor output_2d =
+        output.dimRoll(axis, rank - 1).flatten(0, rank - 1);
 
     // Encode one hot returns void but stores output in "output".
-    popops::encodeOneHot(graph, indices_tensor, output, seq, on_tensor,
-                         off_tensor, {debug_info, "OneHot"});
-
-    // Reshape to the input size
-    output = output.reshapePartial(0, 1, indices[0].shape());
-
-    int64 axis = one_hot_op->Axis();
-    output = output.dimRoll(output.rank() - 1, axis);
+    popops::encodeOneHot(graph, indices.flatten(), output_2d, seq, on, off,
+                         {debug_info, "OneHot"});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
