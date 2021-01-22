@@ -434,12 +434,25 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     This provides the same functionality as the Keras Model `fit` method.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    training run in a single call to hardware.
+
+    Args:
+        steps_per_epoch: Specifies the total number of steps to be performed
+            per epoch.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified. In all other cases a value
+            must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps_per_epoch` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps_per_epoch` divided by the replication
+            factor.
+            The value of 'steps_per_epoch' must be evenly divisible by
+            `steps_per_run` multiplied by the replication factor.
     """
     return super().fit(x,
                        y,
@@ -469,12 +482,23 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     This provides the same functionality as the Keras Model `evaluate` method.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    evaluation run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    evaluation run in a single call to hardware.
+
+    Args:
+        steps: Specifies the total number of steps to be performed.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified.
+            In all other cases a value must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps` divided by the replication factor.
+            The value of 'steps' must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor.
     """
     return super().evaluate(x,
                             y,
@@ -506,12 +530,23 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     allow single mini-batches.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    prediction run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    prediction run in a single call to hardware.
+
+    Args:
+        steps: Specifies the total number of steps to be performed.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified.
+            In all other cases a value must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps` divided by the replication factor.
+            The value of 'steps' must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -1027,12 +1062,25 @@ class PipelineModel(ipu_model.Model):
     This provides the same functionality as the Keras Model `fit` method.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    training run in a single call to hardware.
+
+    Args:
+        steps_per_epoch: Specifies the total number of steps to be performed
+            per epoch.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified. In all other cases a value
+            must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps_per_epoch` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps_per_epoch` divided by the replication
+            factor.
+            The value of 'steps_per_epoch' must be evenly divisible by
+            `steps_per_run` multiplied by the replication factor.
     """
     return super().fit(x,
                        y,
@@ -1062,12 +1110,23 @@ class PipelineModel(ipu_model.Model):
     This provides the same functionality as the Keras Model `evaluate` method.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    evaluation run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    evaluation run in a single call to hardware.
+
+    Args:
+        steps: Specifies the total number of steps to be performed.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified.
+            In all other cases a value must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps` divided by the replication factor.
+            The value of 'steps' must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor.
     """
     return super().evaluate(x,
                             y,
@@ -1099,12 +1158,23 @@ class PipelineModel(ipu_model.Model):
     allow single mini-batches.
 
     The pipeline itself can be wrapped in a loop in order to execute a larger
-    prediction run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the gradient accumulation count
-    multiplied by the steps_per_run value.  If the dataset is infinite, because
-    it has been repeated indefinitely, then this condition is satisfied.
+    prediction run in a single call to hardware.
+
+    Args:
+        steps: Specifies the total number of steps to be performed.
+            For a dataset of known finite length, a default value will be
+            calculated if no value is specified.
+            In all other cases a value must be specified.
+            The value must be evenly divisible by `steps_per_run` multiplied by
+            the replication factor.
+            The dataset should be able to provide enough samples to run for the
+            mini-batch size multiplied by the gradient accumulation count
+            multiplied by the `steps` value.
+        steps_per_run: Specifies how many steps should be performed on each
+            hardware execution.
+            The default value is `steps` divided by the replication factor.
+            The value of 'steps' must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor.
     """
     return super().predict(x,
                            batch_size=batch_size,
