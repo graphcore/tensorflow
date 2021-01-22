@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -35,7 +36,9 @@ class SendToHostOp : public PoplarOpDef {
       return FailedPrecondition(
           "Verified transfers cannot be used with SendToHost operations");
     }
-    poplar::program::Sequence seq;
+
+    PoplarOpDefDebugInfo debug_info(debug_context, "SendToHostOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     const auto* send = Cast<HloSendToHostInstruction>(inst);
 
@@ -44,8 +47,9 @@ class SendToHostOp : public PoplarOpDef {
     // As long as the stream copies are scheduled right after each other,
     // Poplar will attempt to merge them according to `opt.maxCopyMergeSize`.
     for (int64 i = 0; i < num_inputs; ++i) {
-      TF_ASSIGN_OR_RETURN(const poplar::Tensor tensor,
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
+      TF_ASSIGN_OR_RETURN(
+          const poplar::Tensor tensor,
+          FindInstructionInput(tensor_map, res, inst, i, seq, debug_info));
 
       const std::string& rendezvous_key = send->RendezvousKeys()[i];
 
@@ -53,8 +57,8 @@ class SendToHostOp : public PoplarOpDef {
       const poplar::DataStream stream = graph.addDeviceToHostFIFO(
           rendezvous_key, tensor.elementType(), tensor.numElements());
 
-      seq.add(poplar::program::Copy(tensor, stream,
-                                    res.always_rearrange_copies_on_host));
+      seq.add(poplar::program::Copy(
+          tensor, stream, res.always_rearrange_copies_on_host, {debug_info}));
 
       const Shape& shape = inst->operand(i)->shape();
       res.annotations.send_infos.emplace_back(stream.handle(), rendezvous_key,
@@ -68,9 +72,10 @@ class SendToHostOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "SendToHostOp");
     const int64 input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
-    return AddHostCopyTensor(graph, name, input_shape);
+    return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }
 };
 

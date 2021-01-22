@@ -45,7 +45,7 @@ using GraphCachingWithRemoteBuffersTest = HloTestBase;
 std::unique_ptr<CompilerResources> GetMockResources(poplar::Device& device,
                                                     HloModule* module) {
   auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {});
+  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =
       absl::make_unique<poplar::Graph>(device, poplar::replication_factor(1));

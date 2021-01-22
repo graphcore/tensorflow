@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateless_random.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -37,15 +38,16 @@ class TruncatedNormalOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "TruncatedNormalOp");
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
                         AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+                                  res, tensor_map, {debug_info, "ref"}));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
     auto out = poprand::truncatedNormal(graph, nullptr, 0, ref, dtype, 0.0, 1.0,
-                                        1.0, seq, GetDebugName(inst));
+                                        1.0, seq, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
@@ -58,16 +60,18 @@ class StatelessRandomUniformOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    PoplarOpDefDebugInfo debug_info(debug_context, "StatelessRandomUniformOp");
+    poplar::program::Sequence seq({}, debug_info);
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor seed,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
     // The reference must be mapped linearly, this will define which tiles are
     // generating the random numbers. Different tiles won't generate the same
     // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                        AddPlainTensor(graph, {debug_info, "Reference"},
                                        output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
@@ -83,16 +87,17 @@ class StatelessRandomUniformOp : public PoplarOpDef {
     double max_val = static_cast<double>(as_stateless_random->GetMax());
 
     auto out = poprand::uniform(graph, &seed, 0, ref, dtype, min_val, max_val,
-                                seq, GetDebugName(inst));
+                                seq, {debug_info});
 
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
     if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, TensorLocation{inst, 0},
-                                    output_shape, res, tensor_map));
-      seq.add(poplar::program::Copy(out, new_out));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor new_out,
+          AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
+                    tensor_map, {debug_info, "out"}));
+      seq.add(poplar::program::Copy(out, new_out, false, {debug_info}));
       out = new_out;
     }
 
@@ -107,10 +112,13 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "StatelessRandomUniformIntOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor seed,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
     const HloInstruction* lower = inst->operand(1);
@@ -127,22 +135,23 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
     // generating the random numbers. Different tiles won't generate the same
     // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                        AddPlainTensor(graph, {debug_info, "Reference"},
                                        output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::uniform(graph, &seed, 0, ref, dtype, lower_val,
-                                upper_val, seq, GetDebugName(inst));
+                                upper_val, seq, {debug_info});
 
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
     if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, TensorLocation{inst, 0},
-                                    output_shape, res, tensor_map));
-      seq.add(poplar::program::Copy(out, new_out));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor new_out,
+          AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
+                    tensor_map, {debug_info, "out"}));
+      seq.add(poplar::program::Copy(out, new_out, false, {debug_info}));
       out = new_out;
     }
 
@@ -157,32 +166,35 @@ class StatelessRandomNormalOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "StatelessRandomNormalOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor seed,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
     // The reference must be mapped linearly, this will define which tiles are
     // generating the random numbers. Different tiles won't generate the same
     // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                        AddPlainTensor(graph, {debug_info, "Reference"},
                                        output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::normal(graph, &seed, 0, ref, dtype, 0.0, 1.0, seq,
-                               GetDebugName(inst));
+                               {debug_info});
 
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
     if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, TensorLocation{inst, 0},
-                                    output_shape, res, tensor_map));
-      seq.add(poplar::program::Copy(out, new_out));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor new_out,
+          AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
+                    tensor_map, {debug_info, "out"}));
+      seq.add(poplar::program::Copy(out, new_out, false, {debug_info}));
       out = new_out;
     }
 
@@ -197,32 +209,36 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "StatelessTruncatedNormalOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor seed,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
     // The reference must be mapped linearly, this will define which tiles are
     // generating the random numbers. Different tiles won't generate the same
     // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                        AddPlainTensor(graph, {debug_info, "Reference"},
                                        output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::truncatedNormal(graph, &seed, 0, ref, dtype, 0.0, 1.0,
-                                        1.0, seq, GetDebugName(inst));
+                                        1.0, seq, {debug_info});
 
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
     if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, TensorLocation{inst, 0},
-                                    output_shape, res, tensor_map));
-      seq.add(poplar::program::Copy(out, new_out));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor new_out,
+          AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
+                    tensor_map, {debug_info, "out"}));
+      seq.add(poplar::program::Copy(out, new_out, false, {debug_info}));
       out = new_out;
     }
 
@@ -237,10 +253,10 @@ class SeedOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    const std::string debug_name = GetDebugName(inst);
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "SeedOp");
+    poplar::program::Sequence seq({}, debug_info);
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed_ref,
-                        AddPlainTensor(graph, debug_name + "/SeedRef",
+                        AddPlainTensor(graph, {debug_info, "SeedRef"},
                                        output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
@@ -253,7 +269,7 @@ class SeedOp : public PoplarOpDef {
 
     poplar::Tensor seed = poprand::uniform(
         graph, nullptr, 1U, seed_ref, dtype, std::numeric_limits<int32>::min(),
-        std::numeric_limits<int32>::max(), seq, debug_name + "/GenerateSeed");
+        std::numeric_limits<int32>::max(), seq, {debug_info, "GenerateSeed"});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, seed));
     return seq;

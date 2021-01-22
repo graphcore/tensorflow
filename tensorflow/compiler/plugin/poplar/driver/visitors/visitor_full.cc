@@ -35,6 +35,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
@@ -56,18 +57,20 @@ namespace se = ::stream_executor;
 namespace xla {
 namespace poplarplugin {
 
-FullVisitor::FullVisitor(CompilerResources& res, const std::string& name)
-    : BaseVisitor(res, name) {}
+FullVisitor::FullVisitor(CompilerResources& res,
+                         const poplar::DebugNameAndId& debug_name_and_id)
+    : BaseVisitor(res, debug_name_and_id) {}
 
 Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   int64 dimension(inst->concatenate_dimension());
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   std::vector<poplar::Tensor> tensors(inputs.size());
@@ -84,28 +87,31 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
 
 Status FullVisitor::HandleDot(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      CreateMatMulForDotOp(resources_, inst, GetOutputShape(inst), tensor_map));
+      CreateMatMulForDotOp(resources_, inst, GetOutputShape(inst), tensor_map,
+                           debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleCopy(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateCopy(resources_, inst, GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateCopy(resources_, inst, GetOutputShape(inst),
+                                 tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleReverse(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  poplar::program::Sequence seq;
-
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor t = inputs[0][0];
@@ -119,10 +125,11 @@ Status FullVisitor::HandleReverse(HloInstruction* inst) {
 Status FullVisitor::HandleReduce(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   if (IsReducibleArithmetic(inst->to_apply())) {
+    poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleReduction(resources_, inst, GetOutputShape(inst),
-                              tensor_map));
+                              tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   return Unimplemented(inst);
@@ -131,11 +138,12 @@ Status FullVisitor::HandleReduce(HloInstruction* inst) {
 Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor out = inputs[0][0];
@@ -151,10 +159,12 @@ Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
 Status FullVisitor::HandleReshape(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(auto inputs, FindInplaceOutputs(tensor_map, resources_,
-                                                      inst, seq, false));
+  TF_ASSIGN_OR_RETURN(auto inputs,
+                      FindInplaceOutputs(tensor_map, resources_, inst, seq,
+                                         debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   if (inputs[0][0].IsRemoteBuffer()) {
@@ -172,11 +182,12 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
 Status FullVisitor::HandleTranspose(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor out = inputs[0][0];
@@ -195,42 +206,48 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
 
 Status FullVisitor::HandleSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateSlice(resources_, inst, GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateSlice(resources_, inst, GetOutputShape(inst),
+                                  tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleDynamicSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      CreateDynamicSliceOp(resources_, inst, GetOutputShape(inst), tensor_map));
+      CreateDynamicSliceOp(resources_, inst, GetOutputShape(inst), tensor_map,
+                           debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateDynamicUpdateSliceOp(
-                          resources_, inst, GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateDynamicUpdateSliceOp(resources_, inst, GetOutputShape(inst),
+                                 tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   if (IsPoplibsPool(inst, inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreatePoplibsWindowReduction(resources_, inst, GetOutputShape(inst),
-                                     tensor_map));
+                                     tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
-                                    tensor_map));
+                                    tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   return Unimplemented(inst);
@@ -240,10 +257,11 @@ Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
   if (IsSimpleSelection(inst->select()) &&
       IsReducibleArithmetic(inst->scatter())) {
     VLOG(1) << "Processing " << inst->name();
+    poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleSelectAndScatter(resources_, inst, GetOutputShape(inst),
-                                     tensor_map));
+                                     tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   return Unimplemented(inst);
@@ -251,22 +269,24 @@ Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
 
 Status FullVisitor::HandleWhile(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   // Version of the while operation which does not allow parameters to be
   // deferred.
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateWhileOp(resources_, inst, GetOutputShape(inst), tensor_map));
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateWhileOp(resources_, inst, GetOutputShape(inst),
+                                    tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandlePad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 2);
   CHECK_EQ(inputs[0].size(), 1);
   CHECK_EQ(inputs[1].size(), 1);
@@ -281,15 +301,19 @@ Status FullVisitor::HandlePad(HloInstruction* inst) {
 Status FullVisitor::HandleIota(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
-  TF_ASSIGN_OR_RETURN(auto prog, CreateIota(resources_, inst,
-                                            GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(
+      auto prog, CreateIota(resources_, inst, GetOutputShape(inst), tensor_map,
+                            debug_name_and_id));
 
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map,
+                                               debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 

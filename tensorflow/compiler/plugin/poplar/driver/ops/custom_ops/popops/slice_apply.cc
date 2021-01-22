@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -38,20 +39,19 @@ poplar::Tensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
   return input.slice(slice_start, slice_end, slice_dimension);
 }
 
-poplar::Tensor CreateSliceFromInput(poplar::Graph& graph,
-                                    const HloSliceApplyBase* inst,
-                                    const poplar::Tensor& input,
-                                    CompilerResources& res,
-                                    const std::string& name) {
+poplar::Tensor CreateSliceFromInput(
+    poplar::Graph& graph, const HloSliceApplyBase* inst,
+    const poplar::Tensor& input, CompilerResources& res,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Tensor input_slice = SliceInputForBinaryApply(inst, input);
-  return TensorCloneAndRebalanceAliasing(graph, res, input_slice, name);
+  return TensorCloneAndRebalanceAliasing(graph, res, input_slice,
+                                         {debug_name_and_id});
 }
 
-poplar::Tensor CreateInputFromSlice(poplar::Graph& graph,
-                                    const HloSliceApplyBase* inst,
-                                    const poplar::Tensor& update,
-                                    CompilerResources& res,
-                                    const std::string& name) {
+poplar::Tensor CreateInputFromSlice(
+    poplar::Graph& graph, const HloSliceApplyBase* inst,
+    const poplar::Tensor& update, CompilerResources& res,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Allocate the input tensor from the update.
   const int64 slice_dimension = inst->GetApplyDimension();
   const int64 inputs_size =
@@ -59,7 +59,7 @@ poplar::Tensor CreateInputFromSlice(poplar::Graph& graph,
   const int64 slice_size =
       inst->operand(1)->shape().dimensions(slice_dimension);
   return CreateTensorFromSlice(graph, update, slice_dimension, inputs_size, res,
-                               name);
+                               {debug_name_and_id});
 }
 
 // All the slice apply ops allocate on the first two operands.
@@ -68,6 +68,7 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyAllocatorOp");
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
     if (input_index != 0 && input_index != 1) {
@@ -87,9 +88,10 @@ class SliceApplyAllocatorOp : public PoplarOpDef {
     const HloSliceApplyBase* slice_apply = Cast<HloSliceApplyBase>(inst);
 
     return input_index == 0
-               ? CreateInputFromSlice(graph, slice_apply, other_side, res, name)
+               ? CreateInputFromSlice(graph, slice_apply, other_side, res,
+                                      {debug_info})
                : CreateSliceFromInput(graph, slice_apply, other_side, res,
-                                      name);
+                                      {debug_info});
   }
 };
 
@@ -98,19 +100,24 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbYOp");
+    poplar::program::Sequence seq({}, debug_info);
     // Get the inputs.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor input = inputs[0][0];
-    TF_ASSIGN_OR_RETURN(poplar::Tensor update,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor scale_input,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor scale_update,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor update,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_input,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_update,
+        FindInstructionInput(tensor_map, res, inst, 3, seq, {debug_info}));
 
     // Slice the input into the right shape.
     const HloSliceApplyaXbY* slice_apply = Cast<HloSliceApplyaXbY>(inst);
@@ -119,7 +126,7 @@ class SliceApplyaXbYOp : public SliceApplyAllocatorOp {
     // Apply the aXbY.
     TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
         graph, input_slice, scale_input, update, scale_update, seq,
-        slice_apply->GetOperation(), GetDebugName(inst)));
+        slice_apply->GetOperation(), {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
     return seq;
@@ -132,17 +139,21 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyabYOp");
+    poplar::program::Sequence seq({}, debug_info);
     // Get the inputs.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor input = inputs[0][0];
-    TF_ASSIGN_OR_RETURN(poplar::Tensor update,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor scale_update,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor update,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_update,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
 
     // Slice the input into the right shape.
     const HloSliceApplyabY* slice_apply = Cast<HloSliceApplyabY>(inst);
@@ -151,7 +162,7 @@ class SliceApplyabYOp : public SliceApplyAllocatorOp {
     // Apply the abY.
     TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
         graph, input_slice, update, scale_update, seq,
-        slice_apply->GetOperation(), GetDebugName(inst)));
+        slice_apply->GetOperation(), {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
     return seq;
@@ -164,17 +175,21 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyaXbOp");
+    poplar::program::Sequence seq({}, debug_info);
     // Get the inputs.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor input = inputs[0][0];
-    TF_ASSIGN_OR_RETURN(poplar::Tensor update,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor scale_input,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor update,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_input,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
 
     // Slice the input into the right shape.
     const HloSliceApplyaXb* slice_apply = Cast<HloSliceApplyaXb>(inst);
@@ -185,12 +200,12 @@ class SliceApplyaXbOp : public SliceApplyAllocatorOp {
         poplar::Tensor one,
         CreateConstantTensor(
             graph, LiteralUtil::One(scalar_shape.element_type()), scalar_shape,
-            update.elementType(), GetDebugName(inst) + "/One"));
+            update.elementType(), {debug_info, "One"}));
 
     // Apply the aXb.
     TF_RETURN_IF_ERROR(ScaledInplaceConstantOrTensor(
         graph, input_slice, scale_input, update, one, seq,
-        slice_apply->GetOperation(), GetDebugName(inst)));
+        slice_apply->GetOperation(), {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
     return seq;
@@ -203,15 +218,18 @@ class SliceApplyOp : public SliceApplyAllocatorOp {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "SliceApplyOp");
+    poplar::program::Sequence seq({}, debug_info);
     // Get the inputs.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor input = inputs[0][0];
-    TF_ASSIGN_OR_RETURN(poplar::Tensor update,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor update,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
 
     // Slice the input into the right shape.
     const HloSliceApply* slice_apply = Cast<HloSliceApply>(inst);
@@ -220,8 +238,7 @@ class SliceApplyOp : public SliceApplyAllocatorOp {
     // Apply the binary operation on the slice.
     TF_ASSIGN_OR_RETURN(popops::expr::BinaryOpType op, LookupBinaryFn(inst));
     auto expr = popops::expr::BinaryOp(op, popops::expr::_1, popops::expr::_2);
-    popops::mapInPlace(graph, expr, {input_slice, update}, seq,
-                       GetDebugName(inst));
+    popops::mapInPlace(graph, expr, {input_slice, update}, seq, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
     return seq;

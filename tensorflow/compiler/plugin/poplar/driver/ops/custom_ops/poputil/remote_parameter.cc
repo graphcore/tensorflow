@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -40,9 +41,10 @@ std::pair<poplar::program::Sequence, poplar::program::Sequence>
 AddRemoteBufferStoreCopy(
     poplar::Graph& graph, CompilerResources& res, poplar::Tensor source,
     poplar::RemoteBuffer remote_buffer,
+    const poplar::DebugNameAndId& debug_name_and_id,
     absl::optional<poplar::Tensor> offset = absl::nullopt) {
-  poplar::program::Sequence temporary_copy_seq;
-  poplar::program::Sequence stream_copy_seq;
+  poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
+  poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
 
   const auto& handle = remote_buffer.handle();
   poplar::Tensor layout_tensor;
@@ -53,16 +55,17 @@ AddRemoteBufferStoreCopy(
     res.remote_buffer_layouts[handle] = layout_tensor;
   }
 
-  poplar::Tensor copy_tensor = graph.clone(layout_tensor);
+  poplar::Tensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});
 
-  temporary_copy_seq.add(
-      poplar::program::Copy(source.flatten(), copy_tensor.flatten()));
+  temporary_copy_seq.add(poplar::program::Copy(
+      source.flatten(), copy_tensor.flatten(), false, {debug_name_and_id}));
 
   if (offset) {
-    stream_copy_seq.add(
-        poplar::program::Copy(copy_tensor, remote_buffer, *offset));
+    stream_copy_seq.add(poplar::program::Copy(copy_tensor, remote_buffer,
+                                              *offset, debug_name_and_id));
   } else {
-    stream_copy_seq.add(poplar::program::Copy(copy_tensor, remote_buffer));
+    stream_copy_seq.add(
+        poplar::program::Copy(copy_tensor, remote_buffer, debug_name_and_id));
   }
   return {temporary_copy_seq, stream_copy_seq};
 }
@@ -83,8 +86,9 @@ class RemoteParameterStoreOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "RemoteParameterStoreOp");
     VLOG(1) << "Processing " << GetDebugName(inst);
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
 
     const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
     const int64 num_outputs = store_inst->RemoteBuffers().size();
@@ -92,8 +96,9 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
 
-    TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
-                        FindInplaceOutputs(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorOrRemoteBufferVectors outputs,
+        FindInplaceOutputs(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(outputs.size(), num_outputs);
 
     poplar::program::Sequence temporary_copies_seq;
@@ -120,10 +125,11 @@ class RemoteParameterStoreOp : public PoplarOpDef {
       if (!UseSyntheticData()) {
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor tensor,
-            FindInstructionInput(tensor_map, res, inst, num_outputs + i, seq));
+            FindInstructionInput(tensor_map, res, inst, num_outputs + i, seq,
+                                 {debug_info}));
 
-        auto pair_seq =
-            AddRemoteBufferStoreCopy(shard_graph, res, tensor, remote_buffer);
+        auto pair_seq = AddRemoteBufferStoreCopy(shard_graph, res, tensor,
+                                                 remote_buffer, {debug_info});
         temporary_copies_seq.add(pair_seq.first);
         stream_copies_seq.add(pair_seq.second);
       }
@@ -153,15 +159,17 @@ class BufferStoreSliceOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "BufferStoreSliceOp");
     const auto* store_inst = Cast<HloBufferStoreSlice>(inst);
     const int64 num_outputs = store_inst->RemoteBuffers().size();
 
     const auto shapes = FlattenedXlaShape(output_shape);
     CHECK_EQ(shapes.size(), num_outputs);
 
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors outputs,
-                        FindInplaceOutputs(tensor_map, res, inst, seq));
+    poplar::program::Sequence seq({}, debug_info);
+    TF_ASSIGN_OR_RETURN(
+        TensorOrRemoteBufferVectors outputs,
+        FindInplaceOutputs(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(outputs.size(), num_outputs);
 
     poplar::program::Sequence temporary_copies_seq;
@@ -178,14 +186,16 @@ class BufferStoreSliceOp : public PoplarOpDef {
 
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor value,
-            FindInstructionInput(tensor_map, res, inst, value_index, seq));
+            FindInstructionInput(tensor_map, res, inst, value_index, seq,
+                                 {debug_info}));
 
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor offset,
-            FindInstructionInput(tensor_map, res, inst, offset_index, seq));
+            FindInstructionInput(tensor_map, res, inst, offset_index, seq,
+                                 {debug_info}));
 
-        auto pair_seq = AddRemoteBufferStoreCopy(shard_graph, res, value,
-                                                 remote_buffer, offset);
+        auto pair_seq = AddRemoteBufferStoreCopy(
+            shard_graph, res, value, remote_buffer, {debug_info}, offset);
         temporary_copies_seq.add(pair_seq.first);
         stream_copies_seq.add(pair_seq.second);
       }

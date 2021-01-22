@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -43,7 +44,8 @@ namespace poplarplugin {
 
 static StatusOr<poplar::Tensor> ReversePathTransform(
     poplar::Graph& graph, poplar::Tensor in,
-    const std::vector<const HloInstruction*>& path) {
+    const std::vector<const HloInstruction*>& path,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Now apply any transformations required by the path from the source to
   // the target
 
@@ -72,7 +74,7 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
       }
       case HloOpcode::kConvert: {
         TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(inst->shape()));
-        in = graph.clone(poplar_type, in, GetDebugName(inst));
+        in = graph.clone(poplar_type, in, {debug_name_and_id});
         break;
       }
       case HloOpcode::kConcatenate: {
@@ -104,7 +106,8 @@ class WideConstOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "WideConstOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
 
@@ -116,7 +119,7 @@ class WideConstOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor constant_tensor,
         AddConstantTensor(graph, TensorLocation{constant, 0}, constant->shape(),
-                          constant_literal, res, tensor_map));
+                          constant_literal, res, tensor_map, {debug_info}));
 
     // Broadcast the tensor to the right shape.
     TF_ASSIGN_OR_RETURN(poplar::Tensor out,
@@ -130,8 +133,9 @@ class WideConstOp : public PoplarOpDef {
       // setInitialValue is a trade off between having a large tensor always
       // live and a copy + a scalar constant always being live.
       TF_ASSIGN_OR_RETURN(poplar::Tensor layout,
-                          AddTensor(graph, src, output_shape, res, tensor_map));
-      seq.add(poplar::program::Copy(out, layout));
+                          AddTensor(graph, src, output_shape, res, tensor_map,
+                                    {debug_info, "layout"}));
+      seq.add(poplar::program::Copy(out, layout, false, {debug_info}));
       out = layout;
     }
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
@@ -147,22 +151,24 @@ class ConvBiasAddOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence prog;
+    PoplarOpDefDebugInfo debug_info(debug_context, "ConvBiasAddOp");
+    poplar::program::Sequence prog({}, {debug_info});
 
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, prog));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor bias,
-        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor bias,
+                        FindInstructionInput(tensor_map, res, inst, 1, prog,
+                                             {debug_info}, false));
 
     const auto* conv_op = GetOperandLookThroughInterIpuCopy(inst, 0);
     poplar::Tensor shuffled_in = ShuffleConvolutionOutputToPoplar(conv_op, in);
 
-    poplin::addBias(graph, shuffled_in, bias, prog, GetDebugName(inst));
+    poplin::addBias(graph, shuffled_in, bias, prog, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in));
     return prog;
@@ -173,6 +179,7 @@ class ConvBiasAddOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ConvBiasAddOp");
     const int64 input_index = tensor_target.input_index;
     const HloInstruction* layout = *tensor_target.layout;
 
@@ -191,9 +198,10 @@ class ConvBiasAddOp : public PoplarOpDef {
     poplar::Tensor acts = outputs[layout_output_idx];
 
     acts = ShuffleConvolutionOutputToPoplar(layout, acts);
-    TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
+    TF_ASSIGN_OR_RETURN(
+        acts, ReversePathTransform(graph, acts, forward_path, {debug_info}));
 
-    return poplin::createBiases(graph, acts, GetDebugName(inst));
+    return poplin::createBiases(graph, acts, {debug_info, "biases"});
   }
 };
 
@@ -204,27 +212,29 @@ class MatMulBiasAddOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "MatMulBiasAddOp");
+
     // Get the broadcast instruction which is required to get the bias size.
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* broadcast = root->operand(1);
     CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
 
-    poplar::program::Sequence prog;
+    poplar::program::Sequence prog({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, prog, false));
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, prog,
+                                                 debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor bias,
-        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor bias,
+                        FindInstructionInput(tensor_map, res, inst, 1, prog,
+                                             {debug_info}, false));
 
     TF_ASSIGN_OR_RETURN(bias, BroadcastTensor(bias, broadcast->shape(),
                                               broadcast->dimensions()));
-    popops::addInPlace(graph, in, bias, prog, GetDebugName(inst));
+    popops::addInPlace(graph, in, bias, prog, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in));
     return prog;
@@ -235,6 +245,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "MatMulBiasAddOp");
     const HloInstruction* layout = *tensor_target.layout;
 
     const auto layout_output_idx = *tensor_target.layout_output_idx;
@@ -250,13 +261,14 @@ class MatMulBiasAddOp : public PoplarOpDef {
     }
 
     poplar::Tensor acts = outputs[layout_output_idx];
-    TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
+    TF_ASSIGN_OR_RETURN(
+        acts, ReversePathTransform(graph, acts, forward_path, {debug_info}));
 
     // Flatten activations into 2D.
     acts = acts.flatten(0, acts.rank() - 1);
     return poputil::createBroadcastOperand(
         graph, acts, acts.elementType(), acts.rank() - 1,
-        /*ditherMapping*/ false, absl::StrCat(name, "/biases"));
+        /*ditherMapping*/ false, {debug_info, "biases"});
   }
 };
 
@@ -267,24 +279,27 @@ class BiasApplyOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "BiasApplyOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
 
     // Find the biases.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor biases = inputs[0][0];
 
     // Find the deltas.
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor deltas,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor deltas,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
     // Find the scale.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, {debug_info}));
 
     // Find reduction dimensions
     const auto* reduce = root->operand(1)->operand(0);
@@ -293,21 +308,20 @@ class BiasApplyOp : public PoplarOpDef {
       reduction_dims.push_back(d);
     }
 
-    const std::string debug_prefix = GetDebugName(inst);
-    auto func = [&graph, reduction_dims, debug_prefix](
+    auto func = [&graph, reduction_dims, &debug_info](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor scale_float = args[2];
       if (scale_float.elementType() != poplar::FLOAT) {
         scale_float = popops::cast(graph, scale_float, poplar::FLOAT, prog,
-                                   debug_prefix + "/ScaleToFloat");
+                                   {debug_info, "ScaleToFloat"});
       }
       // Reduce with scale and update in place
       popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE, scale_float,
-                         prog, debug_prefix + "/negate");
+                         prog, {debug_info, "negate"});
       popops::reduceWithOutput(graph, args[1], args[0], reduction_dims,
                                {popops::Operation::ADD, true, scale_float},
-                               prog, debug_prefix);
+                               prog, {debug_info});
     };
 
     // Depending on whether this is performed inplace or not, the output could
@@ -334,13 +348,14 @@ class ZeroPadOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "ZeroPadOp");
+    poplar::program::Sequence seq({}, debug_info);
     const HloInstruction* root = inst->fused_expression_root();
     const PaddingConfig& cfg(root->padding_config());
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in = inputs[0][0];
@@ -351,8 +366,8 @@ class ZeroPadOp : public PoplarOpDef {
       paddingLower.push_back(d.edge_padding_low());
       paddingUpper.push_back(d.edge_padding_high());
     }
-    poplar::Tensor zero = graph.addConstant(in.elementType(), {}, 0,
-                                            GetDebugName(inst) + "/ZeroPad");
+    poplar::Tensor zero =
+        graph.addConstant(in.elementType(), {}, 0, {debug_info, "ZeroPad"});
     graph.setTileMapping(zero, 0);
     poplar::Tensor out =
         popops::pad(graph, in, paddingLower, paddingUpper, zero);
@@ -369,17 +384,18 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    PoplarOpDefDebugInfo debug_info(debug_context, "ScaledInplaceXbYOp");
+    poplar::program::Sequence seq({}, debug_info);
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in0 = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor in1,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
 
     const auto* root_inst = inst->fused_expression_root();
 
@@ -390,16 +406,14 @@ class ScaledInplaceXbYOp : public PoplarOpDef {
       TF_ASSIGN_OR_RETURN(double scale, LiteralScalarToNativeType<double>(
                                             const_inst->literal()));
 
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, in1, scale, seq,
-                                                root_inst->opcode(),
-                                                GetDebugName(inst)));
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+          graph, in0, in1, scale, seq, root_inst->opcode(), {debug_info}));
     } else if (inst->operand_count() == 3) {
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor scale,
-          FindInstructionInput(tensor_map, res, inst, 2, seq, false));
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, in1, scale, seq,
-                                                root_inst->opcode(),
-                                                GetDebugName(inst)));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
+                          FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                               {debug_info}, false));
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+          graph, in0, in1, scale, seq, root_inst->opcode(), {debug_info}));
     } else {
       return xla::FailedPrecondition("Unsupported use of scaled inplace op: %s",
                                      root_inst->name().c_str());
@@ -416,17 +430,18 @@ class ScaledInplaceaXYOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    PoplarOpDefDebugInfo debug_info(debug_context, "ScaledInplaceaXYOp");
+    poplar::program::Sequence seq({}, debug_info);
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_info, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in0 = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor in1,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
 
     const auto* root_inst = inst->fused_expression_root();
 
@@ -437,24 +452,22 @@ class ScaledInplaceaXYOp : public PoplarOpDef {
       TF_ASSIGN_OR_RETURN(double scale, LiteralScalarToNativeType<double>(
                                             const_inst->literal()));
 
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale, in1, 1.0,
-                                                seq, root_inst->opcode(),
-                                                GetDebugName(inst)));
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+          graph, in0, scale, in1, 1.0, seq, root_inst->opcode(), {debug_info}));
     } else if (inst->operand_count() == 3) {
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor scale,
-          FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
+                          FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                               {debug_info}, false));
 
       const Shape& scalar_shape = inst->operand(2)->shape();
       TF_ASSIGN_OR_RETURN(
           poplar::Tensor one,
           CreateConstantTensor(
               graph, LiteralUtil::One(scalar_shape.element_type()),
-              scalar_shape, in1.elementType(), GetDebugName(inst) + "/One"));
+              scalar_shape, in1.elementType(), {debug_info, "One"}));
 
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale, in1, one,
-                                                seq, root_inst->opcode(),
-                                                GetDebugName(inst)));
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+          graph, in0, scale, in1, one, seq, root_inst->opcode(), {debug_info}));
     } else {
       return xla::FailedPrecondition("Unsupported use of scaled inplace op: %s",
                                      root_inst->name().c_str());
@@ -471,17 +484,18 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "ScaledInplaceaXbYOp");
+    poplar::program::Sequence seq({}, debug_info);
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, true));
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, debug_info, true));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in0 = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor in1,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
 
     const auto* root_inst = inst->fused_expression_root();
 
@@ -498,21 +512,21 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
       TF_ASSIGN_OR_RETURN(double scale_b, LiteralScalarToNativeType<double>(
                                               const_inst_b->literal()));
 
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
-          graph, in0, scale_a, in1, scale_b, seq, root_inst->opcode(),
-          GetDebugName(inst)));
+      TF_CHECK_OK(
+          ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b, seq,
+                                        root_inst->opcode(), {debug_info}));
     } else if (inst->operand_count() == 4) {
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor scale_a,
-          FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor scale_a,
+                          FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                               {debug_info}, false));
 
-      TF_ASSIGN_OR_RETURN(
-          poplar::Tensor scale_b,
-          FindInstructionInput(tensor_map, res, inst, 3, seq, false));
+      TF_ASSIGN_OR_RETURN(poplar::Tensor scale_b,
+                          FindInstructionInput(tensor_map, res, inst, 3, seq,
+                                               {debug_info}, false));
 
-      TF_CHECK_OK(ScaledInplaceConstantOrTensor(
-          graph, in0, scale_a, in1, scale_b, seq, root_inst->opcode(),
-          GetDebugName(inst)));
+      TF_CHECK_OK(
+          ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b, seq,
+                                        root_inst->opcode(), {debug_info}));
     } else {
       return xla::FailedPrecondition("Unsupported, aXbY scaled inplace op: %s",
                                      root_inst->name().c_str());
@@ -529,14 +543,15 @@ class PaddingReduceWindowOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "PaddingReduceWindowOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     const HloInstruction* root = inst->fused_expression_root();
     const Window& window(root->window());
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_info, false));
     CHECK_EQ(inputs.size(), 2);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor in = inputs[0][0];
@@ -565,10 +580,12 @@ class ReductionFp16InputOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReductionFp16InputOp");
     const HloInstruction* reduce_inst = inst->fused_expression_root();
-    TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                        CreateSimpleReduction(res, inst, reduce_inst,
-                                              output_shape, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Program prog,
+        CreateSimpleReduction(res, inst, reduce_inst, output_shape, tensor_map,
+                              {debug_info}));
     return prog;
   }
 };
@@ -580,11 +597,13 @@ class ReductionSquareAddOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReductionSquareAddOp");
     const HloInstruction* reduce_inst = inst->fused_expression_root();
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleReduction(res, popops::Operation::SQUARE_ADD, inst,
-                              reduce_inst, output_shape, tensor_map));
+                              reduce_inst, output_shape, tensor_map,
+                              {debug_info}));
     return prog;
   }
 };

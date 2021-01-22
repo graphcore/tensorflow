@@ -34,10 +34,11 @@ enum DistributionType { UNIFORM, LOG_UNIFORM };
 class RangeSampler {
  public:
   RangeSampler(const DistributionType distribution,
-               const std::string debug_name, const uint64 range_max,
-               const uint64 tile, const poplar::Tensor& seed)
+               const poplar::DebugNameAndId& debug_name_and_id,
+               const uint64 range_max, const uint64 tile,
+               const poplar::Tensor& seed)
       : distribution_(distribution),
-        debug_name_(debug_name),
+        dnai_(debug_name_and_id),
         range_max_(range_max),
         tile_(tile),
         seed_(seed) {}
@@ -50,7 +51,7 @@ class RangeSampler {
                                                const uint64 k,
                                                poplar::program::Sequence& seq);
 
-  const std::string DebugName() const { return debug_name_; }
+  const poplar::DebugNameAndId& GetDebugNameAndId() const { return dnai_; }
   const DistributionType Distribution() const { return distribution_; }
   const uint64 RangeMax() const { return range_max_; }
   const uint64 Tile() const { return tile_; }
@@ -63,7 +64,7 @@ class RangeSampler {
 
  private:
   const DistributionType distribution_;
-  const std::string debug_name_;
+  const poplar::DebugNameAndId dnai_;
   const uint64 range_max_;
   const uint64 tile_;
   const poplar::Tensor seed_;
@@ -72,9 +73,10 @@ class RangeSampler {
 class UniqueRangeSampler : public RangeSampler {
  public:
   UniqueRangeSampler(const DistributionType distribution,
-                     const std::string debug_name, const uint64 range_max,
-                     const uint64 tile, const poplar::Tensor& seed)
-      : RangeSampler(distribution, debug_name, range_max, tile, seed) {}
+                     const poplar::DebugNameAndId& debug_name_and_id,
+                     const uint64 range_max, const uint64 tile,
+                     const poplar::Tensor& seed)
+      : RangeSampler(distribution, debug_name_and_id, range_max, tile, seed) {}
 
   Status Sample(poplar::Graph& graph, poplar::Tensor& samples,
                 poplar::program::Sequence& seq) override;
@@ -93,9 +95,9 @@ StatusOr<DistributionType> DistributionStringToEnum(
 
 // Function to instantiate a RangeSampler with a string
 StatusOr<std::unique_ptr<RangeSampler>> RangeSamplerFactory(
-    const std::string distribution, const std::string debug_name,
-    const uint64 range_max, const uint64 tile, const poplar::Tensor& seed,
-    bool unique);
+    const std::string distribution,
+    const poplar::DebugNameAndId& debug_name_and_id, const uint64 range_max,
+    const uint64 tile, const poplar::Tensor& seed, bool unique);
 
 }  // namespace poplarplugin
 }  // namespace xla

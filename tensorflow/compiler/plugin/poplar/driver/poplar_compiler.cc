@@ -432,20 +432,21 @@ HloPrintOptions GetPrintOptions() {
   return opts;
 }
 
-StatusOr<poplar::program::Program> InitializeSeed(poplar::Graph& graph,
-                                                  int replication_factor) {
-  const std::string seed_prefix = "__seed";
+StatusOr<poplar::program::Program> InitializeSeed(
+    poplar::Graph& graph, int replication_factor,
+    const poplar::DebugContext& debug_context = {"__seed"}) {
+  PoplarOpDefDebugInfo debug_info(debug_context, "InitializeSeed");
 
   auto seed =
-      graph.addVariable(poplar::UNSIGNED_INT, {2}, seed_prefix + "/tensor");
+      graph.addVariable(poplar::UNSIGNED_INT, {2}, {debug_info, "seed"});
   graph.setTileMapping(seed, 0);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, {debug_info});
   if (!UseSyntheticData()) {
     // Copy the seed from the data stream and set it.
     auto data_stream = graph.addHostToDeviceFIFO(
         GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
-    seq.add(poplar::program::Copy(data_stream, seed));
+    seq.add(poplar::program::Copy(data_stream, seed, false, {debug_info}));
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the seed on the device.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -453,13 +454,16 @@ StatusOr<poplar::program::Program> InitializeSeed(poplar::Graph& graph,
                         initializer.GetData(ShapeUtil::MakeShape(U32, {2})));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, seed, literal));
   }
-  poprand::setSeed(graph, seed, 0, seq, seed_prefix + "/set");
+  poprand::setSeed(graph, seed, 0, seq, {debug_info, "set"});
 
   return seq;
 }
 
 bool InitializeCycleCounter(poplar::Graph& graph,
-                            poplar::program::Sequence& seq) {
+                            poplar::program::Sequence& seq,
+                            const poplar::DebugContext& debug_context) {
+  PoplarOpDefDebugInfo debug_info(debug_context, "InitializeCycleCounter");
+
   int tile = PoplarXlaFlags::Get().log_cycle_count;
   if (tile < 0 ||
       graph.getTarget().getTargetType() != poplar::TargetType::IPU) {
@@ -467,10 +471,10 @@ bool InitializeCycleCounter(poplar::Graph& graph,
   } else {
     std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
     poplar::Tensor cycleCounter =
-        poplar::cycleCount(graph, seq, tile, cycleCounterId + "/tensor");
+        poplar::cycleCount(graph, seq, tile, {debug_info, cycleCounterId});
     poplar::DataStream fifo = graph.addDeviceToHostFIFO(
         cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
-    seq.add(poplar::program::Copy(cycleCounter, fifo));
+    seq.add(poplar::program::Copy(cycleCounter, fifo, false, {debug_info}));
     return true;
   }
 }
@@ -1461,7 +1465,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
       auto order = module->schedule().sequence(entry).instructions();
       TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
-          resources, poplar_executor->VerifiedTransfers()));
+          resources, poplar_executor->VerifiedTransfers(),
+          {"InitializeIndexTensors"}));
 
       // The following line starts the lowering in poplar.
       VLOG(1) << "Begin Poplar graph contruction.";
@@ -1471,7 +1476,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       return PoplarExceptionToTensorflowStatus("[Build graph] ", e);
     }
 
-    poplar::program::Sequence main_program;
+    poplar::program::Sequence main_program({}, {"MainProgram"});
 
     // Set up the random seed.
     TF_ASSIGN_OR_RETURN(auto seed_setup,
@@ -1490,7 +1495,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // Add the main program sequence.
     main_program.add(visitor.GetSequenceAndInitializeCounters());
 
-    logging_cycle_count = InitializeCycleCounter(main_graph, main_program);
+    logging_cycle_count = InitializeCycleCounter(main_graph, main_program,
+                                                 "InitializeCycleCounter");
 
     // =======================================================================
     // DO NOT CHANGE THE ORDER OF THESE WITHOUT UPDATING PoplarProgramType IN
@@ -1502,7 +1508,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     // For verified transfers fuse all 3 programs in a single one.
     if (poplar_executor->UseVerifiedTransfers()) {
-      poplar::program::Sequence fused_program;
+      poplar::program::Sequence fused_program({}, "FusedProgram");
       for (auto& prog : progs) {
         fused_program.add(prog);
       }

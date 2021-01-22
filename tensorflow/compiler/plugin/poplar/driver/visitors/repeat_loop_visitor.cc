@@ -34,8 +34,9 @@ namespace poplarplugin {
 RepeatLoopVisitor::RepeatLoopVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description,
-    const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, description, name, {},
+    const ReallocateInputsInfo& reallocate_inputs_info,
+    const poplar::DebugNameAndId& debug_name_and_id)
+    : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {},
                              reallocate_inputs_info) {
   EnterVariableScope();
 }
@@ -48,6 +49,8 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
           "loop - only one resource update is allowed.");
     }
 
+    poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+
     has_resource_update_ = true;
     num_mini_batches_to_accumulate_ =
         GetResourceUpdateBatchesToAccumulate(inst);
@@ -56,9 +59,10 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
         DeferredArgRBVectors inputs,
         GetInputsForDeferredRBInstruction(inst, /*preserve_aliasing*/ true));
 
-    TF_ASSIGN_OR_RETURN(resource_update_sequence_,
-                        CreateResourceUpdateOp(resources_, inst, inputs,
-                                               inst->shape(), tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        resource_update_sequence_,
+        CreateResourceUpdateOp(resources_, inst, inputs, inst->shape(),
+                               tensor_map, debug_name_and_id));
     return Status::OK();
   } else {
     return InplaceDeferredVisitor::HandleDeferredAllocationCall(inst);
@@ -69,7 +73,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // Create the sequence which is only executed once before the loops is
   // executed.
   // Add any copies if the inputs were reallocated.
-  TF_ASSIGN_OR_RETURN(pre_loop_sequence_, GetPreambleCopies());
+  TF_ASSIGN_OR_RETURN(pre_loop_sequence_, GetPreambleCopies(dnai_));
 
   // Initialize the counters to zero once at the begining.
   pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero());
@@ -78,7 +82,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   auto& zeroing_tensors =
       resources_.gradient_accumulation_zeroing_tensors.top();
   ZeroTensors(resources_, GetMasterGraph(resources_), zeroing_tensors,
-              tensors_zeroing_sequence_, name_ + "/ZeroAccumulators");
+              tensors_zeroing_sequence_, {dnai_, "ZeroAccumulators"});
 
   auto& zeroing_remote_buffers =
       resources_.gradient_accumulation_zeroing_remote_buffers.top();
@@ -92,7 +96,7 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // are aliased to the inputs of the next one.
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(loop_state_, AddLoopInputOutputAliasingCopies(
-                                       graph, inst->parent(), name_));
+                                       graph, inst->parent(), {dnai_}));
 
   return Status::OK();
 }
@@ -132,12 +136,13 @@ void RepeatLoopVisitor::AddSequenceForAliasingCopy(
 
 poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     const HloInstruction* inst) {
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   const int64 repeat_count = GetRepeatLoopCount(inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   seq.add(pre_loop_sequence_);
 
-  poplar::program::Sequence repeat_seq;
+  poplar::program::Sequence repeat_seq({}, {debug_name_and_id, "repeat"});
   {
     repeat_seq.add(GetSequence(/*copy_execution_counters*/ false));
     // Increase the local execution counters at the end of each iteration.
@@ -150,18 +155,20 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     // Create a double loop - the inner loop executes for
     // `num_mini_batches_to_accumulate_` iterations and then performs the
     // resource update.
-    poplar::program::Sequence inner_seq;
+    poplar::program::Sequence inner_seq({}, {debug_name_and_id, "inner"});
     // Zero the gradient accumulation buffers.
     inner_seq.add(tensors_zeroing_sequence_);
-    inner_seq.add(
-        poplar::program::Repeat(num_mini_batches_to_accumulate_, repeat_seq));
+    inner_seq.add(poplar::program::Repeat(num_mini_batches_to_accumulate_,
+                                          repeat_seq, {debug_name_and_id}));
     inner_seq.add(resource_update_sequence_);
 
     // Repeat the inner loop.
-    seq.add(poplar::program::Repeat(
-        repeat_count / num_mini_batches_to_accumulate_, inner_seq));
+    seq.add(
+        poplar::program::Repeat(repeat_count / num_mini_batches_to_accumulate_,
+                                inner_seq, {debug_name_and_id}));
   } else {
-    seq.add(poplar::program::Repeat(repeat_count, repeat_seq));
+    seq.add(
+        poplar::program::Repeat(repeat_count, repeat_seq, {debug_name_and_id}));
   }
   return seq;
 }

@@ -237,13 +237,15 @@ class DeferredVisitor : public FullVisitor {
    */
   DeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-      const std::string& name, bool allocate_all_input_tensors = true,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      bool allocate_all_input_tensors = true,
       const std::vector<const DeferredVisitor*>& dependent_computations = {},
       bool reallocate_inputs = true);
 
   DeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-      const std::string& name, bool allocate_all_input_tensors,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      bool allocate_all_input_tensors,
       const std::vector<const DeferredVisitor*>& dependent_computations,
       const ReallocateInputsInfo& reallocate_inputs_info);
 
@@ -280,7 +282,8 @@ class DeferredVisitor : public FullVisitor {
   // site but now have a tensor.
   virtual Status PropagateDeferredAllocations(
       const HloInstruction* callsite_inst,
-      const DeferredArgRBVectors& callsite_inputs);
+      const DeferredArgRBVectors& callsite_inputs,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   poplar::program::Sequence GetSequence(
       bool copy_execution_counters = true) final;
@@ -348,32 +351,37 @@ class DeferredVisitor : public FullVisitor {
   // Allocation location is the location where the tensor is actually allocated.
   StatusOr<poplar::Tensor> AllocateInput(
       TensorLocation allocation_location, const Shape& shape,
-      absl::optional<poplar::Tensor> tensor_like);
+      absl::optional<poplar::Tensor> tensor_like,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   StatusOr<poplar::Tensor> AllocateInput(
       TensorLocation allocation_location, const Shape& shape,
-      absl::optional<TensorOrRemoteBuffer> tensor_like);
+      absl::optional<TensorOrRemoteBuffer> tensor_like,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
-  StatusOr<poplar::Tensor> AllocateInput(TensorLocation allocation_location,
-                                         const Shape& shape);
+  StatusOr<poplar::Tensor> AllocateInput(
+      TensorLocation allocation_location, const Shape& shape,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Function called for each input tensor into the computation.
   // Input location is the location at which the tensor is an input to the
   // computation (parameter/infeed).
-  StatusOr<poplar::Tensor> PostProcessInputTensor(poplar::Tensor tensor,
-                                                  TensorLocation input_location,
-                                                  const Shape& shape);
+  StatusOr<poplar::Tensor> PostProcessInputTensor(
+      poplar::Tensor tensor, TensorLocation input_location, const Shape& shape,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Called by AllocateInput when allocating an input for an infeed.
   StatusOr<poplar::Tensor> PostProcessInfeedAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, poplar::Tensor tensor);
+      poplar::program::Sequence& sequence, poplar::Tensor tensor,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Called by AllocateInput when allocating an input for a parameter.
   // By default, inplace evaluator does no post processing for parameters.
   virtual StatusOr<poplar::Tensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,
-      poplar::program::Sequence& sequence, poplar::Tensor tensor) {
+      poplar::program::Sequence& sequence, poplar::Tensor tensor,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     return tensor;
   }
 
@@ -384,7 +392,8 @@ class DeferredVisitor : public FullVisitor {
   // copies for any operand which requires it.
   Status PropagateDeferredAllocations(
       const HloInstruction* callsite_inst,
-      const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone);
+      const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
@@ -428,13 +437,15 @@ class InplaceDeferredVisitor : public DeferredVisitor {
  public:
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description, const std::string& name,
+      const HloInstructionDescription& description,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
 
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgRBVectors& inputs,
-      const HloInstructionDescription& description, const std::string& name,
+      const HloInstructionDescription& description,
+      const poplar::DebugNameAndId& debug_name_and_id,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations,
       const ReallocateInputsInfo& reallocate_inputs_info);
 
@@ -448,18 +459,20 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // copies. Returns the loop state (i.e. the output of the loop).
   StatusOr<TensorOrRemoteBufferVector> AddLoopInputOutputAliasingCopies(
       poplar::Graph& graph, const HloComputation* computation,
-      const std::string& debug_name);
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a layout.
   Status PropagateDeferredAllocations(
       const HloInstruction* callsite_inst,
-      const DeferredArgRBVectors& callsite_inputs) override;
+      const DeferredArgRBVectors& callsite_inputs,
+      const poplar::DebugNameAndId& debug_name_and_id) override;
 
   // If the visitor operator is allowed to reallocate inputs, then copies from
   // the callsite to computation inputs might be required as they are different
   // tensors.
-  StatusOr<poplar::program::Sequence> GetPreambleCopies();
+  StatusOr<poplar::program::Sequence> GetPreambleCopies(
+      const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
   // Add the given sequence to the correct sequence for aliasing copies.

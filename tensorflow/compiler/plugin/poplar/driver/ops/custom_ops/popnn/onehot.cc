@@ -21,6 +21,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -38,22 +39,23 @@ class OneHotOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "OneHotOp");
     // Create the control program.
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
 
     // We expect only three arguments. Other two, depth and axis, are expected
     // to be compile time constants.
-    TF_ASSIGN_OR_RETURN(
-        TensorVector indices,
-        FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVector indices,
+                        FindInstructionInputTensors(tensor_map, res, inst, 0,
+                                                    seq, {debug_info}, false));
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVector on,
-        FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVector on,
+                        FindInstructionInputTensors(tensor_map, res, inst, 1,
+                                                    seq, {debug_info}, false));
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVector off,
-        FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVector off,
+                        FindInstructionInputTensors(tensor_map, res, inst, 2,
+                                                    seq, {debug_info}, false));
 
     const HloOneHotInstruction* one_hot_op = Cast<HloOneHotInstruction>(inst);
     if (!one_hot_op) {
@@ -71,16 +73,17 @@ class OneHotOp : public PoplarOpDef {
 
     // Create the output tensor to store the result in (as popops takes this by
     // reference rather than returning the output).
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0},
-                                  tmp_output_shape, res, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, tmp_output_shape, res,
+                  tensor_map, {debug_info, "output"}));
 
     poplar::Tensor on_tensor = on[0];
     poplar::Tensor off_tensor = off[0];
 
     // Encode one hot returns void but stores output in "output".
     popops::encodeOneHot(graph, indices_tensor, output, seq, on_tensor,
-                         off_tensor, "OneHot");
+                         off_tensor, {debug_info, "OneHot"});
 
     // Reshape to the input size
     output = output.reshapePartial(0, 1, indices[0].shape());

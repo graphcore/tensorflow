@@ -43,22 +43,21 @@ struct CompilerResources;
 struct TensorTarget;
 
 StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
-    poplar::Graph& graph, CompilerResources& res, const std::string& name,
+    poplar::Graph& graph, CompilerResources& res,
+    const poplar::DebugNameAndId& debug_name_and_id,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreatePoplarOp(poplar::Graph& graph,
-                                                  CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  const xla::Shape& output,
-                                                  TensorMap& tensor_map);
+StatusOr<poplar::program::Program> CreatePoplarOp(
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
-StatusOr<poplar::Tensor> AllocateHloOpTensor(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const std::string& name,
-                                             const TensorTarget& tensor_target,
-                                             const xla::Shape& shape,
-                                             const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AllocateHloOpTensor(
+    poplar::Graph& graph, CompilerResources& res,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    const TensorTarget& tensor_target, const xla::Shape& shape,
+    const TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateHloOp(poplar::Graph& graph,
                                                CompilerResources& res,

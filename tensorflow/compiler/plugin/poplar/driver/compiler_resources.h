@@ -197,6 +197,7 @@ struct CompilerResources {
         local_replication_factor(local_replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
+        preamble_sequence({}, "Preamble"),
         scheduler_selection(scheduler_selection),
         recomputation_enabled(recomputation_enabled),
         use_stable_norm_statistics(use_stable_norm_statistics),

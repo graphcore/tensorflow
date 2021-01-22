@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -39,6 +40,7 @@ class ReplicationIndexOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReplicationIndexOp");
     // TensorFlow requires slices to be signed integers, we therefore type cast
     // to int32.
     auto output = graph.addReplicationIndexConstant();
@@ -47,7 +49,7 @@ class ReplicationIndexOp : public PoplarOpDef {
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
-    return poplar::program::Sequence();
+    return poplar::program::Sequence({}, debug_info);
   }
 };
 REGISTER_POPLAR_OP(ReplicationIndex, ReplicationIndexOp);

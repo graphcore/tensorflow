@@ -20,6 +20,7 @@ limitations under the License.
 #include <poputil/DebugInfo.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -82,6 +83,23 @@ XlaOpDebugInfo::XlaOpDebugInfo(poplar::DebugContext& debug_context,
 }
 
 XlaOpDebugInfo::~XlaOpDebugInfo() {}
+
+uint64_t GetDebugId(const CompilerResources& resources,
+                    const HloInstruction* inst) {
+  auto it = resources.hlo_instruction_to_debug_id_mapping.find(inst);
+  if (it != resources.hlo_instruction_to_debug_id_mapping.end()) {
+    return it->second;
+  } else {
+    return 0;
+  }
+}
+
+poplar::DebugNameAndId GetDebugNameAndId(const CompilerResources& res,
+                                         const HloInstruction* inst,
+                                         const std::string suffix) {
+  return poplar::DebugNameAndId(suffix, GetDebugId(res, inst),
+                                GetDebugName(inst));
+}
 
 }  // namespace poplarplugin
 }  // namespace xla

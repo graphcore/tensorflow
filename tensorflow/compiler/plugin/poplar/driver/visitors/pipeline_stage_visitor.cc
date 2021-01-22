@@ -34,8 +34,9 @@ namespace poplarplugin {
 
 PipelineStageVisitor::PipelineStageVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description, const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, description, name) {}
+    const HloInstructionDescription& description,
+    const poplar::DebugNameAndId& debug_name_and_id)
+    : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id) {}
 
 bool PipelineStageVisitor::TupleOutputsNeedToPreserveAliasing(
     const HloInstruction* inst) {
@@ -53,7 +54,8 @@ poplar::program::Sequence PipelineStageVisitor::GetCachedSequence() {
     function_ = GetMasterGraph(resources_).addFunction(seq);
     has_function_ = true;
   }
-  return poplar::program::Sequence(poplar::program::Call(function_));
+  return poplar::program::Sequence({poplar::program::Call(function_, {dnai_})},
+                                   dnai_);
 }
 
 ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
@@ -75,12 +77,14 @@ ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description, const std::string& name)
-    : PipelineStageVisitor(res, inputs, description, name) {}
+    const HloInstructionDescription& description,
+    const poplar::DebugNameAndId& debug_name_and_id)
+    : PipelineStageVisitor(res, inputs, description, debug_name_and_id) {}
 
 Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
-    const DeferredArgRBVectors& callsite_inputs) {
+    const DeferredArgRBVectors& callsite_inputs,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   std::vector<bool> add_clones(callsite_inst->operand_count());
   // Mark all the non-read only inputs as requiring clones so that when the
   // sequence is reused we can copy the tensor values into them.
@@ -90,13 +94,13 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
                     });
 
   return DeferredVisitor::PropagateDeferredAllocations(
-      callsite_inst, callsite_inputs, add_clones);
+      callsite_inst, callsite_inputs, add_clones, debug_name_and_id);
 }
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
     const HloInstruction* callsite, const DeferredArgRBVectors& deferred_inputs,
     TensorMap& callsite_tensor_map) {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
   TensorOrRemoteBufferVectors inputs(deferred_inputs.size());
@@ -113,7 +117,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
         // stage has been built.
         TensorOrRemoteBufferVector input = FindInstructionInputsInRange(
             callsite_tensor_map, resources_, callsite, operand_idx,
-            {flat_idx, flat_idx + 1}, seq, false);
+            {flat_idx, flat_idx + 1}, seq, dnai_, false);
         CHECK_EQ(input.size(), 1);
         // We do not need to check whether this input is used inplace, because
         // we add copies for all inplace inputs in a reusable pipeline stage
@@ -142,7 +146,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
   // modified. Note that since we are adding these copies, the FIFO instructions
   // can be executed after the PipelineStage and before the
   // PipelineStageRecomputation since the values won't be modified inplace.
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   for (int64 op_idx = 0; op_idx != callsite->operand_count(); ++op_idx) {
     const HloInstruction* operand = callsite->operand(op_idx);
     if (IsPipelineStageReadOnlyInput(operand)) {
@@ -154,7 +158,8 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
       CHECK_EQ(inputs[op_idx].size(), computation_inputs_[op_idx].size());
       for (size_t flat_idx = 0; flat_idx != inputs[op_idx].size(); ++flat_idx) {
         seq.add(TensorCopyWithAliasing(graph, inputs[op_idx][flat_idx],
-                                       computation_inputs_[op_idx][flat_idx]));
+                                       computation_inputs_[op_idx][flat_idx],
+                                       dnai_));
       }
     }
   }

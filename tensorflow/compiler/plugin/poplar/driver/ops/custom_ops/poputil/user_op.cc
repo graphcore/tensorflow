@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -38,6 +39,7 @@ class UserOpImpl : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "UserOpImpl");
     const HloUserOpInstruction* user_op_inst = Cast<HloUserOpInstruction>(inst);
 
     const std::string& gp_path = user_op_inst->GetPath();
@@ -84,7 +86,7 @@ class UserOpImpl : public PoplarOpDef {
     as_function_host_rw_ptr =
         reinterpret_cast<decltype(as_function_host_rw_ptr)>(
             user_op_inst->GetPointerToFunc());
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
     std::vector<poplar::Tensor> outputs;
 
     // Track the number of outputs/inputs this operation has.
@@ -136,9 +138,9 @@ class UserOpImpl : public PoplarOpDef {
 
       for (std::uint32_t i = 0; i < user_op_inst->NumInputs(); ++i) {
         // Get the poplar tensor.
-        TF_ASSIGN_OR_RETURN(
-            poplar::Tensor in,
-            FindInstructionInput(tensor_map, res, inst, i, seq, false));
+        TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                            FindInstructionInput(tensor_map, res, inst, i, seq,
+                                                 {debug_info}, false));
 
         // Give each input a stream identifier based on the instruction name.
         const std::string stream_name =
@@ -159,12 +161,12 @@ class UserOpImpl : public PoplarOpDef {
 
         // Copy from the tensor into the host stream. We will later attach a
         // callback to this.
-        seq.add(poplar::program::Copy(in, stream));
+        seq.add(poplar::program::Copy(in, stream, false, {debug_info}));
       }
 
       // Add an ontile sync to stop the copies from host being merged with the
       // above as there is an invisble dependency in the callback.
-      seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
+      seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL, {debug_info}));
 
       outputs.resize(number_of_outputs);
 
@@ -174,9 +176,10 @@ class UserOpImpl : public PoplarOpDef {
            output_index++) {
         xla::Shape shape = output_shape.tuple_shapes()[output_index];
         // Create a new tensor using "AddTensor" to get a good layout.
-        TF_ASSIGN_OR_RETURN(poplar::Tensor output_tensor,
-                            AddTensor(graph, TensorLocation{inst, output_index},
-                                      shape, res, tensor_map));
+        TF_ASSIGN_OR_RETURN(
+            poplar::Tensor output_tensor,
+            AddTensor(graph, TensorLocation{inst, output_index}, shape, res,
+                      tensor_map, {debug_info, "output"}));
 
         // Add stream ID for each output tensor.
         const std::string stream_name =
@@ -203,7 +206,8 @@ class UserOpImpl : public PoplarOpDef {
         meta_info.output_stream_info.push_back(ref);
 
         // Add the copy to the graph.
-        seq.add(poplar::program::Copy(stream, output_tensor));
+        seq.add(
+            poplar::program::Copy(stream, output_tensor, false, {debug_info}));
 
         outputs[output_index] = output_tensor;
       }
@@ -213,9 +217,9 @@ class UserOpImpl : public PoplarOpDef {
 
         // Get the variadic inputs and store them in the vector.
         for (size_t i = 0; i < user_op_inst->NumInputs(); ++i) {
-          TF_ASSIGN_OR_RETURN(
-              poplar::Tensor in,
-              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                              FindInstructionInput(tensor_map, res, inst, i,
+                                                   seq, {debug_info}, false));
           inputs[i] = in;
         }
         // Call the user operation and add it to the sequence.
@@ -240,26 +244,26 @@ class UserOpImpl : public PoplarOpDef {
 
         // Get the gradients.s
         for (ssize_t i = 0; i < size_of_gradient; ++i) {
-          TF_ASSIGN_OR_RETURN(
-              poplar::Tensor in,
-              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                              FindInstructionInput(tensor_map, res, inst, i,
+                                                   seq, {debug_info}, false));
 
           gradients.push_back(in);
         }
 
         // Get the previous inputs.
         for (ssize_t i = size_of_gradient; i < outputs_index; ++i) {
-          TF_ASSIGN_OR_RETURN(
-              poplar::Tensor in,
-              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                              FindInstructionInput(tensor_map, res, inst, i,
+                                                   seq, {debug_info}, false));
           previous_outputs.push_back(in);
         }
 
         // Get the previous outputs.
         for (size_t i = outputs_index; i < user_op_inst->NumInputs(); ++i) {
-          TF_ASSIGN_OR_RETURN(
-              poplar::Tensor in,
-              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                              FindInstructionInput(tensor_map, res, inst, i,
+                                                   seq, {debug_info}, false));
           previous_inputs.push_back(in);
         }
 

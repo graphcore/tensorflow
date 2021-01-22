@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
@@ -64,6 +65,7 @@ class SortOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "SortOp");
     const HloSortInstruction* sort = Cast<HloSortInstruction>(inst);
 
     if (!IsSimpleComparison(inst)) {
@@ -71,16 +73,18 @@ class SortOp : public PoplarOpDef {
           "Current Sort implementation only supports GT/LT/GE/LE comparisons");
     }
 
-    poplar::program::Sequence prog;
+    poplar::program::Sequence prog({}, debug_info);
     // Get the inplace input/outputs.
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, prog));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     if (sort->operand_count() == 1) {
       CHECK_EQ(inputs.size(), 1);
       CHECK_EQ(inputs[0].size(), 1);
       poplar::Tensor to_sort = inputs[0][0];
 
-      popops::sortInPlace(graph, to_sort, sort->dimensions(0), prog);
+      popops::sortInPlace(graph, to_sort, sort->dimensions(0), prog,
+                          {debug_info});
 
       if (ReverseSortOutput(inst)) {
         TF_ASSIGN_OR_RETURN(to_sort,
@@ -95,7 +99,8 @@ class SortOp : public PoplarOpDef {
       poplar::Tensor key = inputs[0][0];
       poplar::Tensor value = inputs[1][0];
 
-      popops::sortKeyValueInPlace(graph, key, value, sort->dimensions(0), prog);
+      popops::sortKeyValueInPlace(graph, key, value, sort->dimensions(0), prog,
+                                  {debug_info});
 
       if (ReverseSortOutput(inst)) {
         TF_ASSIGN_OR_RETURN(key, ReverseTensor(key, sort->dimensions()));

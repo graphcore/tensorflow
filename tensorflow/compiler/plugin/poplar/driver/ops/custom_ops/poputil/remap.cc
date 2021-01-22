@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -40,15 +41,17 @@ class RemapOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "RemapOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(
-        auto input, FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+    TF_ASSIGN_OR_RETURN(auto input,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info}, false));
 
-    auto output = graph.addVariable(input.elementType(), input.shape(),
-                                    GetDebugName(inst));
+    auto output =
+        graph.addVariable(input.elementType(), input.shape(), {debug_info});
     poputil::mapTensorLinearly(graph, output);
-    seq.add(poplar::program::Copy(input, output));
+    seq.add(poplar::program::Copy(input, output, false, {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 

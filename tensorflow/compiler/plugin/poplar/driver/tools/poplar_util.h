@@ -114,7 +114,8 @@ StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
 StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
 
-void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t);
+void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
+                             const poplar::DebugNameAndId& debug_name_and_id);
 
 absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
     int64 parameter_number, const RemoteParameterInfos& remote_parameter_infos);
@@ -145,9 +146,9 @@ StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);
 
 // Add a copy between two tensors with compatbile aliasing Poplar Tensors.
-poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
-                                                 const poplar::Tensor& src,
-                                                 const poplar::Tensor& dst);
+poplar::program::Sequence TensorCopyWithAliasing(
+    poplar::Graph& graph, const poplar::Tensor& src, const poplar::Tensor& dst,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 // Modify the compiler resources to indicate the embedding associated with a
 // slice plan has been allocated with the given plan.
@@ -191,13 +192,14 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
 // Zero the given remote buffer at the given repeat offset.
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
                       poplar::RemoteBuffer& remote_buffer, int64 offset,
-                      poplar::program::Sequence& sequence);
+                      poplar::program::Sequence& sequence,
+                      const poplar::DebugNameAndId& debug_name_and_id);
 
 // Zero the given tensors efficiently.
 void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
                  const std::vector<poplar::Tensor>& tensors,
                  poplar::program::Sequence& sequence,
-                 const std::string& debug_prefix);
+                 const poplar::DebugNameAndId& debug_name_and_id);
 
 // Functor to hash a poplar type.
 struct PoplarTypeHasher {

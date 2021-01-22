@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -77,6 +78,7 @@ class LstmLayerFwdOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerFwdOp");
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
 
@@ -86,32 +88,32 @@ class LstmLayerFwdOp : public PoplarOpDef {
     switch (input_index) {
       case 0: {
         // Allocate LSTM input tensor
-        return popnn::lstm::createInput(graph, lstm_params, name, lstm_opts,
-                                        &res.dot_cache);
+        return popnn::lstm::createInput(graph, lstm_params, {debug_info},
+                                        lstm_opts, &res.dot_cache);
       }
       case 1: {
         // Allocate initial output (h) tensor
-        return popnn::lstm::createInitialOutput(graph, lstm_params, name,
-                                                lstm_opts, &res.dot_cache);
+        return popnn::lstm::createInitialOutput(
+            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
       }
       case 2: {
         // Allocate initial cell state (c) tensor
-        return popnn::lstm::createInitialCellState(graph, lstm_params, name,
-                                                   lstm_opts, &res.dot_cache);
+        return popnn::lstm::createInitialCellState(
+            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
       }
       case 3: {
         // Allocate LSTM weights kernel
         poplar::Tensor input_weights;
         poplar::Tensor output_weights;
         std::tie(input_weights, output_weights) =
-            popnn::lstm::createWeightsKernel(graph, lstm_params, name,
+            popnn::lstm::createWeightsKernel(graph, lstm_params, {debug_info},
                                              lstm_opts, &res.dot_cache);
         return PackLstmKernel(input_weights, output_weights);
       }
       case 4: {
         // Allocate LSTM weights biases
-        return popnn::lstm::createWeightsBiases(graph, lstm_params, name,
-                                                lstm_opts, &res.dot_cache);
+        return popnn::lstm::createWeightsBiases(
+            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
       }
       default: {
         return xla::FailedPrecondition(
@@ -127,25 +129,31 @@ class LstmLayerFwdOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerFwdOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_h_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_c_state,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 4, seq,
-                                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_seq,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_h_state,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_c_state,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_kernel,
+        FindInstructionInput(tensor_map, res, inst, 3, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_biases,
+        FindInstructionInput(tensor_map, res, inst, 4, seq, debug_info,
+                             /*expand_aliasing*/ false));
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
@@ -157,10 +165,9 @@ class LstmLayerFwdOp : public PoplarOpDef {
     auto lstm_inst = Cast<HloRNNInstruction>(inst);
     bool is_training = lstm_inst->is_training();
 
-    const std::string debug_prefix = GetDebugName(inst);
     auto func = [&graph, &res, lstm_params, lstm_opts, is_training, input_size,
-                 output_size, debug_prefix](std::vector<poplar::Tensor>& args,
-                                            poplar::program::Sequence& prog) {
+                 output_size, &debug_info](std::vector<poplar::Tensor>& args,
+                                           poplar::program::Sequence& prog) {
       poplar::Tensor input_seq = args[0];
       poplar::Tensor input_h_state = args[1];
       poplar::Tensor input_c_state = args[2];
@@ -176,9 +183,9 @@ class LstmLayerFwdOp : public PoplarOpDef {
       auto intermediates_ptr = is_training ? &args[8] : nullptr;
       std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
           graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-          prog, debug_prefix, lstm_opts, &res.dot_cache);
+          prog, {debug_info}, lstm_opts, &res.dot_cache);
       args[6] = poputil::duplicate(graph, args[5][lstm_params.timeSteps - 1],
-                                   prog, debug_prefix + "/outputHState");
+                                   prog, {debug_info, "outputHState"});
     };
 
     poplar::Tensor output, output_h_state, output_c_state, intermediates;
@@ -225,46 +232,59 @@ class LstmLayerBwdOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerBwdOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // Do not expand aliasing when creating a cached op - the input will be
     // reallocated if required.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_h_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_c_state,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 4, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output,
-                        FindInstructionInput(tensor_map, res, inst, 5, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_h_state,
-                        FindInstructionInput(tensor_map, res, inst, 6, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_c_state,
-                        FindInstructionInput(tensor_map, res, inst, 7, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_intermediates,
-                        FindInstructionInput(tensor_map, res, inst, 8, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 9, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_h_state_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 10, seq,
-                                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_c_state_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 11, seq,
-                                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_seq,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_h_state,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_input_c_state,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_kernel,
+        FindInstructionInput(tensor_map, res, inst, 3, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_biases,
+        FindInstructionInput(tensor_map, res, inst, 4, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output,
+        FindInstructionInput(tensor_map, res, inst, 5, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output_h_state,
+        FindInstructionInput(tensor_map, res, inst, 6, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output_c_state,
+        FindInstructionInput(tensor_map, res, inst, 7, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_intermediates,
+        FindInstructionInput(tensor_map, res, inst, 8, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output_backprop,
+        FindInstructionInput(tensor_map, res, inst, 9, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output_h_state_backprop,
+        FindInstructionInput(tensor_map, res, inst, 10, seq, debug_info,
+                             /*expand_aliasing*/ false));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor arg_output_c_state_backprop,
+        FindInstructionInput(tensor_map, res, inst, 11, seq, debug_info,
+                             /*expand_aliasing*/ false));
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
@@ -273,10 +293,9 @@ class LstmLayerBwdOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
-    const std::string debug_prefix = GetDebugName(inst);
     auto func = [&graph, &res, lstm_params, lstm_opts, input_size, output_size,
-                 debug_prefix](std::vector<poplar::Tensor>& args,
-                               poplar::program::Sequence& prog) {
+                 &debug_info](std::vector<poplar::Tensor>& args,
+                              poplar::program::Sequence& prog) {
       poplar::Tensor input_seq = args[0];
       poplar::Tensor input_h_state = args[1];
       poplar::Tensor input_c_state = args[2];
@@ -299,13 +318,13 @@ class LstmLayerBwdOp : public PoplarOpDef {
 
       popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
                          output_h_state_backprop, prog,
-                         debug_prefix + "/outputGradient");
+                         {debug_info, "outputGradient"});
 
       popnn::lstm::LstmWeights weights_backprop;
       popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
           graph, lstm_params, prog, init_state, intermediates, weights,
           input_seq, output, output_backprop, &output_c_state_backprop,
-          &args[12], weights_backprop, debug_prefix, lstm_opts, &res.dot_cache);
+          &args[12], weights_backprop, {debug_info}, lstm_opts, &res.dot_cache);
       args[13] = init_state_backprop.output;
       args[14] = init_state_backprop.cellState;
       args[15] = PackLstmKernel(weights_backprop.inputWeights,

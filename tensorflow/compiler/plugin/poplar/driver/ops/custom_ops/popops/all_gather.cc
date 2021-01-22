@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -55,7 +56,8 @@ class AllGatherOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "AllGatherOp");
+    poplar::program::Sequence seq({}, debug_info);
     const int64 num_inputs = inst->operand_count();
 
     // If there is no replication, then we can just duplicate the inputs.
@@ -63,10 +65,10 @@ class AllGatherOp : public PoplarOpDef {
       for (int64 i = 0; i < num_inputs; ++i) {
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor input,
-            FindInstructionInput(tensor_map, res, inst, i, seq));
+            FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
 
         poplar::Tensor output_tensor = poputil::duplicate(
-            graph, input, seq, GetDebugName(inst),
+            graph, input, seq, {debug_info},
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensor));
@@ -94,8 +96,9 @@ class AllGatherOp : public PoplarOpDef {
 
     // Collect up all the inputs
     for (int64 i = 0; i < num_inputs; ++i) {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor input,
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor input,
+          FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
 
       // If we haven't seen the type before, add it to the list of seen types.
       if (!typed_inputs.contains(input.elementType())) {
@@ -115,7 +118,7 @@ class AllGatherOp : public PoplarOpDef {
 
       // all gather the concatenated tensor.
       poplar::Tensor output =
-          gcl::allGather(GetMasterGraph(res), input, seq, GetDebugName(inst),
+          gcl::allGather(GetMasterGraph(res), input, seq, {debug_info},
                          GetReplicatedCollectiveOptions(res));
 
       // Work out what each sub-tensor's element count is.

@@ -31,7 +31,8 @@ namespace poplarplugin {
 class MapVisitor : public BaseVisitor {
  public:
   MapVisitor(CompilerResources& res, const TensorOrRemoteBufferVectors& inputs,
-             const xla::Shape& shape, const std::string& name);
+             const xla::Shape& shape,
+             const poplar::DebugNameAndId& debug_name_and_id);
 
   Status HandleParameter(HloInstruction* inst) override;
   Status FinishScopedVisit(HloInstruction* inst) override;

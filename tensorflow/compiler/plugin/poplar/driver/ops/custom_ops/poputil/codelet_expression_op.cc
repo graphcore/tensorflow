@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/codelet_expression_op.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -77,13 +78,15 @@ class CodeletExpressionOpOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "CodeletExpressionOpOp");
     auto op_inst = Cast<HloCodeletExpressionOpInstruction>(inst);
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
 
     std::vector<poplar::Tensor> input_tensors(inst->operand_count());
     for (int i = 0; i < inst->operand_count(); ++i) {
-      TF_ASSIGN_OR_RETURN(input_tensors[i],
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
+      TF_ASSIGN_OR_RETURN(
+          input_tensors[i],
+          FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
 
       if (i > 0) {
         poputil::broadcastToMatch(input_tensors[0], input_tensors[i]);
@@ -102,9 +105,9 @@ class CodeletExpressionOpOp : public PoplarOpDef {
 
     graph.addCodelets(vertex_source);
 
-    poplar::Tensor output = graph.clone(input_tensors[0]);
+    poplar::Tensor output = graph.clone(input_tensors[0], {debug_info});
 
-    auto cs = graph.addComputeSet(GetDebugName(inst) + "/cs");
+    auto cs = graph.addComputeSet({debug_info, "cs"});
     const auto tile_mapping = graph.getTileMapping(input_tensors[0]);
     auto tile = 0u;
     for (const auto& intervals : tile_mapping) {

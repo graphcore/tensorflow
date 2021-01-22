@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -43,10 +44,11 @@ class MaxPoolOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "MaxPoolOp");
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsPooling(res, inst, tensor_map, popnn::PoolingType::MAX,
-                                pool_inst->window());
+                                pool_inst->window(), {debug_info});
   }
 };
 REGISTER_POPLAR_OP(MaxPool, MaxPoolOp);
@@ -56,10 +58,11 @@ class AvgPoolOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "AvgPoolOp");
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
     return CreatePoplibsPooling(res, inst, tensor_map, popnn::PoolingType::AVG,
-                                pool_inst->window());
+                                pool_inst->window(), {debug_info});
   }
 };
 REGISTER_POPLAR_OP(AvgPool, AvgPoolOp);
@@ -69,9 +72,11 @@ class MaxPoolGradOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "MaxPoolGradOp");
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
-    return CreatePoplibsMaxPoolGrad(res, inst, tensor_map, pool_inst->window());
+    return CreatePoplibsMaxPoolGrad(res, inst, tensor_map, pool_inst->window(),
+                                    {debug_info});
   }
 };
 REGISTER_POPLAR_OP(MaxPoolGrad, MaxPoolGradOp);
@@ -81,10 +86,12 @@ class AvgPoolGradOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "AvgPoolGradOp");
     auto pool_inst = Cast<HloPoolingInstruction>(inst);
 
-    return CreatePoplibsPoolingGrad(
-        res, inst, tensor_map, popnn::PoolingType::AVG, pool_inst->window());
+    return CreatePoplibsPoolingGrad(res, inst, tensor_map,
+                                    popnn::PoolingType::AVG,
+                                    pool_inst->window(), {debug_info});
   }
 };
 REGISTER_POPLAR_OP(AvgPoolGrad, AvgPoolGradOp);

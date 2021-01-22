@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -53,16 +54,16 @@ struct TensorCopyInfo {
 StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     CompilerResources& res, poplar::Tensor input, const HloInstruction* inst,
     int64 output_flat_tuple_index, int64 dst_shard, const Shape& output_shape,
-    TensorMap& tensor_map) {
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
   TensorLocation output_location{inst, output_flat_tuple_index};
   if (HasTensorAllocationTarget(output_location, res)) {
     // Allocate the new tensor on the destination device.
     poplar::Graph& graph =
         GetGraphWithOutputIndex(res, inst, output_flat_tuple_index);
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor output,
-        AddTensor(graph, output_location, output_shape, res, tensor_map));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
+                        AddTensor(graph, output_location, output_shape, res,
+                                  tensor_map, {debug_name_and_id, "output"}));
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
   }
 
@@ -70,7 +71,7 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
   poplar::Graph& master_graph = GetMasterGraph(res);
   poplar::Tensor output = poputil::cloneToIpu(
       master_graph, input, dst_device_id,
-      absl::StrCat(GetDebugName(inst), "/", output_flat_tuple_index),
+      {debug_name_and_id, std::to_string(output_flat_tuple_index)},
       poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
   poplar::Tensor input_dealised = input.flatten();
@@ -93,7 +94,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
     poplar::Graph&, CompilerResources& res, const HloInstruction* inst,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugContext& debug_context) {
-  poplar::program::Sequence seq;
+  PoplarOpDefDebugInfo debug_info(debug_context, "IpuInterCopyOp");
+  poplar::program::Sequence seq({}, debug_info);
 
   if (!inst->has_sharding()) {
     return FailedPrecondition("Missing shard information on %s", inst->name());
@@ -120,9 +122,9 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
       return FailedPrecondition("Mismatched sharding info on %s", inst->name());
     }
 
-    TF_ASSIGN_OR_RETURN(
-        auto operand_tensors,
-        FindInstructionInputTensors(tensor_map, res, inst, i, seq, false));
+    TF_ASSIGN_OR_RETURN(auto operand_tensors,
+                        FindInstructionInputTensors(tensor_map, res, inst, i,
+                                                    seq, {debug_info}, false));
     const auto shapes = FlattenedXlaShape(src->shape());
     CHECK_EQ(src_sharding.size(), shapes.size());
     for (int64 index = 0; index < src_sharding.size();
@@ -133,7 +135,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
       TF_ASSIGN_OR_RETURN(
           TensorCopyInfo copy_info,
           GetTensorCopyInfo(res, operand_tensors[index], inst, flat_tuple_index,
-                            dst_shard, shapes[index], tensor_map));
+                            dst_shard, shapes[index], tensor_map,
+                            {debug_info}));
 
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index,
                                   copy_info.output));
@@ -142,8 +145,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   }
 
   // Insert the copies.
-  poplar::program::Sequence inter_ipu_copies;
-  poplar::program::Sequence intra_ipu_copies;
+  poplar::program::Sequence inter_ipu_copies({}, debug_info);
+  poplar::program::Sequence intra_ipu_copies({}, debug_info);
   for (auto& src_to_dst : copy_informations) {
     const int64 src_shard = src_to_dst.first;
 
@@ -163,7 +166,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
         outputs[i] = infos[i].output_for_copy;
       }
       prog.add(poplar::program::Copy(poplar::concat(inputs),
-                                     poplar::concat(outputs)));
+                                     poplar::concat(outputs), false,
+                                     {debug_info}));
     }
   }
 

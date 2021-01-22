@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/execution_counter_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -33,13 +34,15 @@ class ExecutionCounterOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "ExecutionCounterOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor counter, GetExecutionCounter(res, inst));
 
     // Create a copy to prevent modification of the counter itself.
     auto counter_copy = poputil::duplicate(
-        graph, counter, seq, GetDebugName(inst) + "/ExecutionCounterCopy");
+        graph, counter, seq, {debug_info, "ExecutionCounterCopy"});
+
     TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, counter_copy));
 
     return seq;

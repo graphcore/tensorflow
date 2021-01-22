@@ -54,7 +54,7 @@ poplar::Device CreateIpuModel(int64 num_shards) {
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     int64 num_shards) {
   auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {});
+  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       CreateIpuModel(num_shards), poplar::replication_factor(1));
@@ -82,12 +82,12 @@ ENTRY main {
                           ParseAndReturnVerifiedModule(hlo_text));
 
   auto resources = GetMockResources(module.get(), 1);
-  ExecutionCounters counters(*resources.get());
+  ExecutionCounters counters(*resources.get(), {});
   EXPECT_FALSE(counters.Initialized());
   // Put the counters on the stack.
   resources->execution_counter_scopes.push(&counters);
   // Create new counters.
-  ExecutionCounters sub_counters(*resources.get());
+  ExecutionCounters sub_counters(*resources.get(), {});
   // Mark one counter as used.
   TF_EXPECT_OK(sub_counters.GetCounter(0).status());
   EXPECT_THAT(sub_counters.GetLiveCounters(), ::testing::ElementsAre(true));
@@ -111,12 +111,12 @@ ENTRY main {
                           ParseAndReturnVerifiedModule(hlo_text));
 
   auto resources = GetMockResources(module.get(), 4);
-  ExecutionCounters counters(*resources.get());
+  ExecutionCounters counters(*resources.get(), {});
   EXPECT_FALSE(counters.Initialized());
   // Put the counters on the stack.
   resources->execution_counter_scopes.push(&counters);
   // Create new counters.
-  ExecutionCounters sub_counters(*resources.get());
+  ExecutionCounters sub_counters(*resources.get(), {});
   // Mark counter as used.
   TF_EXPECT_OK(sub_counters.GetCounter(0).status());
   TF_EXPECT_OK(sub_counters.GetCounter(2).status());

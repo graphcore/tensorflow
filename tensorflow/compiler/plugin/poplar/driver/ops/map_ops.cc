@@ -87,19 +87,20 @@ StatusOr<bool> IsParallelMap(const HloInstruction* inst,
   return tester._is_ok;
 }
 
-StatusOr<poplar::program::Program> CreateParallelMap(CompilerResources& res,
-                                                     const HloInstruction* inst,
-                                                     const xla::Shape& output,
-                                                     TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateParallelMap(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
-  poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
+  poplar::program::Sequence seq({}, debug_name_and_id);
+  TF_ASSIGN_OR_RETURN(
+      TensorOrRemoteBufferVectors inputs,
+      FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), inst->operand_count());
   for (int64 op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
-  MapVisitor visitor(res, inputs, output, GetDebugName(inst));
+  MapVisitor visitor(res, inputs, output, debug_name_and_id);
   TF_RETURN_IF_ERROR(inst->to_apply()->Accept(&visitor));
 
   seq.add(visitor.GetSequence());
@@ -112,25 +113,28 @@ StatusOr<poplar::program::Program> CreateParallelMap(CompilerResources& res,
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output,
-                                                TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateCallOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   if (IsRepeatLoop(inst)) {
     // Version of the repeat operation which does not allow parameters to be
     // deferred.
-    TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        seq, CreateRepeatOp(res, inst, output, tensor_map, debug_name_and_id));
   } else if (IsPipelineOp(inst)) {
     // Version of the pipeline operation which does not allow parameters to be
     // deferred.
-    TF_ASSIGN_OR_RETURN(seq, CreatePipelineOp(res, inst, output, tensor_map));
+    TF_ASSIGN_OR_RETURN(seq, CreatePipelineOp(res, inst, output, tensor_map,
+                                              debug_name_and_id));
   } else {
     // Version of a function call which does not allow parameters to be
     // deferred.
-    TF_ASSIGN_OR_RETURN(seq, CreateFunctionOp(res, inst, output, tensor_map));
+    TF_ASSIGN_OR_RETURN(seq, CreateFunctionOp(res, inst, output, tensor_map,
+                                              debug_name_and_id));
   }
 
   return seq;
@@ -138,36 +142,38 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
 
 StatusOr<poplar::program::Program> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map) {
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph = GetGraph(res, inst);
   if (IsPoplibsHloCustomOp(inst)) {
     VLOG(1) << "Processing " << inst->custom_call_target()
             << " as Poplibs call";
-    return CreatePoplarOp(graph, res, inst, output, tensor_map);
+    return CreatePoplarOp(graph, res, inst, output, tensor_map,
+                          debug_name_and_id);
   } else {
     return xla::FailedPrecondition("Unrecognised kCustomCall %s.",
                                    inst->ToString().c_str());
   }
 }
 
-StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  const xla::Shape& output,
-                                                  TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateFusionOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   HloComputation* comp = inst->fused_instructions_computation();
-  poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
+  poplar::program::Sequence seq({}, debug_name_and_id);
+  TF_ASSIGN_OR_RETURN(
+      TensorOrRemoteBufferVectors inputs,
+      FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), inst->operand_count());
   for (int64 op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
 
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
-  InplaceDeferredVisitor inplace_visitor(res, deferred_inputs,
-                                         HloInstructionDescription(inst),
-                                         GetDebugName(inst));
+  InplaceDeferredVisitor inplace_visitor(
+      res, deferred_inputs, HloInstructionDescription(inst), debug_name_and_id);
   TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
   seq.add(inplace_visitor.GetSequence());
@@ -180,28 +186,28 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
-                                                 const HloInstruction* inst,
-                                                 const xla::Shape& output,
-                                                 TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreateWhileOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
+  TF_ASSIGN_OR_RETURN(
+      TensorOrRemoteBufferVectors inputs,
+      FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence while_seq,
-      CreateWhileOp(res, inst, deferred_inputs, output, tensor_map));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence while_seq,
+                      CreateWhileOp(res, inst, deferred_inputs, output,
+                                    tensor_map, debug_name_and_id));
   seq.add(while_seq);
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
-                                                 const HloInstruction* inst,
-                                                 DeferredArgRBVectors& inputs,
-                                                 const xla::Shape& output,
-                                                 TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateWhileOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), 1);
   const HloInstruction* input_inst = inst->operand(0);
@@ -232,7 +238,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   // Note that the visitor explicitly doesn't allocate all the input tensors for
   // the conditional computation in order to allow the body to visitor to create
   // the tensors.
-  DeferredVisitor condition_visitor(res, inputs, GetDebugName(inst) + "/Cond",
+  DeferredVisitor condition_visitor(res, inputs, {debug_name_and_id, "Cond"},
                                     /*allocate_all_input_tensors*/ false);
   const HloComputation* condition_comp = inst->while_condition();
   {
@@ -246,9 +252,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 
   // Create an inplace visitor for the loop body.
   InplaceDeferredVisitor body_visitor(
-      res, inputs, HloInstructionDescription(inst),
-      GetDebugName(inst) + "/Body", {&condition_visitor},
-      reallocate_input_info);
+      res, inputs, HloInstructionDescription(inst), {debug_name_and_id, "Body"},
+      {&condition_visitor}, reallocate_input_info);
   const HloComputation* body_comp = inst->while_body();
   {
     auto order =
@@ -256,7 +261,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     TF_RETURN_IF_ERROR(body_comp->AcceptOrdered(&body_visitor, order));
 
     // Make sure any deferred inputs to the instruction are pushed up.
-    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst, inputs));
+    TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(
+        inst, inputs, debug_name_and_id));
   }
 
   const uint64 param_count = inputs[0].size();
@@ -281,10 +287,10 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   ExecutionCounters& cond_counters = condition_visitor.GetExecutionCounters();
   ExecutionCounters& body_counters = body_visitor.GetExecutionCounters();
 
-  poplar::program::Sequence main_seq;
+  poplar::program::Sequence main_seq({}, {debug_name_and_id, "main"});
   // Add copies for any inputs which were reallocated.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
-                      body_visitor.GetPreambleCopies());
+                      body_visitor.GetPreambleCopies(debug_name_and_id));
   main_seq.add(copy_seq);
 
   // Only add the zeroing for the execution counters in the condition and body
@@ -294,7 +300,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   main_seq.add(body_counters.SetInitialValuesToZero());
 
   // Create a sequence and predicate for the condition.
-  poplar::program::Sequence cond_seq;
+  poplar::program::Sequence cond_seq({}, {debug_name_and_id, "condition"});
   poplar::Tensor predicate;
   {
     // Before executing the condition, copy inputs which are required by
@@ -302,14 +308,15 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     for (uint64 i = 0; i < param_count; i++) {
       if (condition_visitor.InputIsUsed(0, i) && body_inputs[i].IsTensor()) {
         cond_seq.add(poplar::program::Copy(body_inputs[i].AsTensor(),
-                                           cond_inputs[i].AsTensor()));
+                                           cond_inputs[i].AsTensor(), false,
+                                           {debug_name_and_id}));
       }
     }
     cond_seq.add(
         condition_visitor.GetSequence(/*copy_execution_counters*/ false));
 
     predicate =
-        popops::allTrue(graph, cond_outputs[0], cond_seq, GetDebugName(inst));
+        popops::allTrue(graph, cond_outputs[0], cond_seq, {debug_name_and_id});
     // Increase the local execution counters at the end of each iteration.
     cond_seq.add(cond_counters.IncrementLiveCounters());
   }
@@ -317,9 +324,9 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   // are aliased to the inputs of the next one.
   TF_ASSIGN_OR_RETURN(const TensorOrRemoteBufferVector loop_state,
                       body_visitor.AddLoopInputOutputAliasingCopies(
-                          graph, body_comp, GetDebugName(inst)));
+                          graph, body_comp, {debug_name_and_id}));
   // Create a sequence for the body.
-  poplar::program::Sequence body_seq;
+  poplar::program::Sequence body_seq({}, {debug_name_and_id, "body"});
   {
     body_seq.add(body_visitor.GetSequence(/*copy_execution_counters*/ false));
     // Increase the local execution counters at the end of each iteration.
@@ -327,7 +334,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   }
 
   // Create the while loop.
-  main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, predicate, body_seq));
+  main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, predicate, body_seq,
+                                                {debug_name_and_id}));
 
   for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutput(tensor_map, inst, i, loop_state[i]));
@@ -336,29 +344,29 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   return main_seq;
 }
 
-StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  const xla::Shape& output,
-                                                  TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreateRepeatOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
+  TF_ASSIGN_OR_RETURN(
+      TensorOrRemoteBufferVectors inputs,
+      FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
 
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence loop_seq,
-      CreateRepeatOp(res, inst, deferred_inputs, output, tensor_map));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence loop_seq,
+                      CreateRepeatOp(res, inst, deferred_inputs, output,
+                                     tensor_map, debug_name_and_id));
   seq.add(loop_seq);
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  DeferredArgRBVectors& inputs,
-                                                  const xla::Shape& output,
-                                                  TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateRepeatOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), inst->operand_count());
 
@@ -379,13 +387,14 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 
   // Create the visitor.
   RepeatLoopVisitor visitor(res, inputs, HloInstructionDescription(inst),
-                            reallocate_input_info, GetDebugName(inst));
+                            reallocate_input_info, debug_name_and_id);
 
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
+  TF_RETURN_IF_ERROR(
+      visitor.PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
 
   const TensorOrRemoteBufferVector& loop_state = visitor.GetLoopState();
 
@@ -401,28 +410,30 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 namespace {
 TensorOrRemoteBufferVectors GetAllInstructionInputs(
     CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, TensorMap& tensor_map) {
+    poplar::program::Sequence& seq, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   TensorOrRemoteBufferVectors inputs(inst->operand_count());
   for (int64 i = 0; i != inst->operand_count(); ++i) {
-    inputs[i] = FindInstructionInputs(tensor_map, res, inst, i, seq);
+    inputs[i] =
+        FindInstructionInputs(tensor_map, res, inst, i, seq, debug_name_and_id);
   }
   return inputs;
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
-                                                    const HloInstruction* inst,
-                                                    const xla::Shape& output,
-                                                    TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreateFunctionOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   TensorOrRemoteBufferVectors inputs =
-      GetAllInstructionInputs(res, inst, seq, tensor_map);
+      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence func_seq,
-      CreateFunctionOp(res, inst, deferred_inputs, output, tensor_map));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence func_seq,
+                      CreateFunctionOp(res, inst, deferred_inputs, output,
+                                       tensor_map, debug_name_and_id));
   seq.add(func_seq);
   return seq;
 }
@@ -430,10 +441,10 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
 StatusOr<poplar::program::Program> CreateFunctionOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
-    TensorMap& tensor_map) {
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   HloComputation* comp = inst->to_apply();
 
@@ -464,12 +475,12 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
                           res, deferred_inputs, comp, keep_input_layouts));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(
-      subcomp_visitor->PropagateDeferredAllocations(inst, deferred_inputs));
+  TF_RETURN_IF_ERROR(subcomp_visitor->PropagateDeferredAllocations(
+      inst, deferred_inputs, debug_name_and_id));
 
   // Now that the all the inputs have been allocated and propagated, get them.
   TensorOrRemoteBufferVectors inputs =
-      GetAllInstructionInputs(res, inst, seq, tensor_map);
+      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
   for (int64 o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
     auto& inst_inputs = inputs[o];
@@ -492,7 +503,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
         if (subcomp_visitor->InputIsUsed(o, i)) {
           if (comp_input.IsTensor()) {
             seq.add(poplar::program::Copy(inst_input.AsTensor(),
-                                          comp_input.AsTensor()));
+                                          comp_input.AsTensor(), false,
+                                          debug_name_and_id));
           } else if (comp_input.IsRemoteBuffer()) {
             return xla::FailedPrecondition(
                 "Unable to handle used remote buffer tensor in function call "
@@ -537,9 +549,9 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
                                    " to be a Tensor object");
       }
 
-      auto name = absl::StrCat(GetDebugName(inst), "_out_", flat_tuple_index);
+      auto name = absl::StrCat("out/", flat_tuple_index);
       poplar::Tensor cloned_output = poputil::duplicate(
-          graph, output.AsTensor(), seq, name,
+          graph, output.AsTensor(), seq, {debug_name_and_id, name},
           poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
       TF_RETURN_IF_ERROR(
           AddOutputTensor(tensor_map, inst, flat_tuple_index, cloned_output));
@@ -551,21 +563,22 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
-                                                    const HloInstruction* inst,
-                                                    const xla::Shape& output,
-                                                    TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreatePipelineOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(TensorOrRemoteBufferVectors inputs,
-                      FindInplaceOutputs(tensor_map, res, inst, seq));
+  TF_ASSIGN_OR_RETURN(
+      TensorOrRemoteBufferVectors inputs,
+      FindInplaceOutputs(tensor_map, res, inst, seq, debug_name_and_id));
 
   // Call the create op with a deferred version of inputs.
   DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
 
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence pipeline_seq,
-      CreatePipelineOp(res, inst, deferred_inputs, output, tensor_map));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_seq,
+                      CreatePipelineOp(res, inst, deferred_inputs, output,
+                                       tensor_map, debug_name_and_id));
   seq.add(pipeline_seq);
 
   return seq;
@@ -574,10 +587,10 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
 StatusOr<poplar::program::Program> CreatePipelineOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
-    TensorMap& tensor_map) {
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   HloComputation* pipeline_computation = inst->to_apply();
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
@@ -591,7 +604,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   TF_ASSIGN_OR_RETURN(
       auto visitor,
       GetPipelineVisitor(inst, res, inputs, HloInstructionDescription(inst),
-                         GetDebugName(inst)));
+                         debug_name_and_id));
   TF_RETURN_IF_ERROR(
       visitor->VerifyPipelineArguments(gradient_accumulation_count));
 
@@ -602,12 +615,13 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor->PropagateDeferredAllocations(inst, inputs));
+  TF_RETURN_IF_ERROR(
+      visitor->PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
 
   // Make sure that inputs/outputs alias each other.
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
                       visitor->AddLoopInputOutputAliasingCopies(
-                          graph, pipeline_computation, GetDebugName(inst)));
+                          graph, pipeline_computation, debug_name_and_id));
   ExecutionCounters& execution_counters = visitor->GetExecutionCounters();
   // Initialize the counters.
   seq.add(execution_counters.SetInitialValuesToZero());
@@ -619,7 +633,8 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   // Increase the counters at the end of each pipeline execution.
   pipeline_prog.add(execution_counters.IncrementLiveCounters());
 
-  seq.add(poplar::program::Repeat(repeat_count, pipeline_prog));
+  seq.add(
+      poplar::program::Repeat(repeat_count, pipeline_prog, debug_name_and_id));
 
   for (size_t i = 0; i < pipeline_state.size(); i++) {
     TF_CHECK_OK(AddOutput(tensor_map, inst, i, pipeline_state[i]));
@@ -630,11 +645,12 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
 
 StatusOr<poplar::program::Program> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map) {
+    const xla::Shape& output, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   bool is_switch;
   if (inst->operand(0)->shape().element_type() == PRED) {
@@ -654,7 +670,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   }
 
   TensorOrRemoteBufferVectors inputs =
-      GetAllInstructionInputs(res, inst, seq, tensor_map);
+      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor pred = inputs[0][0].AsTensor();
 
@@ -675,13 +691,16 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   // Add final output tensors for the conditional op
   std::vector<poplar::Tensor> outputs;
   for (unsigned int i = 0; i < output_count; i++) {
-    poplar::Tensor out = graph.clone(bodies[0]->outputs()[i]);
+    poplar::Tensor out =
+        graph.clone(bodies[0]->outputs()[i], debug_name_and_id);
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     outputs.push_back(out);
   }
 
   // Create the full program sequences for each branch
-  std::vector<poplar::program::Sequence> seqs(bodies.size());
+  // TODO(T32947) : Would be good if we could name each branch
+  std::vector<poplar::program::Sequence> seqs(bodies.size(),
+                                              {{}, debug_name_and_id});
   for (auto b = 0; b < n_branches; b++) {
     if (bodies[b]->inputs().size() != 1) {
       return xla::FailedPrecondition("Invalid input count on branch %d.", b);
@@ -694,9 +713,9 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
     for (unsigned int i = 0; i < bodies[b]->inputs()[0].size(); i++) {
       if (bodies[b]->InputIsUsed(0, i)) {
         if (bodies[b]->inputs()[0][i].IsTensor()) {
-          seqs[b].add(
-              poplar::program::Copy(inputs[b + 1][i].AsTensor(),
-                                    bodies[b]->inputs()[0][i].AsTensor()));
+          seqs[b].add(poplar::program::Copy(
+              inputs[b + 1][i].AsTensor(), bodies[b]->inputs()[0][i].AsTensor(),
+              false, debug_name_and_id));
         } else if (bodies[b]->inputs()[0][i].IsRemoteBuffer()) {
           return xla::FailedPrecondition(
               "Unable to handle used remote buffer tensor in conditional "
@@ -718,7 +737,8 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
     for (unsigned int i = 0; i < output_count; i++) {
       if (bodies[b]->outputs()[i].IsTensor()) {
         seqs[b].add(poplar::program::Copy(bodies[b]->outputs()[i].AsTensor(),
-                                          outputs[i]));
+                                          outputs[i], false,
+                                          debug_name_and_id));
       } else if (bodies[b]->outputs()[i].IsRemoteBuffer()) {
         return xla::FailedPrecondition(
             "Unable to output remote buffer tensor in conditional "
@@ -735,15 +755,17 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
 
   if (!is_switch) {
     poplar::Tensor scalar_pred =
-        popops::allTrue(graph, pred, seq, GetDebugName(inst));
+        popops::allTrue(graph, pred, seq, {debug_name_and_id});
 
-    seq.add(poplar::program::If(scalar_pred, seqs[0], seqs[1]));
+    seq.add(poplar::program::If(scalar_pred, seqs[0], seqs[1],
+                                {debug_name_and_id}));
   } else {
     std::vector<std::pair<int32, poplar::program::Program>> cases;
     for (int64 c = 0; c < static_cast<int64>(seqs.size()) - 1; c++) {
       cases.push_back(std::make_pair(c, seqs[c]));
     }
-    seq.add(poplar::program::Switch(pred, cases, seqs.back()));
+    seq.add(
+        poplar::program::Switch(pred, cases, seqs.back(), {debug_name_and_id}));
   }
 
   return seq;
@@ -752,21 +774,22 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
 StatusOr<poplar::program::Program> CreateResourceUpdateOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
-    TensorMap& tensor_map) {
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
   HloComputation* resource_update_comp = inst->to_apply();
   VLOG(1) << "Processing " << inst->name() << " : "
           << resource_update_comp->name() << " as a resource update.";
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   // Create a visitor for the resource update.
   InplaceDeferredVisitor visitor(res, inputs, HloInstructionDescription(inst),
-                                 GetDebugName(inst));
+                                 debug_name_and_id);
   auto order = resource_update_comp->parent()
                    ->schedule()
                    .sequence(resource_update_comp)
                    .instructions();
   TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
   // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst, inputs));
+  TF_RETURN_IF_ERROR(
+      visitor.PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
   // Add to the sequence.
   seq.add(visitor.GetSequence());
   seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
