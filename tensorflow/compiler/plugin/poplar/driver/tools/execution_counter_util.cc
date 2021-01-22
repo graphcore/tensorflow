@@ -74,21 +74,24 @@ poplar::Graph& GetGraphForShard(CompilerResources& resources, size_t shard) {
 }
 }  // namespace
 
-ExecutionCounters::ExecutionCounters(CompilerResources& resources,
-                                     const std::string& name)
+ExecutionCounters::ExecutionCounters(
+    CompilerResources& resources,
+    const poplar::DebugNameAndId& debug_name_and_id)
     : counters_(GetNumCounters(resources)),
       live_counters_(GetNumCounters(resources)),
       resources_(resources),
-      name_(name) {}
+      dnai_(debug_name_and_id) {}
 
-ExecutionCounters ExecutionCounters::Clone(const std::string& name) {
-  ExecutionCounters cloned(resources_, name);
+ExecutionCounters ExecutionCounters::Clone(
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  ExecutionCounters cloned(resources_, debug_name_and_id);
   // Clone all the live counters.
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       poplar::Graph& graph = GetGraphForShard(resources_, shard);
       cloned.counters_[shard] = graph.clone(
-          counters_[shard], absl::StrCat(name, "/ExecutionCounter/", shard));
+          counters_[shard],
+          {debug_name_and_id, absl::StrCat("ExecutionCounter/", shard)});
       cloned.live_counters_[shard] = true;
     }
   }
@@ -102,7 +105,7 @@ StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
     // Requesting a counter which was not live, create it.
     poplar::Graph& graph = GetGraphForShard(resources_, shard);
     counters_[shard] = graph.addVariable(
-        poplar::INT, {}, absl::StrCat(name_, "/ExecutionCounter/", shard));
+        poplar::INT, {}, {dnai_, absl::StrCat("ExecutionCounter/", shard)});
     graph.setTileMapping(counters_[shard], 0);
     live_counters_[shard] = true;
   }
@@ -112,13 +115,14 @@ StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
 StatusOr<poplar::program::Program> ExecutionCounters::SetInitialValuesFrom(
     ExecutionCounters* source) {
   CHECK_EQ(source->counters_.size(), counters_.size());
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor source_counter,
                           source->GetCounter(shard));
       // Copy the value.
-      seq.add(poplar::program::Copy(source_counter, counters_[shard]));
+      seq.add(poplar::program::Copy(source_counter, counters_[shard], false,
+                                    {dnai_}));
     }
   }
   initialized_ = true;
@@ -126,12 +130,12 @@ StatusOr<poplar::program::Program> ExecutionCounters::SetInitialValuesFrom(
 }
 
 poplar::program::Program ExecutionCounters::SetInitialValuesToZero() {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       poplar::Graph& graph = GetGraphForShard(resources_, shard);
       popops::zero(graph, counters_[shard], seq,
-                   absl::StrCat(name_, "/ZeroExecutionCounter/", shard));
+                   {dnai_, absl::StrCat("ZeroExecutionCounter/", shard)});
     }
   }
   initialized_ = true;
@@ -141,26 +145,27 @@ poplar::program::Program ExecutionCounters::SetInitialValuesToZero() {
 StatusOr<poplar::program::Program> ExecutionCounters::UpdateCounters(
     ExecutionCounters* destination) {
   CHECK_EQ(destination->counters_.size(), counters_.size());
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor destination_counter,
                           destination->GetCounter(shard));
       // Copy the value.
-      seq.add(poplar::program::Copy(counters_[shard], destination_counter));
+      seq.add(poplar::program::Copy(counters_[shard], destination_counter,
+                                    false, {dnai_}));
     }
   }
   return seq;
 }
 
 poplar::program::Program ExecutionCounters::IncrementLiveCounters() const {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   for (size_t shard = 0; shard != counters_.size(); ++shard) {
     if (live_counters_[shard]) {
       poplar::Graph& graph = GetGraphForShard(resources_, shard);
       popops::addInPlace(
           graph, counters_[shard], 1, seq,
-          absl::StrCat(name_, "/IncrementExecutionCounter/", shard));
+          {dnai_, absl::StrCat("IncrementExecutionCounter/", shard)});
     }
   }
   return seq;

@@ -33,7 +33,8 @@ namespace poplarplugin {
  */
 class FullVisitor : public BaseVisitor {
  public:
-  FullVisitor(CompilerResources& resources, const std::string& name);
+  FullVisitor(CompilerResources& resources,
+              const poplar::DebugNameAndId& debug_name_and_id);
 
   Status HandleConcatenate(HloInstruction* inst) override;
 

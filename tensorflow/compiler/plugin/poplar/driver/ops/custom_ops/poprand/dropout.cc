@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -42,22 +43,22 @@ class DropoutOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    const std::string debug_name = GetDebugName(inst);
+    PoplarOpDefDebugInfo debug_info(debug_context, "DropoutOp");
     const HloDropout* dropout_instruction = Cast<HloDropout>(inst);
     const float rate = dropout_instruction->Rate();
     const float scale = dropout_instruction->Scale();
 
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor input,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+    poplar::program::Sequence seq({}, debug_info);
+    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info}, false));
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor seed,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
 
     // Clone the seed as it is an output.
-    seed = poputil::duplicate(graph, seed, seq, debug_name + "/Seed");
+    seed = poputil::duplicate(graph, seed, seq, {debug_info, "Seed"});
 
     // Dropout expects an unsigned int but tensorflow takes in int32 when
     // targeting IPU.
@@ -72,22 +73,23 @@ class DropoutOp : public PoplarOpDef {
           ShapeUtil::MakeShape(inst->operand(0)->shape().element_type(),
                                dropout_instruction->NoiseShape());
       TF_ASSIGN_OR_RETURN(poplar::Tensor reference,
-                          AddPlainTensor(graph, debug_name + "/ShapedReference",
+                          AddPlainTensor(graph, {debug_info, "ShapedReference"},
                                          ns_ref_shape, res, false));
 
-      output = poprand::shapedDropout(graph, &seed_unsigned, 1U, input,
-                                      reference, rate, scale, seq, debug_name);
+      output =
+          poprand::shapedDropout(graph, &seed_unsigned, 1U, input, reference,
+                                 rate, scale, seq, {debug_info});
     } else {
       // Create an empty tensor for the dropout. This is internal to the poprand
       // implementation but is exposed anyway so we need to provide it.
       TF_ASSIGN_OR_RETURN(
           poplar::Tensor reference,
-          AddPlainTensor(graph, debug_name + "/Reference",
+          AddPlainTensor(graph, {debug_info, "Reference"},
                          inst->operand(0)->shape(), res, false));
 
       // Perform the actual dropout by calling into the poprand function.
       output = poprand::dropout(graph, &seed_unsigned, 1U, input, reference,
-                                rate, scale, seq, debug_name);
+                                rate, scale, seq, {debug_info});
     }
 
     // Mark that tensor as our output.

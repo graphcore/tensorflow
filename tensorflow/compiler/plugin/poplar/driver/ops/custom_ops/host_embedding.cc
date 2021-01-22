@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -97,11 +98,13 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingLookupInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
-    seq.add(poplar::program::WriteUndef(output));
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
+    seq.add(poplar::program::WriteUndef(output, {debug_name_and_id}));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
     return seq;
@@ -112,10 +115,12 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingLookupInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     res.annotations.host_embedding_lookup_infos.push_back(
         {inst->name(), inst->EmbeddingId(), inst->operand(0)->shape(),
@@ -130,13 +135,16 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
         output.elementType(), output.numElements());
 
     // Send the indices to the host.
-    seq.add(poplar::program::Copy(indices, index_buffer));
+    seq.add(poplar::program::Copy(indices, index_buffer, false,
+                                  {debug_name_and_id}));
 
     // Sync to avoid any stream merging due to host-side data dependecy.
-    seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
+    seq.add(
+        poplar::program::Sync(poplar::SyncType::INTERNAL, {debug_name_and_id}));
 
     // Read the values from the host.
-    seq.add(poplar::program::Copy(activation_fifo, output));
+    seq.add(poplar::program::Copy(activation_fifo, output, false,
+                                  {debug_name_and_id}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
@@ -148,26 +156,30 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // Create the host sliceable tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
         graph, output.elementType(), output.shape(), false,
-        GetDebugName(inst) + "/tmp");
+        {debug_name_and_id, "tmp"});
 
     // Copy the indices into the host sliceable indices.
-    seq.add(poplar::program::Copy(indices, host_sliceable.indices));
+    seq.add(poplar::program::Copy(indices, host_sliceable.indices, false,
+                                  {debug_name_and_id}));
 
     // Copy from the remote buffer.
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     // Copy the values into the output tensor.
-    seq.add(poplar::program::Copy(host_sliceable.tensor, output));
+    seq.add(poplar::program::Copy(host_sliceable.tensor, output, false,
+                                  {debug_name_and_id}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
@@ -179,21 +191,23 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
     indices =
-        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
                        GetReplicatedCollectiveOptions(res));
 
     // Create a replication factor constant tensor.
     poplar::Tensor rep =
         graph.addConstant(poplar::UNSIGNED_INT, {}, res.replication_factor,
-                          GetDebugName(inst) + "/replication_factor");
+                          {debug_name_and_id, "replication_factor"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, rep);
 
     // Divide the indices by the replication factor to transform the global
@@ -201,20 +215,21 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // currently assume there is a power of two replication factor, this could
     // be rewritten as bitshift right log_2(rep) bits.
     poplar::Tensor ind = popops::div(graph, indices.flatten(), rep, seq,
-                                     GetDebugName(inst) + "/shift_indices");
+                                     {debug_name_and_id, "shift_indices"});
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
         graph, output.elementType(),
         {indices.dim(0) * indices.dim(1), output.dim(1)}, false,
-        GetDebugName(inst) + "/tmp");
+        {debug_name_and_id, "tmp"});
 
     // Copy the replica-local indices to the host sliceable indices.
-    seq.add(poplar::program::Copy(ind, host_sliceable.indices));
+    seq.add(poplar::program::Copy(ind, host_sliceable.indices, false,
+                                  {debug_name_and_id}));
 
     // Read from the remote buffer into the host sliceable tensor.
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     // The current replica index.
     poplar::Tensor replica_id = graph.addReplicationIndexConstant();
@@ -225,26 +240,25 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // Given we can currently assume that the replication factor is a power of
     // two, this could be rewritten as a bitwise-and with rep-1.
     poplar::Tensor rem = popops::rem(graph, indices, rep, seq,
-                                     GetDebugName(inst) + "/mask_indices");
+                                     {debug_name_and_id, "mask_indices"});
 
     // Check whether (i mod r) is equal to this replica id. This tells us
     // whether the element refered to by the global index is "owned" by this
     // replca.
     poplar::Tensor mask =
         popops::eq(graph, rem.reinterpret(replica_id.elementType()), replica_id,
-                   seq, GetDebugName(inst) + "/mask");
+                   seq, {debug_name_and_id, "mask"});
 
     // Create a constant zero fo masking.
-    poplar::Tensor zero =
-        graph.addConstant(host_sliceable.tensor.elementType(), {}, 0,
-                          GetDebugName(inst) + "/zero");
+    poplar::Tensor zero = graph.addConstant(host_sliceable.tensor.elementType(),
+                                            {}, 0, {debug_name_and_id, "zero"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
 
     // Use the computed mask, based on whether this replica "owns" the requested
     // element, to zero the invalid elements of host_sliceable.tensor.
     popops::selectInPlace(graph, host_sliceable.tensor, zero,
                           mask.flatten().expand({1}), seq,
-                          GetDebugName(inst) + "/mask_output");
+                          {debug_name_and_id, "mask_output"});
     host_sliceable.tensor = host_sliceable.tensor.reshape(
         {indices.dim(0), indices.dim(1), output.dim(1)});
 
@@ -253,12 +267,12 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // results to the correct replica.
     host_sliceable.tensor = gcl::reduceScatter(
         graph, host_sliceable.tensor.flatten(), popops::Operation::ADD, seq,
-        GetDebugName(inst) + "/reduce_scatter",
+        {debug_name_and_id, "reduce_scatter"},
         GetReplicatedCollectiveOptions(res));
 
     // Copy the result to the output tensor.
     seq.add(poplar::program::Copy(host_sliceable.tensor.reshape(output.shape()),
-                                  output));
+                                  output, false, {debug_name_and_id}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
@@ -270,15 +284,17 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::RemoteBuffer& remote_buffer,
       poplar::Tensor indices, poplar::program::Sequence seq,
       CompilerResources& res, const HloHostEmbeddingLookupInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the output tensor.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor output,
+        AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map,
+                  {debug_name_and_id, "output"}));
 
     // All-Gather the indices from all replicas.
     indices =
-        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
                        GetReplicatedCollectiveOptions(res));
 
     // Create the host sliceable temporary tensor.
@@ -287,14 +303,15 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
         {indices.dim(0) * indices.dim(1),
          tensorflow::MathUtil::CeilOfRatio<unsigned>(output.dim(1),
                                                      res.replication_factor)},
-        false, inst->name() + "/tmp");
+        false, {debug_name_and_id, "tmp"});
 
     // Copy the indices to the host sliceable indices.
-    seq.add(poplar::program::Copy(indices.flatten(), host_sliceable.indices));
+    seq.add(poplar::program::Copy(indices.flatten(), host_sliceable.indices,
+                                  false, {debug_name_and_id}));
 
     // Copy from the remote buffer into the host sliceable tensor.
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
     host_sliceable.tensor = host_sliceable.tensor.reshapePartial(
         0, 1, {indices.dim(0), indices.dim(1)});
 
@@ -302,7 +319,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // We also recieve the columns we requested from the other replicas.
     host_sliceable.tensor =
         gcl::allToAll(graph, host_sliceable.tensor, seq,
-                      GetDebugName(inst) + "/exchange_columns",
+                      {debug_name_and_id, "exchange_columns"},
                       GetReplicatedCollectiveOptions(res));
 
     // Dimshuffle and reshape back to the output shape.
@@ -311,7 +328,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     host_sliceable.tensor = host_sliceable.tensor.slice(0, output.dim(1), 1);
 
     // Copy to the output tensor.
-    seq.add(poplar::program::Copy(host_sliceable.tensor, output));
+    seq.add(poplar::program::Copy(host_sliceable.tensor, output, false,
+                                  {debug_name_and_id}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
@@ -326,10 +344,12 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
           "Verified transfers cannot be used with Host embeddings");
     }
 
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(
-        TensorVector indices,
-        FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
+    PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingLookupOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    TF_ASSIGN_OR_RETURN(TensorVector indices,
+                        FindInstructionInputTensors(tensor_map, res, inst, 0,
+                                                    seq, {debug_info}, false));
 
     const HloHostEmbeddingLookupInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingLookupInstruction>(inst);
@@ -337,7 +357,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     if (UseSyntheticData()) {
       return SyntheticImpl(graph, indices[0].reinterpret(poplar::UNSIGNED_INT),
                            seq, res, host_embedding_inst, output_shape,
-                           tensor_map);
+                           tensor_map, {debug_info});
     }
 
     if (res.enable_experimental_remote_buffer_embedding) {
@@ -355,25 +375,25 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
             HostEmbeddingSplittingStrategy::Token) {
           return RemoteBufferSplitTokensImpl(
               graph, rbuffer, indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
-              res, host_embedding_inst, output_shape, tensor_map);
+              res, host_embedding_inst, output_shape, tensor_map, {debug_info});
         }
 
         if (host_embedding_inst->SplittingStrategy() ==
             HostEmbeddingSplittingStrategy::Encoding) {
           return RemoteBufferSplitEncodingImpl(
               graph, rbuffer, indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
-              res, host_embedding_inst, output_shape, tensor_map);
+              res, host_embedding_inst, output_shape, tensor_map, {debug_info});
         }
       }
 
       return RemoteBufferImpl(
           graph, rbuffer, indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
-          res, host_embedding_inst, output_shape, tensor_map);
+          res, host_embedding_inst, output_shape, tensor_map, {debug_info});
     }
 
     return CallbackImpl(graph, indices[0].reinterpret(poplar::UNSIGNED_INT),
-                        seq, res, host_embedding_inst, output_shape,
-                        tensor_map);
+                        seq, res, host_embedding_inst, output_shape, tensor_map,
+                        {debug_info});
   }
 };
 
@@ -391,7 +411,8 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       poplar::Graph& graph, poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingUpdateInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     res.annotations.host_embedding_update_infos.push_back(
         {inst->name(), inst->EmbeddingId(), inst->operand(2)->shape(),
          inst->operand(1)->shape()});
@@ -404,8 +425,10 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
         graph.addDeviceToHostFIFO(inst->name() + inst->EmbeddingId() + "_grads",
                                   grads.elementType(), grads.numElements());
 
-    seq.add(poplar::program::Copy(indices, index_buffer));
-    seq.add(poplar::program::Copy(grads, grad_fifo));
+    seq.add(poplar::program::Copy(indices, index_buffer, false,
+                                  {debug_name_and_id}));
+    seq.add(
+        poplar::program::Copy(grads, grad_fifo, false, {debug_name_and_id}));
 
     return seq;
   }
@@ -416,24 +439,26 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingUpdateInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // Create the temporary host sliceable tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
         graph, grads.elementType(), grads.shape(), true,
-        GetDebugName(inst) + "/tmp");
+        {debug_name_and_id, "tmp"});
 
     // Read the weights from the host.
-    seq.add(poplar::program::Copy(indices, host_sliceable.indices));
+    seq.add(poplar::program::Copy(indices, host_sliceable.indices, false,
+                                  {debug_name_and_id}));
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     // Apply the gradients.
     popops::addInPlace(graph, host_sliceable.tensor, grads, seq,
-                       GetDebugName(inst) + "/apply_grads");
+                       {debug_name_and_id, "apply_grads"});
 
     // Send the updated weights back to the host.
     seq.add(poplar::program::Copy(host_sliceable.tensor, remote_buffer,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     return seq;
   }
@@ -445,30 +470,32 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingUpdateInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // All-Gather the indices from all replicas.
     indices =
-        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
                        GetReplicatedCollectiveOptions(res));
     indices = indices.flatten(0, 2);
 
     // All-Gather the grads from all replicas.
-    grads = gcl::allGather(graph, grads, seq, GetDebugName(inst) + "/grads",
+    grads = gcl::allGather(graph, grads, seq, {debug_name_and_id, "grads"},
                            GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
         graph, grads.elementType(), grads.shape(), true,
-        GetDebugName(inst) + "/tmp");
+        {debug_name_and_id, "tmp"});
 
     // Copy the indices to the host sliceable indices.
-    seq.add(poplar::program::Copy(indices, host_sliceable.indices));
+    seq.add(poplar::program::Copy(indices, host_sliceable.indices, false,
+                                  {debug_name_and_id}));
 
     // Create a replication factor constant tensor.
     poplar::Tensor rep =
         graph.addConstant(poplar::UNSIGNED_INT, {}, res.replication_factor,
-                          GetDebugName(inst) + "/replication_factor");
+                          {debug_name_and_id, "replication_factor"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, rep);
 
     // Divide the indices by the replication factor to transform the global
@@ -476,7 +503,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     // currently assume there is a power of two replication factor, this could
     // be rewritten as bitshift right log_2(rep) bits.
     popops::divInPlace(graph, host_sliceable.indices, rep, seq,
-                       GetDebugName(inst) + "/shift_indices");
+                       {debug_name_and_id, "shift_indices"});
 
     // Create an invalid constant index that is used to avoid clobbering valid
     // values in the remote buffer. Currently implemented as one-past-the-end
@@ -485,7 +512,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
         poplar::UNSIGNED_INT, {},
         tensorflow::MathUtil::CeilOfRatio<unsigned>(
             inst->EmbeddingShape().dimensions(0), res.replication_factor),
-        GetDebugName(inst) + "/invalid_index");
+        {debug_name_and_id, "invalid_index"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, invalid);
 
     // The current replica index.
@@ -497,14 +524,14 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     // Given we can currently assume that the replication factor is a power of
     // two, this could be rewritten as a bitwise-and with rep-1.
     poplar::Tensor rem = popops::rem(graph, host_sliceable.indices, rep, seq,
-                                     GetDebugName(inst) + "/mask_indices");
+                                     {debug_name_and_id, "mask_indices"});
 
     // Check whether (i mod r) is equal to this replica id. This tells us
     // whether the element refered to by the global index is "owned" by this
     // replca.
     poplar::Tensor mask =
         popops::eq(graph, rem.reinterpret(replica_id.elementType()), replica_id,
-                   seq, GetDebugName(inst) + "/mask");
+                   seq, {debug_name_and_id, "mask"});
 
     // Use the computed mask, based on whether this replica "owns" the requested
     // element, to invalidate the indices and avoid overwritting valid regions
@@ -512,19 +539,19 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     popops::selectInPlace(graph,
                           host_sliceable.indices.reinterpret(poplar::INT),
                           invalid.reinterpret(poplar::INT), mask, seq,
-                          GetDebugName(inst) + "/mask_indices");
+                          {debug_name_and_id, "mask_indices"});
 
     // Read from the remote buffer into the host sliceable tensor.
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     // Apply the gradients to the values read from the remote buffer.
     popops::addInPlace(graph, host_sliceable.tensor, grads, seq,
-                       GetDebugName(inst) + "/apply_grads");
+                       {debug_name_and_id, "apply_grads"});
 
     // Read from the host sliceable tensor into the remote buffer.
     seq.add(poplar::program::Copy(host_sliceable.tensor, remote_buffer,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, debug_name_and_id));
 
     return seq;
   }
@@ -536,10 +563,11 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       poplar::Tensor grads, poplar::Tensor indices,
       poplar::program::Sequence seq, CompilerResources& res,
       const HloHostEmbeddingUpdateInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map) {
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugNameAndId& debug_name_and_id) {
     // All-Gather the indices from all replicas.
     indices =
-        gcl::allGather(graph, indices, seq, GetDebugName(inst) + "/indices",
+        gcl::allGather(graph, indices, seq, {debug_name_and_id, "indices"},
                        GetReplicatedCollectiveOptions(res));
 
     // Check whether we need to pad the gradients because the replication factor
@@ -557,7 +585,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
     // All-To-All exchange the grad columns with their respective replicas.
     grads = gcl::allToAll(graph, grads, seq,
-                          GetDebugName(inst) + "/exchange_columns",
+                          {debug_name_and_id, "exchange_columns"},
                           GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
@@ -565,22 +593,23 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     auto host_sliceable = popops::createHostSliceableTensor(
         graph, grads.elementType(),
         {indices.dim(0) * indices.dim(1), grads.dim(1)}, true,
-        inst->name() + "/tmp");
+        {debug_name_and_id, "tmp"});
 
     // Copy the replica-local indices to the host sliceable indices.
-    seq.add(poplar::program::Copy(indices.flatten(), host_sliceable.indices));
+    seq.add(poplar::program::Copy(indices.flatten(), host_sliceable.indices,
+                                  false, {debug_name_and_id}));
 
     // Copy from the remote buffer into the host sliceable tensor.
     seq.add(poplar::program::Copy(remote_buffer, host_sliceable.tensor,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     // Apply the gradients to the read values.
     popops::addInPlace(graph, host_sliceable.tensor, grads, seq,
-                       GetDebugName(inst) + "/apply_grads");
+                       {debug_name_and_id, "apply_grads"});
 
     // Copy from the host sliceable tensor into the remote buffer.
     seq.add(poplar::program::Copy(host_sliceable.tensor, remote_buffer,
-                                  host_sliceable.indices));
+                                  host_sliceable.indices, {debug_name_and_id}));
 
     return seq;
   }
@@ -593,16 +622,16 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       return FailedPrecondition(
           "Verified transfers cannot be used with Host embeddings");
     }
+    PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingUpdateOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    poplar::program::Sequence seq;
+    TF_ASSIGN_OR_RETURN(TensorVector grads,
+                        FindInstructionInputTensors(tensor_map, res, inst, 1,
+                                                    seq, {debug_info}, false));
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVector grads,
-        FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
-
-    TF_ASSIGN_OR_RETURN(
-        TensorVector indices,
-        FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVector indices,
+                        FindInstructionInputTensors(tensor_map, res, inst, 2,
+                                                    seq, {debug_info}, false));
 
     const HloHostEmbeddingUpdateInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingUpdateInstruction>(inst);
@@ -624,7 +653,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
           return RemoteBufferSplitTokensImpl(
               graph, rbuffer, grads[0],
               indices[0].reinterpret(poplar::UNSIGNED_INT), seq, res,
-              host_embedding_inst, output_shape, tensor_map);
+              host_embedding_inst, output_shape, tensor_map, {debug_info});
         }
 
         if (host_embedding_inst->SplittingStrategy() ==
@@ -632,18 +661,18 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
           return RemoteBufferSplitEncodingImpl(
               graph, rbuffer, grads[0],
               indices[0].reinterpret(poplar::UNSIGNED_INT), seq, res,
-              host_embedding_inst, output_shape, tensor_map);
+              host_embedding_inst, output_shape, tensor_map, {debug_info});
         }
       }
 
       return RemoteBufferImpl(graph, rbuffer, grads[0],
                               indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
                               res, host_embedding_inst, output_shape,
-                              tensor_map);
+                              tensor_map, {debug_info});
     } else {
-      return CallbackImpl(graph, grads[0],
-                          indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
-                          res, host_embedding_inst, output_shape, tensor_map);
+      return CallbackImpl(
+          graph, grads[0], indices[0].reinterpret(poplar::UNSIGNED_INT), seq,
+          res, host_embedding_inst, output_shape, tensor_map, {debug_info});
     }
 
     return seq;
@@ -665,7 +694,8 @@ class HostEmbeddingNotifyOp : public PoplarOpDef {
     const HloHostEmbeddingNotifyInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingNotifyInstruction>(inst);
 
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingNotifyOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // For synthetic data or remote buffers, there's no communication with the
     // host.
@@ -683,9 +713,9 @@ class HostEmbeddingNotifyOp : public PoplarOpDef {
         poplar::INT, 0);
 
     // Use a dummy tensor to "copy" to the FIFO
-    poplar::Tensor t = graph.addVariable(poplar::INT, {0});
+    poplar::Tensor t = graph.addVariable(poplar::INT, {0}, {debug_info});
     graph.setTileMapping(t, 0);
-    seq.add(poplar::program::Copy(t, notify));
+    seq.add(poplar::program::Copy(t, notify, false, debug_info));
 
     return seq;
   }

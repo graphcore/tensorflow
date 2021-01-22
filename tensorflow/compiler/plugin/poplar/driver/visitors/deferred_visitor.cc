@@ -240,20 +240,22 @@ ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
 
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-    const std::string& name, bool allocate_all_input_tensors,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool allocate_all_input_tensors,
     const std::vector<const DeferredVisitor*>& dependent_computations,
     bool reallocate_inputs)
     : DeferredVisitor(
-          res, callsite_inputs, name, allocate_all_input_tensors,
+          res, callsite_inputs, debug_name_and_id, allocate_all_input_tensors,
           dependent_computations,
           GetReallocateInputsInfo(callsite_inputs, reallocate_inputs)) {}
 
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& callsite_inputs,
-    const std::string& name, bool allocate_all_input_tensors,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool allocate_all_input_tensors,
     const std::vector<const DeferredVisitor*>& dependent_computations,
     const ReallocateInputsInfo& reallocate_inputs_info)
-    : FullVisitor(res, name),
+    : FullVisitor(res, debug_name_and_id),
       callsite_inputs_(callsite_inputs),
       computation_inputs_(callsite_inputs.size()),
       dependent_computations_(dependent_computations),
@@ -336,6 +338,7 @@ Status DeferredVisitor::AddSequenceForInstruction(
 
 Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+
   const auto param_num = inst->parameter_number();
 
   std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
@@ -391,6 +394,8 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
 Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
                                               const Shape shape) {
+  poplar::DebugNameAndId debug_name_and_id =
+      GetDebugNameAndId(input_location.instruction);
   const auto param_num = input_location.instruction->parameter_number();
   auto& allocated = allocated_tensors_[param_num];
 
@@ -403,20 +408,22 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
 
   // Function which is called when allocating this tensor.
   DeferredAllocateFunction allocate_fn =
-      [this, shape, callsite_tensor](
+      [this, shape, callsite_tensor, debug_name_and_id](
           TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(auto tensor, AllocateInput(allocation_location, shape,
-                                                   callsite_tensor));
+    TF_ASSIGN_OR_RETURN(
+        auto tensor, AllocateInput(allocation_location, shape, callsite_tensor,
+                                   debug_name_and_id));
     return tensor;
   };
 
   // Function which is called to post processing the allocation of this input.
   DeferredPostProcessFunction post_process_fn =
-      [this, input_location, shape,
-       param_num](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      [this, input_location, shape, param_num,
+       debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
     // Call the post process for this location.
     TF_ASSIGN_OR_RETURN(tensor,
-                        PostProcessInputTensor(tensor, input_location, shape));
+                        PostProcessInputTensor(tensor, input_location, shape,
+                                               debug_name_and_id));
 
     // Add the tensor to the computation inputs.
     computation_inputs_[param_num]
@@ -462,8 +469,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
         GetGraphWithOutputIndex(resources_, input_location.instruction,
                                 input_location.flattened_output_tuple_index);
     poplar::Tensor output = TensorCloneAndRebalanceAliasing(
-        graph, resources_, *callsite_tensor,
-        GetDebugName(input_location.instruction));
+        graph, resources_, *callsite_tensor, debug_name_and_id);
 
     TF_RETURN_IF_ERROR(post_process_fn(output).status());
     TF_CHECK_OK(AddOutputTensor(tensor_map, input_location.instruction,
@@ -489,6 +495,8 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
         "Currently calling `get_next()` multiple times on the same "
         "IPUInfeedQueue in the same computation block is not supported.");
   }
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
@@ -523,21 +531,22 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
 
     // Function which is called when this input is allocated.
     DeferredAllocateFunction allocate_fn =
-        [this, shape](
+        [this, shape, debug_name_and_id](
             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      TF_ASSIGN_OR_RETURN(auto tensor,
-                          AllocateInput(allocation_location, shape));
+      TF_ASSIGN_OR_RETURN(auto tensor, AllocateInput(allocation_location, shape,
+                                                     debug_name_and_id));
       return tensor;
     };
 
     // Function which is called when post processing the allocation of this
     // input.
     DeferredPostProcessFunction post_process_fn =
-        [this, input_location,
-         shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+        [this, input_location, shape,
+         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       // Call the post process for this location.
-      TF_ASSIGN_OR_RETURN(
-          tensor, PostProcessInputTensor(tensor, input_location, shape));
+      TF_ASSIGN_OR_RETURN(tensor,
+                          PostProcessInputTensor(tensor, input_location, shape,
+                                                 debug_name_and_id));
 
       return tensor;
     };
@@ -560,6 +569,9 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
 
 Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
   // Go through all the shapes for inst, don't allocate any tensors which can be
   // deferred.
@@ -598,21 +610,22 @@ Status DeferredVisitor::HandleGetTupleElement(HloInstruction* inst) {
         TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocationUser(
             input_location, output_location));
       } else {
-        poplar::program::Sequence seq;
+        poplar::program::Sequence seq({}, debug_name_and_id);
 
         // Cannot defer the use of this tensor, hence get the input tensor and
         // set it as output.
 
         TensorOrRemoteBufferVector outputs = FindInstructionInputsInRange(
             tensor_map, resources_, inst, 0,
-            {flat_tuple_index, flat_tuple_index + 1}, seq, false);
+            {flat_tuple_index, flat_tuple_index + 1}, seq, debug_name_and_id,
+            false);
         CHECK_EQ(outputs.size(), 1);
         if (outputs[0].IsTensor()) {
           poplar::Tensor output = outputs[0].AsTensor();
           // Duplicate the tensor if this is not an inplace lowering.
           if (!is_lowered_inplace) {
             output = poputil::duplicate(
-                graph, output, seq, absl::StrCat(GetDebugName(inst), "/", i),
+                graph, output, seq, {debug_name_and_id, std::to_string(i)},
                 poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
           }
           TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, i, output));
@@ -660,6 +673,7 @@ StatusOr<DeferredArgRBVectors>
 DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
                                                    bool preserve_aliasing) {
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   auto allowed_deferred_allocation_locations =
       GetAllowedDeferLocationsFromInputs(inst);
@@ -707,10 +721,11 @@ DeferredVisitor::GetInputsForDeferredRBInstruction(const HloInstruction* inst,
                 is_lowered_inplace &&
                 allowed_deferred_allocation_locations[operand_idx][i];
 
-            poplar::program::Sequence seq;
-            tensor = GetTensorForInplaceOp(
-                outputs[0], resources_, inst, operand_idx, i, seq,
-                is_tensor_lowered_inplace, !preserve_aliasing);
+            poplar::program::Sequence seq({}, debug_name_and_id);
+            tensor =
+                GetTensorForInplaceOp(outputs[0], resources_, inst, operand_idx,
+                                      i, seq, is_tensor_lowered_inplace,
+                                      !preserve_aliasing, debug_name_and_id);
             TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
           }
           inputs[operand_idx][i] = tensor;
@@ -771,30 +786,33 @@ Status DeferredVisitor::HandleCall(HloInstruction* inst) {
 }
 
 Status DeferredVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   if (IsRepeatLoop(inst)) {
     // Get inputs preserving any deferred allocations.
     TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
     TF_ASSIGN_OR_RETURN(
         auto seq, CreateRepeatOp(resources_, inst, inputs, GetOutputShape(inst),
-                                 tensor_map));
+                                 tensor_map, debug_name_and_id));
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     return Status::OK();
   } else if (IsPipelineOp(inst)) {
     // Get inputs preserving any deferred allocations.
     TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
-    TF_ASSIGN_OR_RETURN(auto seq,
-                        CreatePipelineOp(resources_, inst, inputs,
-                                         GetOutputShape(inst), tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        auto seq,
+        CreatePipelineOp(resources_, inst, inputs, GetOutputShape(inst),
+                         tensor_map, debug_name_and_id));
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     return Status::OK();
   } else if (IsFunction(inst)) {
     // Get inputs preserving any deferred allocations.
     TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
 
-    TF_ASSIGN_OR_RETURN(auto seq,
-                        CreateFunctionOp(resources_, inst, inputs,
-                                         GetOutputShape(inst), tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        auto seq,
+        CreateFunctionOp(resources_, inst, inputs, GetOutputShape(inst),
+                         tensor_map, debug_name_and_id));
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
     return Status::OK();
   } else {
@@ -807,10 +825,11 @@ Status DeferredVisitor::HandleWhile(HloInstruction* inst) {
 }
 
 Status DeferredVisitor::HandleDeferredAllocationWhile(HloInstruction* inst) {
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputsForDeferredRBInstruction(inst));
   TF_ASSIGN_OR_RETURN(
       auto seq, CreateWhileOp(resources_, inst, inputs, GetOutputShape(inst),
-                              tensor_map));
+                              tensor_map, debug_name_and_id));
   TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, seq));
   return Status::OK();
 }
@@ -861,6 +880,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   CHECK(!inst->shape().IsTuple());
 
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+
   TensorLocation output_location{inst, 0};
   const HloGradientAccumulatorCreate* create =
       Cast<HloGradientAccumulatorCreate>(inst);
@@ -868,7 +889,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   if (create->IsRemote()) {
     CHECK(inst->shape().IsArray());
 
-    poplar::program::Sequence zeroing_seq;
+    poplar::program::Sequence zeroing_seq({}, {debug_name_and_id, "zeroing"});
 
     poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
     TF_ASSIGN_OR_RETURN(poplar::Type element_type,
@@ -888,13 +909,14 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
       // Zero the remote buffer for the offset that we own.
       auto remote_buffer = output.AsRemoteBuffer();
       ZeroRemoteBuffer(resources_, graph, remote_buffer, info->merge_offset,
-                       zeroing_seq);
+                       zeroing_seq, debug_name_and_id);
     } else {
       // Create a new buffer.
       poplar::RemoteBuffer output = graph.addRemoteBuffer(
           inst->name(), element_type, element_count, 1, true);
       TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
-      ZeroRemoteBuffer(resources_, graph, output, /*offset=*/0, zeroing_seq);
+      ZeroRemoteBuffer(resources_, graph, output, /*offset=*/0, zeroing_seq,
+                       debug_name_and_id);
     }
 
     // Add the remote buffer to the zeroing stack.
@@ -908,8 +930,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
       HasTensorAllocationTarget(output_location, resources_);
   if (inst->operand_count() > 0) {
     allocate_fn =
-        [this,
-         inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+        [this, inst, debug_name_and_id](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
       poplar::Graph& graph = GetGraph(resources_, inst);
 
       // Get the layout of the variable passed into the gradient accumulator -
@@ -928,21 +950,23 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
       if (tensor_like && inst->user_count() > 1) {
         // Use the variable tensor layout as the layout for the accumulator.
         tensor = TensorCloneAndRebalanceAliasing(
-            graph, resources_, variable_tensor, GetDebugName(inst));
+            graph, resources_, variable_tensor, debug_name_and_id);
       } else {
         // Allocate the accumulator, and if there isn't a layout to use, use
         // the variable layout.
-        TF_ASSIGN_OR_RETURN(tensor, AllocateInput(allocation_location,
-                                                  inst->shape(), tensor_like));
+        TF_ASSIGN_OR_RETURN(tensor,
+                            AllocateInput(allocation_location, inst->shape(),
+                                          tensor_like, debug_name_and_id));
       }
       return tensor;
     };
   } else {
     allocate_fn =
-        [this,
-         inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AllocateInput(allocation_location, inst->shape()));
+        [this, inst, debug_name_and_id](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor tensor,
+          AllocateInput(allocation_location, inst->shape(), debug_name_and_id));
       return tensor;
     };
   }
@@ -965,6 +989,8 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
 
 Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   const HloCreateBuffer* create_buffer = Cast<HloCreateBuffer>(inst);
   const Shape& shape = inst->shape();
@@ -999,10 +1025,11 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
 
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
-        [this, shape](
+        [this, shape, debug_name_and_id](
             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AllocateInput(allocation_location, shape));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor tensor,
+          AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
 
@@ -1034,9 +1061,10 @@ std::pair<poplar::program::Sequence, poplar::program::Sequence>
 AddRemoteBufferLoadCopy(poplar::Graph& graph, CompilerResources& res,
                         poplar::RemoteBuffer remote_buffer,
                         poplar::Tensor destination,
+                        const poplar::DebugNameAndId& debug_name_and_id,
                         absl::optional<poplar::Tensor> offset = absl::nullopt) {
-  poplar::program::Sequence stream_copy_seq;
-  poplar::program::Sequence temporary_copy_seq;
+  poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
+  poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
 
   const auto& handle = remote_buffer.handle();
   poplar::Tensor layout_tensor;
@@ -1047,22 +1075,26 @@ AddRemoteBufferLoadCopy(poplar::Graph& graph, CompilerResources& res,
     res.remote_buffer_layouts[handle] = layout_tensor;
   }
 
-  poplar::Tensor copy_tensor = graph.clone(layout_tensor);
+  poplar::Tensor copy_tensor = graph.clone(layout_tensor, {debug_name_and_id});
 
   if (offset) {
-    stream_copy_seq.add(
-        poplar::program::Copy(remote_buffer, copy_tensor, *offset));
+    stream_copy_seq.add(poplar::program::Copy(remote_buffer, copy_tensor,
+                                              *offset, {debug_name_and_id}));
   } else {
-    stream_copy_seq.add(poplar::program::Copy(remote_buffer, copy_tensor));
+    stream_copy_seq.add(
+        poplar::program::Copy(remote_buffer, copy_tensor, {debug_name_and_id}));
   }
-  temporary_copy_seq.add(
-      poplar::program::Copy(copy_tensor.flatten(), destination.flatten()));
+  temporary_copy_seq.add(poplar::program::Copy(copy_tensor.flatten(),
+                                               destination.flatten(), false,
+                                               {debug_name_and_id}));
   return {stream_copy_seq, temporary_copy_seq};
 }
 }  // namespace
 
 Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
   const int64 num_inputs = inst->operand_count();
@@ -1083,22 +1115,23 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
-        [this, shape](
+        [this, shape, debug_name_and_id](
             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AllocateInput(allocation_location, shape));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor tensor,
+          AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
 
     // Function which is called after the tensor has been created - this
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst, i,
-         shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+        [this, inst, i, shape,
+         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      poplar::program::Sequence stream_copy_seq;
-      poplar::program::Sequence temporary_copy_seq;
+      poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
+      poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
       if (UseSyntheticData()) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1109,8 +1142,9 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
         }
         stream_copy_seq.add(poplar::program::WriteUndef(tensor));
       } else {
-        TensorOrRemoteBufferVector inputs = FindInstructionInputs(
-            tensor_map, resources_, inst, i, stream_copy_seq, true);
+        TensorOrRemoteBufferVector inputs =
+            FindInstructionInputs(tensor_map, resources_, inst, i,
+                                  stream_copy_seq, debug_name_and_id, true);
 
         CHECK_EQ(inputs.size(), 1);
 
@@ -1121,8 +1155,8 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
         }
 
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
-        auto pair_seq = AddRemoteBufferLoadCopy(shard_graph, resources_,
-                                                remote_buffer, tensor);
+        auto pair_seq = AddRemoteBufferLoadCopy(
+            shard_graph, resources_, remote_buffer, tensor, debug_name_and_id);
         stream_copy_seq.add(pair_seq.first);
         temporary_copy_seq.add(pair_seq.second);
       }
@@ -1151,6 +1185,8 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+
   const auto* load_inst = Cast<HloBufferLoadSlice>(inst);
   const int64 num_outputs = load_inst->RemoteBuffers().size();
 
@@ -1163,22 +1199,23 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
 
     // Function which is called when allocating this tensor.
     DeferredAllocateFunction allocate_fn =
-        [this, shape](
+        [this, shape, debug_name_and_id](
             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
-                          AllocateInput(allocation_location, shape));
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor tensor,
+          AllocateInput(allocation_location, shape, debug_name_and_id));
       return tensor;
     };
 
     // Function which is called after the tensor has been created - this
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst, i, num_outputs,
-         shape](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+        [this, inst, i, num_outputs, shape,
+         debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
 
-      poplar::program::Sequence stream_copy_seq;
-      poplar::program::Sequence temporary_copy_seq;
+      poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
+      poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
       if (UseSyntheticData()) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
@@ -1190,18 +1227,20 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
         stream_copy_seq.add(poplar::program::WriteUndef(tensor));
       } else {
         // Get the remote buffer input.
-        TensorOrRemoteBufferVector inputs = FindInstructionInputs(
-            tensor_map, resources_, inst, i, stream_copy_seq);
+        TensorOrRemoteBufferVector inputs =
+            FindInstructionInputs(tensor_map, resources_, inst, i,
+                                  stream_copy_seq, debug_name_and_id);
         CHECK_EQ(inputs.size(), 1);
         poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
 
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor offset,
             FindInstructionInput(tensor_map, resources_, inst, num_outputs + i,
-                                 stream_copy_seq));
+                                 stream_copy_seq, debug_name_and_id));
 
-        auto pair_seq = AddRemoteBufferLoadCopy(shard_graph, resources_,
-                                                remote_buffer, tensor, offset);
+        auto pair_seq =
+            AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
+                                    tensor, debug_name_and_id, offset);
         stream_copy_seq.add(pair_seq.first);
         temporary_copy_seq.add(pair_seq.second);
       }
@@ -1263,15 +1302,18 @@ Status DeferredVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
 
 Status DeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
-    const DeferredArgRBVectors& callsite_inputs) {
+    const DeferredArgRBVectors& callsite_inputs,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   return PropagateDeferredAllocations(
       callsite_inst, callsite_inputs,
-      std::vector<bool>(callsite_inst->operand_count(), true));
+      std::vector<bool>(callsite_inst->operand_count(), true),
+      debug_name_and_id);
 }
 
 Status DeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
-    const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone) {
+    const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Note that this is called after finish visit, so tensors are being added to
   // the scope which called the visitor.
   TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
@@ -1292,11 +1334,10 @@ Status DeferredVisitor::PropagateDeferredAllocations(
         if (add_clone[operand_idx]) {
           poplar::Graph& graph =
               GetGraphWithOutputIndex(resources_, input_inst, i);
-          const std::string name =
-              absl::StrCat(GetDebugName(input_inst), "/", i);
 
           t = graph.clone(
-              t, name, poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+              t, {debug_name_and_id, std::to_string(i)},
+              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         }
         TF_RETURN_IF_ERROR(
             deferred_allocation->PostProcessAllocation({input_inst, i}, t));
@@ -1308,27 +1349,33 @@ Status DeferredVisitor::PropagateDeferredAllocations(
 }
 
 StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
-    TensorLocation allocation_location, const Shape& shape) {
+    TensorLocation allocation_location, const Shape& shape,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   return AllocateInput(allocation_location, shape,
-                       absl::optional<poplar::Tensor>(absl::nullopt));
+                       absl::optional<poplar::Tensor>(absl::nullopt),
+                       debug_name_and_id);
 }
 
 StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
-    absl::optional<TensorOrRemoteBuffer> tensor_like) {
+    absl::optional<TensorOrRemoteBuffer> tensor_like,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   CHECK(!tensor_like || tensor_like->IsTensor());
 
   if (tensor_like) {
-    return AllocateInput(allocation_location, shape, tensor_like->AsTensor());
+    return AllocateInput(allocation_location, shape, tensor_like->AsTensor(),
+                         debug_name_and_id);
   } else {
     return AllocateInput(allocation_location, shape,
-                         absl::optional<poplar::Tensor>(absl::nullopt));
+                         absl::optional<poplar::Tensor>(absl::nullopt),
+                         debug_name_and_id);
   }
 }
 
 StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
     TensorLocation allocation_location, const Shape& shape,
-    absl::optional<poplar::Tensor> tensor_like) {
+    absl::optional<poplar::Tensor> tensor_like,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph =
       GetGraphWithOutputIndex(resources_, allocation_location.instruction,
                               allocation_location.flattened_output_tuple_index);
@@ -1351,33 +1398,47 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
   if (HasTensorAllocationTarget(allocation_location, resources_) ||
       (tensor_like && tensor_like->containsConstant()) || (!tensor_like)) {
     // Do the allocation.
-    TF_ASSIGN_OR_RETURN(out, AddTensor(graph, allocation_location, shape,
-                                       resources_, tensor_map));
+
+    // TODO(T32947) : Would like to pass the Debug Info associated with the
+    // debug_name_and_id passed in to AddTensor. However that results in losing
+    // some information as if the debug is not passed the variable will
+    // 'inherit' the debug name of the tensor it is cloned from. Which is more
+    // useful. Would like to be able get the name of the tensor we clone from.
+
+    // For instance.
+    // Without debug info :
+    // all/b0/batch_norm/FusedBatchNormV3/batch-norm-training.19/gamma With
+    // debug info : /arg_32
+
+    TF_ASSIGN_OR_RETURN(out,
+                        AddTensor(graph, allocation_location, shape, resources_,
+                                  tensor_map, {debug_name_and_id, "output"}));
   } else {
-    auto name = absl::StrCat(GetDebugName(allocation_location.instruction), "_",
-                             allocation_location.flattened_output_tuple_index);
-    out =
-        TensorCloneAndRebalanceAliasing(graph, resources_, *tensor_like, name);
+    out = TensorCloneAndRebalanceAliasing(graph, resources_, *tensor_like,
+                                          debug_name_and_id);
   }
 
   return out;
 }
 
 StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInputTensor(
-    poplar::Tensor tensor, TensorLocation input_location, const Shape& shape) {
-  poplar::program::Sequence seq;
+    poplar::Tensor tensor, TensorLocation input_location, const Shape& shape,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   // Each visitor might need to post process the allocation, for example change
   // add copies to a sequence. Use the input location for that information.
   switch (input_location.instruction->opcode()) {
     case HloOpcode::kInfeed: {
-      TF_ASSIGN_OR_RETURN(tensor, PostProcessInfeedAllocation(
-                                      input_location, shape, seq, tensor));
+      TF_ASSIGN_OR_RETURN(
+          tensor, PostProcessInfeedAllocation(input_location, shape, seq,
+                                              tensor, debug_name_and_id));
       break;
     }
     case HloOpcode::kParameter: {
-      TF_ASSIGN_OR_RETURN(tensor, PostProcessParameterAllocation(
-                                      input_location, shape, seq, tensor));
+      TF_ASSIGN_OR_RETURN(
+          tensor, PostProcessParameterAllocation(input_location, shape, seq,
+                                                 tensor, debug_name_and_id));
       break;
     }
     default: {
@@ -1397,11 +1458,12 @@ StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInputTensor(
 
 StatusOr<poplar::Tensor> DeferredVisitor::PostProcessInfeedAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& sequence, poplar::Tensor tensor) {
-  TF_ASSIGN_OR_RETURN(
-      auto prog,
-      CreateInfeed(resources_, location.instruction,
-                   location.flattened_output_tuple_index, shape, tensor));
+    poplar::program::Sequence& sequence, poplar::Tensor tensor,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  TF_ASSIGN_OR_RETURN(auto prog,
+                      CreateInfeed(resources_, location.instruction,
+                                   location.flattened_output_tuple_index, shape,
+                                   tensor, debug_name_and_id));
   sequence.add(prog);
   return tensor;
 }
@@ -1454,7 +1516,7 @@ bool DeferredVisitor::InputIsUsedInDependentComputations(
 
 poplar::program::Sequence DeferredVisitor::GetSequence(
     bool copy_execution_counters) {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   if (copy_execution_counters) {
     TF_CHECK_OK(
         CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
@@ -1471,44 +1533,49 @@ poplar::program::Sequence DeferredVisitor::GetFunctionCall() {
     function_ = GetMasterGraph(resources_).addFunction(func_seq);
   }
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, dnai_);
   TF_CHECK_OK(
       CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
-  seq.add(poplar::program::Call(*function_));
+  seq.add(poplar::program::Call(*function_, {dnai_}));
   return seq;
 }
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description, const std::string& name,
+    const HloInstructionDescription& description,
+    const poplar::DebugNameAndId& debug_name_and_id,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
     : InplaceDeferredVisitor(
-          res, inputs, description, name, dependent_subcomputations,
+          res, inputs, description, debug_name_and_id,
+          dependent_subcomputations,
           GetReallocateInputsInfo(inputs, reallocate_inputs)) {}
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description, const std::string& name,
+    const HloInstructionDescription& description,
+    const poplar::DebugNameAndId& debug_name_and_id,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)
-    : DeferredVisitor(res, inputs, name, true, dependent_subcomputations,
-                      reallocate_inputs_info),
+    : DeferredVisitor(res, inputs, debug_name_and_id, true,
+                      dependent_subcomputations, reallocate_inputs_info),
       description_(description) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst,
-    const DeferredArgRBVectors& callsite_inputs) {
+    const DeferredArgRBVectors& callsite_inputs,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   return DeferredVisitor::PropagateDeferredAllocations(
       callsite_inst, callsite_inputs,
-      std::vector<bool>(callsite_inst->operand_count(), false));
+      std::vector<bool>(callsite_inst->operand_count(), false),
+      debug_name_and_id);
 }
 
-StatusOr<poplar::program::Sequence>
-InplaceDeferredVisitor::GetPreambleCopies() {
+StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
+    const poplar::DebugNameAndId& debug_name_and_id) {
   CHECK_EQ(callsite_inputs_.size(), computation_inputs_.size());
   CHECK_EQ(callsite_inputs_.size(), reallocate_inputs_info_.size());
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   for (uint64 i = 0; i != callsite_inputs_.size(); ++i) {
     CHECK_EQ(callsite_inputs_[i].size(), computation_inputs_[i].size());
     CHECK_EQ(callsite_inputs_[i].size(), reallocate_inputs_info_[i].size());
@@ -1521,7 +1588,8 @@ InplaceDeferredVisitor::GetPreambleCopies() {
         }
         VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
         seq.add(poplar::program::Copy(callsite_inputs_[i][j]->AsTensor(),
-                                      computation_inputs_[i][j].AsTensor()));
+                                      computation_inputs_[i][j].AsTensor(),
+                                      false, debug_name_and_id));
       }
     }
   }
@@ -1530,6 +1598,8 @@ InplaceDeferredVisitor::GetPreambleCopies() {
 
 Status InplaceDeferredVisitor::HandleParameterTensor(
     TensorLocation input_location, const Shape shape) {
+  poplar::DebugNameAndId debug_name_and_id =
+      GetDebugNameAndId(input_location.instruction);
   const auto param_num = input_location.instruction->parameter_number();
 
   // Whether this input has an allocation target.
@@ -1541,20 +1611,22 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
 
   // Function which is called when tensor is allocated for this input.
   DeferredAllocateFunction allocate_fn =
-      [this, shape, callsite_tensor](
+      [this, shape, callsite_tensor, debug_name_and_id](
           TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(auto tensor, AllocateInput(allocation_location, shape,
-                                                   callsite_tensor));
+    TF_ASSIGN_OR_RETURN(
+        auto tensor, AllocateInput(allocation_location, shape, callsite_tensor,
+                                   debug_name_and_id));
     return tensor;
   };
 
   // Function which is called when post processing the allocation of this input.
   DeferredPostProcessFunction post_process_fn =
-      [this, input_location, shape,
-       param_num](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      [this, input_location, shape, param_num,
+       debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
     // Call the post process for this location.
     TF_ASSIGN_OR_RETURN(tensor,
-                        PostProcessInputTensor(tensor, input_location, shape));
+                        PostProcessInputTensor(tensor, input_location, shape,
+                                               debug_name_and_id));
     // Add the tensor to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] = tensor;
@@ -1600,7 +1672,7 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
 StatusOr<TensorOrRemoteBufferVector>
 InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
     poplar::Graph& graph, const HloComputation* computation,
-    const std::string& debug_name) {
+    const poplar::DebugNameAndId& debug_name_and_id) {
   enum class AliasType {
     NO_ALIAS_NOT_USED,
     NO_ALIAS_USED,
@@ -1706,14 +1778,16 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
               "Found disallowed remote buffer aliasing at input %d of loop %s",
               i, computation->name());
         }
-        VLOG(1) << "Adding a partial copy in " << debug_name
-                << " for tuple index " << i;
-        const std::string name = absl::StrCat(debug_name, "_bodyout_temp_", i);
-        unaliased_loop_outputs[i] = graph.clone(loop_outputs[i], name);
+        VLOG(1) << "Adding a partial copy in "
+                << debug_name_and_id.getPathName() << " for tuple index " << i;
+        unaliased_loop_outputs[i] = graph.clone(
+            loop_outputs[i], {debug_name_and_id, std::string("bodyout_temp_") +
+                                                     std::to_string(i)});
         AddSequenceForAliasingCopy(
             computation->root_instruction(),
             poplar::program::Copy(loop_outputs[i].AsTensor(),
-                                  unaliased_loop_outputs[i].AsTensor()));
+                                  unaliased_loop_outputs[i].AsTensor(), false,
+                                  {debug_name_and_id}));
         break;
       }
       default:
@@ -1732,13 +1806,14 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
               "Found disallowed remote buffer aliasing at input %d of loop %s",
               i, computation->name());
         }
-        VLOG(1) << "Adding a output to input copy in " << debug_name
-                << " for tuple index " << i;
+        VLOG(1) << "Adding a output to input copy in "
+                << debug_name_and_id.getPathName() << " for tuple index " << i;
         // Get the input ready for the next iteration.
         AddSequenceForAliasingCopy(
             computation->root_instruction(),
             poplar::program::Copy(unaliased_loop_outputs[i].AsTensor(),
-                                  loop_inputs[i].AsTensor()));
+                                  loop_inputs[i].AsTensor(), false,
+                                  {debug_name_and_id}));
         break;
       }
       case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:

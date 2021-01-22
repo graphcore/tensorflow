@@ -133,7 +133,10 @@ Status GenericGraphCache::ExecuteCached(
         }
       }
 
-      std::string name = absl::StrCat(GetDebugName(inst), "/Realloc", arg_idx);
+      poplar::DebugNameAndId debug_name_and_id =
+          GetDebugNameAndId(resources, inst);
+
+      auto name = absl::StrCat("Realloc/", arg_idx);
       if (needs_reallocating) {
         VLOG(1) << "Reallocating argument " << arg_idx
                 << " for cached Poplar Function generated for "
@@ -142,8 +145,9 @@ Status GenericGraphCache::ExecuteCached(
         if (allocating_indices.contains(arg_idx)) {
           // Just allocate the tensor.
           TF_ASSIGN_OR_RETURN(
-              new_arg, AddTensorForTarget(graph, {inst, arg_idx}, resources,
-                                          local_map, name));
+              new_arg,
+              AddTensorForTarget(graph, {inst, arg_idx}, resources, local_map,
+                                 {debug_name_and_id, name}));
         } else if (layout_dependencies.contains(arg_idx)) {
           // Need to allocate a tensor given a previously allocated tensor.
           int64 dependent_arg_idx = layout_dependencies.at(arg_idx);
@@ -153,13 +157,13 @@ Status GenericGraphCache::ExecuteCached(
               new_arg,
               AddTensorForTarget(
                   graph, {inst, arg_idx, dependent_operand, dependent_arg_idx},
-                  resources, local_map, name));
+                  resources, local_map, {debug_name_and_id, name}));
         } else {
           // We don't have an allocator function and we assume linear mapping is
           // better than aliases.
           TF_ASSIGN_OR_RETURN(
-              new_arg,
-              AddPlainTensor(graph, name, operand->shape(), resources, false));
+              new_arg, AddPlainTensor(graph, {debug_name_and_id, name},
+                                      operand->shape(), resources, false));
         }
         if (input.shape() != new_arg.shape()) {
           return InternalErrorStrCat(

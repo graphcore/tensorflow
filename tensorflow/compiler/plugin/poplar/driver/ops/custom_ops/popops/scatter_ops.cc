@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -32,11 +33,11 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<poplar::Tensor> AddIndicesTensor(poplar::Graph& graph,
-                                          const std::string& debug_name,
-                                          const xla::Shape& shape,
-                                          CompilerResources& resources) {
-  return CreateIndicesTensor(graph, popops::SlicePlan(), shape, debug_name);
+StatusOr<poplar::Tensor> AddIndicesTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+    const xla::Shape& shape, CompilerResources& resources) {
+  return CreateIndicesTensor(graph, popops::SlicePlan(), shape,
+                             {debug_name_and_id});
 }
 
 class ScatterOp : public PoplarOpDef {
@@ -45,6 +46,7 @@ class ScatterOp : public PoplarOpDef {
       const std::string& name, const TensorTarget& tensor_target,
       const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ScatterOp");
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
@@ -61,13 +63,13 @@ class ScatterOp : public PoplarOpDef {
           }
         }
 
-        TF_ASSIGN_OR_RETURN(out,
-                            AddScatterTensor(graph, name, shape, slice_shape));
+        TF_ASSIGN_OR_RETURN(
+            out, AddScatterTensor(graph, {debug_info}, shape, slice_shape));
         break;
       }
       case 1: {
-        TF_ASSIGN_OR_RETURN(out,
-                            AddIndicesTensor(graph, name, shape, resources));
+        TF_ASSIGN_OR_RETURN(
+            out, AddIndicesTensor(graph, {debug_info}, shape, resources));
         break;
       }
       case 2: {
@@ -80,8 +82,8 @@ class ScatterOp : public PoplarOpDef {
           }
         }
 
-        TF_ASSIGN_OR_RETURN(out,
-                            AddScatterTensor(graph, name, shape, slice_shape));
+        TF_ASSIGN_OR_RETURN(
+            out, AddScatterTensor(graph, {debug_info}, shape, slice_shape));
         break;
       }
       default:
@@ -96,6 +98,7 @@ class ScatterOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ScatterOp");
     const auto update_computation = inst->to_apply();
     const auto dim_numbers = inst->scatter_dimension_numbers();
 
@@ -105,19 +108,22 @@ class ScatterOp : public PoplarOpDef {
         dim_numbers.scatter_dims_to_operand_dims();
     const auto index_vector_dim = dim_numbers.index_vector_dim();
 
-    poplar::program::Sequence prog;
+    poplar::program::Sequence prog({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, prog));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, prog, debug_info));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor operand = inputs[0][0];
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
-                        FindInstructionInput(tensor_map, res, inst, 1, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor indices,
+        FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
-                        FindInstructionInput(tensor_map, res, inst, 2, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor updates,
+        FindInstructionInput(tensor_map, res, inst, 2, prog, {debug_info}));
 
     popops::UpdateComputationFunc update_computation_func;
     auto root_inst = update_computation->root_instruction();
@@ -137,7 +143,7 @@ class ScatterOp : public PoplarOpDef {
       update_computation_func =
           [&](poplar::Graph& g, poplar::Tensor& a, poplar::Tensor& b,
               poplar::program::Sequence& p) -> poplar::Tensor {
-        popops::addInPlace(g, b, a, p);
+        popops::addInPlace(g, b, a, p, {debug_info});
 
         return b;
       };
@@ -159,12 +165,14 @@ class ScatterOp : public PoplarOpDef {
           // Copy the inputs in if they were used.
           if (update_comp_visitor->InputIsUsed(0, 0)) {
             p.add(poplar::program::Copy(
-                a_elem, update_comp_visitor->inputs()[0][0].AsTensor()));
+                a_elem, update_comp_visitor->inputs()[0][0].AsTensor(), false,
+                {debug_info}));
           }
 
           if (update_comp_visitor->InputIsUsed(1, 0)) {
             p.add(poplar::program::Copy(
-                b_elem, update_comp_visitor->inputs()[1][0].AsTensor()));
+                b_elem, update_comp_visitor->inputs()[1][0].AsTensor(), false,
+                {debug_info}));
           }
 
           // Add the sequence.
@@ -172,7 +180,8 @@ class ScatterOp : public PoplarOpDef {
 
           // Copy the output out
           p.add(poplar::program::Copy(
-              update_comp_visitor->outputs()[0].AsTensor(), o_elem));
+              update_comp_visitor->outputs()[0].AsTensor(), o_elem, false,
+              {debug_info}));
         }
 
         return result;
@@ -184,7 +193,7 @@ class ScatterOp : public PoplarOpDef {
                     {inserted_window_dims.begin(), inserted_window_dims.end()},
                     {scatter_dims_to_operand_dims.begin(),
                      scatter_dims_to_operand_dims.end()},
-                    update_computation_func, prog, GetDebugName(inst));
+                    update_computation_func, prog, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
     return prog;

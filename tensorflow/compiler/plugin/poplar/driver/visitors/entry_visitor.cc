@@ -44,7 +44,8 @@ Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
                            CompilerResources& res,
                            poplar::program::Sequence& seq,
                            const InputOutputAliasingMap::InputInfo& info,
-                           const HloInstruction* inst) {
+                           const HloInstruction* inst,
+                           const poplar::DebugNameAndId& debug_name_and_id) {
   if (res.use_verified_transfers) {
     if (rearrange_on_host) {
       LOG(WARNING)
@@ -53,9 +54,11 @@ Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
     TF_ASSIGN_OR_RETURN(poplar::Tensor index,
                         res.streams_indices.IndexTensor(info, inst, seq));
     seq.add(poplar::program::Copy(stream, dst, index, false,
-                                  res.streams_indices.CopyOptions()));
+                                  res.streams_indices.CopyOptions(),
+                                  debug_name_and_id));
   } else {
-    seq.add(poplar::program::Copy(stream, dst, rearrange_on_host));
+    seq.add(poplar::program::Copy(stream, dst, rearrange_on_host,
+                                  debug_name_and_id));
   }
   return Status::OK();
 }
@@ -65,7 +68,8 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
                            CompilerResources& res,
                            poplar::program::Sequence& seq,
                            const InputOutputAliasingMap::OutputInfo& info,
-                           const HloInstruction* inst) {
+                           const HloInstruction* inst,
+                           const poplar::DebugNameAndId& debug_name_and_id) {
   if (res.use_verified_transfers) {
     if (rearrange_on_host) {
       LOG(WARNING)
@@ -74,9 +78,11 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
     TF_ASSIGN_OR_RETURN(poplar::Tensor index,
                         res.streams_indices.IndexTensor(info, inst, seq));
     seq.add(poplar::program::Copy(src, stream, index, false,
-                                  res.streams_indices.CopyOptions()));
+                                  res.streams_indices.CopyOptions(),
+                                  debug_name_and_id));
   } else {
-    seq.add(poplar::program::Copy(src, stream, rearrange_on_host));
+    seq.add(poplar::program::Copy(src, stream, rearrange_on_host,
+                                  debug_name_and_id));
   }
   return Status::OK();
 }
@@ -85,7 +91,9 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
-    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry") {}
+    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry"),
+      host_to_device({}, dnai_),
+      device_to_host({}, dnai_) {}
 
 Status EntryVisitor::AddSequenceForInstruction(
     const HloInstruction* inst, const poplar::program::Sequence& seq) {
@@ -105,7 +113,8 @@ Status EntryVisitor::AddSequenceForInstruction(
 
 StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     TensorLocation location, const Shape& shape,
-    poplar::program::Sequence& stream_copy_seq, poplar::Tensor tensor) {
+    poplar::program::Sequence& stream_copy_seq, poplar::Tensor tensor,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   const HloInstruction* inst = location.instruction;
   const int64 flat_tuple_index = location.flattened_output_tuple_index;
 
@@ -143,7 +152,7 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     TF_RETURN_IF_ERROR(AddHostToDeviceCopy(
         fifo, tensor_destination,
         !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host,
-        graph, resources_, stream_copy_seq, in_info, inst));
+        graph, resources_, stream_copy_seq, in_info, inst, debug_name_and_id));
 
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
@@ -160,19 +169,20 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     poplar::Graph& graph =
         GetGraphWithOutputIndex(resources_, inst, flat_tuple_index);
     tensor = graph.clone(non_modified_tensor,
-                         GetDebugName(inst) + ".resource_not_modified_clone");
+                         {debug_name_and_id, "resource_not_modified_clone"});
 
     // Call the base class since we do not want our own handling of
     // parameters for this special case.
     TF_RETURN_IF_ERROR(DeferredVisitor::AddSequenceForInstruction(
-        inst, poplar::program::Copy(non_modified_tensor, tensor)));
+        inst, poplar::program::Copy(non_modified_tensor, tensor, false,
+                                    {debug_name_and_id})));
   }
   return tensor;
 }
 
 const poplar::program::Sequence
 EntryVisitor::GetSequenceAndInitializeCounters() {
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, "InitializeCounters");
   seq.add(execution_counters_.SetInitialValuesToZero());
   seq.add(DeferredVisitor::GetSequence(/*copy_execution_counters*/ false));
   return seq;
@@ -180,6 +190,8 @@ EntryVisitor::GetSequenceAndInitializeCounters() {
 
 Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   VLOG(1) << "Processing FinishVisit";
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(root);
+
   HloComputation* comp = root->parent();
 
   if (ShapeUtil::IsEmptyTuple(root->shape())) {
@@ -203,7 +215,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
        ++idx) {
     auto& out_info = entry_outputs[idx];
 
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_name_and_id);
 
     // Flatten the tuple tensor (if required) and iterate over all of them
     const Shape layout_sub_shape =
@@ -235,11 +247,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 
     // Get the all the tensors for the current output index - work out the
     // range.
-    TF_ASSIGN_OR_RETURN(
-        TensorVector out_tensors,
-        FindExpandedInstructionOutputsInRange(
-            tensor_map, resources_, root,
-            {flat_tuple_index_start, flat_tuple_index_end}, seq));
+    TF_ASSIGN_OR_RETURN(TensorVector out_tensors,
+                        FindExpandedInstructionOutputsInRange(
+                            tensor_map, resources_, root,
+                            {flat_tuple_index_start, flat_tuple_index_end}, seq,
+                            debug_name_and_id));
 
     // If the output is a modified resource, we want to keep it on the device at
     // the exact same location it was an input to the graph.
@@ -259,7 +271,8 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
           AddSequenceForInstruction(
               root, poplar::program::Copy(out_tensors[tuple_index],
-                                          in_tensors[tuple_index]));
+                                          in_tensors[tuple_index], false,
+                                          debug_name_and_id));
         }
       }
     }
@@ -276,11 +289,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
             handle, out.elementType(), out.numElements(),
             resources_.streams_indices.GraphOptions(handle));
 
-        TF_RETURN_IF_ERROR(
-            AddDeviceToHostCopy(out, fifo,
-                                !out_info.IsStreaming() ||
-                                    resources_.always_rearrange_copies_on_host,
-                                graph, resources_, seq, out_info, root));
+        TF_RETURN_IF_ERROR(AddDeviceToHostCopy(
+            out, fifo,
+            !out_info.IsStreaming() ||
+                resources_.always_rearrange_copies_on_host,
+            graph, resources_, seq, out_info, root, debug_name_and_id));
       }
     }
 
@@ -295,14 +308,14 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 }
 
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
-  poplar::program::Sequence combined;
+  poplar::program::Sequence combined({}, {"HostToDevice"});
   combined.add(resources_.streams_indices.LoadCheckpointSequence());
   combined.add(host_to_device);
   return combined;
 }
 
 const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
-  poplar::program::Sequence combined;
+  poplar::program::Sequence combined({}, {"DeviceToHost"});
   combined.add(device_to_host);
   combined.add(resources_.streams_indices.SaveCheckpointSequence());
   return combined;

@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/topk.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -38,12 +39,14 @@ class TopKOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "TopKOp");
     // Create the control program.
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_info);
 
     // Get the input.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor input,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
 
     const HloTopK* as_top_k = Cast<HloTopK>(inst);
     int64 num_k = as_top_k->NumK();
@@ -65,7 +68,8 @@ class TopKOp : public PoplarOpDef {
     poplar::Tensor index_output;
 
     poplar::Tensor value_output =
-        popnn::topK(graph, input, index_output, num_k, sorted, seq, "TopK");
+        popnn::topK(graph, input, index_output, num_k, sorted, seq,
+                    {debug_info, "value_output"});
 
     // Reshape the input to be in the original form with the last dimension
     // replaced with K.

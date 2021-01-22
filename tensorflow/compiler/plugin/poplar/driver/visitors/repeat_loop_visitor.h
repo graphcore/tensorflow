@@ -30,7 +30,7 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
   RepeatLoopVisitor(CompilerResources& res, const DeferredArgRBVectors& inputs,
                     const HloInstructionDescription& description,
                     const ReallocateInputsInfo& reallocate_inputs_info,
-                    const std::string& name);
+                    const poplar::DebugNameAndId& debug_name_and_id);
 
   Status HandleDeferredAllocationCall(HloInstruction* inst) override;
 

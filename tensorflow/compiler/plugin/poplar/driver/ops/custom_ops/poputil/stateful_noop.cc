@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -35,8 +36,10 @@ namespace {
 class StatefulNoopOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(
       poplar::Graph&, CompilerResources&, const HloInstruction*,
-      const xla::Shape&, TensorMap&, const poplar::DebugContext&) override {
-    poplar::program::Sequence seq;
+      const xla::Shape&, TensorMap&,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "StatefulNoopOp");
+    poplar::program::Sequence seq({}, debug_info);
     return seq;
   }
 };

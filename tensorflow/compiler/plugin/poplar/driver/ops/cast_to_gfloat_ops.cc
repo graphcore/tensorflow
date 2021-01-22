@@ -30,16 +30,17 @@ namespace poplarplugin {
 StatusOr<poplar::program::Program> CreatePoplibsGfloatParams(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
-    poplar::Type gf_calc_type, const unsigned gf_packed_cfg) {
+    poplar::Type gf_calc_type, const unsigned gf_packed_cfg,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing GfloatParams.";
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   poplar::Tensor gf_param =
       popfloat::experimental::GfloatCast::createCastOpParamsTensor(
-          graph, seq, gf_calc_type, gf_packed_cfg, GetDebugName(inst));
+          graph, seq, gf_calc_type, gf_packed_cfg, {debug_name_and_id});
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, gf_param));
   return seq;
@@ -48,7 +49,8 @@ StatusOr<poplar::program::Program> CreatePoplibsGfloatParams(
 StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
-    popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg) {
+    popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   const HloCastNativeToGfloatInstruction* cast_inst =
       Cast<HloCastNativeToGfloatInstruction>(inst);
 
@@ -56,7 +58,7 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   auto tf_in_type = cast_inst->InputType();
 
@@ -66,29 +68,32 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
   poplar::Type in_type;
   TF_ASSIGN_OR_RETURN(in_type, PoplarDataType(in_type_));
 
-  TF_ASSIGN_OR_RETURN(poplar::Tensor gf_params,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor gf_params,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, debug_name_and_id));
 
   if (cast_inst->GetUseDescriptions().size() &&
       gf_cast_cfg.inPlaceOp(in_type)) {
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_name_and_id));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     poplar::Tensor operand = inputs[0][0];
 
     popfloat::experimental::GfloatCast::castNativeToGfloatInPlace(
-        graph, operand, gf_params, seq, gf_cast_cfg, GetDebugName(inst));
+        graph, operand, gf_params, seq, gf_cast_cfg, {debug_name_and_id});
 
     TF_ASSIGN_OR_RETURN(operand, BroadcastTensor(operand, output_shape));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
   } else {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor operand,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor operand,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_name_and_id));
 
     auto out = popfloat::experimental::GfloatCast::castNativeToGfloat(
-        graph, operand, gf_params, seq, gf_cast_cfg, GetDebugName(inst));
+        graph, operand, gf_params, seq, gf_cast_cfg, {debug_name_and_id});
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   }
 
@@ -98,20 +103,23 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
 StatusOr<poplar::program::Program> CreatePoplibsCastGfloatToNative(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map,
-    popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg) {
+    popfloat::experimental::GfloatCast::CastConfig& gf_cast_cfg,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing Unpack Gfloat.";
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(poplar::Tensor operand,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
-  TF_ASSIGN_OR_RETURN(poplar::Tensor params,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor operand,
+      FindInstructionInput(tensor_map, res, inst, 0, seq, debug_name_and_id));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor params,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, debug_name_and_id));
 
   auto out = popfloat::experimental::GfloatCast::castGfloatToNative(
-      graph, operand, params, seq, gf_cast_cfg, GetDebugName(inst));
+      graph, operand, params, seq, gf_cast_cfg, {debug_name_and_id});
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 

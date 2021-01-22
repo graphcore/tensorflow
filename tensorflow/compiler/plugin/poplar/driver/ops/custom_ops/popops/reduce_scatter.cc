@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -63,14 +64,16 @@ class ReduceScatterOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "ReduceScatterOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // Collect all the inputs.
     const int64 num_inputs = inst->operand_count();
     std::vector<poplar::Tensor> inputs(num_inputs);
     for (int64 i = 0; i < num_inputs; ++i) {
-      TF_ASSIGN_OR_RETURN(inputs[i],
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
+      TF_ASSIGN_OR_RETURN(
+          inputs[i],
+          FindInstructionInput(tensor_map, res, inst, i, seq, {debug_info}));
       // The op requires rank-1 input.
       CHECK_EQ(inputs[i].rank(), 1);
     }
@@ -84,10 +87,9 @@ class ReduceScatterOp : public PoplarOpDef {
         InterleavePerReplica(graph, inputs, res.replication_factor);
 
     // Do the actual reduce scatter on the interleaved input.
-    poplar::Tensor interleaved_output =
-        gcl::reduceScatter(graph, interleaved_input, popops::Operation::ADD,
-                           seq, GetDebugName(inst) + "/ReduceScatter",
-                           GetReplicatedCollectiveOptions(res));
+    poplar::Tensor interleaved_output = gcl::reduceScatter(
+        graph, interleaved_input, popops::Operation::ADD, seq,
+        {debug_info, "ReduceScatter"}, GetReplicatedCollectiveOptions(res));
 
     // Deinterleave output.
     // Before: interleaved_output = [sum(a0), sum(a1), sum(b0)] (on replica 1/2)

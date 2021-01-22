@@ -107,7 +107,8 @@ const std::vector<std::string>& VerifiedStreamsIndices::CheckpointFeedsOrder()
 Status VerifiedStreamsIndices::InitializeFeedStream(
     const std::string& feed_name, int64 stream_idx,
     const std::string& stream_handle, poplar::program::Sequence& seq,
-    const HloInstruction* inst) {
+    const HloInstruction* inst,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Only needed for verified streams.
   if (!resources_->use_verified_transfers) {
     return Status::OK();
@@ -134,11 +135,13 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
       // Create a copy to avoid conflicts with other streams.
       TF_ASSIGN_OR_RETURN(
           stream_index,
-          AddPlainTensor(GetMasterGraph(*resources_),
-                         absl::StrCat(stream_handle, "Index"),
-                         XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
-                         *resources_));
-      load_checkpoint_.add(poplar::program::Copy(feed_index, stream_index));
+          AddPlainTensor(
+              GetMasterGraph(*resources_),
+              {debug_name_and_id, absl::StrCat(stream_handle, "Index")},
+              XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
+              *resources_));
+      load_checkpoint_.add(poplar::program::Copy(feed_index, stream_index,
+                                                 false, {debug_name_and_id}));
     } else {
       stream_index = feed_index;
     }
@@ -150,7 +153,8 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
 }
 
 Status VerifiedStreamsIndices::InitializeIndexTensors(
-    CompilerResources& resources, const IpuOptions::VerifiedTransfers& opts) {
+    CompilerResources& resources, const IpuOptions::VerifiedTransfers& opts,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   if (resources_ != nullptr) {
     return xla::FailedPrecondition("Indices already allocated");
   }
@@ -225,16 +229,17 @@ Status VerifiedStreamsIndices::InitializeIndexTensors(
 
   xla::Literal zeroes = LiteralUtil::CreateR1<uint32>({0, 0});
   poplar::Graph& graph = GetMasterGraph(*resources_);
-  TF_ASSIGN_OR_RETURN(poplar::Tensor zero_tensor,
-                      CreateConstantTensor(graph, zeroes, zeroes.shape(),
-                                           poplar::UNSIGNED_INT, "Index0"));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor zero_tensor,
+      CreateConstantTensor(graph, zeroes, zeroes.shape(), poplar::UNSIGNED_INT,
+                           {debug_name_and_id, "Index0"}));
 
   input_data_.Initialize(*resources_, zero_tensor);
   output_data_.Initialize(*resources_, zero_tensor);
   input_parameters_.Initialize(*resources_, zero_tensor);
   output_parameters_.Initialize(*resources_, zero_tensor);
 
-  TF_RETURN_IF_ERROR(SetKeysAndStartIds(opts));
+  TF_RETURN_IF_ERROR(SetKeysAndStartIds(opts, debug_name_and_id));
 
   // Generate the key / id pairs for all the handles
   for (auto handle : handles) {
@@ -354,26 +359,28 @@ void VerifiedStreamsIndices::Index::SetKeyAndStartId(uint64 key, uint64 id) {
 void VerifiedStreamsIndices::Index::SetKey(uint64 key) { key_ = key; }
 
 Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
-    const IpuOptions::VerifiedTransfers& opts) {
+    const IpuOptions::VerifiedTransfers& opts,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph = GetMasterGraph(*resources_);
   TF_ASSIGN_OR_RETURN(
       checkpoint_tensor_,
-      AddPlainTensor(graph, ipu::Metadata::CheckpointName(),
+      AddPlainTensor(graph,
+                     {debug_name_and_id, ipu::Metadata::CheckpointName()},
                      XlaShapeFromPoplarShape(xla::PrimitiveType::U32,
                                              {2 * feeds_info_.size()}),
                      *resources_));
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor checkpoint_idx,
-      AddPlainTensor(graph, ipu::Metadata::InputCheckpointIndexName(),
-                     XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
-                     *resources_));
+      AddPlainTensor(
+          graph, {debug_name_and_id, ipu::Metadata::InputCheckpointIndexName()},
+          XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}), *resources_));
 
   auto fifo_index = graph.addHostToDeviceFIFO(
       ipu::Metadata::InputCheckpointIndexHandle(), checkpoint_idx.elementType(),
       checkpoint_idx.numElements());
-  load_checkpoint_.add(
-      poplar::program::Copy(fifo_index, checkpoint_idx, false));
+  load_checkpoint_.add(poplar::program::Copy(fifo_index, checkpoint_idx, false,
+                                             {debug_name_and_id}));
 
   auto fifo_in = graph.addHostToDeviceFIFO(
       ipu::Metadata::InputCheckpointHandle(), checkpoint_tensor_.elementType(),
@@ -381,9 +388,9 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_in().key())},
        {"id", absl::StrCat(opts.checkpoint_in().start_id())}});
-  load_checkpoint_.add(poplar::program::Copy(fifo_in, checkpoint_tensor_,
-                                             checkpoint_idx, false,
-                                             {{"streamVerification", "true"}}));
+  load_checkpoint_.add(poplar::program::Copy(
+      fifo_in, checkpoint_tensor_, checkpoint_idx, false,
+      {{"streamVerification", "true"}}, {debug_name_and_id}));
   assigned_ids_.insert(
       {fifo_in.handle(),
        {opts.checkpoint_in().key(), opts.checkpoint_in().start_id()}});
@@ -391,7 +398,7 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   // Increment the index by one.
   popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
                      {checkpoint_idx.slice(0, 1)}, load_checkpoint_,
-                     "CheckpointIndexInc");
+                     {debug_name_and_id, "CheckpointIndexInc"});
 
   auto fifo_out = graph.addDeviceToHostFIFO(
       ipu::Metadata::OutputCheckpointHandle(), checkpoint_tensor_.elementType(),
@@ -399,23 +406,24 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_out().key())},
        {"id", absl::StrCat(opts.checkpoint_out().start_id())}});
-  save_checkpoint_.add(poplar::program::Copy(checkpoint_tensor_, fifo_out,
-                                             checkpoint_idx, false,
-                                             {{"streamVerification", "true"}}));
+  save_checkpoint_.add(poplar::program::Copy(
+      checkpoint_tensor_, fifo_out, checkpoint_idx, false,
+      {{"streamVerification", "true"}}, {debug_name_and_id}));
   assigned_ids_.insert(
       {fifo_out.handle(),
        {opts.checkpoint_out().key(), opts.checkpoint_out().start_id()}});
   auto fifo_out_clear = graph.addDeviceToHostFIFO(
       ipu::Metadata::OutputClearCheckpointHandle(),
       checkpoint_tensor_.elementType(), checkpoint_tensor_.numElements());
-  save_checkpoint_.add(
-      poplar::program::Copy(checkpoint_tensor_, fifo_out_clear, false));
+  save_checkpoint_.add(poplar::program::Copy(checkpoint_tensor_, fifo_out_clear,
+                                             false, {debug_name_and_id}));
 
   return Status::OK();
 }
 
 Status VerifiedStreamsIndices::SetKeysAndStartIds(
-    const IpuOptions::VerifiedTransfers& opts) {
+    const IpuOptions::VerifiedTransfers& opts,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   std::vector<std::pair<Index*, IpuOptions::VerifiedInfo>> indices;
 
   absl::c_transform(
@@ -429,7 +437,7 @@ Status VerifiedStreamsIndices::SetKeysAndStartIds(
         return std::make_pair(pair.first, pair.second);
       });
   if (feeds_info_.size() > 0) {
-    TF_RETURN_IF_ERROR(CreateCheckpointLoadSave(opts));
+    TF_RETURN_IF_ERROR(CreateCheckpointLoadSave(opts, debug_name_and_id));
   }
 
   if (input_data_.NumTensors() > 0) {

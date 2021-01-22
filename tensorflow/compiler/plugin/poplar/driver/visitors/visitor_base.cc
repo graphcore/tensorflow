@@ -35,6 +35,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
@@ -61,6 +62,7 @@ typedef StatusOr<poplar::program::Program> (*CustomCallFn)(
 Status BaseVisitor::Preprocess(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   bool new_stochastic_rounding_enabled;
   switch (poplar_backend_config.stochastic_rounding()) {
     case THREESTATE_OFF:
@@ -78,18 +80,21 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
           "Invalid value for PoplarBackendConfig.stochastic_rounding()");
   }
   if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, debug_name_and_id);
     poplar::setStochasticRounding(GetGraph(resources_, inst), seq,
                                   new_stochastic_rounding_enabled,
-                                  "Preprocess");
+                                  {debug_name_and_id, "Preprocess"});
     AddSequenceForInstruction(inst, seq);
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
   }
   return Status::OK();
 }
 
-BaseVisitor::BaseVisitor(CompilerResources& resources, const std::string& name)
-    : resources_(resources), name_(name), execution_counters_(resources, name) {
+BaseVisitor::BaseVisitor(CompilerResources& resources,
+                         const poplar::DebugNameAndId& debug_name_and_id)
+    : resources_(resources),
+      dnai_(debug_name_and_id),
+      execution_counters_(resources, debug_name_and_id) {
   stochastic_rounding_enabled_ =
       resources_.global_floating_point_behaviour.esr();
 
@@ -113,28 +118,31 @@ Status BaseVisitor::HandleHloOp(HloInstruction* inst) {
 
 Status BaseVisitor::HandleConvert(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateCastOp(resources_, inst, GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateCastOp(resources_, inst, GetOutputShape(inst),
+                                   tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleTupleSelect(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      CreateTupleSelectOp(resources_, inst, GetOutputShape(inst), tensor_map));
+      CreateTupleSelectOp(resources_, inst, GetOutputShape(inst), tensor_map,
+                          debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  poplar::program::Sequence seq;
-
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor out = inputs[0][0];
@@ -148,6 +156,8 @@ Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
 
 Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
 
   auto reduction = inst->to_apply();
   auto reduction_root = reduction->root_instruction();
@@ -164,9 +174,9 @@ Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
     }
   }
 
-  TF_ASSIGN_OR_RETURN(
-      auto seq, CreateReplicatedAllReduce(resources_, inst,
-                                          GetOutputShape(inst), tensor_map));
+  TF_ASSIGN_OR_RETURN(auto seq, CreateReplicatedAllReduce(
+                                    resources_, inst, GetOutputShape(inst),
+                                    tensor_map, debug_name_and_id));
 
   return AddSequenceForInstruction(inst, seq);
 }
@@ -174,20 +184,24 @@ Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
 Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::DebugContext debug_context(debug_name_and_id);
+  PoplarOpDefDebugInfo debug_info(debug_context, "HandleConstant");
+
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor t,
       AddConstantTensor(graph, TensorLocation{inst, 0}, GetOutputShape(inst),
-                        inst->literal(), resources_, tensor_map));
+                        inst->literal(), resources_, tensor_map, {debug_info}));
 
   // If this constant is used inplace then we need to add a copy and use that
   // instead so the original constant value is always preserved.
   bool is_inplace_read_write = IsOutputModifiedInplace(inst);
   if (is_inplace_read_write && t.numElements() != 0) {
     VLOG(1) << "Constant tensor is read/write inplace, adding copy";
-    poplar::program::Sequence prog;
+    poplar::program::Sequence prog({}, debug_info);
     poplar::Tensor clone = poputil::duplicate(
-        graph, t, prog, GetDebugName(inst) + ".clone",
+        graph, t, prog, {debug_info, "clone"},
         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
     TF_RETURN_IF_ERROR(AddSequenceForInstruction(inst, prog));
@@ -200,12 +214,12 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
 
 Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  poplar::program::Sequence seq;
-
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors output_tensors,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors output_tensors,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(inst->shape()));
   for (size_t i = 0; i < output_tensors[0].size(); i++) {
@@ -217,16 +231,17 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
 }
 
 namespace {
-StatusOr<TensorVectors> GetFusionInputs(CompilerResources& res,
-                                        const HloInstruction* inst,
-                                        TensorMap& tensor_map,
-                                        poplar::program::Sequence& seq,
-                                        const bool expand_aliasing = true) {
+StatusOr<TensorVectors> GetFusionInputs(
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    const bool expand_aliasing = true) {
   TensorVectors args;
   for (int64 i = 0; i < inst->operand_count(); i++) {
-    TF_ASSIGN_OR_RETURN(TensorVector t,
-                        FindInstructionInputTensors(tensor_map, res, inst, i,
-                                                    seq, expand_aliasing));
+    TF_ASSIGN_OR_RETURN(
+        TensorVector t,
+        FindInstructionInputTensors(tensor_map, res, inst, i, seq,
+                                    debug_name_and_id, expand_aliasing));
     args.push_back(t);
   }
   return args;
@@ -235,15 +250,17 @@ StatusOr<TensorVectors> GetFusionInputs(CompilerResources& res,
 
 Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::program::Program prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
   if (IsArithmeticExpressionFusion(inst)) {
-    TF_ASSIGN_OR_RETURN(TensorVectors args,
-                        GetFusionInputs(resources_, inst, tensor_map, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors args,
+        GetFusionInputs(resources_, inst, tensor_map, seq, debug_name_and_id));
     ArithmeticExprVisitor arithmetic_visitor(resources_, args,
-                                             GetDebugName(inst));
+                                             debug_name_and_id);
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
     prog = arithmetic_visitor.GetSequence();
 
@@ -258,14 +275,15 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
     if (is_poplar_custom_op) {
       TF_ASSIGN_OR_RETURN(
           prog, CreatePoplarOp(graph, resources_, inst, GetOutputShape(inst),
-                               tensor_map));
+                               tensor_map, debug_name_and_id));
     } else {
       return xla::FailedPrecondition("Unrecognised fusion instruction %s.",
                                      inst->ToString().c_str());
     }
   } else {
-    TF_ASSIGN_OR_RETURN(prog, CreateFusionOp(resources_, inst,
-                                             GetOutputShape(inst), tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        prog, CreateFusionOp(resources_, inst, GetOutputShape(inst), tensor_map,
+                             debug_name_and_id));
   }
 
   seq.add(prog);
@@ -275,57 +293,66 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
 Status BaseVisitor::HandleCall(HloInstruction* inst) {
   HloComputation* comp = inst->to_apply();
   VLOG(1) << "Processing " << inst->name() << " : " << comp->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateCallOp(resources_, inst, GetOutputShape(inst), tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateCallOp(resources_, inst, GetOutputShape(inst),
+                                   tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleCustomCall(HloInstruction* inst) {
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateCustomCallOp(resources_, inst, GetOutputShape(inst), tensor_map));
+  VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateCustomCallOp(resources_, inst, GetOutputShape(inst),
+                                         tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateTuple(resources_, inst, tensor_map));
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateTuple(resources_, inst, tensor_map, debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleMap(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(bool simple_parallel,
                       IsParallelMap(inst, inst->to_apply()));
   if (simple_parallel) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
-        CreateParallelMap(resources_, inst, GetOutputShape(inst), tensor_map));
+        CreateParallelMap(resources_, inst, GetOutputShape(inst), tensor_map,
+                          debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
   return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleConditional(HloInstruction* inst) {
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
-      CreateConditionalOp(resources_, inst, GetOutputShape(inst), tensor_map));
+      CreateConditionalOp(resources_, inst, GetOutputShape(inst), tensor_map,
+                          debug_name_and_id));
   return AddSequenceForInstruction(inst, prog);
 }
 
 Status BaseVisitor::HandleReal(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  poplar::program::Sequence seq;
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor in,
-      FindInstructionInput(tensor_map, resources_, inst, 0, seq));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+                      FindInstructionInput(tensor_map, resources_, inst, 0, seq,
+                                           debug_name_and_id));
 
   poplar::Tensor out = GetGraph(resources_, inst).clone(in);
-  seq.add(poplar::program::Copy(in, out));
+  seq.add(poplar::program::Copy(in, out, false, {debug_name_and_id}));
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return AddSequenceForInstruction(inst, seq);
@@ -333,25 +360,26 @@ Status BaseVisitor::HandleReal(HloInstruction* inst) {
 
 Status BaseVisitor::HandleAllToAll(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   TF_ASSIGN_OR_RETURN(
       auto seq, CreateReplicatedAllToAll(resources_, inst, GetOutputShape(inst),
-                                         tensor_map));
+                                         tensor_map, debug_name_and_id));
 
   return AddSequenceForInstruction(inst, seq);
 }
 
 Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
-  poplar::program::Sequence seq;
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   std::vector<std::string> dep_names;
   GetAllDepNames(inst->operand(1), dep_names);
 
   VLOG(1) << "Processing " << inst->name() << " on "
           << absl::StrJoin(dep_names, ",");
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, resources_, inst,
+                                               seq, debug_name_and_id, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), CountShapes(inst->operand(0)->shape()));
   for (size_t idx = 0; idx < inputs[0].size(); idx++) {
@@ -364,6 +392,11 @@ Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
 Status BaseVisitor::Unimplemented(HloInstruction* inst) {
   return xla::Unimplemented("%s (%s) not implemented", inst->name().c_str(),
                             HloOpcodeString(inst->opcode()).c_str());
+}
+
+poplar::DebugNameAndId BaseVisitor::GetDebugNameAndId(
+    const HloInstruction* inst) const {
+  return xla::poplarplugin::GetDebugNameAndId(resources_, inst);
 }
 
 Status BaseVisitor::HandleAfterAll(HloInstruction* inst) {
@@ -448,7 +481,7 @@ poplar::program::Sequence BaseVisitor::GetRawSequence() const {
 poplar::program::Sequence BaseVisitor::GetSequence(
     bool copy_execution_counters) {
   if (copy_execution_counters) {
-    poplar::program::Sequence seq;
+    poplar::program::Sequence seq({}, dnai_);
     TF_CHECK_OK(
         CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
     seq.add(GetRawSequence());

@@ -305,8 +305,10 @@ Status SetPartialsTypeIfPresent(const HloInstruction* inst,
   return SetPartialsTypeIfPresent(poplar_backend_config, option_flags);
 }
 
-void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t) {
-  popops::zero(GetMasterGraph(res), t, res.preamble_sequence, "ZeroVar");
+void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
+                             const poplar::DebugNameAndId& debug_name_and_id) {
+  popops::zero(GetMasterGraph(res), t, res.preamble_sequence,
+               {debug_name_and_id, "ZeroVar"});
 }
 
 absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
@@ -705,10 +707,10 @@ std::string GetTensorMappingJson(const std::string& module_name,
   return json_msg;
 }
 
-poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
-                                                 const poplar::Tensor& src,
-                                                 const poplar::Tensor& dst) {
-  poplar::program::Sequence seq;
+poplar::program::Sequence TensorCopyWithAliasing(
+    poplar::Graph& graph, const poplar::Tensor& src, const poplar::Tensor& dst,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Tensor src_flat = src.flatten();
   poplar::Tensor dst_flat = dst.flatten();
 
@@ -722,7 +724,7 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
     dst_flat = poplar::concat(dst_flat.slices(flat_dealiased_intervals));
   }
 
-  seq.add(poplar::program::Copy(src_flat, dst_flat));
+  seq.add(poplar::program::Copy(src_flat, dst_flat, false, debug_name_and_id));
   return seq;
 }
 
@@ -767,8 +769,10 @@ DeferredArgRBVectors ConvertInputsToDeferredInputs(
 
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
                       poplar::RemoteBuffer& remote_buffer, int64 offset,
-                      poplar::program::Sequence& sequence) {
-  poplar::Tensor zero = graph.addConstant(remote_buffer.elementType(), {1}, 0);
+                      poplar::program::Sequence& sequence,
+                      const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::Tensor zero = graph.addConstant(remote_buffer.elementType(), {1}, 0,
+                                          {debug_name_and_id, "zero"});
   MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, zero);
 
   // Broadcast up to the number of elements in the remote buffer.
@@ -777,20 +781,22 @@ void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,
   // Copy the zero into the remote buffer at the right offset.
   CHECK_LT(offset, remote_buffer.getRepeats());
   if (offset == 0) {
-    sequence.add(poplar::program::Copy(zero, remote_buffer));
+    sequence.add(
+        poplar::program::Copy(zero, remote_buffer, {debug_name_and_id}));
   } else {
-    poplar::Tensor offset_tensor =
-        graph.addConstant(poplar::UNSIGNED_INT, {1}, offset);
+    poplar::Tensor offset_tensor = graph.addConstant(
+        poplar::UNSIGNED_INT, {1}, offset, {debug_name_and_id, "offset"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
                                      offset_tensor);
-    sequence.add(poplar::program::Copy(zero, remote_buffer, offset_tensor));
+    sequence.add(poplar::program::Copy(zero, remote_buffer, offset_tensor,
+                                       debug_name_and_id));
   }
 }
 
 void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
                  const std::vector<poplar::Tensor>& tensors,
                  poplar::program::Sequence& sequence,
-                 const std::string& debug_prefix) {
+                 const poplar::DebugNameAndId& debug_name_and_id) {
   // Keeps track of what types we have seen in a deterministic ordering.
   std::vector<poplar::Type> seen_types;
 
@@ -810,7 +816,7 @@ void ZeroTensors(CompilerResources& res, poplar::Graph& graph,
   // Concatenate all the inputs of the same type and zero them.
   for (auto type : seen_types) {
     poplar::Tensor input = poplar::concat(typed_inputs[type]);
-    popops::zero(graph, input, sequence, debug_prefix);
+    popops::zero(graph, input, sequence, {debug_name_and_id});
   }
 }
 

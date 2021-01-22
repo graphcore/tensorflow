@@ -23,6 +23,7 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 
 #include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
@@ -89,10 +90,10 @@ class ExecutionCounters {
  public:
   ExecutionCounters() = delete;
   explicit ExecutionCounters(CompilerResources& resources,
-                             const std::string& name = "");
+                             const poplar::DebugNameAndId& debug_name_and_id);
 
   // Clone the execution counters.
-  ExecutionCounters Clone(const std::string& name = "");
+  ExecutionCounters Clone(const poplar::DebugNameAndId& debug_name_and_id);
 
   // Get a counter for a particular shard and mark it as live.
   StatusOr<poplar::Tensor> GetCounter(int64 shard);
@@ -127,7 +128,7 @@ class ExecutionCounters {
 
   CompilerResources& resources_;
 
-  const std::string name_;
+  const poplar::DebugNameAndId dnai_;
 
   bool initialized_ = false;
 };

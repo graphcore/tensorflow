@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -38,20 +39,21 @@ class RemapDeduceOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "RemapDeduceOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // Get the original tensor which is to be remapped.
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor input,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info}, false));
 
     // Create a new tensor using "AddTensor" to get a good layout.
     TF_ASSIGN_OR_RETURN(poplar::Tensor output,
                         AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
+                                  res, tensor_map, {debug_info, "output"}));
 
     // Copy the original into the new layout.
-    seq.add(poplar::program::Copy(input, output));
+    seq.add(poplar::program::Copy(input, output, false, {debug_info}));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
   }
