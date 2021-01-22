@@ -130,7 +130,7 @@ Status UniqueRangeSampler::Sample(poplar::Graph& graph, poplar::Tensor& samples,
   // N which boils down to the biased urn problem. Instead, we optimistically
   // assume every sample taken is unique a.k.a. the minimum number of cycles the
   // vertex could possibly take.
-  graph.setCycleEstimate(v, 9 + prng_cycles * samples.numElements());
+  graph.setPerfEstimate(v, 9 + prng_cycles * samples.numElements());
 
   // Execute the compute set with a temporary seed
   auto oldSeed = poplar::getHwSeeds(graph, seq, fn_name);

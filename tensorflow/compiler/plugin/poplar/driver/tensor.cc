@@ -780,7 +780,6 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
 
 StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                                             const TensorTarget& tensor_target,
-                                            const xla::Shape& shape,
                                             CompilerResources& resources,
                                             const TensorMap& tensor_map,
                                             const std::string& debug_name) {
@@ -805,11 +804,11 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
     if (is_poplar_custom_op) {
       TF_ASSIGN_OR_RETURN(
           out, AllocatePoplarOpTensor(graph, resources, debug_name,
-                                      tensor_target, shape, tensor_map));
+                                      tensor_target, tshape, tensor_map));
     } else if (is_hlo_op_with_allocator) {
       TF_ASSIGN_OR_RETURN(
           out, AllocateHloOpTensor(graph, resources, debug_name, tensor_target,
-                                   shape, tensor_map));
+                                   tshape, tensor_map));
     } else {
       const std::string error_msg =
           absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
@@ -819,13 +818,13 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
             case 0: {
               TF_ASSIGN_OR_RETURN(out,
                                   AddLeftMatMul(graph, resources, debug_name,
-                                                tensor_target, shape));
+                                                tensor_target, tshape));
               break;
             }
             case 1: {
               TF_ASSIGN_OR_RETURN(out,
                                   AddRightMatMul(graph, resources, debug_name,
-                                                 tensor_target, shape));
+                                                 tensor_target, tshape));
               break;
             }
             default:
@@ -890,8 +889,8 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
     VLOG(1) << "Adding a tensor with layout for ("
             << src.instruction->ToString() << ", "
             << src.flattened_output_tuple_index << ").";
-    TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, shape,
-                                                resources, tensor_map, name));
+    TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, resources,
+                                                tensor_map, name));
 
   } else {
     TF_ASSIGN_OR_RETURN(out, AddPlainTensor(graph, name, shape, resources));

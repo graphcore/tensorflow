@@ -43,7 +43,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/send_recv_runtime_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
@@ -474,18 +473,6 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
 
   const int64 num_replicas = current_replication_factor_;
 
-  const bool can_buffers_overlap =
-      CanPoplarSendBuffersOverlap(option_flags_, current_config_);
-
-  // The IPU model uses temporary buffers, so they must be copied.
-  const bool can_avoid_buffer_copy =
-      !can_buffers_overlap && !PoplarXlaFlags::Get().use_ipu_model;
-
-  if (can_avoid_buffer_copy) {
-    VLOG(1)
-        << "Assuming that Poplar send buffer pointers can be used without copy";
-  }
-
   for (const SendRecvInfo& send : send_infos) {
     VLOG(1) << "Connecting Poplar IPU->host stream to rendezvous key '"
             << send.rendezvous_key << "' with shape " << send.shape;
@@ -505,12 +492,22 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     // `this` which holds a refcount of it should outlive the engine.
     auto* rendezvous = GetRendezvous();
 
-    auto callback_creator = SendFromFirstReplicaCallbackCreator(
-        shape, type, key, rendezvous, num_replicas, can_avoid_buffer_copy);
-
     for (int64 replica_id = 0; replica_id < num_replicas; ++replica_id) {
-      current_engine_->connectStreamToCallback(send.stream_handle, replica_id,
-                                               callback_creator(replica_id));
+      if (replica_id == 0) {
+        current_engine_->connectStreamToCallback(
+            send.stream_handle, replica_id,
+            [rendezvous, key, type, shape](void* src) {
+              auto tensor = tensorflow::Tensor(type, shape);
+              auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+              std::memcpy(dst->data(), src, dst->size());
+              rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
+                               /*is_dead=*/false);
+            });
+      } else {
+        // Discard the output from the remaining replicas.
+        current_engine_->connectStreamToCallback(send.stream_handle, replica_id,
+                                                 [](void*) {});
+      }
     }
   }
 
@@ -2750,7 +2747,7 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
   TENSORFLOW_TRACEPOINT();
-  if (current_engine_ != nullptr) {
+  if (current_engine_) {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (engine == current_engine_) {
       auto status = MoveDeviceToHost();
@@ -2758,7 +2755,7 @@ void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
         LOG(FATAL) << status.ToString();
       }
       DeferredDeallocation();
-      current_engine_ = NULL;
+      current_engine_ = nullptr;
     }
   }
 }
@@ -3068,7 +3065,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
   const auto& input_output_aliasing_map =
       executable.GetInputOutputAliasingMap();
   const auto& output_shape = executable.result_shape();
-  poplar::Engine* engine = executable.Engine();
+  poplar::Engine* engine(executable.Engine());
 
   perftools::gputools::DeviceMemoryBase retbuf;
 
@@ -3091,7 +3088,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     }
   }
 
-  if (engine == NULL) {
+  if (!engine) {
     // An empty engine is either a graph that just passes its inputs through
     // to its outputs, or a graph which returns a constant.
     if (executable.IsConstantGraph()) {

@@ -152,7 +152,8 @@ class GRULayerBaseOp : public PoplarOpDef {
       }
       case 5: {
         // Allocate AUGRU attention
-        return popnn::gru::createAttention(graph, gru_params, name);
+        return popnn::gru::createAttention(graph, gru_params, name)
+            .dimShuffle({1, 0});
       }
       default: {
         return xla::FailedPrecondition(
