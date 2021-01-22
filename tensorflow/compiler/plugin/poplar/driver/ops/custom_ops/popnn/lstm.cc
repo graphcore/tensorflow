@@ -165,9 +165,11 @@ class LstmLayerFwdOp : public PoplarOpDef {
     auto lstm_inst = Cast<HloRNNInstruction>(inst);
     bool is_training = lstm_inst->is_training();
 
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, lstm_params, lstm_opts, is_training, input_size,
-                 output_size, &debug_info](std::vector<poplar::Tensor>& args,
-                                           poplar::program::Sequence& prog) {
+                 output_size,
+                 debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                    poplar::program::Sequence& prog) {
       poplar::Tensor input_seq = args[0];
       poplar::Tensor input_h_state = args[1];
       poplar::Tensor input_c_state = args[2];
@@ -183,9 +185,9 @@ class LstmLayerFwdOp : public PoplarOpDef {
       auto intermediates_ptr = is_training ? &args[8] : nullptr;
       std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
           graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-          prog, {debug_info}, lstm_opts, &res.dot_cache);
+          prog, {debug_name_and_id}, lstm_opts, &res.dot_cache);
       args[6] = poputil::duplicate(graph, args[5][lstm_params.timeSteps - 1],
-                                   prog, {debug_info, "outputHState"});
+                                   prog, {debug_name_and_id, "outputHState"});
     };
 
     poplar::Tensor output, output_h_state, output_c_state, intermediates;
@@ -293,9 +295,10 @@ class LstmLayerBwdOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, lstm_params, lstm_opts, input_size, output_size,
-                 &debug_info](std::vector<poplar::Tensor>& args,
-                              poplar::program::Sequence& prog) {
+                 debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                    poplar::program::Sequence& prog) {
       poplar::Tensor input_seq = args[0];
       poplar::Tensor input_h_state = args[1];
       poplar::Tensor input_c_state = args[2];
@@ -318,13 +321,14 @@ class LstmLayerBwdOp : public PoplarOpDef {
 
       popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
                          output_h_state_backprop, prog,
-                         {debug_info, "outputGradient"});
+                         {debug_name_and_id, "outputGradient"});
 
       popnn::lstm::LstmWeights weights_backprop;
       popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
           graph, lstm_params, prog, init_state, intermediates, weights,
           input_seq, output, output_backprop, &output_c_state_backprop,
-          &args[12], weights_backprop, {debug_info}, lstm_opts, &res.dot_cache);
+          &args[12], weights_backprop, {debug_name_and_id}, lstm_opts,
+          &res.dot_cache);
       args[13] = init_state_backprop.output;
       args[14] = init_state_backprop.cellState;
       args[15] = PackLstmKernel(weights_backprop.inputWeights,
