@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
@@ -28,7 +29,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
-    poplar::Graph& graph, const std::string& debug_prefix,
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const HloInstruction* inst, CompilerResources& resources) {
   const HloWeightsTransposeChansFlipXYInstruction* weights_transpose_inst =
       Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
@@ -52,7 +53,7 @@ StatusOr<poplar::Tensor> AddConvWeightsTransposeChansFlipXY(
 
   poplar::Tensor out_weights = poplin::createWeights(
       graph, conv_params,
-      absl::StrCat(debug_prefix, "/CreateWeights_TransposeChansFlipXY"), opts,
+      {debug_name_and_id, "createWeights_TransposeChansFlipXY"}, opts,
       &resources.convolution_cache);
 
   out_weights = RemoveGroupsDimensionFromWeights(conv_params, out_weights);
@@ -68,11 +69,13 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "WeightsTransposeChansFlipXYOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in_weights,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info, false));
 
     const HloWeightsTransposeChansFlipXYInstruction* weights_transpose_inst =
         Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
@@ -100,12 +103,11 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     in_weights = AddGroupsDimensionToWeights(conv_params, in_weights,
                                              /* swap_features= */ true);
 
-    const std::string debug_prefix = GetDebugName(inst);
-    poplar::Tensor out_weights = poplin::createWeights(
-        graph, conv_params, absl::StrCat(debug_prefix, "/CreateWeights"), opts,
-        &res.convolution_cache);
+    poplar::Tensor out_weights =
+        poplin::createWeights(graph, conv_params, {debug_info, "CreateWeights"},
+                              opts, &res.convolution_cache);
 
-    auto func = [&graph, &res, inst, debug_prefix](
+    auto func = [&graph, &res, inst, &debug_info](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor in_weights_f = args[0];
@@ -113,7 +115,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
 
       poplin::weightsTransposeChansFlipXY(
           graph, in_weights_f, out_weights_f, prog,
-          absl::StrCat(debug_prefix, "/WeightsTransposeChansFlipXY"));
+          {debug_info, "WeightsTransposeChansFlipXY"});
     };
 
     std::vector<poplar::Tensor> args = {in_weights, out_weights};
@@ -141,6 +143,8 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "WeightsTransposeChansFlipXYOp");
     const int64 input_index = tensor_target.input_index;
     const HloInstruction* inst = tensor_target.tgt;
 
@@ -148,7 +152,7 @@ class WeightsTransposeChansFlipXYOp : public PoplarOpDef {
     switch (input_index) {
       case 0: {
         TF_ASSIGN_OR_RETURN(out, AddConvWeightsTransposeChansFlipXY(
-                                     graph, GetDebugName(inst), inst, res));
+                                     graph, {debug_info}, inst, res));
         break;
       }
       default:

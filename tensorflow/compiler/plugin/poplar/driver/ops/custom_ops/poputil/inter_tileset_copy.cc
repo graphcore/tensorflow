@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -37,12 +38,13 @@ class InterTilesetCopyOp : public PoplarOpDef {
       const poplar::DebugContext& debug_context) override {
     const auto* copy_inst = Cast<HloInterTilesetCopy>(inst);
 
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "InterTilesetCopyOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     CHECK(!IsLoweredInplace(inst)) << inst->ToString();
 
-    TensorOrRemoteBufferVector inputs =
-        FindInstructionInputs(tensor_map, res, inst, 0, seq, true);
+    TensorOrRemoteBufferVector inputs = FindInstructionInputs(
+        tensor_map, res, inst, 0, seq, {debug_info}, true);
     CHECK_EQ(inputs.size(), 1);
     CHECK(inputs[0].IsTensor())
         << "Expected to copy a poplar::Tensor: " << inst->ToString();
@@ -53,14 +55,15 @@ class InterTilesetCopyOp : public PoplarOpDef {
       // Sanity check that we are allocating on IO tiles.
       CHECK_EQ(graph.getTarget().getNumTiles(), res.num_io_tiles);
 
-      TF_ASSIGN_OR_RETURN(
-          output, AddHostCopyTensor(graph, GetDebugName(inst), output_shape));
+      TF_ASSIGN_OR_RETURN(output,
+                          AddHostCopyTensor(graph, {debug_info}, output_shape));
     } else {
-      TF_ASSIGN_OR_RETURN(output, AddTensor(graph, TensorLocation{inst, 0},
-                                            output_shape, res, tensor_map));
+      TF_ASSIGN_OR_RETURN(
+          output, AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
+                            tensor_map, {debug_info, "output"}));
     }
 
-    seq.add(poplar::program::Copy(input, output));
+    seq.add(poplar::program::Copy(input, output, false, {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
@@ -71,6 +74,7 @@ class InterTilesetCopyOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "InterTilesetCopyOp");
     const auto* copy_inst = Cast<HloInterTilesetCopy>(tensor_target.tgt);
     if (copy_inst->IsCopyToIoTiles()) {
       // Sanity check that we are allocating on IO tiles.
@@ -79,7 +83,7 @@ class InterTilesetCopyOp : public PoplarOpDef {
 
     const int64 input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
-    return AddHostCopyTensor(graph, name, input_shape);
+    return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }
 };
 

@@ -41,9 +41,11 @@ Status CreatePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
-    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq) {
+    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      infeed_config.feed_id(), tuple_index, handle, seq, inst));
+      infeed_config.feed_id(), tuple_index, handle, seq, inst,
+      debug_name_and_id));
 
   poplar::OptionFlags fifo_options =
       res.streams_indices.GraphFeedOptions(handle);
@@ -57,13 +59,16 @@ Status CreatePoplarH2DFIFO(
     TF_ASSIGN_OR_RETURN(poplar::Tensor index,
                         res.streams_indices.IndexTensor(handle, inst, seq));
     seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
-                                  res.streams_indices.CopyOptions()));
+                                  res.streams_indices.CopyOptions(),
+                                  {debug_name_and_id}));
     // Increment the index by one.
-    popops::mapInPlace(
-        graph, pe::Add(pe::_1, pe::Const(1)), {index.slice(0, 1)}, seq,
-        GetDebugName(inst) + "/InfeedIndexInc/" + std::to_string(tuple_index));
+    popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
+                       {index.slice(0, 1)}, seq,
+                       {debug_name_and_id, std::string("InfeedIndexInc/") +
+                                               std::to_string(tuple_index)});
   } else {
-    seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
+    seq.add(poplar::program::Copy(fifo, tensor_to_update, false,
+                                  debug_name_and_id));
   }
 
   return Status::OK();
@@ -73,25 +78,29 @@ Status CreateReusablePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
-    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq) {
+    poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Is the stream registered in the cache?
   auto itr = res.infeed_cache.find(handle);
   if (itr != res.infeed_cache.end()) {
     // Reuse the cache program and copy the result into the tensor.
     seq.add(itr->second.first);
-    seq.add(poplar::program::Copy(itr->second.second, tensor_to_update));
+    seq.add(poplar::program::Copy(itr->second.second, tensor_to_update, false,
+                                  debug_name_and_id));
 
     return Status::OK();
   }
 
   // Wasn't in the cache, so we'll create one.
-  poplar::Tensor tmp = graph.clone(tensor_to_update);
+  poplar::Tensor tmp = graph.clone(tensor_to_update, debug_name_and_id);
   TF_RETURN_IF_ERROR(CreatePoplarH2DFIFO(res, inst, tuple_index, infeed_config,
-                                         handle, graph, tmp, seq));
+                                         handle, graph, tmp, seq,
+                                         debug_name_and_id));
 
   // Add to the cache.
   res.infeed_cache[handle] = std::make_pair(seq, tmp);
-  seq.add(poplar::program::Copy(tmp, tensor_to_update));
+  seq.add(
+      poplar::program::Copy(tmp, tensor_to_update, false, debug_name_and_id));
 
   return Status::OK();
 }
@@ -100,9 +109,11 @@ Status CreatePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
-    poplar::program::Sequence& seq) {
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      outfeed_config.feed_id(), tuple_index, handle, seq, inst));
+      outfeed_config.feed_id(), tuple_index, handle, seq, inst,
+      debug_name_and_id));
   auto fifo =
       graph.addDeviceToHostFIFO(handle, in.elementType(), in.numElements(),
                                 res.streams_indices.GraphFeedOptions(handle));
@@ -111,13 +122,14 @@ Status CreatePoplarD2HFIFO(
                         res.streams_indices.IndexTensor(handle, inst, seq));
 
     seq.add(poplar::program::Copy(in, fifo, index, false,
-                                  res.streams_indices.CopyOptions()));
+                                  res.streams_indices.CopyOptions(),
+                                  {debug_name_and_id}));
     // Increment the index by one.
     popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
                        {index.slice(0, 1)}, seq,
-                       GetDebugName(inst) + "/OutfeedIndexInc");
+                       {debug_name_and_id, "OutfeedIndexInc"});
   } else {
-    seq.add(poplar::program::Copy(in, fifo, false));
+    seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
   }
 
   return Status::OK();
@@ -127,28 +139,32 @@ Status CreateReusablePoplarD2HFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
     const xla::poplarplugin::PoplarFeedConfig& outfeed_config,
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
-    poplar::program::Sequence& seq) {
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      outfeed_config.feed_id(), tuple_index, handle, seq, inst));
+      outfeed_config.feed_id(), tuple_index, handle, seq, inst,
+      debug_name_and_id));
 
   // Is the stream registered in the cache?
   auto itr = res.outfeed_cache.find(handle);
   if (itr != res.outfeed_cache.end()) {
     // Reuse the cache program and copy the input into the tensor.
-    seq.add(poplar::program::Copy(in, itr->second.second));
+    seq.add(poplar::program::Copy(in, itr->second.second, false,
+                                  {debug_name_and_id}));
     seq.add(itr->second.first);
 
     return Status::OK();
   }
 
   // Wasn't in the cache, so we'll create one.
-  poplar::Tensor tmp = graph.clone(in);
-  poplar::program::Sequence out_copy;
+  poplar::Tensor tmp = graph.clone(in, {debug_name_and_id});
+  poplar::program::Sequence out_copy({}, debug_name_and_id);
   TF_RETURN_IF_ERROR(CreatePoplarD2HFIFO(res, inst, tuple_index, outfeed_config,
-                                         handle, graph, tmp, out_copy));
+                                         handle, graph, tmp, out_copy,
+                                         {debug_name_and_id}));
 
   // Add to the cache.
-  seq.add(poplar::program::Copy(in, tmp));
+  seq.add(poplar::program::Copy(in, tmp, false, {debug_name_and_id}));
   seq.add(out_copy);
   res.outfeed_cache[handle] = std::make_pair(out_copy, tmp);
 
@@ -156,12 +172,11 @@ Status CreateReusablePoplarD2HFIFO(
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                int64 tuple_index,
-                                                const xla::Shape& shape,
-                                                poplar::Tensor tensor) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreateInfeed(
+    CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    const xla::Shape& shape, poplar::Tensor tensor,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
   poplar::Graph& graph = GetGraph(res, inst);
@@ -190,13 +205,14 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
           GetInfeedCopyHandle(infeed_config.feed_id(), tuple_index);
 
       if (infeed_config.reusable()) {
-        return CreateReusablePoplarH2DFIFO(res, inst, tuple_index,
-                                           infeed_config, handle, graph,
-                                           tensor_to_update, seq);
+        return CreateReusablePoplarH2DFIFO(
+            res, inst, tuple_index, infeed_config, handle, graph,
+            tensor_to_update, seq, debug_name_and_id);
       }
 
       return CreatePoplarH2DFIFO(res, inst, tuple_index, infeed_config, handle,
-                                 graph, tensor_to_update, seq);
+                                 graph, tensor_to_update, seq,
+                                 debug_name_and_id);
     } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
       // Initialize the tensor with a synthetic initalizer.
       auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -228,14 +244,15 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
         // When rearranging on the host, it is better to keep the layout of the
         // slices in the output tensor layout, in order to minimise on-device
         // rearrangement.
-        cloned_tensors[i] = graph.clone(tensor).reshape(slice_shape);
+        cloned_tensors[i] =
+            graph.clone(tensor, {debug_name_and_id}).reshape(slice_shape);
       } else {
         // When rearranging on the device, it is better to rearrange after the
         // dynamic slice, so that the rearrangement only takes place on the
         // slice, not the whole incoming pegged_memory buffer.
-        cloned_tensors[i] =
-            graph.addVariable(tensor.elementType(), slice_shape,
-                              poplar::VariableMappingMethod::LINEAR);
+        cloned_tensors[i] = graph.addVariable(
+            tensor.elementType(), slice_shape,
+            poplar::VariableMappingMethod::LINEAR, {debug_name_and_id});
       }
     }
     // Concatenate all the cloned tensors then reshape to make sure we are
@@ -244,15 +261,16 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
         poplar::concat(cloned_tensors).reshape(buffer_shape);
 
     // A counter for tracking the number of entries in the buffer
-    poplar::Tensor counter = graph.addVariable(
-        poplar::UNSIGNED_INT, {},
-        GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
+    poplar::Tensor counter =
+        graph.addVariable(poplar::UNSIGNED_INT, {},
+                          {debug_name_and_id, std::string("InfeedCtr/") +
+                                                  std::to_string(tuple_index)});
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
-    AddZeroTensorToPreamble(res, counter);
+    AddZeroTensorToPreamble(res, counter, {debug_name_and_id});
 
     // The body for copying from host and zeroing the counter.
-    poplar::program::Sequence true_body;
+    poplar::program::Sequence true_body({}, {debug_name_and_id, "true_body"});
 
     // If we are using synthetic data, init pegged_memory with it otherwise host
     // copy. Either way we will have a tensor with some number of prefetched
@@ -265,28 +283,33 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
         pegged_memory));
 
     // The NOP body.
-    poplar::program::Sequence false_body;
+    poplar::program::Sequence false_body({}, {debug_name_and_id, "false_body"});
 
     // Predicate for fetching the next batch
-    poplar::Tensor predicate = popops::map(
-        graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
-        GetDebugName(inst) + "/InfeedCtrCmp/" + std::to_string(tuple_index));
+    poplar::Tensor predicate =
+        popops::map(graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
+                    {debug_name_and_id, std::string("InfeedCtrCmp/") +
+                                            std::to_string(tuple_index)});
 
     // The main body which contains the control flow for copy from host and
     // the dynamic slice.
-    seq.add(poplar::program::If(predicate, true_body, false_body));
+    seq.add(poplar::program::If(predicate, true_body, false_body,
+                                {debug_name_and_id}));
 
     // Use dynamic slice to extract the slices from the buffer
     poplar::Tensor slice = popops::dynamicSlice(
         graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
-        GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index));
-    seq.add(poplar::program::Copy(slice, tensor.reshape(slice_shape)));
+        {debug_name_and_id,
+         std::string("Slice/") + std::to_string(tuple_index)});
+    seq.add(poplar::program::Copy(slice, tensor.reshape(slice_shape), false,
+                                  {debug_name_and_id}));
 
     // Increment the counter by one.
     popops::mapInPlace(
         graph, pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
         {counter}, seq,
-        GetDebugName(inst) + "/InfeedCtrInc/" + std::to_string(tuple_index));
+        {debug_name_and_id,
+         std::string("InfeedCtrInc/") + std::to_string(tuple_index)});
 
   } else {
     // Just an normal copy from host->tensor or init tensor with synthetic data.
@@ -295,10 +318,10 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
-                                                 const HloInstruction* inst,
-                                                 TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
+StatusOr<poplar::program::Program> CreateOutfeed(
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  poplar::program::Sequence seq({}, debug_name_and_id);
   poplar::Graph& graph = GetGraph(res, inst);
 
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
@@ -339,9 +362,10 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
   }
 
   const bool expand_aliasing = true;
-  TF_ASSIGN_OR_RETURN(TensorVector input_tensors,
-                      FindInstructionInputTensors(tensor_map, res, inst, 0, seq,
-                                                  expand_aliasing));
+  TF_ASSIGN_OR_RETURN(
+      TensorVector input_tensors,
+      FindInstructionInputTensors(tensor_map, res, inst, 0, seq,
+                                  debug_name_and_id, expand_aliasing));
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
     poplar::Tensor& in = input_tensors[i];
@@ -351,11 +375,13 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
     if (io_batch_size == 1) {
       // Simply copy to the stream
       if (outfeed_config.reusable()) {
-        TF_RETURN_IF_ERROR(CreateReusablePoplarD2HFIFO(
-            res, inst, i, outfeed_config, handle, graph, in, seq));
+        TF_RETURN_IF_ERROR(
+            CreateReusablePoplarD2HFIFO(res, inst, i, outfeed_config, handle,
+                                        graph, in, seq, debug_name_and_id));
       } else {
         TF_RETURN_IF_ERROR(CreatePoplarD2HFIFO(res, inst, i, outfeed_config,
-                                               handle, graph, in, seq));
+                                               handle, graph, in, seq,
+                                               debug_name_and_id));
       }
     } else {
       if (outfeed_config.reusable()) {
@@ -384,14 +410,15 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
           // When rearranging on the host it is better to have the slices of the
           // buffer laid out in the same form as the 'in' tensor so that there
           // is no cost of rearrangement.
-          cloned_tensors[i] = graph.clone(in).reshape(slice_shape);
+          cloned_tensors[i] =
+              graph.clone(in, {debug_name_and_id}).reshape(slice_shape);
         } else {
           // When the data is rearranged on the device, it is beter to have the
           // slices arranged in the standard order of the host buffer, and then
           // to have the rearragement done only once, during the dynamicUpdate.
-          cloned_tensors[i] =
-              graph.addVariable(in.elementType(), slice_shape,
-                                poplar::VariableMappingMethod::LINEAR);
+          cloned_tensors[i] = graph.addVariable(
+              in.elementType(), slice_shape,
+              poplar::VariableMappingMethod::LINEAR, {debug_name_and_id});
         }
       }
       poplar::Tensor batched =
@@ -400,43 +427,47 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       //  A counter for counting slots
       poplar::Tensor counter = graph.addVariable(
           poplar::UNSIGNED_INT, {},
-          GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
+          {debug_name_and_id, std::string("OutfeedCtr/") + std::to_string(i)});
       // Map counter to the next tile.
       MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
                                        counter);
-      AddZeroTensorToPreamble(res, counter);
+      AddZeroTensorToPreamble(res, counter, debug_name_and_id);
 
       // Use dynamic slice update to put the slices into the buffer
-      popops::dynamicUpdate(graph, batched, in.expand({0}),
-                            counter.reshape({1}), {0}, {1}, seq,
-                            GetDebugName(inst) + "/Slice" + std::to_string(i));
+      popops::dynamicUpdate(
+          graph, batched, in.expand({0}), counter.reshape({1}), {0}, {1}, seq,
+          {debug_name_and_id, std::string("Slice/") + std::to_string(i)});
 
       // Increment the counter by one.
       popops::mapInPlace(
           graph,
           pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
           {counter}, seq,
-          GetDebugName(inst) + "/OutfeedCtrInc/" + std::to_string(i));
+          {debug_name_and_id,
+           std::string("OutfeedCtrInc/") + std::to_string(i)});
 
       // The body for copying to host and zeroing the counter.
-      poplar::program::Sequence true_body;
+      poplar::program::Sequence true_body({}, debug_name_and_id);
 
       // Copy the data to the host
       auto fifo = graph.addDeviceToHostFIFO(handle, batched.elementType(),
                                             batched.numElements());
-      true_body.add(poplar::program::Copy(batched, fifo, false));
+      true_body.add(
+          poplar::program::Copy(batched, fifo, false, {debug_name_and_id}));
 
       // The NOP body.
-      poplar::program::Sequence false_body;
+      poplar::program::Sequence false_body({}, debug_name_and_id);
 
       // Check the counter doesn't equal
-      poplar::Tensor predicate = popops::map(
-          graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
-          GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
+      poplar::Tensor predicate =
+          popops::map(graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
+                      {debug_name_and_id,
+                       std::string("OutfeedCtrCmp/") + std::to_string(i)});
 
       // The main body which contains the control flow for copy from host and
       // the dynamic slice.
-      seq.add(poplar::program::If(predicate, true_body, false_body));
+      seq.add(poplar::program::If(predicate, true_body, false_body,
+                                  {debug_name_and_id}));
     }
   }
 

@@ -40,10 +40,10 @@ using ::absl::StrCat;
 namespace xla {
 namespace poplarplugin {
 
-ArithmeticExprVisitor::ArithmeticExprVisitor(CompilerResources& res,
-                                             const TensorVectors& inputs,
-                                             const std::string& name)
-    : BaseVisitor(res, name), inputs_(std::move(inputs)) {}
+ArithmeticExprVisitor::ArithmeticExprVisitor(
+    CompilerResources& res, const TensorVectors& inputs,
+    const poplar::DebugNameAndId& debug_name_and_id)
+    : BaseVisitor(res, debug_name_and_id), inputs_(std::move(inputs)) {}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
 ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
@@ -169,14 +169,15 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 }
 
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
   poplar::Graph& graph = GetGraph(resources_, inst);
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   // get the expression
   TF_ASSIGN_OR_RETURN(auto expr, FindExpressionInput(inst));
   // map expression with the tensors
   poplar::Tensor out =
-      popops::map(graph, *expr, ts_, seq, GetDebugName(inst) + "_expression");
+      popops::map(graph, *expr, ts_, seq, {debug_name_and_id, "expression"});
   outputs_.push_back(out);
 
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),

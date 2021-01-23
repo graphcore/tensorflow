@@ -31,7 +31,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
   PipelineStageVisitor(CompilerResources& res,
                        const DeferredArgRBVectors& inputs,
                        const HloInstructionDescription& description,
-                       const std::string& name);
+                       const poplar::DebugNameAndId& debug_name_and_id);
 
   bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
 
@@ -53,13 +53,14 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
   ReusablePipelineStageVisitor(CompilerResources& res,
                                const DeferredArgRBVectors& inputs,
                                const HloInstructionDescription& description,
-                               const std::string& name);
+                               const poplar::DebugNameAndId& debug_name_and_id);
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
   Status PropagateDeferredAllocations(
       const HloInstruction* callsite,
-      const DeferredArgRBVectors& callsite_inputs) override;
+      const DeferredArgRBVectors& callsite_inputs,
+      const poplar::DebugNameAndId& debug_name_and_id) override;
 
   // Get the sequence for the forward stage, adding any copies for inplace
   // inputs.

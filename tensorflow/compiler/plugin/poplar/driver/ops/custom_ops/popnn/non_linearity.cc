@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -40,23 +41,25 @@ class NonLinearityOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityOp");
+    poplar::program::Sequence seq({}, debug_info);
     poplar::Tensor t;
     const bool is_inplace =
         AreInplaceOutputTensorsWritable(tensor_map, res, inst);
 
     if (is_inplace) {
-      TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                          FindInplaceOutputTensors(tensor_map, res, inst, seq));
+      TF_ASSIGN_OR_RETURN(
+          TensorVectors inputs,
+          FindInplaceOutputTensors(tensor_map, res, inst, seq, {debug_info}));
       CHECK_EQ(inputs.size(), 1);
       CHECK_EQ(inputs[0].size(), 1);
       t = inputs[0][0];
-      popnn::nonLinearityInPlace(graph, NLType, t, seq, GetDebugName(inst));
+      popnn::nonLinearityInPlace(graph, NLType, t, seq, {debug_info});
     } else {
-      TF_ASSIGN_OR_RETURN(
-          t, FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+      TF_ASSIGN_OR_RETURN(t, FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                                  {debug_info}, false));
 
-      t = popnn::nonLinearity(graph, NLType, t, seq, GetDebugName(inst));
+      t = popnn::nonLinearity(graph, NLType, t, seq, {debug_info});
     }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
@@ -74,18 +77,19 @@ class NonLinearityGradOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "NonLinearityGradOp");
+    poplar::program::Sequence seq({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor out,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor out,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info}, false));
 
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor outgrad,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+    TF_ASSIGN_OR_RETURN(poplar::Tensor outgrad,
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             {debug_info}, false));
 
     poplar::Tensor t = popnn::nonLinearityInputGradient(
-        graph, NLType, out, outgrad, seq, GetDebugName(inst));
+        graph, NLType, out, outgrad, seq, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
 

@@ -44,6 +44,7 @@ namespace xla {
 namespace poplarplugin {
 
 class TensorMap;
+struct CompilerResources;
 
 class PoplarOpDefDebugInfo : public poplar::DebugInfo {
  public:
@@ -79,6 +80,10 @@ class XlaOpDebugInfo : public poplar::DebugInfo {
 
   using poplar::DebugInfo::setValue;
 };
+
+poplar::DebugNameAndId GetDebugNameAndId(const CompilerResources&,
+                                         const HloInstruction*,
+                                         const std::string = "");
 
 }  // namespace poplarplugin
 }  // namespace xla

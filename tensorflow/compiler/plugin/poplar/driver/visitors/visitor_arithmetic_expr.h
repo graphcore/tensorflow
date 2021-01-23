@@ -34,7 +34,7 @@ namespace poplarplugin {
 class ArithmeticExprVisitor : public BaseVisitor {
  public:
   ArithmeticExprVisitor(CompilerResources& res, const TensorVectors& inputs,
-                        const std::string& name);
+                        const poplar::DebugNameAndId& debug_name_and_id);
 
   Status HandleElementwiseUnary(HloInstruction* inst) override;
   Status HandleElementwiseBinary(HloInstruction* inst) override;

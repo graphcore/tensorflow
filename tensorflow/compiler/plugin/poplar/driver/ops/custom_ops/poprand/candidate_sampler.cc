@@ -34,14 +34,14 @@ class CandidateSamplerOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    poplar::program::Sequence seq;
+    PoplarOpDefDebugInfo debug_info(debug_context, "CandidateSamplerOp");
+    poplar::program::Sequence seq({}, debug_info);
 
     // Retrieve attributes from the HloPoplarInstruction
     const HloCandidateSampler* sampler_inst = Cast<HloCandidateSampler>(inst);
     bool unique = sampler_inst->Unique();
     const uint64 range_max = sampler_inst->RangeMax();
     std::string distribution = sampler_inst->Distribution();
-    std::string debug_name = GetDebugName(inst);
 
     // Try to place each op onto a different tile by using the next tile from
     // the linear mapping state
@@ -49,10 +49,12 @@ class CandidateSamplerOp : public PoplarOpDef {
         MappingHelper::YieldNextTile(res.linear_mapping_state, graph);
 
     // Get inputs
-    TF_ASSIGN_OR_RETURN(poplar::Tensor true_classes,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor true_classes,
+        FindInstructionInput(tensor_map, res, inst, 0, seq, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor seed,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
     // Seed must be unsigned for the later call to poprand::setSeed
     poplar::Tensor seed_unsigned = seed.reinterpret(poplar::UNSIGNED_INT);
     const Shape sample_shape = output_shape.tuple_shapes()[0];
@@ -60,15 +62,16 @@ class CandidateSamplerOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(sample_shape));
     poplar::Tensor samples =
         graph.addVariable(poplar_type, PoplarShapeFromXlaShape(sample_shape),
-                          debug_name + "/samples");
+                          {debug_info, "samples"});
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, samples,
                                      1, 1);
     const uint64 k = samples.numElements();
 
     // Create a sampler, sample from it and calculate expectations
-    TF_ASSIGN_OR_RETURN(std::unique_ptr<RangeSampler> sampler,
-                        RangeSamplerFactory(distribution, debug_name, range_max,
-                                            tile, seed_unsigned, unique));
+    TF_ASSIGN_OR_RETURN(
+        std::unique_ptr<RangeSampler> sampler,
+        RangeSamplerFactory(distribution, {debug_info}, range_max, tile,
+                            seed_unsigned, unique));
     sampler->Sample(graph, samples, seq);
     TF_ASSIGN_OR_RETURN(poplar::Tensor sampled_expectation,
                         sampler->Expectation(graph, samples, k, seq));

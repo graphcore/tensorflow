@@ -23,6 +23,7 @@ limitations under the License.
 #include <poplar/Program.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/execution_counter_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
@@ -40,7 +41,8 @@ struct CompilerResources;
  */
 class BaseVisitor : public DfsHloVisitor {
  public:
-  BaseVisitor(CompilerResources& resources, const std::string& name);
+  BaseVisitor(CompilerResources& resources,
+              const poplar::DebugNameAndId& debug_name_and_id);
 
   virtual const Shape& GetOutputShape(HloInstruction*) const;
 
@@ -183,6 +185,8 @@ class BaseVisitor : public DfsHloVisitor {
  protected:
   Status Unimplemented(HloInstruction* inst);
 
+  poplar::DebugNameAndId GetDebugNameAndId(const HloInstruction* inst) const;
+
   CompilerResources& resources_;
 
   TensorMap tensor_map;
@@ -190,7 +194,7 @@ class BaseVisitor : public DfsHloVisitor {
   bool has_infeed_ = false;
   bool stochastic_rounding_enabled_;
 
-  const std::string name_;
+  const poplar::DebugNameAndId dnai_;
 
   // Scope execution counters.
   ExecutionCounters execution_counters_;

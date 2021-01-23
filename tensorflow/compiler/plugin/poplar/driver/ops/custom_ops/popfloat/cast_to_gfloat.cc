@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popfloat/gfloat_ops_utils.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/popfloat/gfloat_config_utils.pb.h"
@@ -50,6 +51,8 @@ class CalcGfloatParamsOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "CalcGfloatParamsOp");
+
     const HloGfloatParamsInstruction* param_inst =
         Cast<HloGfloatParamsInstruction>(inst);
 
@@ -68,7 +71,7 @@ class CalcGfloatParamsOp : public PoplarOpDef {
 
     auto gf_packed_params = gf_format_cfg.getPackedFloatParameters();
     return CreatePoplibsGfloatParams(res, inst, output_shape, tensor_map,
-                                     calc_type, gf_packed_params);
+                                     calc_type, gf_packed_params, {debug_info});
   }
 };
 REGISTER_POPLAR_OP(CalcGfloatParams, CalcGfloatParamsOp);
@@ -78,6 +81,8 @@ class CastNativeToGfloatOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "CastNativeToGfloatOp");
+
     const HloCastNativeToGfloatInstruction* cast_inst =
         Cast<HloCastNativeToGfloatInstruction>(inst);
 
@@ -112,7 +117,7 @@ class CastNativeToGfloatOp : public PoplarOpDef {
     auto cast_op_cfg = gfloatutils::CreateCastNativeToGfloatConfig(
         gf_cast_config, calc_type, out_type);
     return CreatePoplibsCastNativeToGfloat(res, inst, output_shape, tensor_map,
-                                           cast_op_cfg);
+                                           cast_op_cfg, {debug_info});
   }
 };
 REGISTER_POPLAR_OP(CastNativeToGfloat, CastNativeToGfloatOp);
@@ -122,6 +127,8 @@ class CastGfloatToNativeOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "CastGfloatToNativeOp");
+
     const HloCastGfloatToNativeInstruction* cast_inst =
         Cast<HloCastGfloatToNativeInstruction>(inst);
 
@@ -149,7 +156,7 @@ class CastGfloatToNativeOp : public PoplarOpDef {
             gfloat_format, calc_type, out_type);
 
     return CreatePoplibsCastGfloatToNative(res, inst, output_shape, tensor_map,
-                                           cast_op_cfg);
+                                           cast_op_cfg, {debug_info});
   }
 };
 REGISTER_POPLAR_OP(CastGfloatToNative, CastGfloatToNativeOp);

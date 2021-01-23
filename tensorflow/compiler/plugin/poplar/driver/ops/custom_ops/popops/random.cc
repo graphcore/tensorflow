@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -35,16 +36,16 @@ inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
 static StatusOr<poplar::program::Program> RandomNormal(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double mean_val, double sd_val, const xla::Shape& output_shape,
-    TensorMap& tensor_map) {
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor ref,
-      AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map));
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
+  TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
+                      AddTensor(graph, TensorLocation{inst, 0}, output_shape,
+                                res, tensor_map, {debug_name_and_id, "ref"}));
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   auto out = poprand::normal(graph, nullptr, 0, ref, dtype, mean_val, sd_val,
-                             seq, GetDebugName(inst));
+                             seq, {debug_name_and_id});
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
@@ -55,6 +56,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "RandomNormalScaleOp");
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* mean1 = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(mean1->opcode(), HloOpcode::kConstant);
@@ -78,7 +80,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
     double mean_val = mean1_val + mean2_val;
     double sd_val = sd1_val * sd2_val;
     return RandomNormal(graph, res, inst, mean_val, sd_val, output_shape,
-                        tensor_map);
+                        tensor_map, {debug_info});
   }
 };
 
@@ -87,16 +89,16 @@ REGISTER_POPLAR_OP(Norm_scale_add, RandomNormalScaleOp);
 static StatusOr<poplar::program::Program> RandomUniform(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double lower_val, double upper_val, const xla::Shape& output_shape,
-    TensorMap& tensor_map) {
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor ref,
-      AddTensor(graph, TensorLocation{inst, 0}, output_shape, res, tensor_map));
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
+  TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
+                      AddTensor(graph, TensorLocation{inst, 0}, output_shape,
+                                res, tensor_map, {debug_name_and_id, "ref"}));
 
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
   auto out = poprand::uniform(graph, nullptr, 0, ref, dtype, lower_val,
-                              upper_val, seq, GetDebugName(inst));
+                              upper_val, seq, {debug_name_and_id});
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
@@ -107,6 +109,7 @@ class RandomUniformScaleOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "RandomUniformScaleOp");
     const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* shift = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(shift->opcode(), HloOpcode::kConstant);
@@ -131,7 +134,7 @@ class RandomUniformScaleOp : public PoplarOpDef {
     upper_val = upper_val * scale_val + shift_val;
 
     return RandomUniform(graph, res, inst, lower_val, upper_val, output_shape,
-                         tensor_map);
+                         tensor_map, {debug_info});
   }
 };
 
@@ -142,6 +145,7 @@ class RngOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "RngOp");
     if (inst->operand_count() != 2) {
       return FailedPrecondition("RNG must have two operands.");
     }
@@ -163,14 +167,14 @@ class RngOp : public PoplarOpDef {
     switch (inst->random_distribution()) {
       case RandomDistribution::RNG_NORMAL: {
         return RandomNormal(graph, res, inst, op0_val, op1_val, output_shape,
-                            tensor_map);
+                            tensor_map, {debug_info});
       }
       case RandomDistribution::RNG_UNIFORM: {
         if (ShapeUtil::ElementIsIntegral(output_shape)) {
           op1_val -= 1.0;
         }
         return RandomUniform(graph, res, inst, op0_val, op1_val, output_shape,
-                             tensor_map);
+                             tensor_map, {debug_info});
       }
       default: {
         return FailedPrecondition(

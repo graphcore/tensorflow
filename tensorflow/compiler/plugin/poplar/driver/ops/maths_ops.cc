@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/slice_apply.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
@@ -232,21 +233,22 @@ StatusOr<popops::expr::TernaryOpType> LookupTernaryFn(
 
 StatusOr<poplar::program::Program> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor pred,
-      FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor pred,
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           debug_name_and_id, false));
 
-  TF_ASSIGN_OR_RETURN(
-      TensorVector in0,
-      FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
-  TF_ASSIGN_OR_RETURN(
-      TensorVector in1,
-      FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
+  TF_ASSIGN_OR_RETURN(TensorVector in0,
+                      FindInstructionInputTensors(tensor_map, res, inst, 1, seq,
+                                                  debug_name_and_id, false));
+  TF_ASSIGN_OR_RETURN(TensorVector in1,
+                      FindInstructionInputTensors(tensor_map, res, inst, 2, seq,
+                                                  debug_name_and_id, false));
 
   if (in0.size() != in1.size()) {
     return xla::FailedPrecondition("Mismatching tuple sizes on %s",
@@ -265,7 +267,7 @@ StatusOr<poplar::program::Program> CreateTupleSelectOp(
     }
 
     poplar::Tensor out = popops::map(graph, popops::expr::TernaryOpType::SELECT,
-                                     i0, i1, p, seq, GetDebugName(inst));
+                                     i0, i1, p, seq, {debug_name_and_id});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
   }
@@ -275,122 +277,121 @@ StatusOr<poplar::program::Program> CreateTupleSelectOp(
 
 namespace {
 template <typename T>
-Status DoScaledInplaceConstantOrTensor(poplar::Graph& graph,
-                                       poplar::Tensor& lhs, poplar::Tensor& rhs,
-                                       T scale, poplar::program::Sequence& prog,
-                                       const HloOpcode op_type,
-                                       const std::string& name) {
+Status DoScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& lhs, poplar::Tensor& rhs, T scale,
+    poplar::program::Sequence& prog, const HloOpcode op_type,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   // Call the inplace op
   switch (op_type) {
     case HloOpcode::kAdd: {
-      popops::scaledAddTo(graph, lhs, rhs, scale, prog, name);
+      popops::scaledAddTo(graph, lhs, rhs, scale, prog, {debug_name_and_id});
       break;
     }
     case HloOpcode::kSubtract: {
-      popops::scaledSubtractFrom(graph, lhs, rhs, scale, prog, name);
+      popops::scaledSubtractFrom(graph, lhs, rhs, scale, prog,
+                                 {debug_name_and_id});
       break;
     }
     default: {
       return xla::FailedPrecondition("Unsupported scaled inplace op: %s",
-                                     name.c_str());
+                                     debug_name_and_id.getPathName());
     }
   }
   return Status::OK();
 }
 
 template <typename T>
-Status DoScaledInplaceConstantOrTensor(poplar::Graph& graph,
-                                       poplar::Tensor& tensor_a, T scale_a,
-                                       poplar::Tensor& tensor_b, T scale_b,
-                                       poplar::program::Sequence& prog,
-                                       const HloOpcode op_type,
-                                       const std::string& name) {
+Status DoScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& tensor_a, T scale_a,
+    poplar::Tensor& tensor_b, T scale_b, poplar::program::Sequence& prog,
+    const HloOpcode op_type, const poplar::DebugNameAndId& debug_name_and_id) {
   // Call the inplace op
   switch (op_type) {
     case HloOpcode::kAdd: {
       popops::scaledAddTo(graph, tensor_a, scale_a, tensor_b, scale_b, prog,
-                          name);
+                          {debug_name_and_id});
       break;
     }
     case HloOpcode::kSubtract: {
       popops::scaledSubtractFrom(graph, tensor_a, scale_a, tensor_b, scale_b,
-                                 prog, name);
+                                 prog, {debug_name_and_id});
       break;
     }
     default: {
       return xla::FailedPrecondition("Unsupported scaled inplace op: %s",
-                                     name.c_str());
+                                     debug_name_and_id.getPathName());
     }
   }
   return Status::OK();
 }
 }  // namespace
 
-Status ScaledInplaceConstantOrTensor(poplar::Graph& graph, poplar::Tensor& lhs,
-                                     poplar::Tensor& rhs, const double scale,
-                                     poplar::program::Sequence& prog,
-                                     const HloOpcode op_type,
-                                     const std::string& name) {
+Status ScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& lhs, poplar::Tensor& rhs,
+    const double scale, poplar::program::Sequence& prog,
+    const HloOpcode op_type, const poplar::DebugNameAndId& debug_name_and_id) {
   return DoScaledInplaceConstantOrTensor(graph, lhs, rhs, scale, prog, op_type,
-                                         name);
+                                         debug_name_and_id);
 }
 
-Status ScaledInplaceConstantOrTensor(poplar::Graph& graph, poplar::Tensor& lhs,
-                                     poplar::Tensor& rhs, poplar::Tensor& scale,
-                                     poplar::program::Sequence& prog,
-                                     const HloOpcode op_type,
-                                     const std::string& name) {
+Status ScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& lhs, poplar::Tensor& rhs,
+    poplar::Tensor& scale, poplar::program::Sequence& prog,
+    const HloOpcode op_type, const poplar::DebugNameAndId& debug_name_and_id) {
   return DoScaledInplaceConstantOrTensor(graph, lhs, rhs, scale, prog, op_type,
-                                         name);
+                                         debug_name_and_id);
 }
 
 Status ScaledInplaceConstantOrTensor(
     poplar::Graph& graph, poplar::Tensor& tensor_a, const double scale_a,
     poplar::Tensor& tensor_b, const double scale_b,
     poplar::program::Sequence& prog, const HloOpcode op_type,
-    const std::string& name) {
+    const poplar::DebugNameAndId& debug_name_and_id) {
   return DoScaledInplaceConstantOrTensor(graph, tensor_a, scale_a, tensor_b,
-                                         scale_b, prog, op_type, name);
+                                         scale_b, prog, op_type,
+                                         debug_name_and_id);
 }
 
 Status ScaledInplaceConstantOrTensor(
     poplar::Graph& graph, poplar::Tensor& tensor_a, poplar::Tensor& scale_a,
     poplar::Tensor& tensor_b, poplar::Tensor& scale_b,
     poplar::program::Sequence& prog, const HloOpcode op_type,
-    const std::string& name) {
+    const poplar::DebugNameAndId& debug_name_and_id) {
   return DoScaledInplaceConstantOrTensor(graph, tensor_a, scale_a, tensor_b,
-                                         scale_b, prog, op_type, name);
+                                         scale_b, prog, op_type,
+                                         debug_name_and_id);
 }
 
 StatusOr<poplar::program::Program> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   CHECK_EQ(inst->opcode(), HloOpcode::kDot);
 
   // Do not expand aliasing when creating a cached op - the input will be
   // reallocated if required.
-  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_lhs,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                           /*expand_aliasing*/ false));
-  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_rhs,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                           /*expand_aliasing*/ false));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor arg_lhs,
+      FindInstructionInput(tensor_map, res, inst, 0, seq, debug_name_and_id,
+                           /*expand_aliasing*/ false));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor arg_rhs,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, debug_name_and_id,
+                           /*expand_aliasing*/ false));
 
   const DotDimensionNumbers dot_dims = inst->dot_dimension_numbers();
   TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
   TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
                       GetMatMulOptionsForInst(inst, res));
 
-  const std::string debug_prefix = GetDebugName(inst);
-
   // Created a cached dot.
   auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, &opts,
-               debug_prefix](std::vector<poplar::Tensor>& args,
-                             poplar::program::Sequence& prog) {
+               &debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                   poplar::program::Sequence& prog) {
     poplar::Tensor lhs = args[0];
     poplar::Tensor rhs = args[1];
 
@@ -420,16 +421,16 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
       poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
                                       lhs.elementType(), lhs.shape(),
                                       rhs.shape(), opts, &res.dot_cache);
-      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type_s
-              << (res.clear_matmul_pass_type ? " (cleared)" : "") << ". Plan "
-              << stream.str();
+      VLOG(2) << "MatMul " << debug_name_and_id.getPathName() << ". Type "
+              << dot_type_s << (res.clear_matmul_pass_type ? " (cleared)" : "")
+              << ". Plan " << stream.str();
       for (auto opt : opts) {
         VLOG(2) << "- option: " << opt.first << " = " << opt.second;
       }
     }
 
     args[2] = poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
-                                    debug_prefix, opts, &res.dot_cache);
+                                    {debug_name_and_id}, opts, &res.dot_cache);
     // Reshape to XLA shape
     args[2] = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
   };
@@ -449,22 +450,23 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   return seq;
 }
 
-StatusOr<poplar::program::Program> CreateCastOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateCastOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence seq;
+  poplar::program::Sequence seq({}, debug_name_and_id);
 
   // TODO(T16423) - Do not expand aliasing when casting.
-  TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor in,
+      FindInstructionInput(tensor_map, res, inst, 0, seq, debug_name_and_id));
 
   TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(output_shape));
 
   poplar::Tensor out =
-      popops::cast(graph, in, poplar_type, seq, GetDebugName(inst));
+      popops::cast(graph, in, poplar_type, seq, {debug_name_and_id});
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 

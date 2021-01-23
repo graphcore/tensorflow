@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
@@ -29,7 +30,7 @@ namespace poplarplugin {
 namespace {
 
 StatusOr<poplar::Tensor> AddGatherTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, std::vector<std::size_t> slice_sizes,
     std::vector<unsigned> start_index_map) {
   const auto shape = PoplarShapeFromXlaShape(shape_xla);
@@ -37,14 +38,14 @@ StatusOr<poplar::Tensor> AddGatherTensor(
   TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape_xla));
 
   return popops::createGatherInput(graph, poplar_type, shape, slice_sizes,
-                                   start_index_map, debug_name);
+                                   start_index_map, {debug_name_and_id});
 }
 
-StatusOr<poplar::Tensor> AddIndicesTensor(poplar::Graph& graph,
-                                          const std::string& debug_name,
-                                          const xla::Shape& shape,
-                                          CompilerResources& resources) {
-  return CreateIndicesTensor(graph, popops::SlicePlan(), shape, debug_name);
+StatusOr<poplar::Tensor> AddIndicesTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+    const xla::Shape& shape, CompilerResources& resources) {
+  return CreateIndicesTensor(graph, popops::SlicePlan(), shape,
+                             {debug_name_and_id});
 }
 
 class GatherOp : public PoplarOpDef {
@@ -53,6 +54,7 @@ class GatherOp : public PoplarOpDef {
       const std::string& name, const TensorTarget& tensor_target,
       const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "GatherOp");
     const auto* target = tensor_target.tgt;
     const auto input_index = tensor_target.input_index;
     const auto shape = target->operand(input_index)->shape();
@@ -66,14 +68,14 @@ class GatherOp : public PoplarOpDef {
 
         TF_ASSIGN_OR_RETURN(
             out,
-            AddGatherTensor(graph, name, shape,
+            AddGatherTensor(graph, {debug_info}, shape,
                             {slice_sizes.begin(), slice_sizes.end()},
                             {start_index_map.begin(), start_index_map.end()}));
         break;
       }
       case 1: {
-        TF_ASSIGN_OR_RETURN(out,
-                            AddIndicesTensor(graph, name, shape, resources));
+        TF_ASSIGN_OR_RETURN(
+            out, AddIndicesTensor(graph, {debug_info}, shape, resources));
         break;
       }
       default:
@@ -88,6 +90,7 @@ class GatherOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "GatherOp");
     const auto slice_sizes = inst->gather_slice_sizes();
     const auto dim_numbers = inst->gather_dimension_numbers();
 
@@ -96,21 +99,22 @@ class GatherOp : public PoplarOpDef {
     const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
     const auto start_index_map = dim_numbers.start_index_map();
 
-    poplar::program::Sequence prog;
+    poplar::program::Sequence prog({}, debug_info);
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor operand,
-                        FindInstructionInput(tensor_map, res, inst, 0, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor operand,
+        FindInstructionInput(tensor_map, res, inst, 0, prog, {debug_info}));
 
-    TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
-                        FindInstructionInput(tensor_map, res, inst, 1, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor indices,
+        FindInstructionInput(tensor_map, res, inst, 1, prog, {debug_info}));
 
     auto result = popops::gather(
         graph, operand, indices.reinterpret(poplar::UNSIGNED_INT),
         index_vector_dim, {offset_dims.begin(), offset_dims.end()},
         {slice_sizes.begin(), slice_sizes.end()},
         {collapsed_slice_dims.begin(), collapsed_slice_dims.end()},
-        {start_index_map.begin(), start_index_map.end()}, prog,
-        GetDebugName(inst));
+        {start_index_map.begin(), start_index_map.end()}, prog, {debug_info});
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
     return prog;

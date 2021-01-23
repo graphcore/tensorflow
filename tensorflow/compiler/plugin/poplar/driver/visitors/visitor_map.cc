@@ -26,8 +26,11 @@ namespace poplarplugin {
 
 MapVisitor::MapVisitor(CompilerResources& res,
                        const TensorOrRemoteBufferVectors& inputs,
-                       const xla::Shape& shape, const std::string& name)
-    : BaseVisitor(res, name), operands_(std::move(inputs)), shape_(shape) {}
+                       const xla::Shape& shape,
+                       const poplar::DebugNameAndId& debug_name_and_id)
+    : BaseVisitor(res, debug_name_and_id),
+      operands_(std::move(inputs)),
+      shape_(shape) {}
 
 Status MapVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();

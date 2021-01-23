@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -42,13 +43,15 @@ std::vector<xla::Shape> GetOutputShapes(const xla::Shape& output_shape,
 StatusOr<TensorVector> GetOutputTensors(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const std::vector<xla::Shape>& output_shapes, int64 num_outputs,
-    TensorMap& tensor_map, poplar::program::Sequence& seq) {
+    TensorMap& tensor_map, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   TensorVector result(num_outputs);
 
   // If inputs provided and lowered in-place, use the input tensors.
   if (inst->operand_count() > 0 && IsLoweredInplace(inst)) {
     TF_ASSIGN_OR_RETURN(TensorVectors nested,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_name_and_id));
     CHECK_EQ(nested.size(), num_outputs);
     for (int64 i = 0; i < num_outputs; ++i) {
       CHECK_EQ(nested[i].size(), 1);
@@ -59,7 +62,7 @@ StatusOr<TensorVector> GetOutputTensors(
     for (int64 i = 0; i < num_outputs; ++i) {
       TF_ASSIGN_OR_RETURN(
           result[i],
-          AddHostCopyTensor(graph, GetDebugName(inst), output_shapes[i]));
+          AddHostCopyTensor(graph, {debug_name_and_id}, output_shapes[i]));
     }
   }
 
@@ -75,7 +78,9 @@ class RecvFromHostOp : public PoplarOpDef {
       return FailedPrecondition(
           "Verified transfers cannot be used with RecvFromHost operations");
     }
-    poplar::program::Sequence seq;
+
+    PoplarOpDefDebugInfo debug_info(debug_context, "RecvFromHostOp");
+    poplar::program::Sequence seq({}, {debug_info});
 
     const auto* recv = Cast<HloRecvFromHostInstruction>(inst);
     const int64 num_outputs = recv->RendezvousKeys().size();
@@ -92,9 +97,10 @@ class RecvFromHostOp : public PoplarOpDef {
     CHECK_EQ(output_shapes.size(), num_outputs);
 
     // Get/allocate output tensors according to in-placeness.
-    TF_ASSIGN_OR_RETURN(TensorVector output_tensors,
-                        GetOutputTensors(graph, res, inst, output_shapes,
-                                         num_outputs, tensor_map, seq));
+    TF_ASSIGN_OR_RETURN(
+        TensorVector output_tensors,
+        GetOutputTensors(graph, res, inst, output_shapes, num_outputs,
+                         tensor_map, seq, {debug_info}));
     CHECK_EQ(output_tensors.size(), num_outputs);
 
     // As long as the stream copies are scheduled right after each other,
@@ -109,8 +115,8 @@ class RecvFromHostOp : public PoplarOpDef {
           rendezvous_key, tensor.elementType(), tensor.numElements(),
           poplar::ReplicatedStreamMode::BROADCAST);
 
-      seq.add(poplar::program::Copy(stream, tensor,
-                                    res.always_rearrange_copies_on_host));
+      seq.add(poplar::program::Copy(
+          stream, tensor, res.always_rearrange_copies_on_host, {debug_info}));
 
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
       res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
@@ -124,9 +130,10 @@ class RecvFromHostOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "RecvFromHostOp");
     const int64 input_index = tensor_target.input_index;
     const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
-    return AddHostCopyTensor(graph, name, input_shape);
+    return AddHostCopyTensor(graph, {debug_info}, input_shape);
   }
 };
 

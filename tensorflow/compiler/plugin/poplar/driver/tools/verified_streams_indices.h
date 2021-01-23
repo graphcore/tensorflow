@@ -57,8 +57,9 @@ class VerifiedStreamsIndices {
   // Initialize internal resources based on the compiler resources and the
   // IpuOptions and create an index tensor in the master graph for each tensor
   // type.
-  Status InitializeIndexTensors(CompilerResources& resources,
-                                const IpuOptions::VerifiedTransfers& opts);
+  Status InitializeIndexTensors(
+      CompilerResources& resources, const IpuOptions::VerifiedTransfers& opts,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Return an index tensor from the instruction's graph
   // corresponding to the tensor type of the passed info.
@@ -97,7 +98,8 @@ class VerifiedStreamsIndices {
   Status InitializeFeedStream(const std::string& feed_name, int64 stream_idx,
                               const std::string& stream_handle,
                               poplar::program::Sequence& seq,
-                              const HloInstruction* inst);
+                              const HloInstruction* inst,
+                              const poplar::DebugNameAndId& debug_name_and_id);
 
   // Program to upload a checkpoint and connect it to the verified streams.
   poplar::program::Sequence LoadCheckpointSequence() const;
@@ -120,12 +122,15 @@ class VerifiedStreamsIndices {
   StatusOr<int64> GetFeedNumStreams(const HloInstruction* inst);
   poplar::Tensor GetFeedIndexTensor(const std::string& feed_name);
   // Initialize the key and id values based on the passed IpuOptions.
-  Status SetKeysAndStartIds(const IpuOptions::VerifiedTransfers& opts);
+  Status SetKeysAndStartIds(const IpuOptions::VerifiedTransfers& opts,
+                            const poplar::DebugNameAndId& debug_name_and_id);
   // Create a checkpoint tensor containing the positions of all the streams in
   // the graph. It also creates the sequences to load and save this checkpoint
   // tensor which can be accessed by LoadCheckpointSequence and
   // SaveCheckpointSequence.
-  Status CreateCheckpointLoadSave(const IpuOptions::VerifiedTransfers& opts);
+  Status CreateCheckpointLoadSave(
+      const IpuOptions::VerifiedTransfers& opts,
+      const poplar::DebugNameAndId& debug_name_and_id);
 
   // Store index tensors, id, key and number of tensors for a given variable
   // type.

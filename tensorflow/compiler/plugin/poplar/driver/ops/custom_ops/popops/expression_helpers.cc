@@ -34,11 +34,10 @@ std::vector<poplar::Tensor> GetTensorsFromExpressionInputs(
 }
 namespace {
 // Get the input tensor and create a PlaceHolder Expression.
-StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
-                                         const HloInstruction* inst,
-                                         TensorMap& tensor_map,
-                                         int64 operand_idx, int64 input_idx,
-                                         poplar::program::Sequence& seq) {
+StatusOr<ExpressionInput> GetTensorInput(
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::Tensor tensor;
 
   // Check whether this is the inplace input to the elementwise operation.
@@ -51,15 +50,16 @@ StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
   }
 
   if (inplace_input && AreInplaceOutputTensorsWritable(tensor_map, res, inst)) {
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors inputs,
-        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq,
+                                                 debug_name_and_id, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
     tensor = inputs[0][0];
   } else {
-    TF_ASSIGN_OR_RETURN(tensor, FindInstructionInput(tensor_map, res, inst,
-                                                     input_idx, seq, false));
+    TF_ASSIGN_OR_RETURN(
+        tensor, FindInstructionInput(tensor_map, res, inst, input_idx, seq,
+                                     debug_name_and_id, false));
   }
   return ExpressionInput(tensor);
 }
@@ -100,7 +100,8 @@ StatusOr<ExpressionInput> GetConstantInput(const HloInstruction* inst) {
 
 StatusOr<ExpressionInput> GetElementwiseInput(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq) {
+    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   if (inst->opcode() == HloOpcode::kFusion) {
     // Fusion indicates implicit broadcasting.
     const auto* root_inst = inst->fused_expression_root();
@@ -113,9 +114,9 @@ StatusOr<ExpressionInput> GetElementwiseInput(
       } else {
         // Input is not constant.
         CHECK_EQ(input->operand(0)->opcode(), HloOpcode::kParameter);
-        TF_ASSIGN_OR_RETURN(
-            auto expr_input,
-            GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq));
+        TF_ASSIGN_OR_RETURN(auto expr_input,
+                            GetTensorInput(res, inst, tensor_map, operand_idx,
+                                           input_idx, seq, debug_name_and_id));
         // Broadcast the tensor internally to the right shape.
         TF_ASSIGN_OR_RETURN(expr_input.tensor,
                             BroadcastTensor(*expr_input.tensor, input->shape(),
@@ -125,11 +126,13 @@ StatusOr<ExpressionInput> GetElementwiseInput(
     } else {
       // The input is not broadcasted - just get the tensor.
       CHECK_EQ(input->opcode(), HloOpcode::kParameter);
-      return GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq);
+      return GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq,
+                            debug_name_and_id);
     }
   } else {
     // Explicit version - just get the tensor.
-    return GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq);
+    return GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq,
+                          debug_name_and_id);
   }
 }
 }  // namespace
@@ -145,7 +148,8 @@ const HloInstruction* GetElementwiseOp(const HloInstruction* inst) {
 StatusOr<ExpressionInputs> GetElementwiseInputs(
     CompilerResources& res, const HloInstruction* inst,
     const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
-    poplar::program::Sequence& seq) {
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   auto operation = GetElementwiseOp(inst);
 
   // Go over all the inputs to the operation, and figure out what type they are.
@@ -154,7 +158,7 @@ StatusOr<ExpressionInputs> GetElementwiseInputs(
        operand_idx != operation->operand_count(); ++operand_idx) {
     TF_ASSIGN_OR_RETURN(auto expression_input,
                         GetElementwiseInput(res, inst, tensor_map, operand_idx,
-                                            input_idx, seq));
+                                            input_idx, seq, debug_name_and_id));
     expression_inputs.push_back(expression_input);
     if (expression_input.tensor) {
       input_idx++;

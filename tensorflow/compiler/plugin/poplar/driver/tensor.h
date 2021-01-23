@@ -30,6 +30,7 @@ namespace poplar {
 class Tensor;
 class Graph;
 class Type;
+class DebugNameAndId;
 }  // namespace poplar
 
 namespace xla {
@@ -68,17 +69,15 @@ poplar::Tensor FlattenAndConcatenateTensors(
 
 // Given a tensor of shape [..., N, ...] where N is the `slice_dimension`,
 // create an output tensor of size [..., output_size, ...]
-poplar::Tensor CreateTensorFromSlice(poplar::Graph& graph,
-                                     const poplar::Tensor& slice,
-                                     int64 slice_dimension, int64 output_size,
-                                     CompilerResources& resources,
-                                     const std::string& name = "");
+poplar::Tensor CreateTensorFromSlice(
+    poplar::Graph& graph, const poplar::Tensor& slice, int64 slice_dimension,
+    int64 output_size, CompilerResources& resources,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 // Clone the tensor and rebalance any aliasing across the tiles.
-poplar::Tensor TensorCloneAndRebalanceAliasing(poplar::Graph& graph,
-                                               CompilerResources& res,
-                                               const poplar::Tensor& tensor,
-                                               const std::string& name = "");
+poplar::Tensor TensorCloneAndRebalanceAliasing(
+    poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& tensor,
+    const poplar::DebugNameAndId& debug_name_and_id);
 StatusOr<poplar::Tensor> SliceTensor(
     poplar::Tensor tensor_to_slice,
     const HloInstruction::InstructionVector& slices, int64 slice_index);
@@ -89,7 +88,7 @@ std::vector<poplar::Tensor> SliceTensorIntoTensorsLike(
     const std::vector<poplar::Tensor>& like_tensors);
 
 StatusOr<poplar::Tensor> AddDynamicSliceTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla);
 
 StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
@@ -97,14 +96,13 @@ StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
     const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla);
 
 StatusOr<poplar::Tensor> AddDynamicSliceTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla,
     poplar::Tensor& physical_layout);
 
-StatusOr<poplar::Tensor> AddScatterTensor(poplar::Graph& graph,
-                                          const std::string& debug_name,
-                                          const xla::Shape& shape_xla,
-                                          const xla::Shape& slice_shape_xla);
+StatusOr<poplar::Tensor> AddScatterTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+    const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla);
 
 StatusOr<poplar::Tensor> AddGatherTensor(poplar::Graph& graph,
                                          const std::string& debug_name,
@@ -112,51 +110,47 @@ StatusOr<poplar::Tensor> AddGatherTensor(poplar::Graph& graph,
                                          std::vector<std::size_t> slice_sizes,
                                          std::vector<unsigned> start_index_map);
 
-StatusOr<poplar::Tensor> AddPlainTensor(poplar::Graph& graph,
-                                        const std::string& debug_name,
-                                        const xla::Shape& shape,
-                                        CompilerResources& resources,
-                                        bool offset = true);
+StatusOr<poplar::Tensor> AddPlainTensor(
+    poplar::Graph& graph, const poplar::DebugContext& debug_context,
+    const xla::Shape& shape, CompilerResources& resources, bool offset = true);
 
 // Add a tensor with layout optimised for host exchange.
-StatusOr<poplar::Tensor> AddHostCopyTensor(poplar::Graph& graph,
-                                           const std::string& debug_name,
-                                           const xla::Shape& shape);
+StatusOr<poplar::Tensor> AddHostCopyTensor(
+    poplar::Graph& graph, const poplar::DebugNameAndId& debug_name_and_id,
+    const xla::Shape& shape);
 
 StatusOr<poplar::Tensor> CreateIndicesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
-    const xla::Shape& xla_indices_shape, const std::string& name);
+    const xla::Shape& xla_indices_shape,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 // Returns true if the given tensor source has a special layout allocation
 // target.
 bool HasTensorAllocationTarget(const TensorLocation& src,
                                const CompilerResources& resources);
 
-StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
-                                            const TensorTarget& tensor_target,
-                                            CompilerResources& resources,
-                                            const TensorMap& tensor_map,
-                                            const std::string& debug_name);
+StatusOr<poplar::Tensor> AddTensorForTarget(
+    poplar::Graph& graph, const TensorTarget& tensor_target,
+    CompilerResources& resources, const TensorMap& tensor_map,
+    const poplar::DebugContext& debug_context);
 
 StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                    const TensorLocation& src,
                                    const xla::Shape& shape,
                                    CompilerResources& resources,
-                                   const TensorMap& tensor_map);
+                                   const TensorMap& tensor_map,
+                                   const poplar::DebugContext& debug_context);
 
-StatusOr<poplar::Tensor> AddConstantTensor(poplar::Graph& graph,
-                                           const TensorLocation& src,
-                                           const xla::Shape& shape,
-                                           const xla::Literal& literal,
-                                           CompilerResources& resources,
-                                           const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AddConstantTensor(
+    poplar::Graph& graph, const TensorLocation& src, const xla::Shape& shape,
+    const xla::Literal& literal, CompilerResources& resources,
+    const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 
 // Creates a constant tensor.
-StatusOr<poplar::Tensor> CreateConstantTensor(poplar::Graph& graph,
-                                              const xla::Literal& literal,
-                                              const xla::Shape& shape,
-                                              const poplar::Type& poplar_type,
-                                              const std::string& name);
+StatusOr<poplar::Tensor> CreateConstantTensor(
+    poplar::Graph& graph, const xla::Literal& literal, const xla::Shape& shape,
+    const poplar::Type& poplar_type,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 // Sets a value of a tensor to a constant.
 Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
@@ -219,6 +213,7 @@ std::pair<int64, int64> FindGetTupleElementTupleIndices(
 StatusOr<TensorVector> FindInstructionInputTensorsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
 /**
@@ -247,6 +242,7 @@ StatusOr<TensorVector> FindInstructionInputTensorsInRange(
 TensorOrRemoteBufferVector FindInstructionInputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
     bool expand_aliasing = true);
 
 /* This returns the single poplar tensor which is the non-tuple input to the
@@ -254,7 +250,9 @@ TensorOrRemoteBufferVector FindInstructionInputsInRange(
  */
 StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
+    int64 input, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true);
 
 /**
  * This returns a vector of the poplar tensors or remote buffers which are the
@@ -279,7 +277,9 @@ StatusOr<poplar::Tensor> FindInstructionInput(
  */
 TensorOrRemoteBufferVector FindInstructionInputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
+    int64 input, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true);
 
 /**
  * This returns the poplar tensors which are the inputs to the instruction.
@@ -301,7 +301,9 @@ TensorOrRemoteBufferVector FindInstructionInputs(
  */
 StatusOr<TensorVector> FindInstructionInputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
+    int64 input, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true);
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
                                      const HloInstruction* inst);
@@ -328,7 +330,8 @@ poplar::Tensor GetTensorForInplaceOp(
     poplar::Tensor tensor, CompilerResources& res, const HloInstruction* inst,
     int64 operand_index, uint64 operand_tuple_idx,
     poplar::program::Sequence& seq, bool is_lowered_inplace,
-    bool parallel_writeable_output);
+    bool parallel_writeable_output,
+    const poplar::DebugNameAndId& debug_name_and_id);
 
 /* This returns a vector of poplar tensors which are all of the outputs from
  * the given instruction.
@@ -351,8 +354,9 @@ StatusOr<TensorVector> FindInstructionOutputTensors(const TensorMap& map,
  */
 StatusOr<TensorVectors> FindInplaceOutputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, bool expand_aliasing = true,
-    bool always_preserve_aliases = false);
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true, bool always_preserve_aliases = false);
 
 /**
  * Same as the above function, but has the option to also return remote
@@ -360,8 +364,9 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(
  */
 StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, bool expand_aliasing = true,
-    bool always_preserve_aliases = false);
+    poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id,
+    bool expand_aliasing = true, bool always_preserve_aliases = false);
 
 /* This returns a vector of all poplar tensors which are outputs of the inst
  *   in range [range.first, range.second).
@@ -380,7 +385,8 @@ StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
  */
 StatusOr<TensorVector> FindExpandedInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range, poplar::program::Sequence& seq);
+    std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    const poplar::DebugNameAndId& debug_name_and_id);
 }  // namespace poplarplugin
 }  // namespace xla
 

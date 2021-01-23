@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -32,7 +33,9 @@ class SelectScalarFromRowsOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    return CreateSelectScalarFromRows(graph, res, inst, tensor_map);
+    PoplarOpDefDebugInfo debug_info(debug_context, "SelectScalarFromRowsOp");
+    return CreateSelectScalarFromRows(graph, res, inst, tensor_map,
+                                      {debug_info});
   }
 };
 REGISTER_POPLAR_OP(SelectScalarFromRows, SelectScalarFromRowsOp);
@@ -42,7 +45,8 @@ class UpdateScalarInRowsOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    return CreateUpdateScalarInRows(graph, res, inst, tensor_map);
+    PoplarOpDefDebugInfo debug_info(debug_context, "UpdateScalarInRowsOp");
+    return CreateUpdateScalarInRows(graph, res, inst, tensor_map, {debug_info});
   }
 };
 REGISTER_POPLAR_OP(UpdateScalarInRows, UpdateScalarInRowsOp);
