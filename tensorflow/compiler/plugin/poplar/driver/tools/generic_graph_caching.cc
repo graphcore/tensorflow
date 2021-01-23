@@ -93,10 +93,13 @@ Status GenericGraphCache::ExecuteCached(
     const absl::flat_hash_set<int64>& allocating_indices,
     const absl::flat_hash_map<int64, int64>& layout_dependencies) {
   // Check if we have already executed this instruction.
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(resources, inst);
+
   auto itr = table_.find(inst);
   if ((itr != table_.end()) && !resources.disable_graph_outlining) {
     // We have a cached graph for this dot operation.
-    itr->second(args, seq);
+    itr->second(args, seq, {debug_name_and_id});
   } else {
     // Get the allocation order.
     std::list<int64> alloc_order;
@@ -132,9 +135,6 @@ Status GenericGraphCache::ExecuteCached(
           break;
         }
       }
-
-      poplar::DebugNameAndId debug_name_and_id =
-          GetDebugNameAndId(resources, inst);
 
       auto name = absl::StrCat("Realloc/", arg_idx);
       if (needs_reallocating) {
@@ -178,8 +178,9 @@ Status GenericGraphCache::ExecuteCached(
     }
 
     // Create the function.
-    auto void_func = poputil::graphfn::VoidFunction(graph, signature, func);
-    void_func(args, seq);
+    auto void_func = poputil::graphfn::VoidFunction(graph, signature, func,
+                                                    false, {debug_name_and_id});
+    void_func(args, seq, {debug_name_and_id});
     table_.insert({inst, std::move(void_func)});
   }
   return Status::OK();
