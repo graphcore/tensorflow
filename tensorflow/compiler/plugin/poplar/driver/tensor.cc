@@ -775,11 +775,20 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
   poplar::Tensor other_side = outputs[layout_output_idx];
 
   TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
-  poplar::Tensor output = TensorCloneAndRebalanceAliasing(
-      graph, res, other_side, {debug_name_and_id});
+
+  // Special case of handling the name of the input for AddElementwiseBinary
+  // We are cloning a tensor `other_side` to be the input tensor
+  // In this case it is more useful to keep the debug name of the `other_side`
+  // tensor than the name of the HloInstruction (i.e. /arg_32).
+  //
+  // Instead of passing the debug_name_and_id to the following methods we
+  // we pass an empty name and it will then use the name other `other_side`
+
+  poplar::Tensor output =
+      TensorCloneAndRebalanceAliasing(graph, res, other_side, {});
 
   if (output.elementType() != poplar_type) {
-    output = graph.clone(poplar_type, output, {debug_name_and_id});
+    output = graph.clone(poplar_type, output, {});
   }
 
   return output;
