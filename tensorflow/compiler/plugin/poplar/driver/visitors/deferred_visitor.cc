@@ -1398,21 +1398,9 @@ StatusOr<poplar::Tensor> DeferredVisitor::AllocateInput(
   if (HasTensorAllocationTarget(allocation_location, resources_) ||
       (tensor_like && tensor_like->containsConstant()) || (!tensor_like)) {
     // Do the allocation.
-
-    // TODO(T32947) : Would like to pass the Debug Info associated with the
-    // debug_name_and_id passed in to AddTensor. However that results in losing
-    // some information as if the debug is not passed the variable will
-    // 'inherit' the debug name of the tensor it is cloned from. Which is more
-    // useful. Would like to be able get the name of the tensor we clone from.
-
-    // For instance.
-    // Without debug info :
-    // all/b0/batch_norm/FusedBatchNormV3/batch-norm-training.19/gamma With
-    // debug info : /arg_32
-
     TF_ASSIGN_OR_RETURN(out,
                         AddTensor(graph, allocation_location, shape, resources_,
-                                  tensor_map, {debug_name_and_id, "output"}));
+                                  tensor_map, {debug_name_and_id}));
   } else {
     out = TensorCloneAndRebalanceAliasing(graph, resources_, *tensor_like,
                                           debug_name_and_id);

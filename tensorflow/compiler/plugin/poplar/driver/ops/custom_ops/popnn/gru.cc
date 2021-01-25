@@ -195,12 +195,13 @@ class GRULayerBaseOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, &inst, this, gru_params, gru_opts, input_size,
-                 output_size, &debug_info,
+                 output_size, debug_name_and_id,
                  training](std::vector<poplar::Tensor>& args,
                            poplar::program::Sequence& prog) {
       LowerToPoplar(graph, res, inst, gru_params, gru_opts, input_size,
-                    output_size, training, debug_info, args, prog);
+                    output_size, training, debug_name_and_id, args, prog);
     };
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(

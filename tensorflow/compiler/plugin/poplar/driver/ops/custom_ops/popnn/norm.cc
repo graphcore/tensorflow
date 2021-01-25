@@ -282,7 +282,8 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
       return seq;
     }
 
-    auto func = [&graph, &debug_info, norm_opts](
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, debug_name_and_id, norm_opts](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor operand = args[0];
@@ -297,11 +298,11 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
         case NormType::BatchNorm: {
           // For batch norm variance_or_inv_std_dev is variance, so we need to
           // convert it.
-          poplar::Tensor inv_sd =
-              ConvertVarianceToInvStdDev(graph, variance_or_inv_std_dev,
-                                         norm_opts.epsilon, prog, {debug_info});
+          poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
+              graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
+              {debug_name_and_id});
           args[5] = BatchNormalise(graph, operand, scale, offset, mean, inv_sd,
-                                   prog, {debug_info});
+                                   prog, {debug_name_and_id});
           break;
         }
         case NormType::GroupNorm: {
@@ -310,7 +311,7 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
           args[5] =
               popnn::gn::groupNormalise(graph, operand, scale, offset, mean,
                                         variance_or_inv_std_dev, prog,
-                                        {debug_info}, norm_opts.flags)
+                                        {debug_name_and_id}, norm_opts.flags)
                   .first;
           break;
         }
@@ -391,7 +392,8 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
       return seq;
     }
 
-    auto func = [&graph, &debug_info, norm_opts,
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, debug_name_and_id, norm_opts,
                  use_stable_statistics = res.use_stable_norm_statistics](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
@@ -408,14 +410,14 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
           std::tie(args[4], inv_sd) = popnn::bn::batchNormStatistics(
               graph, operand, norm_opts.epsilon, prog,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_info});
+              poplar::FLOAT, {debug_name_and_id});
 
           args[3] = BatchNormalise(graph, operand, scale, offset, args[4],
-                                   inv_sd, prog, {debug_info});
+                                   inv_sd, prog, {debug_name_and_id});
           // For batch norm variance_or_inv_std_dev is variance, so we need to
           // convert it.
           args[5] = ConvertInvStdDevToVariance(graph, inv_sd, norm_opts.epsilon,
-                                               prog, {debug_info});
+                                               prog, {debug_name_and_id});
           break;
         }
         case NormType::GroupNorm: {
@@ -424,11 +426,11 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
           std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
               graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_info}, norm_opts.flags);
+              poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
 
-          args[3] = popnn::gn::groupNormalise(graph, operand, scale, offset,
-                                              args[4], args[5], prog,
-                                              {debug_info}, norm_opts.flags)
+          args[3] = popnn::gn::groupNormalise(
+                        graph, operand, scale, offset, args[4], args[5], prog,
+                        {debug_name_and_id}, norm_opts.flags)
                         .first;
           break;
         }
@@ -515,7 +517,8 @@ class NormGradOp : public PoplarOpDef {
       return seq;
     }
 
-    auto func = [&graph, &debug_info, norm_opts](
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, debug_name_and_id, norm_opts](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
       poplar::Tensor operand = args[0];
@@ -533,20 +536,21 @@ class NormGradOp : public PoplarOpDef {
         case NormType::BatchNorm: {
           // For batch norm variance_or_inv_std_dev is variance, so we need to
           // convert it.
-          poplar::Tensor inv_sd =
-              ConvertVarianceToInvStdDev(graph, variance_or_inv_std_dev,
-                                         norm_opts.epsilon, prog, {debug_info});
-          poplar::Tensor operand_whitened = popnn::bn::batchNormWhiten(
-              graph, operand, mean, inv_sd, prog, {debug_info, "WhitenedActs"});
+          poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
+              graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
+              {debug_name_and_id});
+          poplar::Tensor operand_whitened =
+              popnn::bn::batchNormWhiten(graph, operand, mean, inv_sd, prog,
+                                         {debug_name_and_id, "WhitenedActs"});
 
           // Compute the grad for the operand.
           args[5] = popnn::bn::batchNormGradients(
               graph, operand_whitened, grad_output, inv_sd, scale, prog,
-              poplar::FLOAT, {debug_info, "OperandGrad"});
+              poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
           // Compute the grads for the scale and offset.
           std::tie(args[6], args[7]) = popnn::bn::batchNormParamGradients(
               graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-              {debug_info, "ScaleOffsetGrads"});
+              {debug_name_and_id, "ScaleOffsetGrads"});
           break;
         }
         case NormType::GroupNorm: {
@@ -554,17 +558,17 @@ class NormGradOp : public PoplarOpDef {
           // don't need to convert it.
           poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
               graph, operand, mean, variance_or_inv_std_dev, prog,
-              {debug_info, "WhitenedActs"}, norm_opts.flags);
+              {debug_name_and_id, "WhitenedActs"}, norm_opts.flags);
 
           // Compute the grad for the operand.
           args[5] = popnn::gn::groupNormGradients(
               graph, operand_whitened, grad_output, variance_or_inv_std_dev,
-              scale, prog, poplar::FLOAT, {debug_info, "OperandGrad"},
+              scale, prog, poplar::FLOAT, {debug_name_and_id, "OperandGrad"},
               norm_opts.flags);
           // Compute the grads for the scale and offset.
           std::tie(args[6], args[7]) = popnn::gn::groupNormParamGradients(
               graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-              {debug_info, "ScaleOffsetGrads"}, norm_opts.flags);
+              {debug_name_and_id, "ScaleOffsetGrads"}, norm_opts.flags);
           break;
         }
       }
@@ -633,7 +637,8 @@ class NormStatisticsOp : public PoplarOpDef {
       return seq;
     }
 
-    auto func = [&graph, &debug_info, norm_opts,
+    poplar::DebugNameAndId debug_name_and_id(debug_info);
+    auto func = [&graph, debug_name_and_id, norm_opts,
                  use_stable_statistics = res.use_stable_norm_statistics](
                     std::vector<poplar::Tensor>& args,
                     poplar::program::Sequence& prog) {
@@ -647,11 +652,11 @@ class NormStatisticsOp : public PoplarOpDef {
           std::tie(args[1], inv_sd) = popnn::bn::batchNormStatistics(
               graph, operand, norm_opts.epsilon, prog,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_info});
+              poplar::FLOAT, {debug_name_and_id});
           // For batch norm variance_or_inv_std_dev is variance, so we need to
           // convert it.
           args[2] = ConvertInvStdDevToVariance(graph, inv_sd, norm_opts.epsilon,
-                                               prog, {debug_info});
+                                               prog, {debug_name_and_id});
           break;
         }
         case NormType::GroupNorm: {
@@ -660,7 +665,7 @@ class NormStatisticsOp : public PoplarOpDef {
           std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
               graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_info}, norm_opts.flags);
+              poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
           break;
         }
       }
