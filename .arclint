@@ -65,7 +65,7 @@
         },
         "gc-copyright": {
             "type": "gc-copyright",
-            "gc-copyright.script_path": "../../../../tensorflow_packaging/check_copyright.py",
+            "gc-copyright.script_path": "../../../../scripts/check_copyright.py",
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
