@@ -88,7 +88,7 @@ class ReduceScatterOp : public PoplarOpDef {
 
     // Do the actual reduce scatter on the interleaved input.
     poplar::Tensor interleaved_output = gcl::reduceScatter(
-        graph, interleaved_input, popops::Operation::ADD, seq,
+        graph, interleaved_input, popops::CollectiveOperator::ADD, seq,
         {debug_info, "ReduceScatter"}, GetReplicatedCollectiveOptions(res));
 
     // Deinterleave output.

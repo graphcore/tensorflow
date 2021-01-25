@@ -97,9 +97,10 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
     {
       if (do_all_reduce) {
         // All reduce the accumulator tensor into the output.
-        gcl::allReduceToDestination(
-            GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
-            if_true, {debug_info}, GetReplicateAllReduceOptions(res));
+        gcl::allReduceToDestination(GetMasterGraph(res), accumulator, output,
+                                    popops::CollectiveOperator::ADD, if_true,
+                                    {debug_info},
+                                    GetReplicateAllReduceOptions(res));
       } else {
         // Copy accumulator into output.
         if_true.add(
@@ -250,9 +251,10 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       {
         if (do_all_reduce_and_norm) {
           // All reduce the accumulator tensor into the output.
-          gcl::allReduceToDestination(
-              GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
-              if_true, {debug_info}, GetReplicateAllReduceOptions(res));
+          gcl::allReduceToDestination(GetMasterGraph(res), accumulator, output,
+                                      popops::CollectiveOperator::ADD, if_true,
+                                      {debug_info},
+                                      GetReplicateAllReduceOptions(res));
 
           // Normalize it - we normalize after the all reduce otherwise we risk
           // the gradients becoming zeros.

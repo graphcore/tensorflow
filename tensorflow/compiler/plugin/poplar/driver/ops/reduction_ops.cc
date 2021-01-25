@@ -951,9 +951,9 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
 
     // Replicated sum the concatenated tensor.
-    gcl::allReduceInPlace(GetMasterGraph(res), flat_tensor,
-                          popops::Operation::ADD, seq, {debug_name_and_id},
-                          GetReplicateAllReduceOptions(res));
+    gcl::allReduceInPlace(
+        GetMasterGraph(res), flat_tensor, popops::CollectiveOperator::ADD, seq,
+        {debug_name_and_id}, GetReplicateAllReduceOptions(res));
   }
 
   for (int64 i = 0; i != flat_tensors.size(); ++i) {
