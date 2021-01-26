@@ -674,8 +674,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
       ok = [
-          '__seed*', '[cC]opy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/conv2d/BiasAdd',
+          '__seed*', 'host-exchange-local-copy-', '[cC]opy_',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/Relu/relu/Nonlinearity'
       ]

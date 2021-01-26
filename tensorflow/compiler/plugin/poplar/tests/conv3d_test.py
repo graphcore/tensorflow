@@ -141,8 +141,8 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.parse_log()
 
       ok = [
-          '__seed*', 'Copy_', 'Conv3D/convolution.*/Conv_1x1',
-          'add/fusion/Op/Add'
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
+          'Conv3D/convolution.*/Conv_1x1', 'add/fusion/Op/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

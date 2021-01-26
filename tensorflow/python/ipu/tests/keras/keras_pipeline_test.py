@@ -410,7 +410,7 @@ class IPUPipelineTest(test.TestCase):
     # history['loss'] is one loss value per epoch (of which there is 1)
     ipu_loss = history.history['loss'][0]
 
-    self.assertAllClose(ipu_loss, cpu_loss)
+    self.assertAllClose(ipu_loss, cpu_loss, rtol=1e-5)
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizer(self):
@@ -824,7 +824,7 @@ class IPUPipelineTest(test.TestCase):
     cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
     cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
 
-    self.assertAllClose(result, cpu_loss)
+    self.assertAllClose(result, cpu_loss, rtol=1e-5)
 
   @test_util.run_v2_only
   def testPredict_CpuMatch(self):

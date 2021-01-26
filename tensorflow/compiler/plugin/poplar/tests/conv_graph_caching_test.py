@@ -65,8 +65,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Would fail if there were two convolutions in the graph as they would be
       # called conv2d and conv2d_1
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'Copy_'
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -103,6 +103,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Matches two convolutions
       ok = [
           '__seed*',
+          'host-exchange-local-copy-',
           'Copy_*weightsRearranged',
           'Copy_',
           'Copy_vs/*/OnTileCopy-0',
@@ -142,7 +143,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -177,7 +179,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
+          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -283,6 +286,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
+          'host-exchange-local-copy-',
           'Copy_',
           'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
@@ -443,8 +447,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(11336260)
-      report.assert_max_tile_memory(9675)
+      report.assert_total_tile_memory(8345558)
+      report.assert_max_tile_memory(7483)
 
       # Would fail if there were two convolutions in the graph
       ok = ['__seed*', 'a/convolution', 'Copy_']
