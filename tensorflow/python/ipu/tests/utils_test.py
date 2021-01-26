@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import json
 import os
 import tempfile
 import numpy as np
@@ -373,6 +374,12 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       # One subdirectory added
       print(os.listdir(tmpdir))
       self.assertEqual(len(os.listdir(tmpdir)), 1)
+
+      # A framework.json of JSON format is in the subdirectory
+      report_dir = os.path.join(tmpdir, os.listdir(tmpdir)[0])
+      self.assertTrue("framework.json" in os.listdir(report_dir))
+      with open(os.path.join(report_dir, "framework.json")) as f:
+        json.load(f)
 
       reps = ipu.utils.extract_compile_reports(e)
       self.assertEqual(len(reps), 1)
