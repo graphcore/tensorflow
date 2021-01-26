@@ -2089,6 +2089,24 @@ Status PoplarExecutor::GetCompilerEvents(
   return Status::OK();
 }
 
+std::string PoplarExecutor::GetModuleReportDirectory(const std::string& name) {
+  // Generate a subdirectory for 'name's reports.
+  // Use a map to remember what directories were generated for what clusters.
+
+  // Guard against concurrent gets/sets when this Executor is being used to
+  // compile multiple clusters simultaneously
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+
+  auto it = cluster_report_directories_.find(name);
+  if (it == cluster_report_directories_.end()) {
+    std::string cluster_directory_name = GenerateDirectoryName("tf_report");
+    cluster_report_directories_[name] = cluster_directory_name;
+    VLOG(1) << "Saving reports for " << name << " to "
+            << cluster_report_directories_[name];
+  }
+  return cluster_report_directories_[name];
+}
+
 void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList& list, const xla::Shape& shape, void* base,
     const InputOutputAliasingMap::InputInfo& input_info,
