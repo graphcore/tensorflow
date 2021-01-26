@@ -1602,8 +1602,8 @@ Status PoplarExecutor::CreatePoplarTarget() {
 
     if (!valid_model_versions.contains(user_model_version)) {
       LOG(WARNING) << "Unknown IPU Model version '" << user_model_version
-                   << "'. Defaulting to 'ipu1'";
-      user_model_version = "ipu1";
+                   << "'. Defaulting to 'ipu2'";
+      user_model_version = "ipu2";
     }
 
     poplar::IPUModel model(user_model_version.c_str());

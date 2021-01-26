@@ -158,7 +158,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         dataset_fn,
         optimizer,
         self,
-        14172,
+        19826,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
         batch_serialization_iterations=3)
 
