@@ -287,7 +287,7 @@ HloComputation* ReplaceResourceUpdateFunction(
     }
     ReplaceInstruction(replacements, old_sink_user,
                        old_sink_user->CloneWithNewOperands(
-                           old_sink_shape, old_sink_user_operands));
+                           old_sink_user->shape(), old_sink_user_operands));
   }
 
   RemoveComputationParameter(replacements, resource_update_comp,

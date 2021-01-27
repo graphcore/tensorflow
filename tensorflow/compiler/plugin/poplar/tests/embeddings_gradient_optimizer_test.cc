@@ -20,9 +20,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_pipeline.h"
+#include "tensorflow/compiler/xla/service/hlo_verifier.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+#include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/str_util.h"
 
 namespace xla {
@@ -206,6 +208,10 @@ TEST_P(EmbeddingsGradientOptimizerTest, DoTest) {
 
   EmbeddingsGradientOptimizer optimizer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  TF_ASSERT_OK(
+      HloVerifier(/*layout_sensitive=*/false, /*allow_mixed_precision=*/false)
+          .Run(module.get())
+          .status());
   EXPECT_EQ(changed, spec.changed);
 }
 
@@ -224,6 +230,10 @@ TEST_F(EmbeddingsGradientOptimizerTest, BatchSerializationIterations) {
 
   EmbeddingsGradientOptimizer optimizer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  TF_ASSERT_OK(
+      HloVerifier(/*layout_sensitive=*/false, /*allow_mixed_precision=*/false)
+          .Run(module.get())
+          .status());
   EXPECT_EQ(changed, spec.changed);
 }
 
