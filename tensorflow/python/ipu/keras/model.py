@@ -22,8 +22,6 @@ import copy
 import math
 import weakref
 
-import numpy as np
-
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
@@ -413,6 +411,24 @@ class _IpuModelBase(KerasModel):
         else:
           steps_per_epoch = size // self.accumulation_count
 
+    if steps_per_epoch is not None and steps_per_run is not None:
+      if steps_per_epoch % (steps_per_run * self.replication_factor) != 0:
+        if mode == ModeKeys.TRAIN:
+          raise ValueError(
+              self.__class__.__name__ + " requires the number of steps in an "
+              "epoch 'steps_per_epoch' (%d) to be evenly divisible by the "
+              "number of steps per execution of the on-device training loop "
+              "'steps_per_run' (%d) multiplied by the replication factor "
+              "(%d)." %
+              (steps_per_epoch, steps_per_run, self.replication_factor))
+        else:
+          raise ValueError(
+              self.__class__.__name__ + " requires the number total of steps "
+              "'steps' (%d) to be evenly divisible by the number of steps per "
+              "execution of the on-device training loop 'steps_per_run' (%d) "
+              "multiplied by the replication factor (%d)." %
+              (steps_per_epoch, steps_per_run, self.replication_factor))
+
     # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
     if mini_batches_per_epoch is not None:
@@ -429,37 +445,50 @@ class _IpuModelBase(KerasModel):
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
-    if mini_batches_per_epoch % self.accumulation_count != 0:
-      raise ValueError(
-          self.__class__.__name__ + " requires the number of batches in the"
-          " dataset (%d) to be a multiple of the accumulated batch size (%d)" %
-          (mini_batches_per_epoch, self.accumulation_count))
-    steps_per_epoch = mini_batches_per_epoch / (self.accumulation_count *
-                                                self.replication_factor)
+    # These errors can only occur when steps_per_epoch is not passed in and the
+    # dataset is of finite length. In that case mini_batches_per_epoch is set to
+    # the size of the dataset in infer_steps_for_dataset.
+    if steps_per_run is None:
+      if mini_batches_per_epoch % (self.accumulation_count *
+                                   self.replication_factor) != 0:
+        raise ValueError(
+            self.__class__.__name__ + " requires the size of the dataset (%d) "
+            "to be evenly divisible by the accumulation count (%d) multiplied "
+            "by the replication factor (%d)" %
+            (mini_batches_per_epoch, self.accumulation_count,
+             self.replication_factor))
+    else:
+      if mini_batches_per_epoch % (self.accumulation_count *
+                                   self.replication_factor *
+                                   steps_per_run) != 0:
+        raise ValueError(
+            self.__class__.__name__ + " requires the size of the dataset (%d) "
+            "to be evenly divisible by the product of 'steps_per_run' (%d), "
+            "the accumulation count (%d), and the replication factor (%d)." %
+            (mini_batches_per_epoch, steps_per_run, self.accumulation_count,
+             self.replication_factor))
+
+    steps_per_epoch_per_replica = (
+        mini_batches_per_epoch /
+        (self.accumulation_count * self.replication_factor))
     if not steps_per_run:
-      steps_per_run = steps_per_epoch
+      steps_per_run = steps_per_epoch_per_replica
 
-    if steps_per_epoch % steps_per_run != 0:
-      raise ValueError(
-          self.__class__.__name__ + " requires the number of steps per"
-          " execution of the on device training loop 'steps_per_run' (%d)"
-          " to be a multiple of the number of steps in the epoch (%d)." %
-          (mini_batches_per_epoch, steps_per_epoch))
-
-    outer_loop_count = int(steps_per_epoch / steps_per_run)
+    outer_loop_count = int(steps_per_epoch_per_replica / steps_per_run)
 
     total_batches = mini_batches_per_epoch * (epochs - initial_epoch)
 
     # Prepare for progress reporting.
     # Note that the steps_per_epoch here is the value passed to this
     # function divided by the replication factor.
-    callbacks = cbks.configure_callbacks(callbacks,
-                                         self,
-                                         epochs=epochs,
-                                         steps_per_epoch=steps_per_epoch,
-                                         verbose=verbose,
-                                         count_mode='steps',
-                                         mode=mode)
+    callbacks = cbks.configure_callbacks(
+        callbacks,
+        self,
+        epochs=epochs,
+        steps_per_epoch=steps_per_epoch_per_replica,
+        verbose=verbose,
+        count_mode='steps',
+        mode=mode)
 
     # If the dataset or mode has changed, then we need to recreate the feeds
     if not self.last_ds or self.last_ds() != ds or self.last_mode != mode:

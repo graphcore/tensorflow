@@ -349,8 +349,8 @@ class IPUModelModelTest(test.TestCase):
       m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
 
       m.compile('sgd', loss='mse')
-      with self.assertRaisesRegex(
-          ValueError, "Model requires the number of batches in the dataset"):
+      with self.assertRaisesRegex(ValueError,
+                                  "Model requires the size of the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only

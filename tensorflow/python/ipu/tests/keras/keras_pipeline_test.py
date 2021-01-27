@@ -329,7 +329,7 @@ class IPUPipelineTest(test.TestCase):
 
       m.compile('sgd', loss='mse')
       with self.assertRaisesRegex(
-          ValueError, "PipelineModel requires the number of batches"):
+          ValueError, "PipelineModel requires the size of the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only

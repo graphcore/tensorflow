@@ -298,7 +298,7 @@ class IPUSequentialPipelineTest(test.TestCase):
 
       with self.assertRaisesRegex(
           ValueError,
-          "SequentialPipelineModel requires the number of batches in the"):
+          "SequentialPipelineModel requires the size of the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only
