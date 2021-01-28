@@ -671,6 +671,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kReduceWindow:
     case HloOpcode::kRng:
     case HloOpcode::kSelectAndScatter:
+    case HloOpcode::kTriangularSolve:
     case HloOpcode::kTupleSelect: {
       type_ = HloInstructionType::kNotInplace;
       break;

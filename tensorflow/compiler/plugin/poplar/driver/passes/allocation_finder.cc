@@ -83,6 +83,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleTriangularSolve(HloInstruction* inst) override {
+    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
+    return Status::OK();
+  }
+
   Status HandleParameter(HloInstruction* inst) override {
     auto shapes = FlattenedXlaShape(inst->shape());
     for (unsigned int i = 0; i < shapes.size(); i++) {
@@ -285,6 +290,12 @@ void AllocationFinder::FindConsumers(
         }
         case HloOpcode::kScatter: {
           if (op_index == 0 || op_index == 1 || op_index == 2) {
+            AddTensorTarget(src, tensor_target);
+          }
+          break;
+        }
+        case HloOpcode::kTriangularSolve: {
+          if (op_index == 0 || op_index == 1) {
             AddTensorTarget(src, tensor_target);
           }
           break;
