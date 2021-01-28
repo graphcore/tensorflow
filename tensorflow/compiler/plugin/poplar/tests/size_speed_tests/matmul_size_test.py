@@ -137,7 +137,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
-      report.assert_total_tile_memory(18791166)
+      report.assert_total_tile_memory(19257303)
 
   def testSerializedMatmul(self):
     with self.session() as sess:
@@ -179,8 +179,8 @@ class MatMulSizeTest(xla_test.XLATestCase):
                                    for k in (x, y, z)})
       self.assertAllClose(np.full([B, I], 129.0), output[0])
       report.parse_log()
-      report.assert_total_tile_memory(125580981)
-      report.assert_max_tile_memory(103185)
+      report.assert_total_tile_memory(126942643)
+      report.assert_max_tile_memory(86813)
 
 
 if __name__ == "__main__":

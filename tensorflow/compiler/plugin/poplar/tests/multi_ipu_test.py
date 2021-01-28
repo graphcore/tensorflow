@@ -77,7 +77,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 2)
-      self.assertEqual(tiles, set((0, 1216)))
+      self.assertEqual(tiles, set((0, 1472)))
 
       ok = [
           '__seed*',
@@ -187,7 +187,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 2)
-      self.assertEqual(tiles, set((0, 1216)))
+      self.assertEqual(tiles, set((0, 1472)))
 
   def testMultiIpuTraining(self):
     with self.session() as sess:
