@@ -194,7 +194,8 @@ class ReportJSON(object):
                eager_mode=False,
                allow_recompute=False,
                use_stable_norm_statistics=False,
-               set_opts_fn=None):
+               set_opts_fn=None,
+               triangular_solve_expander_block_size=0):
     self.report = None
     self.test = test
     self.sess = sess
@@ -226,7 +227,9 @@ class ReportJSON(object):
       opts = utils.set_optimization_options(
           opts,
           max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
-          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size)
+          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
+          triangular_solve_expander_block_size=
+          triangular_solve_expander_block_size)
 
       device_count = device_count_override or compute_device_count(
           pipelining, sharded, replicated)
@@ -411,6 +414,9 @@ class ReportJSON(object):
   def get_execution_reports(self):
     return self.events[IpuTraceEvent.EXECUTE]
 
+  def get_execution_report_cycles(self, idx):
+    return self.get_execution_reports()[idx]['simulation']['cycles']
+
   def get_instruction_info(self):
     return self.instruction_info
 
@@ -533,6 +539,12 @@ class ReportJSON(object):
     low = int(expected * (1.0 - tolerance))
     high = int(expected * (1.0 + tolerance))
     self.test.assertAllInRange([self.get_always_live_memory()], low, high)
+
+  def assert_execution_report_cycles(self, idx, expected, tolerance=0.01):
+    low = int(expected * (1.0 - tolerance))
+    high = int(expected * (1.0 + tolerance))
+    self.test.assertAllInRange([self.get_execution_report_cycles(idx)], low,
+                               high)
 
   # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
   def assert_all_compute_sets_and_list(self, ok):

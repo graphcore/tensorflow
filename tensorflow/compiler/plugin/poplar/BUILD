@@ -614,6 +614,7 @@ cc_library(
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",
+        "driver/ops/custom_ops/poplin/triangular_solve.cc",
         "driver/ops/custom_ops/poplin/weights_transpose_chans_flip_xy.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
         "driver/ops/custom_ops/popnn/gru.cc",
@@ -3573,6 +3574,23 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "triangular_solve_test",
+    size = "medium",
+    srcs = ["tests/triangular_solve_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "cholesky_test",
     size = "small",
     srcs = ["tests/cholesky_test.py"],
@@ -5150,6 +5168,7 @@ test_suite(
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
         "topk_onehot_test",
+        "triangular_solve_test",
         "update_op_dependencies_test",
         "variable_test",
         "variables_offload_and_partition_test",
