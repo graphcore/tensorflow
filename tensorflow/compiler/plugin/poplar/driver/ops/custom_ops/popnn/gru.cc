@@ -126,12 +126,12 @@ class GRULayerBaseOp : public PoplarOpDef {
       case 0: {
         // Allocate GRU input tensor.
         return popnn::gru::createInput(graph, gru_params, {debug_info},
-                                       gru_opts, &res.dot_cache);
+                                       gru_opts, &res.matmul_cache);
       }
       case 1: {
         // Allocate initial state tensor.
         return popnn::gru::createInitialState(graph, gru_params, {debug_info},
-                                              gru_opts, &res.dot_cache);
+                                              gru_opts, &res.matmul_cache);
       }
       case 2: {
         // Allocate GRU weights kernel.
@@ -139,13 +139,13 @@ class GRULayerBaseOp : public PoplarOpDef {
         poplar::Tensor output_weights;
         std::tie(input_weights, output_weights) =
             popnn::gru::createWeightsKernel(graph, gru_params, {debug_info},
-                                            gru_opts, &res.dot_cache);
+                                            gru_opts, &res.matmul_cache);
         return PackGruKernel(input_weights, output_weights);
       }
       case 3: {
         // Allocate GRU weights biases.
         return popnn::gru::createWeightsBiases(graph, gru_params, {debug_info},
-                                               gru_opts, &res.dot_cache);
+                                               gru_opts, &res.matmul_cache);
       }
       case 4: {
         // Allocate AUGRU seq_len
@@ -297,9 +297,9 @@ class GRULayerFwdOp : public GRULayerBaseOp {
 
     auto intermediates_ptr = training ? &args[6] : nullptr;
 
-    args[4] = popnn::gru::gruFwd(graph, gru_params, input_state, input_seq,
-                                 weights, intermediates_ptr, prog,
-                                 {debug_name_and_id}, gru_opts, &res.dot_cache);
+    args[4] = popnn::gru::gruFwd(
+        graph, gru_params, input_state, input_seq, weights, intermediates_ptr,
+        prog, {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
     args[5] = poputil::duplicate(graph, args[4][gru_params.timeSteps - 1], prog,
                                  {debug_name_and_id, "outputHState"});
@@ -367,7 +367,7 @@ class GRULayerBwdOp : public GRULayerBaseOp {
     args[10] = popnn::gru::gruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
         output, output_backprop, &args[9], weights_backprop,
-        {debug_name_and_id}, gru_opts, &res.dot_cache);
+        {debug_name_and_id}, gru_opts, &res.matmul_cache);
     args[11] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
     args[12] = weights_backprop.biases;
@@ -416,9 +416,10 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
     weights.biases = biases;
 
     auto intermediates_ptr = training ? &args[7] : nullptr;
-    args[5] = popnn::gru::gruFwd(graph, gru_params, input_state, input_seq,
-                                 args[4], weights, intermediates_ptr, prog,
-                                 {debug_name_and_id}, gru_opts, &res.dot_cache);
+    args[5] =
+        popnn::gru::gruFwd(graph, gru_params, input_state, input_seq, args[4],
+                           weights, intermediates_ptr, prog,
+                           {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
     args[6] = poputil::duplicate(graph, args[5][gru_params.timeSteps - 1], prog,
                                  {debug_name_and_id, "outputHState"});
@@ -481,7 +482,7 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
     args[11] = popnn::gru::gruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
         seq_len, output, output_backprop, &args[10], weights_backprop,
-        {debug_name_and_id}, gru_opts, &res.dot_cache);
+        {debug_name_and_id}, gru_opts, &res.matmul_cache);
     args[12] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
     args[13] = weights_backprop.biases;
@@ -529,7 +530,7 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
     args[6] =
         popnn::gru::auGruFwd(graph, gru_params, input_state, input_seq, seq_len,
                              weights, intermediates_ptr, attention, prog,
-                             debug_name_and_id, gru_opts, &res.dot_cache);
+                             debug_name_and_id, gru_opts, &res.matmul_cache);
     auto one =
         graph.addConstant(poplar::UNSIGNED_INT, {1}, 1, debug_name_and_id);
     graph.setTileMapping(one, 0);
@@ -540,7 +541,7 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
 
     args[7] = popnn::gru::createInitialState(graph, gru_params,
                                              {debug_name_and_id, "fwdState"},
-                                             gru_opts, &res.dot_cache);
+                                             gru_opts, &res.matmul_cache);
     for (unsigned i = 0; i < gru_params.batchSize; ++i) {
       auto tmp_fwd_tensor = args[6].slice(i, i + 1, 1).squeeze({1});
       auto offset = updated_time_step.slice(i, i + 1);
@@ -637,7 +638,7 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
     args[12] = popnn::gru::auGruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
         seq_len, output, step_output_backprop, &args[11], weights_backprop,
-        attention, &args[15], debug_name_and_id, gru_opts, &res.dot_cache);
+        attention, &args[15], debug_name_and_id, gru_opts, &res.matmul_cache);
     args[13] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
     args[14] = weights_backprop.biases;

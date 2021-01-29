@@ -420,7 +420,7 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
       std::stringstream stream;
       poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
                                       lhs.elementType(), lhs.shape(),
-                                      rhs.shape(), opts, &res.dot_cache);
+                                      rhs.shape(), opts, &res.matmul_cache);
       VLOG(2) << "MatMul " << debug_name_and_id.getPathName() << ". Type "
               << dot_type_s << (res.clear_matmul_pass_type ? " (cleared)" : "")
               << ". Plan " << stream.str();
@@ -429,8 +429,9 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
       }
     }
 
-    args[2] = poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
-                                    {debug_name_and_id}, opts, &res.dot_cache);
+    args[2] =
+        poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
+                              {debug_name_and_id}, opts, &res.matmul_cache);
     // Reshape to XLA shape
     args[2] = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
   };
