@@ -673,7 +673,7 @@ static StatusOr<poplar::Tensor> AddLeftMatMul(
   auto result = poplin::createMatMulGroupedInputLHS(
       graph, type, type, PoplarShapeFromXlaShape(a_shape),
       PoplarShapeFromXlaShape(b_shape), {debug_name_and_id, "lhs"}, opts,
-      &resources.dot_cache);
+      &resources.matmul_cache);
 
   // Unpack matrix
   result = result.reshape(PoplarShapeFromXlaShape(shuffled_shape));
@@ -739,7 +739,7 @@ static StatusOr<poplar::Tensor> AddRightMatMul(
 
     result = poplin::createMatMulGroupedInputRHS(
         graph, type, type, poplar_a_shape, poplar_b_shape,
-        {debug_name_and_id, "rhs"}, opts, &resources.dot_cache);
+        {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache);
 
     // Move the contracting dimension and output dimension into the right
     // locations.
@@ -747,7 +747,7 @@ static StatusOr<poplar::Tensor> AddRightMatMul(
   } else {
     result = poplin::createMatMulGroupedInputRHS(
         graph, type, type, poplar_a_shape, poplar_b_shape,
-        {debug_name_and_id, "rhs"}, opts, &resources.dot_cache);
+        {debug_name_and_id, "rhs"}, opts, &resources.matmul_cache);
   }
 
   // Unpack matrix

@@ -89,17 +89,17 @@ class LstmLayerFwdOp : public PoplarOpDef {
       case 0: {
         // Allocate LSTM input tensor
         return popnn::lstm::createInput(graph, lstm_params, {debug_info},
-                                        lstm_opts, &res.dot_cache);
+                                        lstm_opts, &res.matmul_cache);
       }
       case 1: {
         // Allocate initial output (h) tensor
         return popnn::lstm::createInitialOutput(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
       }
       case 2: {
         // Allocate initial cell state (c) tensor
         return popnn::lstm::createInitialCellState(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
       }
       case 3: {
         // Allocate LSTM weights kernel
@@ -107,13 +107,13 @@ class LstmLayerFwdOp : public PoplarOpDef {
         poplar::Tensor output_weights;
         std::tie(input_weights, output_weights) =
             popnn::lstm::createWeightsKernel(graph, lstm_params, {debug_info},
-                                             lstm_opts, &res.dot_cache);
+                                             lstm_opts, &res.matmul_cache);
         return PackLstmKernel(input_weights, output_weights);
       }
       case 4: {
         // Allocate LSTM weights biases
         return popnn::lstm::createWeightsBiases(
-            graph, lstm_params, {debug_info}, lstm_opts, &res.dot_cache);
+            graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
       }
       default: {
         return xla::FailedPrecondition(
@@ -185,7 +185,7 @@ class LstmLayerFwdOp : public PoplarOpDef {
       auto intermediates_ptr = is_training ? &args[8] : nullptr;
       std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
           graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-          prog, {debug_name_and_id}, lstm_opts, &res.dot_cache);
+          prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
       args[6] = poputil::duplicate(graph, args[5][lstm_params.timeSteps - 1],
                                    prog, {debug_name_and_id, "outputHState"});
     };
@@ -328,7 +328,7 @@ class LstmLayerBwdOp : public PoplarOpDef {
           graph, lstm_params, prog, init_state, intermediates, weights,
           input_seq, output, output_backprop, &output_c_state_backprop,
           &args[12], weights_backprop, {debug_name_and_id}, lstm_opts,
-          &res.dot_cache);
+          &res.matmul_cache);
       args[13] = init_state_backprop.output;
       args[14] = init_state_backprop.cellState;
       args[15] = PackLstmKernel(weights_backprop.inputWeights,
