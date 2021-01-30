@@ -20,6 +20,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/xla/service/executable.h"
@@ -83,6 +84,10 @@ class PoplarExecutable : public Executable {
   }
 
   poplar::Engine* Engine() const { return poplar_engine_.get(); }
+
+  void SetLiteralValue(std::vector<std::vector<Literal>>&& literals) {
+    literal_output_ = std::move(literals);
+  }
 
   const std::vector<std::vector<Literal>>& LiteralValue() const {
     return literal_output_;
