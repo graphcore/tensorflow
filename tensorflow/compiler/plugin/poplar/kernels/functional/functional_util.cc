@@ -34,7 +34,6 @@ namespace poplarplugin {
 XlaCompiler::CompileOptions GetDefaultCompileOptions() {
   XlaCompiler::CompileOptions compile_options;
   compile_options.use_tuple_arg = false;
-  compile_options.resolve_compile_time_constants = true;
   compile_options.always_return_tuple = true;
   compile_options.return_updated_values_for_all_resources = true;
   compile_options.is_entry_computation = false;
