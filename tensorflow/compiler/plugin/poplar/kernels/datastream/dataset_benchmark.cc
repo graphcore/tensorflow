@@ -237,7 +237,7 @@ class DatasetBenchmark : public OpKernel {
     Tensor* output_tensor = nullptr;
     OP_REQUIRES_OK(
         ctx, ctx->allocate_output("out", TensorShape({1}), &output_tensor));
-    output_tensor->flat<string>()(0) = ss.str();
+    output_tensor->flat<tstring>()(0) = ss.str();
   }
 
  private:

@@ -48,7 +48,7 @@ class IpuSummaryOp : public OpKernel {
     Tensor* output_tensor = nullptr;
     OP_REQUIRES_OK(
         ctx, ctx->allocate_output("out", TensorShape({num}), &output_tensor));
-    auto output_flat = output_tensor->flat<string>();
+    auto output_flat = output_tensor->flat<tstring>();
 
     unsigned i = 0;
     for (auto& e : out) {
@@ -167,7 +167,7 @@ class IpuGetConfigurationOp : public OpKernel {
     OP_REQUIRES_OK(ctx,
                    ctx->allocate_output("out", TensorShape({out_opts.size()}),
                                         &output_tensor));
-    auto output_flat = output_tensor->flat<string>();
+    auto output_flat = output_tensor->flat<tstring>();
 
     for (size_t i = 0; i < out_opts.size(); i++) {
       std::string opt_str;
