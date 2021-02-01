@@ -7,7 +7,7 @@ load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod")
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
-load("//tensorflow/core/platform:default/build_config.bzl", "tf_proto_library")
+load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 
 # Rule for generating internal cpp codelets
 genrule(
@@ -151,7 +151,7 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
-        ":backend_protos",
+        ":backend_protos_cc",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -515,7 +515,7 @@ cc_library(
     ],
     deps = [
         ":alias_info_cc_impl",
-        ":backend_protos",
+        ":backend_protos_cc",
         ":common",
         ":config_protos_cc_impl",
         ":custom_kernels_util",
@@ -594,7 +594,7 @@ cc_library(
     ],
     linkstatic = 1,
     deps = [
-        ":backend_protos",
+        ":backend_protos_cc",
         ":flags",
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -839,7 +839,7 @@ cc_library(
         "kernels/datastream/exporters.cc",
     ],
     deps = [
-        ":backend_protos",
+        ":backend_protos_cc",
         ":infeed_utils",
         ":option_flag_cc_impl",
         "//tensorflow/compiler/tf2xla:common",
@@ -1826,7 +1826,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2081,7 +2081,7 @@ xla_test(
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_runner",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2099,7 +2099,7 @@ xla_test(
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_runner",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2192,7 +2192,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2244,7 +2244,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2280,7 +2280,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2316,7 +2316,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2352,7 +2352,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2388,7 +2388,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2424,7 +2424,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2460,7 +2460,7 @@ xla_test(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:global_data",
         "//tensorflow/compiler/xla/client:local_client",
         "//tensorflow/compiler/xla/client:xla_builder",
@@ -2985,7 +2985,7 @@ xla_test(
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_runner",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -3257,7 +3257,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3518,7 +3518,7 @@ tf_xla_py_test(
         "//tensorflow/python:resource_variable_ops",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3540,7 +3540,7 @@ tf_xla_py_test(
         "//tensorflow/python:resource_variable_ops",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3563,7 +3563,7 @@ tf_xla_py_test(
         "//tensorflow/python:resource_variable_ops",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3638,7 +3638,7 @@ tf_xla_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3728,7 +3728,7 @@ tf_xla_py_test(
         "//tensorflow/python:layers",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3747,7 +3747,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3864,7 +3864,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3882,7 +3882,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3935,7 +3935,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3954,7 +3954,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -4040,7 +4040,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4161,7 +4161,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4176,7 +4176,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4191,7 +4191,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4206,7 +4206,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4221,7 +4221,7 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4653,7 +4653,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4670,7 +4670,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4688,7 +4688,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4752,7 +4752,7 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -4785,7 +4785,7 @@ tf_xla_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 
