@@ -446,6 +446,21 @@ class _IpuModelBase(KerasModel):
               "multiplied by the replication factor (%d)." %
               (steps_per_epoch, steps_per_run, self.replication_factor))
 
+    # In the case when steps_per_run is not specified
+    elif (steps_per_epoch is not None
+          and steps_per_epoch % self.replication_factor != 0):
+      if mode == ModeKeys.TRAIN:
+        raise ValueError(
+            self.__class__.__name__ + " requires the number of steps in an "
+            "epoch 'steps_per_epoch' (%d) to be evenly divisible by the "
+            "replication factor (%d)." %
+            (steps_per_epoch, self.replication_factor))
+      else:
+        raise ValueError(
+            self.__class__.__name__ + " requires the number total of steps "
+            "'steps' (%d) to be evenly divisible by the replication factor"
+            " (%d)." % (steps_per_epoch, self.replication_factor))
+
     # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
     if mini_batches_per_epoch is not None:
