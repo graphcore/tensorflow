@@ -479,8 +479,6 @@ class _IpuModelBase(KerasModel):
     total_batches = mini_batches_per_epoch * (epochs - initial_epoch)
 
     # Prepare for progress reporting.
-    # Note that the steps_per_epoch here is the value passed to this
-    # function divided by the replication factor.
     callbacks = cbks.configure_callbacks(
         callbacks,
         self,
@@ -556,15 +554,14 @@ class _IpuModelBase(KerasModel):
 
           # After the first call we can update the callbacks to include
           # the metrics.
-          # Note that the steps_per_epoch here is the value passed to this
-          # function divided by the replication factor.
           if epoch == initial_epoch and run == 0:
-            cbks.set_callback_parameters(callbacks,
-                                         self,
-                                         epochs=epochs,
-                                         steps_per_epoch=steps_per_epoch,
-                                         verbose=verbose,
-                                         mode=mode)
+            cbks.set_callback_parameters(
+                callbacks,
+                self,
+                epochs=epochs,
+                steps_per_epoch=steps_per_epoch_per_replica,
+                verbose=verbose,
+                mode=mode)
 
         # Restart the iterator at the end of the epoch if necessary
         if recreate_iterator:
