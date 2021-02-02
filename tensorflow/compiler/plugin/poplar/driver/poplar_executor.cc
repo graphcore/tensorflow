@@ -1188,7 +1188,7 @@ bool PoplarExecutor::Memcpy(se::Stream* stream, se::DeviceMemoryBase* pop_dst,
 Status PoplarExecutor::SynchronousMemcpy(se::DeviceMemoryBase* pop_dst,
                                          const void* host_src, uint64 size) {
   TensorControl* tc = reinterpret_cast<TensorControl*>(pop_dst->opaque());
-  memcpy(tc->data, host_src, size);
+  std::memcpy(tc->data, host_src, size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     tc->on_device = false;
@@ -1208,7 +1208,7 @@ Status PoplarExecutor::SynchronousMemcpy(void* host_dst,
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
-  memcpy(host_dst, tc->data, size);
+  std::memcpy(host_dst, tc->data, size);
   return Status::OK();
 }
 
@@ -1223,7 +1223,7 @@ Status PoplarExecutor::SynchronousMemcpyDeviceToDevice(
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
-  memcpy(dst_tc->data, src_tc->data, size);
+  std::memcpy(dst_tc->data, src_tc->data, size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     dst_tc->on_device = false;
@@ -2127,10 +2127,10 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
   }
 }
 
-void PoplarExecutor::UpdateArgsHandleMap(
+/*static*/ PoplarExecutor::ArgsHandleMap PoplarExecutor::CreateArgsHandleMap(
     const Args& args, se::DeviceMemoryAllocator* allocator,
-    const xla::poplarplugin::PoplarExecutable& executable) {
-  args_map_.clear();
+    const PoplarExecutable& executable, int ordinal) {
+  PoplarExecutor::ArgsHandleMap args_map;
 
   const auto* comp = executable.module().entry_computation();
   std::vector<xla::Shape> shapes(comp->num_parameters());
@@ -2164,7 +2164,7 @@ void PoplarExecutor::UpdateArgsHandleMap(
           VLOG(1) << "Found an alias for input handle " << input_handle
                   << ", duplicating the buffer.";
           se::DeviceMemoryBase allocated =
-              allocator->Allocate(ordinal_, input.tc->size, false)
+              allocator->Allocate(ordinal, input.tc->size, false)
                   .ConsumeValueOrDie()
                   .Release();
           TensorControl* tc =
@@ -2176,9 +2176,11 @@ void PoplarExecutor::UpdateArgsHandleMap(
       }
 
       input.tc->element_type = shapes[a].element_type();
-      args_map_.emplace(input_handle, input);
+      args_map.emplace(input_handle, input);
     }
   }
+
+  return args_map;
 }
 
 void PoplarExecutor::FlattenedOutputDeviceMemoryList(
@@ -2199,9 +2201,9 @@ void PoplarExecutor::FlattenedOutputDeviceMemoryList(
   }
 }
 
-void PoplarExecutor::UpdateOutputsHandleMap(
-    const xla::poplarplugin::PoplarExecutable& executable,
-    const xla::Shape& shape, se::DeviceMemoryBase retbuf) {
+void PoplarExecutor::UpdateOutputsHandleMap(const PoplarExecutable& executable,
+                                            const xla::Shape& shape,
+                                            se::DeviceMemoryBase retbuf) {
   outputs_map_.clear();
 
   // Get all output pointers and their shapes
@@ -2234,188 +2236,272 @@ void PoplarExecutor::UpdateOutputsHandleMap(
     }
   }
 }
+/*static*/ std::unique_ptr<PoplarExecutor::OutputAllocation>
+PoplarExecutor::GetOutputAllocator(const PoplarExecutable& executable,
+                                   const ArgsHandleMap& args_map,
+                                   se::DeviceMemoryAllocator* allocator,
+                                   int ordinal) {
+  if (executable.Engine()) {
+    return absl::make_unique<PoplarExecutor::BufferOutputAllocation>(
+        allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
+  } else {
+    if (executable.IsConstantGraph() || executable.IsScalarElementwiseGraph()) {
+      return absl::make_unique<PoplarExecutor::ConstantOutputAllocation>(
+          allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
+    } else if (executable.IsRemapGraph()) {
+      return absl::make_unique<PoplarExecutor::RemapOutputAllocation>(
+          allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal,
+          executable.RemapMap());
+    }
+    LOG(FATAL) << "Cannot get an output allocator.";
+  }
+  return std::unique_ptr<PoplarExecutor::OutputAllocation>{};
+}
 
-se::DeviceMemoryBase PoplarExecutor::ConstantOutputAllocation::GetAllocation(
-    se::DeviceMemoryAllocator* allocator, const xla::Shape& shape,
-    const int64 output_index, int64& flat_tensor_index, const Args&,
-    const InputOutputAliasingMap::OutputInfo&, const ArgsHandleMap&,
-    const int ordinal) const {
-  const auto& constant = constants_[output_index][flat_tensor_index];
-  const int64 size(xla::ShapeUtil::ByteSizeOf(shape));
-  se::DeviceMemoryBase allocated =
-      allocator->Allocate(ordinal, size, false).ConsumeValueOrDie().Release();
-  TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
+StatusOr<se::DeviceMemoryBase>
+PoplarExecutor::ConstantOutputAllocation::AllocateBuffer(const Shape& shape,
+                                                         int64, int64) const {
+  const int64 size = ShapeUtil::ByteSizeOf(shape);
+  TF_ASSIGN_OR_RETURN(auto allocated_owned,
+                      allocator_->Allocate(ordinal_, size, false));
+  se::DeviceMemoryBase allocated = allocated_owned.Release();
+  return allocated;
+}
+
+Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64 output_index,
+    int64 flat_tensor_index) const {
+  CHECK(constants_);
+  const auto& constant = constants_->at(output_index).at(flat_tensor_index);
+  const int64 size = ShapeUtil::ByteSizeOf(shape);
+  TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
   tc->size = size;
   tc->element_type = shape.element_type();
   tc->on_device = false;
   tc->output_handle = std::string();
   tc->output_convertor = nullptr;
 
-  void* buf(static_cast<void*>(tc->data));
-  memcpy(buf, constant.untyped_data(), constant.size_bytes());
-  return allocated;
+  void* buf = static_cast<void*>(tc->data);
+  std::memcpy(buf, constant.untyped_data(), constant.size_bytes());
+  return Status::OK();
 }
 
-se::DeviceMemoryBase PoplarExecutor::RemapOutputAllocation::GetAllocation(
-    se::DeviceMemoryAllocator* allocator, const xla::Shape&,
-    const int64 output_index, int64& flat_tensor_index, const Args& args,
-    const InputOutputAliasingMap::OutputInfo&, const ArgsHandleMap& args_map,
-    const int ordinal) const {
-  const auto& remap_idx = remap_map_[output_index];
-  auto it = args_map.find(GetInputCopyHandle(remap_idx, flat_tensor_index));
-  if (it == args_map.end()) {
-    LOG(FATAL) << "Could not remap an output to input tensor.";
-  }
-
+bool PoplarExecutor::RemapOutputAllocation::AddRemapCopy(
+    int64 output_index) const {
   bool make_a_copy = false;
 
-  auto input_infos = input_output_aliasing_map_.GetEntryInputInfos();
-  auto output_infos = input_output_aliasing_map_.GetEntryOutputInfos();
+  const auto& input_infos = io_map_.GetEntryInputInfos();
+  const auto& output_infos = io_map_.GetEntryOutputInfos();
   if (input_infos.size() > 0 && output_infos.size() > 0) {
-    int input_index = output_infos[output_index].GetInputIndex();
-    bool is_input_resource = input_infos[input_index].IsResource();
-    bool is_output_resource = output_infos[output_index].IsResource();
+    const uint64 input_index = output_infos.at(output_index).GetInputIndex();
+    const bool is_input_resource = input_infos.at(input_index).IsResource();
+    const bool is_output_resource = output_infos.at(output_index).IsResource();
     make_a_copy = is_input_resource != is_output_resource;
   }
 
-  if (make_a_copy) {
-    TensorControl* orig = it->second.tc;
-    se::DeviceMemoryBase allocated =
-        allocator->Allocate(ordinal, orig->size, false)
-            .ConsumeValueOrDie()
-            .Release();
-    TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
-    if (orig->on_device) {
-      auto status = executor_->MoveDeviceToHost();
-      if (!status.ok()) {
-        LOG(FATAL) << status.ToString();
-      }
-    }
+  return make_a_copy;
+}
 
-    memcpy(tc->data, orig->data, orig->size);
+StatusOr<PoplarExecutor::TensorControl*>
+PoplarExecutor::RemapOutputAllocation::GetRemapedTensorControl(
+    int64 output_index, int64 flat_tensor_index) const {
+  const int64 remap_idx = remap_map_.at(output_index);
 
-    return se::DeviceMemoryBase(tc, tc->size);
+  auto it = args_map_.find(GetInputCopyHandle(remap_idx, flat_tensor_index));
+  if (it == args_map_.end()) {
+    return FailedPrecondition("Could not remap an output to input tensor.");
+  }
+  return it->second.tc;
+}
+
+StatusOr<se::DeviceMemoryBase>
+PoplarExecutor::RemapOutputAllocation::AllocateBuffer(
+    const Shape&, int64 output_index, int64 flat_tensor_index) const {
+  TF_ASSIGN_OR_RETURN(TensorControl * original,
+                      GetRemapedTensorControl(output_index, flat_tensor_index));
+
+  if (AddRemapCopy(output_index)) {
+    TF_ASSIGN_OR_RETURN(auto allocated_owned,
+                        allocator_->Allocate(ordinal_, original->size, false));
+    se::DeviceMemoryBase allocated = allocated_owned.Release();
+    return allocated;
   } else {
-    // Return a reference
-    TensorControl* tc = it->second.tc;
-    tc->ref_count++;
-    return se::DeviceMemoryBase(tc, tc->size);
+    // Return a reference.
+    original->ref_count++;
+    return se::DeviceMemoryBase(original, original->size);
   }
 }
 
-se::DeviceMemoryBase PoplarExecutor::BufferOutputAllocation::GetAllocation(
-    se::DeviceMemoryAllocator* allocator, const xla::Shape& shape,
-    const int64 output_index, int64& flat_tensor_index, const Args& args,
-    const InputOutputAliasingMap::OutputInfo& output_info,
-    const ArgsHandleMap& args_map, const int ordinal) const {
-  int64 size(xla::ShapeUtil::ByteSizeOf(shape));
+Status PoplarExecutor::RemapOutputAllocation::PopulateBuffer(
+    se::DeviceMemoryBase& buffer, const Shape&, int64 output_index,
+    int64 flat_tensor_index) const {
+  TF_ASSIGN_OR_RETURN(TensorControl * original,
+                      GetRemapedTensorControl(output_index, flat_tensor_index));
+
+  if (AddRemapCopy(output_index)) {
+    TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
+    CHECK(!original->on_device);
+    std::memcpy(tc->data, original->data, original->size);
+  }
+  return Status::OK();
+}
+
+StatusOr<se::DeviceMemoryBase>
+PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
+    const Shape& shape, int64 output_index, int64 flat_tensor_index) const {
+  const auto& output_info = io_map_.GetEntryOutputInfos().at(output_index);
   if (output_info.IsResourceModified()) {
-    // The output is an in-place update of one of the inputs
-    // TODO: is this a multi-threading bug?
-    auto it = args_map.find(
+    // The output is an in-place update of one of the inputs.
+    auto it = args_map_.find(
         GetInputCopyHandle(output_info.GetInputIndex(), flat_tensor_index));
-    if (it == args_map.end()) {
-      LOG(FATAL) << "Could not find matching input resource tensor.";
+    if (it == args_map_.end()) {
+      return FailedPrecondition(
+          "Could not find matching input resource tensor.");
     }
     TensorControl* tc = it->second.tc;
-    tc->size = size;
-    tc->element_type = shape.element_type();
-    tc->on_device = output_info.IsStreaming() ? false : true;
-    tc->ref_count++;
-    tc->output_handle = output_info.Handles().at(flat_tensor_index);
-    tc->output_convertor = GetOutputConversionFunction(shape);
-    return se::DeviceMemoryBase(tc);
+    return se::DeviceMemoryBase(tc, tc->size);
   } else {
-    // The output is not one of the inputs
-    se::DeviceMemoryBase allocated =
-        allocator->Allocate(ordinal, size, false).ConsumeValueOrDie().Release();
-    TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
-    tc->size = size;
-    tc->element_type = shape.element_type();
-    tc->on_device = output_info.IsStreaming() ? false : true;
-    tc->output_handle = output_info.Handles().at(flat_tensor_index);
-    tc->output_convertor = GetOutputConversionFunction(shape);
+    // The output is not one of the inputs.
+    const int64 size = ShapeUtil::ByteSizeOf(shape);
+    TF_ASSIGN_OR_RETURN(auto allocated_owned,
+                        allocator_->Allocate(ordinal_, size, false));
+    se::DeviceMemoryBase allocated = allocated_owned.Release();
     return allocated;
   }
 }
 
-se::DeviceMemoryBase PoplarExecutor::HandleOutputBuffer(
-    se::DeviceMemoryAllocator* allocator,
-    const PoplarExecutor::OutputAllocation& allocation_info,
-    const xla::Shape& shape, const int64 output_index, int64& flat_tensor_index,
-    const Args& args, const InputOutputAliasingMap::OutputInfo& output_info) {
-  if (!shape.IsTuple()) {
-    se::DeviceMemoryBase buf = allocation_info.GetAllocation(
-        allocator, shape, output_index, flat_tensor_index, args, output_info,
-        args_map_, ordinal_);
-    flat_tensor_index++;
-    return buf;
-  } else {
-    int64 size(xla::ShapeUtil::ByteSizeOf(shape, sizeof(void*)));
-    se::DeviceMemoryBase allocated = allocator->Allocate(ordinal_, size, false)
-                                         .ConsumeValueOrDie()
-                                         .Release();
-    TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
-
-    void** buf = reinterpret_cast<void**>(tc->data);
-    for (int64 i = 0; i < xla::ShapeUtil::TupleElementCount(shape); i++) {
-      se::DeviceMemoryBase out = HandleOutputBuffer(
-          allocator, allocation_info, shape.tuple_shapes(i), output_index,
-          flat_tensor_index, args, output_info);
-      *buf++ = out.opaque();
-    }
-    return se::DeviceMemoryBase(tc, size);
+Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64 output_index,
+    int64 flat_tensor_index) const {
+  const auto& output_info = io_map_.GetEntryOutputInfos().at(output_index);
+  TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
+  if (output_info.IsResourceModified()) {
+    tc->ref_count++;
   }
+  tc->size = ShapeUtil::ByteSizeOf(shape);
+  tc->element_type = shape.element_type();
+  tc->on_device = output_info.IsStreaming() ? false : true;
+  tc->output_handle = output_info.Handles().at(flat_tensor_index);
+  tc->output_convertor = GetOutputConversionFunction(shape);
+  return Status::OK();
 }
 
-se::DeviceMemoryBase PoplarExecutor::GetOutputBuffer(
-    const xla::poplarplugin::PoplarExecutable& executable,
+/*static*/ StatusOr<se::DeviceMemoryBase> PoplarExecutor::AllocateOutputBuffer(
+    const PoplarExecutable& executable, se::DeviceMemoryAllocator* allocator,
+    const ArgsHandleMap& args_map, int ordinal) {
+  TENSORFLOW_TRACEPOINT();
+  const Shape& shape = executable.result_shape();
+  VLOG(2) << "Allocating output buffer " << shape << " for "
+          << executable.module().name();
+
+  auto output_allocator =
+      GetOutputAllocator(executable, args_map, allocator, ordinal);
+
+  if (!shape.IsTuple()) {
+    return output_allocator->AllocateBuffer(shape, /*output_index=*/0,
+                                            /*current_flat_tuple_index=*/0);
+  }
+
+  const int64 tuple_size = ShapeUtil::TupleElementCount(shape);
+  const int64 top_size = xla::ShapeUtil::ByteSizeOf(shape, sizeof(void*));
+  TF_ASSIGN_OR_RETURN(auto top_buffer_owned,
+                      allocator->Allocate(ordinal, top_size, false));
+  se::DeviceMemoryBase top_buffer = top_buffer_owned.Release();
+  TensorControl* top_tc = reinterpret_cast<TensorControl*>(top_buffer.opaque());
+  void** top_buf = reinterpret_cast<void**>(top_tc->data);
+
+  for (int64 output_index = 0; output_index != tuple_size; ++output_index) {
+    // Walk the shape for the current output index.
+    const Shape& output_index_shape = shape.tuple_shapes(output_index);
+    ShapeTree<se::DeviceMemoryBase> buffer_tree(output_index_shape);
+
+    // Note that this walk is in pre-order (DFT).
+    int64 flat_tuple_index = 0;
+    TF_RETURN_IF_ERROR(ShapeUtil::ForEachSubshapeWithStatus(
+        output_index_shape,
+        [&](const Shape& subshape, const ShapeIndex& index) -> Status {
+          VLOG(2) << "Allocating output buffer " << subshape << " at "
+                  << output_index << " index " << index;
+          // Create a buffer for this node.
+          se::DeviceMemoryBase* node = buffer_tree.mutable_element(index);
+          if (subshape.IsTuple()) {
+            // If the shape is a tuple, create a buffer to point at all the
+            // subshapes.
+            const int64 size =
+                xla::ShapeUtil::ByteSizeOf(subshape, sizeof(void*));
+            TF_ASSIGN_OR_RETURN(auto owned_allocated,
+                                allocator->Allocate(ordinal, size, false));
+            se::DeviceMemoryBase allocated = owned_allocated.Release();
+            TensorControl* tc =
+                reinterpret_cast<TensorControl*>(allocated.opaque());
+            *node = se::DeviceMemoryBase(tc, size);
+
+          } else {
+            const int64 current_flat_tuple_index = flat_tuple_index++;
+            TF_ASSIGN_OR_RETURN(
+                *node, output_allocator->AllocateBuffer(
+                           subshape, output_index, current_flat_tuple_index));
+          }
+
+          // Propagate the allocated buffer into the buffer above.
+          if (!index.empty()) {
+            ShapeIndex parent_index = index;
+            const int64 parent_output_index = parent_index.back();
+            parent_index.pop_back();
+
+            se::DeviceMemoryBase* parent_buffer =
+                buffer_tree.mutable_element(parent_index);
+            TensorControl* tc =
+                reinterpret_cast<TensorControl*>(parent_buffer->opaque());
+            void** parent_buf = reinterpret_cast<void**>(tc->data);
+            parent_buf[parent_output_index] = node->opaque();
+          }
+          return Status::OK();
+        }));
+    top_buf[output_index] = buffer_tree.mutable_element({})->opaque();
+  }
+  return top_buffer;
+}
+
+Status PoplarExecutor::PopulateOutputBuffer(
+    se::DeviceMemoryBase& buffer, const PoplarExecutable& executable,
     se::DeviceMemoryAllocator* allocator,
-    const PoplarExecutor::OutputAllocation& allocation_info,
-    const xla::Shape& shape, const Args& args,
-    const InputOutputAliasingMap& input_output_aliasing_map) {
-  // Get all output shapes
-  std::vector<xla::Shape> shapes;
-  const int64 size = shape.IsTuple()
-                         ? xla::ShapeUtil::ByteSizeOf(shape, sizeof(void*))
-                         : xla::ShapeUtil::ByteSizeOf(shape);
-
-  if (shape.IsTuple()) {
-    for (int64 i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
-      shapes.push_back(ShapeUtil::GetTupleElementShape(shape, i));
-    }
-  } else {
-    shapes.push_back(shape);
+    const PoplarExecutor::OutputAllocation& output_allocator,
+    const Shape& shape) {
+  VLOG(2) << "Populating output buffer " << shape << " for "
+          << executable.module().name();
+  if (!shape.IsTuple()) {
+    return output_allocator.PopulateBuffer(buffer, shape, /*output_index=*/0,
+                                           /*current_flat_tuple_index=*/0);
   }
 
-  std::vector<void*> ptrs;
-  // For all outputs
-  // Call a recursive function HandleOutputBuffer for each output instruction
-  const auto& outputs_info =
-      executable.GetInputOutputAliasingMap().GetEntryOutputInfos();
-  CHECK_EQ(outputs_info.size(), shapes.size());
-  for (unsigned int idx = 0; idx < shapes.size(); idx++) {
-    const auto& output_info = outputs_info[idx];
-    int64 start_flat_tensor_index = 0;
-    se::DeviceMemoryBase out =
-        HandleOutputBuffer(allocator, allocation_info, shapes[idx], idx,
-                           start_flat_tensor_index, args, output_info);
-    ptrs.push_back(out.opaque());
-  }
-  if (shape.IsTuple()) {
-    se::DeviceMemoryBase allocated = allocator->Allocate(ordinal_, size, false)
-                                         .ConsumeValueOrDie()
-                                         .Release();
-    TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
-    void** buf = reinterpret_cast<void**>(tc->data);
-    for (void* ptr : ptrs) {
-      *buf++ = ptr;
+  for (int64 output_index = 0;
+       output_index != ShapeUtil::TupleElementCount(shape); ++output_index) {
+    // Walk the shape for the current output index.
+    const Shape& output_index_shape = shape.tuple_shapes(output_index);
+    int64 flat_tuple_index = 0;
+    // Only need to populate the leaf nodes.
+    for (const auto& indexed_shape :
+         ShapeUtil::GetLeafShapes(output_index_shape)) {
+      const Shape& leaf_shape = indexed_shape.shape;
+      const ShapeIndex& index = indexed_shape.index;
+
+      VLOG(2) << "Populating output buffer " << leaf_shape << " at "
+              << output_index << " index " << index;
+
+      ShapeIndex full_index = index;
+      full_index.push_front(output_index);
+
+      TF_ASSIGN_OR_RETURN(
+          se::DeviceMemoryBase leaf_buffer,
+          PoplarExecutor::GetBufferByShapeIndex(buffer, full_index));
+
+      TF_RETURN_IF_ERROR(output_allocator.PopulateBuffer(
+          leaf_buffer, leaf_shape, output_index, flat_tuple_index++));
     }
-    return se::DeviceMemoryBase(tc, size);
-  } else {
-    CHECK_EQ(ptrs.size(), 1);
-    return se::DeviceMemoryBase(ptrs[0]);
   }
+
+  return Status::OK();
 }
 
 // Takes a tensor and returns a pointer to a buffer with the data in the right
@@ -2435,7 +2521,7 @@ void PoplarExecutor::PostProcessBuffer(TensorControl* tc) {
   if (tc->output_convertor) {
     void* buf(static_cast<void*>(tc->data));
     std::vector<char> converted = tc->output_convertor(buf, 0, tc->size);
-    memcpy(buf, converted.data(), converted.size());
+    std::memcpy(buf, converted.data(), converted.size());
   }
 }
 
@@ -2466,6 +2552,46 @@ StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
 
     if (tc->on_device && !tc->output_handle.empty()) {
       return true;
+    }
+  }
+  return false;
+}
+
+StatusOr<bool> PoplarExecutor::CheckRemapGraphNeedsOnDeviceBuffers(
+    const OutputAllocation& output_allocator, const Shape& shape) {
+  const RemapOutputAllocation* remap_allocator =
+      static_cast<const RemapOutputAllocation*>(&output_allocator);
+
+  auto remap_requires_device_buffer =
+      [remap_allocator](int64 output_index,
+                        int64 flat_tuple_index) -> StatusOr<bool> {
+    if (remap_allocator->AddRemapCopy(output_index)) {
+      TF_ASSIGN_OR_RETURN(auto tc, remap_allocator->GetRemapedTensorControl(
+                                       output_index, flat_tuple_index));
+      return tc->on_device;
+    }
+    return false;
+  };
+
+  if (!shape.IsTuple()) {
+    return remap_requires_device_buffer(/*output_index=*/0,
+                                        /*current_flat_tuple_index=*/0);
+  }
+
+  for (int64 output_index = 0;
+       output_index != ShapeUtil::TupleElementCount(shape); ++output_index) {
+    // Walk the shape for the current output index.
+    const Shape& output_index_shape = shape.tuple_shapes(output_index);
+
+    for (int64 flat_tuple_index = 0;
+         flat_tuple_index != ShapeUtil::GetLeafCount(output_index_shape);
+         ++flat_tuple_index) {
+      TF_ASSIGN_OR_RETURN(
+          bool requires_device_buffer,
+          remap_requires_device_buffer(output_index, flat_tuple_index));
+      if (requires_device_buffer) {
+        return true;
+      }
     }
   }
   return false;
@@ -2517,6 +2643,10 @@ void PoplarExecutor::ConnectReplicatedDeviceToHost(
 Status PoplarExecutor::MoveDeviceToHost() {
   TENSORFLOW_TRACEPOINT();
   if (UseSyntheticData()) {
+    // Make sure all the allocations are marked as on host.
+    for (const auto& tc : allocations_) {
+      tc->on_device = false;
+    }
     return Status::OK();
   }
 
@@ -2714,14 +2844,17 @@ Status PoplarExecutor::MoveHostToDevice() {
   return Status::OK();
 }
 
-StatusOr<se::DeviceMemoryBase> PoplarExecutor::GetTupleBufferByIndex(
-    const se::DeviceMemoryBase& base, int64 value) {
-  const TensorControl* tc =
-      reinterpret_cast<const TensorControl*>(base.opaque());
-  void** bufs = (void**)tc->data;
-  int64 size = reinterpret_cast<const TensorControl*>(bufs[value])->size;
-
-  return se::DeviceMemoryBase(bufs[value], size);
+/*static*/ StatusOr<se::DeviceMemoryBase> PoplarExecutor::GetBufferByShapeIndex(
+    const se::DeviceMemoryBase& top, const ShapeIndex& index) {
+  se::DeviceMemoryBase buffer = top;
+  for (int64 i : index) {
+    const TensorControl* tc =
+        reinterpret_cast<const TensorControl*>(buffer.opaque());
+    void** bufs = reinterpret_cast<void**>(tc->data);
+    const int64 size = reinterpret_cast<const TensorControl*>(bufs[i])->size;
+    buffer = se::DeviceMemoryBase(bufs[i], size);
+  }
+  return buffer;
 }
 
 void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
@@ -3045,12 +3178,9 @@ Status TransformEvaluatorOutput(const Shape& layout, Literal& evaluator_output,
 }
 }  // namespace
 
-// Computes vector(s) literal input for ConstantOutputAllocation when
-// dealing with ScalarElementwiseGraph.
-Status PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
-    xla::poplarplugin::PoplarExecutable& executable, const Args& args,
-    std::vector<std::vector<Literal>>& literal_evaluate_break_down) {
-  literal_evaluate_break_down.clear();
+StatusOr<std::vector<std::vector<Literal>>>
+PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
+    PoplarExecutable& executable, const Args& args) {
   std::vector<Literal> arg_literals;
   const auto* comp = executable.module().entry_computation();
 
@@ -3058,7 +3188,7 @@ Status PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
     Literal literal(inst->shape(), true);
     const TensorControl* src_tc = reinterpret_cast<const TensorControl*>(
         args[inst->parameter_number()].opaque());
-    memcpy(literal.untyped_data(), src_tc->data, src_tc->size);
+    std::memcpy(literal.untyped_data(), src_tc->data, src_tc->size);
     arg_literals.push_back(std::move(literal));
   }
 
@@ -3067,29 +3197,33 @@ Status PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
                       hlo_evaluator.Evaluate(*comp, arg_literals));
 
   const auto& output_shape = executable.result_shape();
+  std::vector<std::vector<Literal>> constant_outputs;
   TF_RETURN_IF_ERROR(TransformEvaluatorOutput(output_shape, literal_evaluate,
-                                              literal_evaluate_break_down));
+                                              constant_outputs));
 
-  return Status::OK();
+  return constant_outputs;
 }
 
-StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
-    perftools::gputools::StreamExecutor* executor,
-    xla::poplarplugin::PoplarExecutable& executable,
-    se::DeviceMemoryAllocator* allocator, const Args& args) {
+Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
+                                     se::StreamExecutor* executor,
+                                     PoplarExecutable& executable,
+                                     const ArgsHandleMap& args_map,
+                                     se::DeviceMemoryAllocator* allocator,
+                                     const Args& args) {
   TENSORFLOW_TRACEPOINT();
 
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+  args_map_ = args_map;
+
   const auto& input_output_aliasing_map =
       executable.GetInputOutputAliasingMap();
-  const auto& output_shape = executable.result_shape();
-  poplar::Engine* engine(executable.Engine());
+  const Shape& output_shape = executable.result_shape();
+  poplar::Engine* engine = executable.Engine();
 
-  perftools::gputools::DeviceMemoryBase retbuf;
+  const bool engine_changed = current_engine_ != engine;
 
-  bool engine_changed(current_engine_ != engine);
-
-  UpdateArgsHandleMap(args, allocator, executable);
+  auto output_allocator =
+      GetOutputAllocator(executable, args_map_, allocator, ordinal_);
 
   if (!executable.GetHostEmbeddingLookupInfos().empty()) {
     std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
@@ -3107,37 +3241,40 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
   }
 
   if (!engine) {
-    // An empty engine is either a graph that just passes its inputs through
-    // to its outputs, or a graph which returns a constant.
-    if (executable.IsConstantGraph()) {
-      retbuf =
-          GetOutputBuffer(executable, allocator,
-                          ConstantOutputAllocation(executable.LiteralValue()),
-                          output_shape, args, input_output_aliasing_map);
-    } else if (executable.IsRemapGraph()) {
-      RemapOutputAllocation remap(this, executable.RemapMap(),
-                                  input_output_aliasing_map);
-      retbuf = GetOutputBuffer(executable, allocator, remap, output_shape, args,
-                               input_output_aliasing_map);
-    } else if (executable.IsScalarElementwiseGraph()) {
-      // If some arg are on device, move them to host.
+    // An empty engine means that we should not execute the module on the
+    // device.
+    if (executable.IsScalarElementwiseGraph()) {
+      // The graph is small - execute it on the CPU.
+      // If some arguments are on device, move them to host.
       TF_ASSIGN_OR_RETURN(bool any_arg_on_device, CheckAnyArgOnDevice(args));
       if (any_arg_on_device) {
         TF_RETURN_IF_ERROR(MoveDeviceToHost());
       }
 
-      std::vector<std::vector<Literal>> literal_evaluate_break_down;
-      LiteralEvaluateForScalarElementwiseGraph(executable, args,
-                                               literal_evaluate_break_down);
-
-      retbuf =
-          GetOutputBuffer(executable, allocator,
-                          ConstantOutputAllocation(literal_evaluate_break_down),
-                          output_shape, args, input_output_aliasing_map);
-
-    } else {
-      LOG(FATAL) << "Cannot construct a NULL graph.";
+      TF_ASSIGN_OR_RETURN(
+          auto constant_outputs,
+          LiteralEvaluateForScalarElementwiseGraph(executable, args));
+      executable.SetLiteralValue(std::move(constant_outputs));
     }
+
+    if (executable.IsConstantGraph() || executable.IsScalarElementwiseGraph()) {
+      // Set the constants to populate the output buffers with.
+      static_cast<ConstantOutputAllocation*>(output_allocator.get())
+          ->SetConstants(&executable.LiteralValue());
+    } else if (executable.IsRemapGraph()) {
+      // If any of the buffers which are remaped and required a copy are
+      // currently on the device, then the copy needs to be done on the host.
+      TF_ASSIGN_OR_RETURN(
+          bool needs_on_device_buffer,
+          CheckRemapGraphNeedsOnDeviceBuffers(*output_allocator, output_shape));
+      if (needs_on_device_buffer) {
+        TF_RETURN_IF_ERROR(MoveDeviceToHost());
+      }
+    }
+    // Populate all the output buffers - no execution of the engine is required.
+    TF_RETURN_IF_ERROR(PopulateOutputBuffer(*result_buffer, executable,
+                                            allocator, *output_allocator,
+                                            output_shape));
   } else {
     if (!executable.has_module()) {
       return tensorflow::errors::InvalidArgument(
@@ -3188,10 +3325,11 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     if (ShapeUtil::IsEmptyTuple(output_shape)) {
       outputs_map_.clear();
     } else {
-      retbuf = GetOutputBuffer(executable, allocator, BufferOutputAllocation(),
-                               output_shape, args, input_output_aliasing_map);
+      TF_RETURN_IF_ERROR(PopulateOutputBuffer(*result_buffer, executable,
+                                              allocator, *output_allocator,
+                                              output_shape));
 
-      UpdateOutputsHandleMap(executable, output_shape, retbuf);
+      UpdateOutputsHandleMap(executable, output_shape, *result_buffer);
     }
 
     VLOG(1) << "Executing on poplar stream ordinal " << ordinal_ << " of type "
@@ -3379,7 +3517,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     }
   }
 
-  return retbuf;
+  return Status::OK();
 }
 
 void PoplarExecutor::SetCurrentReplicationFactor(

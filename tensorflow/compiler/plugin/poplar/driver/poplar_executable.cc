@@ -112,20 +112,20 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   uint64 start_micros = tensorflow::Env::Default()->NowMicros();
 
   perftools::gputools::StreamExecutor* executor(stream->parent());
-  PoplarExecutor* poplarExecutor(
+  PoplarExecutor* poplar_executor(
       static_cast<PoplarExecutor*>(executor->implementation()));
 
-  if (!poplarExecutor->PoplarDeviceIsAttached() && poplar_engine_) {
-    if (poplarExecutor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
+  if (!poplar_executor->PoplarDeviceIsAttached() && poplar_engine_) {
+    if (poplar_executor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
       return InvalidArgument(
           "Trying to run an executable on a device that was configured for "
           "compilation only.");
     }
 
-    TF_RETURN_IF_ERROR(poplarExecutor->AttachToPoplarDevice());
+    TF_RETURN_IF_ERROR(poplar_executor->AttachToPoplarDevice());
   }
 
-  if (poplar_engine_ && poplarExecutor->UseVerifiedTransfers()) {
+  if (poplar_engine_ && poplar_executor->UseVerifiedTransfers()) {
     return InvalidArgument(
         "Executables using verified transfers can't be run "
         "in Tensorflow");
@@ -133,15 +133,45 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();
 
-  se::DeviceMemoryBase result;
-  PoplarExecutor::AsPoplarStream(stream)->BlockUntilDone();
+  // Create the argument map which stores the information about all the inputs
+  // and their locations.
+  auto args_map = PoplarExecutor::CreateArgsHandleMap(
+      argument_buffers, memory_allocator, *this,
+      poplar_executor->device_ordinal());
+
+  // Create the output buffer.
   TF_ASSIGN_OR_RETURN(
-      result, poplarExecutor->ExecuteEngine(executor, *this, memory_allocator,
-                                            argument_buffers));
+      se::DeviceMemoryBase result,
+      PoplarExecutor::AllocateOutputBuffer(*this, memory_allocator, args_map,
+                                           poplar_executor->device_ordinal()));
+
+  // Copy DeviceMemoryBase values which contain the array(s) of the result into
+  // the respective location in ShapedBuffer which is returned to the caller.
+  ScopedShapedBuffer result_buffer(result_shape(), result_shape(),
+                                   memory_allocator,
+                                   stream->parent()->device_ordinal());
+
+  TF_RETURN_IF_ERROR(result_buffer.buffers().ForEachMutableElementWithStatus(
+      [&result](const ShapeIndex& index, se::DeviceMemoryBase* device_memory) {
+        TF_ASSIGN_OR_RETURN(
+            se::DeviceMemoryBase buffer,
+            PoplarExecutor::GetBufferByShapeIndex(result, index));
+        CHECK(!buffer.is_null() || buffer.size() == 0);
+        if (VLOG_IS_ON(2)) {
+          VLOG(2) << "-- return " << buffer.opaque();
+        }
+        *device_memory = buffer;
+        return Status::OK();
+      }));
+
+  PoplarExecutor::AsPoplarStream(stream)->BlockUntilDone();
+
+  TF_RETURN_IF_ERROR(poplar_executor->ExecuteEngine(
+      &result, executor, *this, args_map, memory_allocator, argument_buffers));
 
   execution_count_++;
-  if (poplarExecutor->ReportEventNthExecution() > 0 &&
-      execution_count_ >= poplarExecutor->ReportEventNthExecution()) {
+  if (poplar_executor->ReportEventNthExecution() > 0 &&
+      execution_count_ >= poplar_executor->ReportEventNthExecution()) {
     execution_count_ = 0;
   }
 
@@ -153,29 +183,6 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     profile->set_compute_time_ns(std::max(nanoseconds, 1.0));
     profile->set_compute_cycle_count(1);
   }
-
-  ScopedShapedBuffer result_buffer(result_shape(), result_shape(),
-                                   run_options->allocator(),
-                                   stream->parent()->device_ordinal());
-
-  // Copy DeviceMemoryBase values which contain the array(s) of the result into
-  // the respective location in ShapedBuffer which is returned to the caller.
-
-  TF_RETURN_IF_ERROR(result_buffer.buffers().ForEachMutableElementWithStatus(
-      [&result, poplarExecutor](const ShapeIndex& index,
-                                se::DeviceMemoryBase* device_memory) {
-        se::DeviceMemoryBase buffer = result;
-        for (auto i : index) {
-          TF_ASSIGN_OR_RETURN(buffer,
-                              poplarExecutor->GetTupleBufferByIndex(buffer, i));
-        }
-        CHECK(!buffer.is_null() || buffer.size() == 0);
-        if (VLOG_IS_ON(2)) {
-          VLOG(2) << "-- return " << buffer.opaque();
-        }
-        *device_memory = buffer;
-        return Status::OK();
-      }));
 
   return std::move(result_buffer);
 }
