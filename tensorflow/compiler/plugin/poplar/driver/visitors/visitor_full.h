@@ -82,6 +82,7 @@ class FullVisitor : public BaseVisitor {
   HANDLE_AS_HLO_OP(HandleGather)
   HANDLE_AS_HLO_OP(HandleScatter)
   HANDLE_AS_HLO_OP(HandleSort)
+  HANDLE_AS_HLO_OP(HandleTriangularSolve)
 };
 
 }  // namespace poplarplugin
