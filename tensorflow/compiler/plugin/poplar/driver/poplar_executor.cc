@@ -2100,6 +2100,11 @@ std::string PoplarExecutor::GetModuleReportDirectory(const std::string& name) {
   auto it = cluster_report_directories_.find(name);
   if (it == cluster_report_directories_.end()) {
     std::string cluster_directory_name = GenerateDirectoryName("tf_report");
+    if (HasMultiReplicaDistributionOptions()) {
+      cluster_directory_name.append(
+          absl::StrCat("__instance_", GetMultiReplicaProcessIndex()));
+    }
+
     cluster_report_directories_[name] = cluster_directory_name;
     VLOG(1) << "Saving reports for " << name << " to "
             << cluster_report_directories_[name];
