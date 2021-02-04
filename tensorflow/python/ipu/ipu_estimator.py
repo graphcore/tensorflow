@@ -679,7 +679,7 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
         # The metric *tensors* on the host are idempotent and will not trigger
         # another execution of the dequeue op when evaluated later.
         with ops.control_dependencies(compiled_evaluation_loop):
-          inputs = self._outfeed_queue.dequeue()
+          inputs = self._outfeed_queue.dequeue(wait_for_completion=True)
 
         args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
         metric_ops = self._captured_eval_metrics_fn(*args, **kwargs)
@@ -691,7 +691,7 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
         # pass-through metric tensors below have a data dependency on the
         # dequeue op. The metric tensors are evaluated in a separate
         # execution so they are guaranteed to see all the enqueued inputs.
-        metrics = self._outfeed_queue.dequeue()
+        metrics = self._outfeed_queue.dequeue(wait_for_completion=True)
 
         metric_ops = {}
         for metric_name, metric_tensor in six.iteritems(metrics):
@@ -735,7 +735,7 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
   def get_predictions(self, compiled_prediction_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_prediction_loop]):
-        predictions = self._outfeed_queue.dequeue()
+        predictions = self._outfeed_queue.dequeue(wait_for_completion=True)
     return predictions
 
   def _call_model_fn(self, features, labels, mode):
