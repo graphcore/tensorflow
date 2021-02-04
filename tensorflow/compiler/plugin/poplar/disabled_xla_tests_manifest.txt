@@ -357,9 +357,9 @@ ReduceWindowTextTest.R4OnlyDilation POPLAR // Dilated reductions
 PoolingTest.AvgPool2DGradWithPaddingCountNotIncludePadding POPLAR
 PoolingTest.AvgPool2DGradWithPadding POPLAR
 
+CholeskyTest.NonPSDInput POPLAR // Incompatible input, implementation dependent results
 ConstantsTest.NanValueF32 POPLAR // NaNs
 MathTypedTest.IsInfOrNan POPLAR // NaNs
-RandomCholeskyTest.Random POPLAR // NaNs
 ArrayElementwiseOpTest.IsFiniteScalarF32 POPLAR // NaNs
 ArrayElementwiseOpTest.IsFiniteR1F32s POPLAR // NaNs
 ArrayElementwiseOpTest.CompareEqF32s POPLAR // NaNs

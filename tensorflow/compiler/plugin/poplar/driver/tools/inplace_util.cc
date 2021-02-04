@@ -650,6 +650,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kBatchNormGrad:
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
+    case HloOpcode::kCholesky:
     case HloOpcode::kCompare:
     case HloOpcode::kConditional:
     case HloOpcode::kConstant:
