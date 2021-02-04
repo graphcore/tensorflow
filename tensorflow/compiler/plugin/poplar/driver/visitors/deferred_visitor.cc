@@ -1132,7 +1132,7 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
-      if (UseSyntheticData()) {
+      if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
           auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -1216,7 +1216,7 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
-      if (UseSyntheticData()) {
+      if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         if (UseSyntheticDataInitializer()) {
           // Initialize the tensor to a constant value.
           auto& initializer = DataInitializer::GetSyntheticDataInitializer();

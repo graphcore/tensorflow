@@ -215,7 +215,8 @@ class IpuHostEmbeddingRegisterOp : public OpKernel {
     context->forward_ref_input_to_ref_output(0, 0);
 
     // If we are using synthetic data, immediately complete the op.
-    if (!xla::poplarplugin::UseSyntheticData()) {
+    if (!xla::poplarplugin::UseSyntheticDataFor(
+            xla::poplarplugin::SyntheticDataCategory::HostEmbedding)) {
       auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
       OP_REQUIRES(context, platform.ok(), platform.status());
       auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(
@@ -270,7 +271,8 @@ class IpuHostEmbeddingDeregisterOp : public OpKernel {
   void Compute(OpKernelContext* context) override {
     context->forward_ref_input_to_ref_output(0, 0);
 
-    if (!xla::poplarplugin::UseSyntheticData()) {
+    if (!xla::poplarplugin::UseSyntheticDataFor(
+            xla::poplarplugin::SyntheticDataCategory::HostEmbedding)) {
       auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
       OP_REQUIRES(context, platform.ok(), platform.status());
       auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(

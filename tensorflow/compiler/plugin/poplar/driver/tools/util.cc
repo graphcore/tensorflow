@@ -523,7 +523,13 @@ const HloInstruction* GetOperandLookThroughInterIpuCopy(
              : operand;
 }
 
-bool UseSyntheticData() { return PoplarXlaFlags::Get().use_synthetic_data; }
+bool UseSyntheticDataFor(SyntheticDataCategory category) {
+  assert(category != SyntheticDataCategory::Unknown);
+
+  const auto& flags = PoplarXlaFlags::Get();
+  return flags.use_synthetic_data ||
+         flags.synthetic_data_categories.count(category) == 1;
+}
 
 bool UseSyntheticDataInitializer() {
   return !PoplarXlaFlags::Get().synthetic_data_initializer.empty();

@@ -441,12 +441,15 @@ StatusOr<poplar::program::Program> InitializeSeed(
   graph.setTileMapping(seed, 0);
 
   poplar::program::Sequence seq({}, {debug_info});
-  if (!UseSyntheticData()) {
+
+  const auto use_synthetic_data =
+      UseSyntheticDataFor(SyntheticDataCategory::Seed);
+  if (!use_synthetic_data) {
     // Copy the seed from the data stream and set it.
     auto data_stream = graph.addHostToDeviceFIFO(
         GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
     seq.add(poplar::program::Copy(data_stream, seed, false, {debug_info}));
-  } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+  } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
     // Initialize the seed on the device.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal,

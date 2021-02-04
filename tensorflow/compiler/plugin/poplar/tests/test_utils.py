@@ -195,7 +195,8 @@ class ReportJSON(object):
                allow_recompute=False,
                use_stable_norm_statistics=False,
                set_opts_fn=None,
-               triangular_solve_expander_block_size=0):
+               triangular_solve_expander_block_size=0,
+               minimum_remote_tensor_size=128):
     self.report = None
     self.test = test
     self.sess = sess
@@ -229,7 +230,8 @@ class ReportJSON(object):
           max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
           max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
           triangular_solve_expander_block_size=
-          triangular_solve_expander_block_size)
+          triangular_solve_expander_block_size,
+          minimum_remote_tensor_size=minimum_remote_tensor_size)
 
       device_count = device_count_override or compute_device_count(
           pipelining, sharded, replicated)

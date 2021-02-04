@@ -378,7 +378,8 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
         for (size_t j = 0; j < num_outputs_; ++j) {
           ctx->set_output(j, outfeed_tensors[0][j]);
         }
-      } else if (xla::poplarplugin::UseSyntheticData()) {
+      } else if (xla::poplarplugin::UseSyntheticDataFor(
+                     xla::poplarplugin::SyntheticDataCategory::Outfeed)) {
         OP_REQUIRES(ctx, false,
                     errors::FailedPrecondition(
                         "Trying to get the last value from an outfeed queue "
