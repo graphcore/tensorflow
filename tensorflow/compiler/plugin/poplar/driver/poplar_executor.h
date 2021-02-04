@@ -534,6 +534,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return block_size <= 0 ? 128 : block_size;
   }
 
+  int64 GetCholeskyBlockSize() const {
+    // 128 is XLA default block size used in CholeskyExpander
+    auto block_size = current_config_.cholesky_block_size();
+    return block_size <= 0 ? 128 : block_size;
+  }
+
   bool EnableFastMath() const { return current_config_.enable_fast_math(); }
 
   IpuSelectionOrder GetSelectionOrder() const {

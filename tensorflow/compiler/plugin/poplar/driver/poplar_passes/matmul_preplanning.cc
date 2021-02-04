@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
+#include <poplin/Cholesky.hpp>
 #include <popnn/Recurrent.hpp>
 
 namespace xla {
@@ -158,6 +159,29 @@ Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
   return Status::OK();
 }
 
+Status MatMulPreplanning::StorePreplanMatMulsCholesky(
+    const HloInstruction* inst) {
+  const poplar::Target& target = GetGraph(resources_, inst).getTarget();
+  const HloCholeskyInstruction* as_solve = Cast<HloCholeskyInstruction>(inst);
+
+  const Shape& shape = inst->operand(0)->shape();
+  TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(shape));
+
+  auto poplar_shape = PoplarShapeFromXlaShape(shape);
+  auto& options = as_solve->cholesky_options();
+
+  auto preplan_params = poplin::getCholeskyMatMulPrePlanParameters(
+      type, poplar_shape, options.lower(), resources_.cholesky_block_size, {});
+
+  for (const auto& preplan_param : preplan_params) {
+    option_flags_store.push_back(preplan_param.second);
+    preplan_matmuls.emplace(&target, preplan_param.first,
+                            &(option_flags_store.back()));
+  }
+
+  return Status::OK();
+}
+
 Status MatMulPreplanning::StorePreplanMatMuls(const HloInstruction* inst) {
   const poplar::Target& target = GetGraph(resources_, inst).getTarget();
 
@@ -188,6 +212,8 @@ StatusOr<bool> MatMulPreplanning::Run(HloModule* module) {
       for (HloInstruction* inst : comp->instructions()) {
         if (inst->opcode() == HloOpcode::kDot) {
           StorePreplanMatMuls(inst);
+        } else if (inst->opcode() == HloOpcode::kCholesky) {
+          StorePreplanMatMulsCholesky(inst);
         } else if (IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst) ||
                    IsPoplarInstruction(PoplarOp::LstmLayerBwd)(inst)) {
           StorePreplanMatMulsLSTM(inst);
