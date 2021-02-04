@@ -556,7 +556,7 @@ Status PoplarExecutor::ConnectHostEmbeddingLookup(
     const HostEmbeddingInfo& lookup_info,
     HostEmbeddingInterface_* embedding_interface) {
   TENSORFLOW_TRACEPOINT();
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding)) {
     return Status::OK();
   }
 
@@ -643,7 +643,7 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
     const HostEmbeddingInfo& update_info,
     HostEmbeddingInterface_* embedding_interface) {
   TENSORFLOW_TRACEPOINT();
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding)) {
     return Status::OK();
   }
 
@@ -681,7 +681,7 @@ Status PoplarExecutor::ConnectHostEmbeddingNotify(
     const HostEmbeddingInfo& notify_info,
     HostEmbeddingInterface_* embedding_interface) {
   TENSORFLOW_TRACEPOINT();
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding)) {
     return Status::OK();
   }
 
@@ -851,7 +851,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     const InfeedInfos& infeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Infeed)) {
     return;
   }
 
@@ -891,7 +891,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
     const OutfeedInfos& outfeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
     return;
   }
 
@@ -1129,17 +1129,18 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
   };
 }
 
-void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
-                                     const OutfeedInfos& outfeed_infos) {
+void PoplarExecutor::LaunchInfeedThreads(const InfeedInfos& infeed_infos) {
   TENSORFLOW_TRACEPOINT();
-  CHECK_EQ(io_threads_.size(), 0);
   // Start all the infeeds.
   for (const FeedInfo& info : infeed_infos) {
     IOFunction fn = CreateInfeedIOThreadFunction(info);
     io_threads_.emplace_back(
         absl::make_unique<IOThread>(info.config.feed_id(), std::move(fn)));
   }
+}
 
+void PoplarExecutor::LaunchOutfeedThreads(const OutfeedInfos& outfeed_infos) {
+  TENSORFLOW_TRACEPOINT();
   // Start all the outfeeds.
   for (const FeedInfo& info : outfeed_infos) {
     IOFunction fn = CreateOutfeedIOThreadFunction(info);
@@ -2647,11 +2648,12 @@ void PoplarExecutor::ConnectReplicatedDeviceToHost(
 
 Status PoplarExecutor::MoveDeviceToHost() {
   TENSORFLOW_TRACEPOINT();
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     // Make sure all the allocations are marked as on host.
     for (const auto& tc : allocations_) {
       tc->on_device = false;
     }
+
     return Status::OK();
   }
 
@@ -2747,7 +2749,8 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
 Status PoplarExecutor::MoveHostToDevice() {
   TENSORFLOW_TRACEPOINT();
-  if (UseSyntheticData()) {
+
+  if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     return Status::OK();
   }
   try {
@@ -2865,7 +2868,7 @@ Status PoplarExecutor::MoveHostToDevice() {
 void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     return;
   }
 
@@ -2880,7 +2883,7 @@ void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
 void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     return;
   }
 
@@ -2992,7 +2995,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
     }
     return output;
   } else {
-    if (UseSyntheticData()) {
+    if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
       LOG(WARNING)
           << "Trying to dequeue elements from the outfeed queue with id="
           << feed_id
@@ -3021,7 +3024,7 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
             outfeed_id.c_str());
       }
     } else {
-      if (UseSyntheticData() &&
+      if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed) &&
           outfeed_info.config.mode() ==
               xla::poplarplugin::PoplarFeedConfig::GetLast) {
         LOG(WARNING) << "Outfeed with id=" << outfeed_id
@@ -3093,7 +3096,7 @@ tensorflow::Rendezvous* PoplarExecutor::GetRendezvous() {
 void PoplarExecutor::ConnectSeedCallback() {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Seed)) {
     return;
   }
 
@@ -3405,8 +3408,12 @@ Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
       }
 
       // Launch the IO threads when we are not using synthetic data.
-      if (!UseSyntheticData()) {
-        LaunchIOThreads(infeed_infos, outfeed_infos);
+      if (!UseSyntheticDataFor(SyntheticDataCategory::Infeed)) {
+        LaunchInfeedThreads(infeed_infos);
+      }
+
+      if (!UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
+        LaunchOutfeedThreads(outfeed_infos);
       }
 
       // Before executing the main program, prepare the random seeds for each
@@ -3417,10 +3424,7 @@ Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
       current_engine_->enableExecutionProfiling();
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 
-      // Stop the IO threads when we are not using synthetic data.
-      if (!UseSyntheticData()) {
-        StopIOThreads();
-      }
+      StopIOThreads();
 
       for (auto& host_embedding_lookup_info :
            executable.GetHostEmbeddingLookupInfos()) {

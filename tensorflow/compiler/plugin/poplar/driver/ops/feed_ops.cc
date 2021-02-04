@@ -200,7 +200,9 @@ StatusOr<poplar::program::Program> CreateInfeed(
   auto init_synthetic_or_copy = [&](poplar::program::Sequence& seq,
                                     const Shape& data_shape,
                                     poplar::Tensor& tensor_to_update) {
-    if (!UseSyntheticData()) {
+    const auto use_synthetic_data =
+        UseSyntheticDataFor(SyntheticDataCategory::Infeed);
+    if (!use_synthetic_data) {
       const std::string handle =
           GetInfeedCopyHandle(infeed_config.feed_id(), tuple_index);
 
@@ -213,7 +215,7 @@ StatusOr<poplar::program::Program> CreateInfeed(
       return CreatePoplarH2DFIFO(res, inst, tuple_index, infeed_config, handle,
                                  graph, tensor_to_update, seq,
                                  debug_name_and_id);
-    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+    } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
       // Initialize the tensor with a synthetic initalizer.
       auto& initializer = DataInitializer::GetSyntheticDataInitializer();
       TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(data_shape));
@@ -351,7 +353,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(
                 outfeed->operands()[0]->shape());
   TF_RETURN_IF_ERROR(AddOutfeedInfo(res.annotations, info));
 
-  if (UseSyntheticData()) {
+  if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
     return seq;
   }
 

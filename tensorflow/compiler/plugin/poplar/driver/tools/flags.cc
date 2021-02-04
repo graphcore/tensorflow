@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
@@ -31,12 +32,45 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+SyntheticDataCategory SyntheticDataCategoryFromName(absl::string_view name) {
+#define RETURN_CATEGORY_FOR_NAME(NAME, CATEGORY) \
+  if (name == #NAME) return CATEGORY;
+
+  RETURN_CATEGORY_FOR_NAME(hostembedding, SyntheticDataCategory::HostEmbedding);
+  RETURN_CATEGORY_FOR_NAME(infeed, SyntheticDataCategory::Infeed);
+  RETURN_CATEGORY_FOR_NAME(outfeed, SyntheticDataCategory::Outfeed);
+  RETURN_CATEGORY_FOR_NAME(parameters, SyntheticDataCategory::Parameters);
+  RETURN_CATEGORY_FOR_NAME(seed, SyntheticDataCategory::Seed);
+
+#undef RETURN_CATEGORY_FOR_NAME
+
+  return SyntheticDataCategory::Unknown;
+}
+
+std::set<SyntheticDataCategory> ParseSyntheticDataCategoriesArg(
+    const std::string& arg) {
+  std::set<SyntheticDataCategory> categories;
+
+  auto splitter = absl::StrSplit(arg, ',', absl::SkipWhitespace());
+  for (auto split : splitter) {
+    split = absl::StripAsciiWhitespace(split);
+
+    categories.insert(SyntheticDataCategoryFromName(split));
+  }
+
+  return categories;
+}
+
 absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
   static absl::flat_hash_map<std::string, std::string> flag_usage = {
       {"help", "Display all the flags infos. (bool)"},
       {"use_synthetic_data",
        "If enabled, there will be no data transfers between the host and the "
        "IPU(s). (bool)"},
+      {"synthetic_data_categories",
+       "A comma separated list of values that can be used for finer control "
+       "over which kinds of data are made synthetic. Valid values are.. "
+       "infeed/outfeed/seed/hostembedding/parameters."},
       {"synthetic_data_initializer",
        "If set when using synthetic data, all the inputs to the graph can be "
        "initialized directly on the IPU either randomly "
@@ -129,6 +163,16 @@ PoplarXlaFlags::PoplarXlaFlags() {
 #undef ADD_FLAG
 #undef ADD_DEPRECATED_FLAG
   };
+
+  const auto synthetic_data_category_hook = [this](const std::string& arg) {
+    this->raw_synthetic_data_categories = arg;
+    this->synthetic_data_categories = ParseSyntheticDataCategoriesArg(arg);
+    return true;
+  };
+  flag_list.emplace_back(tensorflow::Flag(
+      "synthetic_data_categories", synthetic_data_category_hook,
+      /*default*/ "", flag_usage["synthetic_data_categories"]));
+
   xla::ParseFlagsFromEnvAndDieIfUnknown("TF_POPLAR_FLAGS", flag_list);
 
   // Store all the flags as a string.
@@ -137,9 +181,20 @@ PoplarXlaFlags::PoplarXlaFlags() {
     as_string = flag_buffer;
   }
 
-  if (!use_synthetic_data && !synthetic_data_initializer.empty()) {
+  const auto invalid_synthetic_data_category =
+      synthetic_data_categories.count(SyntheticDataCategory::Unknown) != 0;
+  if (invalid_synthetic_data_category) {
+    LOG(FATAL) << "Using an unknown synthetic data category in: '"
+               << raw_synthetic_data_categories << "'" << std::endl
+               << "Usage: " << flag_usage["synthetic_data_categories"];
+  }
+
+  const auto not_using_synthetic_data =
+      !use_synthetic_data && synthetic_data_categories.empty();
+  if (not_using_synthetic_data && !synthetic_data_initializer.empty()) {
     LOG(FATAL) << "The flag \"synthetic_data_initializer\" can only be used "
-                  "in combination with \"use_synthetic_data\".";
+                  "in combination with \"use_synthetic_data\" or "
+                  "\"synthetic_data_categories\".";
   }
 
   if (deprecated_flags.add_all_reduce_copies) {
@@ -163,10 +218,10 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash =
-      hash_util::hash(use_synthetic_data, synthetic_data_initializer,
-                      use_ipu_model, while_loop_brute_force_max_trip_count,
-                      fallback_scheduler, allow_nans, log_cycle_count);
+  hlo_hash = hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
+                             synthetic_data_initializer, use_ipu_model,
+                             while_loop_brute_force_max_trip_count,
+                             fallback_scheduler, allow_nans, log_cycle_count);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {

@@ -132,7 +132,9 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
 
   poplar::Graph& graph = GetGraph(resources_, inst);
 
-  if (!UseSyntheticData()) {
+  const auto use_synthetic_data =
+      UseSyntheticDataFor(SyntheticDataCategory::Parameters);
+  if (!use_synthetic_data) {
     poplar::Tensor tensor_destination = tensor;
     if (!LayoutUtil::IsMonotonicWithDim0Major(
             module_shapes[flat_tuple_index].layout())) {
@@ -154,7 +156,7 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
         !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host,
         graph, resources_, stream_copy_seq, in_info, inst, debug_name_and_id));
 
-  } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+  } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
@@ -277,7 +279,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       }
     }
 
-    if (!UseSyntheticData()) {
+    if (!UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
       // Add FIFOs to the host for each output tensor.
       for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
            ++tuple_index) {
