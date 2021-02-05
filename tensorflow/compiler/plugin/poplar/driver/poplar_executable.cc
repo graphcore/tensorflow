@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 
-#include <algorithm>
 #include <fstream>
 #include <utility>
 
@@ -91,53 +90,6 @@ PoplarExecutable::~PoplarExecutable() {
   }
 }
 
-Status PoplarExecutable::ExecuteComputeFunction(
-    const ExecutableRunOptions* run_options,
-    se::DeviceMemoryBase* result_buffer,
-    HloExecutionProfile* hlo_execution_profile,
-    const std::vector<se::DeviceMemoryBase>& argument_buffers,
-    const std::vector<Shape>& argument_shapes,
-    const PoplarExecutor::ArgsHandleMap& args_map, uint64 start_time_us) {
-  TENSORFLOW_TRACEPOINT();
-  VLOG(2) << "Begin asynchronous engine execution " << module().name();
-  se::Stream* stream = run_options->stream();
-  se::StreamExecutor* executor = stream->parent();
-  PoplarExecutor* poplar_executor =
-      static_cast<PoplarExecutor*>(executor->implementation());
-  se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();
-
-  poplar_executor->ExecuteEngine(result_buffer, executor, *this, args_map,
-                                 memory_allocator, argument_buffers);
-
-  execution_count_++;
-  if (poplar_executor->ReportEventNthExecution() > 0 &&
-      execution_count_ >= poplar_executor->ReportEventNthExecution()) {
-    execution_count_ = 0;
-  }
-
-  uint64 end_time_us = tensorflow::Env::Default()->NowMicros();
-
-  if (run_options->execution_profile()) {
-    auto profile = run_options->execution_profile();
-    const double nanoseconds = (end_time_us - start_time_us) * 1000.0;
-    profile->set_compute_time_ns(std::max(nanoseconds, 1.0));
-    profile->set_compute_cycle_count(1);
-  }
-
-  // Decrement the reference counter for all buffers once the execution is
-  // completed so that they can be deallocated if required.
-  TF_RETURN_IF_ERROR(PoplarExecutor::DecrementBufferReferenceCount(
-      *result_buffer, result_shape()));
-  for (int64 i = 0; i != argument_buffers.size(); ++i) {
-    TF_RETURN_IF_ERROR(PoplarExecutor::DecrementBufferReferenceCount(
-        argument_buffers[i], argument_shapes[i]));
-  }
-
-  VLOG(2) << "End asynchronous engine execution " << module().name();
-
-  return Status::OK();
-}
-
 StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     const ServiceExecutableRunOptions* run_options,
     absl::Span<const ShapedBuffer* const> arguments,
@@ -146,18 +98,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   se::Stream* stream = run_options->stream();
 
   std::vector<se::DeviceMemoryBase> argument_buffers;
-  std::vector<Shape> argument_shapes;
-
   for (size_t i = 0; i < arguments.size(); ++i) {
-    const se::DeviceMemoryBase& argument_buffer =
-        arguments[i]->buffer(/*index=*/{});
-    const Shape& argument_shape = arguments[i]->on_device_shape();
-    argument_buffers.push_back(argument_buffer);
-    argument_shapes.push_back(argument_shape);
-    // Make sure inputs are not deallocated during execution by increasing the
-    // reference counter.
-    TF_RETURN_IF_ERROR(PoplarExecutor::IncrementBufferReferenceCount(
-        argument_buffer, argument_shape));
+    argument_buffers.push_back(arguments[i]->buffer(/*index=*/{}));
   }
 
   VLOG(1) << "Execute " << module().name();
@@ -167,15 +109,11 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     }
   }
 
-  uint64 start_time_us = tensorflow::Env::Default()->NowMicros();
+  uint64 start_micros = tensorflow::Env::Default()->NowMicros();
 
-  se::StreamExecutor* executor = stream->parent();
-  PoplarExecutor* poplar_executor =
-      static_cast<PoplarExecutor*>(executor->implementation());
-
-  // There is no obvious way to return a failed Status asynchronously when
-  // executing an engine, so make sure the previous execution was ok.
-  TF_RETURN_IF_ERROR(poplar_executor->GetAndResetExecutorStatus());
+  perftools::gputools::StreamExecutor* executor(stream->parent());
+  PoplarExecutor* poplar_executor(
+      static_cast<PoplarExecutor*>(executor->implementation()));
 
   if (!poplar_executor->PoplarDeviceIsAttached() && poplar_engine_) {
     if (poplar_executor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
@@ -207,11 +145,6 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       PoplarExecutor::AllocateOutputBuffer(*this, memory_allocator, args_map,
                                            poplar_executor->device_ordinal()));
 
-  // Make sure the result is not deallocated until the execution has finished by
-  // increasing the reference counters.
-  TF_RETURN_IF_ERROR(
-      PoplarExecutor::IncrementBufferReferenceCount(result, result_shape()));
-
   // Copy DeviceMemoryBase values which contain the array(s) of the result into
   // the respective location in ShapedBuffer which is returned to the caller.
   ScopedShapedBuffer result_buffer(result_shape(), result_shape(),
@@ -231,28 +164,25 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
         return Status::OK();
       }));
 
-  // Need to make sure to capture all the required resources for the
-  // execution. We use a struct instead of a lambda to make this explicit.
-  struct AsyncExecuteTask {
-    PoplarExecutable* executable;
-    ServiceExecutableRunOptions run_options;
-    se::DeviceMemoryBase output_buffer;
-    HloExecutionProfile* hlo_execution_profile;
-    std::vector<se::DeviceMemoryBase> argument_buffers;
-    std::vector<Shape> argument_shapes;
-    PoplarExecutor::ArgsHandleMap args_map;
-    uint64 start_time_us;
+  PoplarExecutor::AsPoplarStream(stream)->BlockUntilDone();
 
-    void operator()() {
-      TF_CHECK_OK(executable->ExecuteComputeFunction(
-          &run_options.run_options(), &output_buffer, hlo_execution_profile,
-          argument_buffers, argument_shapes, args_map, start_time_us));
-    }
-  };
+  TF_RETURN_IF_ERROR(poplar_executor->ExecuteEngine(
+      &result, executor, *this, args_map, memory_allocator, argument_buffers));
 
-  PoplarExecutor::AsPoplarStream(stream)->EnqueueTask(AsyncExecuteTask{
-      this, *run_options, result, hlo_execution_profile, argument_buffers,
-      argument_shapes, args_map, start_time_us});
+  execution_count_++;
+  if (poplar_executor->ReportEventNthExecution() > 0 &&
+      execution_count_ >= poplar_executor->ReportEventNthExecution()) {
+    execution_count_ = 0;
+  }
+
+  uint64 end_micros = tensorflow::Env::Default()->NowMicros();
+
+  if (run_options->run_options().execution_profile()) {
+    auto profile = run_options->run_options().execution_profile();
+    const double nanoseconds = (end_micros - start_micros) * 1000.0;
+    profile->set_compute_time_ns(std::max(nanoseconds, 1.0));
+    profile->set_compute_cycle_count(1);
+  }
 
   return std::move(result_buffer);
 }
