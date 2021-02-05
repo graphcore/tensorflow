@@ -122,7 +122,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
 
       poplar::RemoteBuffer remote_buffer = outputs[i][0].AsRemoteBuffer();
 
-      if (!UseSyntheticData()) {
+      if (!UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor tensor,
             FindInstructionInput(tensor_map, res, inst, num_outputs + i, seq,
@@ -179,7 +179,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
 
-      if (!UseSyntheticData()) {
+      if (!UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         poplar::RemoteBuffer remote_buffer = output.AsRemoteBuffer();
         const auto value_index = num_outputs + i;
         const auto offset_index = 2 * num_outputs + i;

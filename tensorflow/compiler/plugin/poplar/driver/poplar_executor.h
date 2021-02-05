@@ -865,8 +865,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   // Creates and launches the threads which send/receive data from the Poplar
   // stream callbacks.
-  void LaunchIOThreads(const InfeedInfos& infeed_infos,
-                       const OutfeedInfos& outfeed_infos);
+  void LaunchInfeedThreads(const InfeedInfos& infeed_infos);
+  void LaunchOutfeedThreads(const OutfeedInfos& outfeed_infos);
 
   // Blocks until all the IOThreads stop.
   void StopIOThreads();

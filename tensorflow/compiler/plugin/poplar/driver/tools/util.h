@@ -26,6 +26,7 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -167,10 +168,11 @@ bool IsSupportedSharding(const HloSharding&);
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
     const HloInstruction* inst, const int64 operand_idx);
 
-// This function returns true if the environment variable flag
-// "use_synthetic_data" has been set. Using synthetic data means that *no data*
-// will be copied to/from the device.
-bool UseSyntheticData();
+// This function returns true if the given SyntheticDataCategory was included in
+// the environment variable flag "synthetic_data_categories". If true then it
+// means that no data of this particular category will be copied to/from the
+// device.
+bool UseSyntheticDataFor(SyntheticDataCategory category);
 
 // This function returns true if the environment variable flag
 // "synthetic_data_initializer" has been set. Using this flag means that all the

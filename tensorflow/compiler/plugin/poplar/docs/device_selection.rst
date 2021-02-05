@@ -202,8 +202,8 @@ For a full list, refer to  :ref:`api-section`.
     - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
   * - ``--synthetic_data_initializer``
     - Used in combination with the
-      ``--use_synthetic_data`` option to control how the inputs to the graph
-      will be initialised on the IPU.
+      ``--use_synthetic_data`` or ``--synthetic_data_categories`` option to 
+      control how the inputs to the graph will be initialised on the IPU.
 
       The values will be either random: ``--synthetic_data_initializer=random``
 
@@ -213,10 +213,20 @@ For a full list, refer to  :ref:`api-section`.
       to this directory.
   * - ``--use_ipu_model``
     - Use the Poplar IPUModel for graph compilation and execution.
+  * - ``--synthetic_data_categories``
+    - Prevents the system from transfering data of the given types to/from the IPU
+      when executing code. This is used for testing performance without the overhead
+      of data transfer.
+
+      The values can be any of: infeed, outfeed, seed, hostembedding or parameters.
+
+      For example, ``--synthetic_data_categories='infeed,outfeed'`` will use synthetic data just
+      for in and outfeeds.
   * - ``--use_synthetic_data``
     - Prevent the system from downloading or uploading data to the IPU when
       executing code. This is used for testing performance without the overhead
-      of data transfer.
+      of data transfer. When enabled implies that all ``--synthetic_data_categories``
+      are set.
 
       Executing the ``dequeue`` op for an ``IPUOutfeedQueue``
       with ``outfeed_mode`` set to ``IPUOutfeedMode.LAST`` will throw an

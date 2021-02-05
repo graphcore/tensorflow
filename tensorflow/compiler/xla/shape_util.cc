@@ -505,6 +505,13 @@ ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
   return absl::c_equal(lhs.dimensions(), rhs.dimensions());
 }
 
+/* static */ bool ShapeUtil::SameRank(const Shape& lhs,
+                                      const Shape& rhs) {
+  CHECK(lhs.IsArray());
+  CHECK(rhs.IsArray());
+  return lhs.rank() == rhs.rank();
+}
+
 /* static */ bool ShapeUtil::Compatible(const Shape& lhs, const Shape& rhs) {
   return Shape::Equal().IgnoreLayout()(lhs, rhs);
 }

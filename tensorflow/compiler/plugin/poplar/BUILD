@@ -168,6 +168,7 @@ cc_library(
         "kernels/custom_kernels_util.cc",
     ],
     hdrs = [
+        "driver/tools/flags.h",
         "driver/tools/util.h",
         "kernels/custom_kernels_util.h",
     ],
@@ -514,6 +515,7 @@ cc_library(
         "driver/tools/custom_ops/user_op_hlo.h",
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.h",
         "driver/tools/find_all_users.h",
+        "driver/tools/flags.h",
         "driver/tools/hlo_hash.h",
         "driver/tools/hlo_matcher.h",
         "driver/tools/hlo_poplar_buffer.h",
@@ -3606,6 +3608,29 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "synthetic_data_categories_test",
+    size = "large",
+    srcs = ["tests/synthetic_data_categories_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:random_ops",
+        "//tensorflow/python:resource_variable_ops",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/keras:layers_base",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+tf_xla_py_test(
     name = "multi_run_test",
     size = "small",
     srcs = ["tests/multi_run_test.py"],
@@ -5041,6 +5066,7 @@ test_suite(
         "stateful_noop_test",
         "subcomputation_graph_caching_test",
         "sync_list_scheduler_test",
+        "synthetic_data_categories_test",
         "synthetic_data_test",
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",

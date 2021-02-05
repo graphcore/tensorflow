@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DIRVER_TOOLS_FALGS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DIRVER_TOOLS_FALGS_H_
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,15 @@ using tensorflow::int64;
 namespace xla {
 namespace poplarplugin {
 
+enum class SyntheticDataCategory {
+  Seed,
+  Infeed,
+  Outfeed,
+  HostEmbedding,
+  Parameters,
+  Unknown
+};
+
 class PoplarXlaFlags {
  public:
   static const PoplarXlaFlags& Get();
@@ -39,6 +49,10 @@ class PoplarXlaFlags {
   // If enabled, there will be no data transfers between the host and the
   // IPU(s).
   bool use_synthetic_data = false;
+
+  // These values prevent a subset of the IPU/host data transfers from
+  // happening.
+  std::set<SyntheticDataCategory> synthetic_data_categories;
 
   // If enabled when using synthetic data, all the inputs to the graph will be
   // initialized to the value passed on the IPU.
@@ -104,6 +118,9 @@ class PoplarXlaFlags {
 
  private:
   PoplarXlaFlags();
+
+  // copy of the synthetic_data_categories argument, used for hashing.
+  std::string raw_synthetic_data_categories = "";
 };
 
 ;

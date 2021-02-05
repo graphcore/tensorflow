@@ -257,6 +257,11 @@ class ShapeUtil {
   // Precondition: IsArray(lhs) && IsArray(rhs)
   static bool SameDimensions(const Shape& lhs, const Shape& rhs);
 
+  // Returns whether the LHS and RHS shapes have the same rank; note: does
+  // not check element type.
+  // Precondition: IsArray(lhs) && IsArray(rhs)
+  static bool SameRank(const Shape& lhs, const Shape& rhs);
+
   // Returns whether the lhs and rhs shapes have the same element type.
   static bool SameElementType(const Shape& lhs, const Shape& rhs) {
     return lhs.element_type() == rhs.element_type();
@@ -297,9 +302,9 @@ class ShapeUtil {
   // compatibility.
   static bool CompatibleIgnoringElementType(const Shape& lhs, const Shape& rhs);
 
-  // Returns true if the tuple tree shapes are identical. Leaf dimensions,
-  // element type, and layout are ignored. Tuple elements are compared
-  // recursively for compatibility.
+  // Returns true if the tuple tree shapes and leaf ranks are identical.
+  // Leaf dimensions, element type, and layout are ignored. Tuple elements are
+  // compared recursively for compatibility.
   static bool CompatibleKind(const Shape& lhs, const Shape& rhs);
 
   // As Compatible, but allow one of lhs and rhs to be BF16 while the other

@@ -354,7 +354,7 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     const HloHostEmbeddingLookupInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingLookupInstruction>(inst);
 
-    if (UseSyntheticData()) {
+    if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding)) {
       return SyntheticImpl(graph, indices[0].reinterpret(poplar::UNSIGNED_INT),
                            seq, res, host_embedding_inst, output_shape,
                            tensor_map, {debug_info});
@@ -635,7 +635,7 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
     const HloHostEmbeddingUpdateInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingUpdateInstruction>(inst);
-    if (UseSyntheticData()) {
+    if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding)) {
       return SyntheticImpl(seq);
     } else if (res.enable_experimental_remote_buffer_embedding) {
       VLOG(1) << "Using experimental remote buffer embedding update";
@@ -699,7 +699,8 @@ class HostEmbeddingNotifyOp : public PoplarOpDef {
 
     // For synthetic data or remote buffers, there's no communication with the
     // host.
-    if (UseSyntheticData() || res.enable_experimental_remote_buffer_embedding) {
+    if (UseSyntheticDataFor(SyntheticDataCategory::HostEmbedding) ||
+        res.enable_experimental_remote_buffer_embedding) {
       return seq;
     }
 
