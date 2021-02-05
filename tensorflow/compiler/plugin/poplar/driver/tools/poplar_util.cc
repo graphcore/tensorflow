@@ -784,16 +784,35 @@ poplar::program::Sequence TensorCopyWithAliasing(
   return seq;
 }
 
+StatusOr<bool> SlicePlansCompatible(CompilerResources& res,
+                                    const HloInstruction* a,
+                                    const HloInstruction* b) {
+  if (a == b) {
+    return true;
+  }
+
+  TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan_a, GetSlicePlan(res, a));
+  TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan_b, GetSlicePlan(res, b));
+
+  return plan_a && plan_b ? *plan_a == *plan_b : false;
+}
+
 void NotifySlicePlanAllocation(CompilerResources& res,
-                               const popops::SlicePlan* plan) {
-  if (plan != nullptr) {
-    res.used_slice_plan.insert(plan);
+                               const TensorTarget& target) {
+  res.slice_plan_allocators.emplace(target.tgt, target.tgt);
+  for (const HloInstruction* inst : target.compatible_slice_plans) {
+    res.slice_plan_allocators.emplace(inst, target.tgt);
   }
 }
 
-bool SlicePlanHasAllocation(CompilerResources& res,
-                            const popops::SlicePlan* plan) {
-  return res.used_slice_plan.count(plan) == 1;
+StatusOr<bool> SlicePlanHasAllocation(CompilerResources& res,
+                                      const HloInstruction* inst) {
+  auto it = res.slice_plan_allocators.find(inst);
+  if (it == res.slice_plan_allocators.end()) {
+    return false;
+  }
+  const HloInstruction* allocator = it->second;
+  return SlicePlansCompatible(res, allocator, inst);
 }
 
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
