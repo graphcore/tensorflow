@@ -362,6 +362,26 @@ struct UserOpsExecutionState {
   std::unordered_map<const HloInstruction*, uint32_t>
       numbers_of_inputs_initialized;
 };
+
+std::string GetExecutableCachePath() {
+  // Lazily find the path the first time it is requested.
+  static const auto path = []() -> std::string {
+    const std::string flag = PoplarXlaFlags::Get().executable_cache_path;
+    if (!flag.empty()) {
+      return flag;
+    }
+
+    const char* env_var = std::getenv("POPDIST_EXECUTABLE_CACHE_PATH");
+    if (env_var) {
+      return env_var;
+    }
+
+    return "";
+  }();
+
+  return path;
+}
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -1810,11 +1830,11 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 }
 
 bool PoplarExecutor::HaveExecutableCache() const {
-  return !PoplarXlaFlags::Get().executable_cache_path.empty();
+  return !GetExecutableCachePath().empty();
 }
 
 Status PoplarExecutor::CreateExecutableCacheDirIfMissing() const {
-  return CreateDirIfMissing(PoplarXlaFlags::Get().executable_cache_path);
+  return CreateDirIfMissing(GetExecutableCachePath());
 }
 
 std::string ModuleFilenames::SerializedExecutableFilename() const {
@@ -1844,12 +1864,12 @@ std::string ModuleFilenames::CachedExecutableFilename() const {
 }
 
 std::string ModuleFilenames::CachedEngineFilename() const {
-  return tensorflow::io::JoinPath(PoplarXlaFlags::Get().executable_cache_path,
+  return tensorflow::io::JoinPath(GetExecutableCachePath(),
                                   basename_ + ".xla_engine");
 }
 
 std::string ModuleFilenames::CompilationLockFilename() const {
-  return tensorflow::io::JoinPath(PoplarXlaFlags::Get().executable_cache_path,
+  return tensorflow::io::JoinPath(GetExecutableCachePath(),
                                   basename_ + ".compile_lock");
 }
 
