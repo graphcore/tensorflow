@@ -456,6 +456,13 @@ PoplarExecutor::PoplarExecutor()
 
 PoplarExecutor::~PoplarExecutor() { TENSORFLOW_TRACEPOINT(); }
 
+Status PoplarExecutor::GetAndResetExecutorStatus() {
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+  const Status status = current_status_;
+  current_status_ = Status::OK();
+  return status;
+}
+
 se::DeviceMemoryBase PoplarExecutor::Allocate(uint64 size, int64 memory_space) {
   TENSORFLOW_TRACEPOINT();
   TensorControl* allocated = new TensorControl(size);
@@ -482,6 +489,42 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
       tc->ref_count--;
     }
   }
+}
+
+/*static*/ Status PoplarExecutor::IncrementBufferReferenceCount(
+    const se::DeviceMemoryBase& buffer, const Shape& shape) {
+  return ShapeUtil::ForEachSubshapeWithStatus(shape, [buffer](
+                                                         const Shape& subshape,
+                                                         const ShapeIndex&
+                                                             index) {
+    TF_ASSIGN_OR_RETURN(se::DeviceMemoryBase subbuffer,
+                        PoplarExecutor::GetBufferByShapeIndex(buffer, index));
+    TensorControl* tc = reinterpret_cast<TensorControl*>(subbuffer.opaque());
+    if (tc->ref_count < 1) {
+      return FailedPrecondition(
+          "Trying to increment a reference counter for a deallocated buffer.");
+    }
+    tc->ref_count++;
+    return Status::OK();
+  });
+}
+
+/*static*/ Status PoplarExecutor::DecrementBufferReferenceCount(
+    const se::DeviceMemoryBase& buffer, const Shape& shape) {
+  return ShapeUtil::ForEachSubshapeWithStatus(shape, [buffer](
+                                                         const Shape& subshape,
+                                                         const ShapeIndex&
+                                                             index) {
+    TF_ASSIGN_OR_RETURN(se::DeviceMemoryBase subbuffer,
+                        PoplarExecutor::GetBufferByShapeIndex(buffer, index));
+    TensorControl* tc = reinterpret_cast<TensorControl*>(subbuffer.opaque());
+    if (tc->ref_count < 1) {
+      return FailedPrecondition(
+          "Trying to decrement a reference counter for a deallocated buffer.");
+    }
+    tc->ref_count--;
+    return Status::OK();
+  });
 }
 
 Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
@@ -1194,6 +1237,7 @@ bool PoplarExecutor::Memcpy(se::Stream* stream, void* host_dst,
   AsPoplarStream(stream)->EnqueueTask([this, host_dst, pop_src, size]() {
     Status ok = SynchronousMemcpy(host_dst, pop_src, size);
   });
+  AsPoplarStream(stream)->BlockUntilDone();
   return true;
 }
 
@@ -1203,6 +1247,7 @@ bool PoplarExecutor::Memcpy(se::Stream* stream, se::DeviceMemoryBase* pop_dst,
   AsPoplarStream(stream)->EnqueueTask([this, dst, host_src, size]() mutable {
     Status ok = SynchronousMemcpy(&dst, host_src, size);
   });
+  AsPoplarStream(stream)->BlockUntilDone();
   return true;
 }
 
@@ -1274,7 +1319,13 @@ bool PoplarExecutor::HostCallback(se::Stream* stream,
 bool PoplarExecutor::HostCallback(se::Stream* stream,
                                   std::function<Status()> callback) {
   TENSORFLOW_TRACEPOINT();
-  AsPoplarStream(stream)->EnqueueTask(callback);
+  AsPoplarStream(stream)->EnqueueTask([callback]() {
+    Status status = callback();
+    if (!status.ok()) {
+      LOG(WARNING) << "Host callback failed: " << status;
+    }
+  });
+
   return true;
 }
 
@@ -1300,7 +1351,7 @@ bool PoplarExecutor::StopTimer(se::Stream* stream, se::Timer* timer) {
 Status PoplarExecutor::BlockHostUntilDone(se::Stream* stream) {
   AsPoplarStream(stream)->BlockUntilDone();
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-  return Status::OK();
+  return GetAndResetExecutorStatus();
 }
 
 bool PoplarExecutor::SynchronizeAllActivity() {
@@ -3232,14 +3283,27 @@ PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
   return constant_outputs;
 }
 
-Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
-                                     se::StreamExecutor* executor,
-                                     PoplarExecutable& executable,
-                                     const ArgsHandleMap& args_map,
-                                     se::DeviceMemoryAllocator* allocator,
-                                     const Args& args) {
+void PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
+                                   se::StreamExecutor* executor,
+                                   PoplarExecutable& executable,
+                                   const ArgsHandleMap& args_map,
+                                   se::DeviceMemoryAllocator* allocator,
+                                   const Args& args) {
   TENSORFLOW_TRACEPOINT();
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+  if (!current_status_.ok()) {
+    LOG(FATAL) << current_status_.ToString();
+  }
+  current_status_ = ExecuteEngineImpl(result_buffer, executor, executable,
+                                      args_map, allocator, args);
+}
 
+Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
+                                         se::StreamExecutor* executor,
+                                         PoplarExecutable& executable,
+                                         const ArgsHandleMap& args_map,
+                                         se::DeviceMemoryAllocator* allocator,
+                                         const Args& args) {
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   args_map_ = args_map;
 
@@ -3338,9 +3402,6 @@ Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
         return PoplarExceptionToTensorflowStatus("[Load engine] ", e);
       }
     }
-
-    // Deallocate all the marked buffers.
-    DeferredDeallocation();
 
     TF_ASSIGN_OR_RETURN(const bool move_host_to_device,
                         CheckMoveHostToDeviceRequired(engine_changed));
@@ -3545,6 +3606,9 @@ Status PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
       return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
     }
   }
+
+  // Deallocate all the marked buffers.
+  DeferredDeallocation();
 
   return Status::OK();
 }
