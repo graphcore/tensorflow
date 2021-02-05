@@ -68,6 +68,9 @@ struct TensorTarget {
   // sliceable.
   absl::optional<int64> sliceable_dimension = absl::nullopt;
 
+  // Set of instructions which use compatible plans/allocated tensors.
+  absl::flat_hash_set<const HloInstruction*> compatible_slice_plans;
+
   TensorTarget(const HloInstruction* tgt, int64 input_index,
                absl::optional<const HloInstruction*> layout,
                absl::optional<int64> layout_output_idx,
@@ -117,7 +120,9 @@ class AllocationFinder : public HloModulePass {
   int64 GetAllocationPriority(const TensorTarget& inst) const;
 
   // Should return true when target 'a' should be used over 'b'
-  bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b);
+  bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b) const;
+  bool SlicePlanCompatibleTarget(const TensorTarget& a,
+                                 const TensorTarget& b) const;
 
   void AddTensorTarget(const TensorLocation& source,
                        const TensorTarget& tensor_target);

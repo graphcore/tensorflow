@@ -449,6 +449,16 @@ bool IsSupportedAllReduce(const HloInstruction* inst) {
   return false;
 }
 
+bool IsMultiSliceOrUpdate(const HloInstruction* inst) {
+  for (auto op : {PoplarOp::MultiSlice, PoplarOp::MultiUpdate,
+                  PoplarOp::MultiUpdateAdd}) {
+    if (IsPoplarInstruction(op)(inst)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool IsMultiUpdateScatter(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kScatter) {
     const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);

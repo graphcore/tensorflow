@@ -168,14 +168,20 @@ poplar::program::Sequence TensorCopyWithAliasing(
     const poplar::DebugNameAndId& debug_name_and_id);
 
 // Modify the compiler resources to indicate the embedding associated with a
-// slice plan has been allocated with the given plan.
+// instruction has been allocated with the given plan.
 void NotifySlicePlanAllocation(CompilerResources& res,
-                               const popops::SlicePlan* plan);
+                               const TensorTarget& target);
 
-// Test whether the given slice plan has been used to allocate the embedding
+// Test whether the given instruction has been used to allocate the embedding
 // input.
-bool SlicePlanHasAllocation(CompilerResources& res,
-                            const popops::SlicePlan* plan);
+StatusOr<bool> SlicePlanHasAllocation(CompilerResources& res,
+                                      const HloInstruction* inst);
+
+// Check if slice plan a could be used for allocation and plan b for slice
+// Currently checks equivalence
+StatusOr<bool> SlicePlansCompatible(CompilerResources& res,
+                                    const HloInstruction* a,
+                                    const HloInstruction* b);
 
 // Get a slice plan for an instruction.
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
