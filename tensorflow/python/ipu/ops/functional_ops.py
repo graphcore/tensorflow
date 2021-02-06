@@ -105,11 +105,6 @@ def outlined_function(func=None,
   return decorated
 
 
-@deprecation.deprecated(None, "Use `ipu.outlined_function(...)`.")
-def function(func, name=None):
-  return outlined_function(func, unique_sharding=False, name=name)
-
-
 class _InvalidCaptureException(Exception):
   pass
 
