@@ -282,8 +282,6 @@ class PopnnLSTM(_PopnnRNN):
       initial_state: An `LSTMStateTuple` of state tensors, each shaped
         `[batch_size, num_units]`. If not provided, the state is
         initialized to zeros.
-        DEPRECATED a tuple of tensor (input_h_state, input_c_state)
-        each of shape [batch_size, num_units].
       training: Set to False to use the LSTM model in inference mode.
 
     Returns:
@@ -291,9 +289,7 @@ class PopnnLSTM(_PopnnRNN):
 
       * output: a tensor of shape [time_len, batch_size, num_units].
       * output_states: An `LSTMStateTuple` of the same shape and structure as
-        initial_state. If the initial state used the deprecated behaviour of
-        not passing `LSTMStateTuple`, then a tuple
-        (output_h_state, output_c_state) is returned.
+        initial_state.
 
     Raises:
       ValueError: if initial_state is not valid.
@@ -305,20 +301,10 @@ class PopnnLSTM(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
-    uses_old_api = False
     if initial_state is not None and not isinstance(initial_state,
                                                     rnn_cell.LSTMStateTuple):
-      if isinstance(initial_state, tuple):
-        logging.warning(
-            "Passing a tuple as a `initial_state` to PopnnLSTM is "
-            "deprecated and will be removed in the future. Pass an "
-            "`LSTMStateTuple` instead.")
-        initial_state = rnn_cell.LSTMStateTuple(initial_state[1],
-                                                initial_state[0])
-        uses_old_api = True
-      else:
-        raise ValueError("Invalid initial_state type: `%s`, expecting "
-                         "`LSTMStateTuple`." % type(initial_state))
+      raise ValueError("Invalid initial_state type: `%s`, expecting "
+                       "`LSTMStateTuple`." % type(initial_state))
 
     if initial_state is None:
       # Create a zero state.
@@ -340,8 +326,6 @@ class PopnnLSTM(_PopnnRNN):
         name=self._name)
     state = rnn_cell.LSTMStateTuple(output_c, output_h)
 
-    if uses_old_api:
-      state = (state.h, state.c)
     return outputs, state
 
   def state_shape(self, batch_size):

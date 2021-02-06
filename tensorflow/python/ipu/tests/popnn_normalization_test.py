@@ -525,7 +525,6 @@ class PopnnInstanceNormTest(test_util.TensorFlowTestCase):
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
     normalization_ops.instance_norm(images,
                                     channels_axis=-1,
-                                    reduction_axes=(-3, -2),
                                     center=True,
                                     scale=True)
     beta = get_variables('beta')[0]

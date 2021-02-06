@@ -49,10 +49,6 @@ class IPUPipelineEstimatorSpec(
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
-  @deprecation.deprecated_args(
-      None,
-      "pipeline_depth is deprecated, use gradient_accumulation_count instead",
-      "pipeline_depth")
   @deprecation.deprecated_arg_values(
       None,
       "You are using the deprecated definition of `iterations_per_loop` with "
@@ -68,7 +64,6 @@ class IPUPipelineEstimatorSpec(
               gradient_accumulation_count=None,
               count_gradient_accumulation_as_iterations=False,
               gradient_accumulation_dtype=None,
-              pipeline_depth=None,
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
@@ -156,9 +151,6 @@ class IPUPipelineEstimatorSpec(
     if mode == model_fn_lib.ModeKeys.EVAL and not eval_metrics_fn:
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`eval_metrics_fn` when evaluating")
-
-    if pipeline_depth:
-      gradient_accumulation_count = pipeline_depth
 
     if not gradient_accumulation_count:
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "

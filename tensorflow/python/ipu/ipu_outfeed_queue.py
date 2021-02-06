@@ -60,12 +60,9 @@ class IPUOutfeedQueue:
   operation will in this case return a single element.
 
   """
-  @deprecation.deprecated_args(None, "Use outfeed_mode instead.",
-                               "outfeed_all")
   def __init__(self,
                feed_name,
                outfeed_mode=None,
-               outfeed_all=None,
                device_ordinal=0,
                replication_factor=1,
                io_batch_size=1):
@@ -78,7 +75,6 @@ class IPUOutfeedQueue:
         outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
           outfeed behaviour. If not specified then all elements will be
           returned by the outfeed when the dequeue operation is run.
-        outfeed_all: deprecated.
         device_ordinal: ordinal of the IPU device on which this queue will be
           used. By default the queue will be used on "/device/IPU:0".
         replication_factor: the number of replicated graphs this Outfeed
@@ -92,16 +88,6 @@ class IPUOutfeedQueue:
     Raises:
       ValueError: if the types or values are incorrect
       """
-
-    # Handle deprecated factor.
-    if outfeed_all is not None:
-      logging.warning("`outfeed_all` has been deprecated and will be removed "
-                      "in the future version. Use `outfeed_mode` instead.")
-
-      if not isinstance(outfeed_all, bool):
-        raise ValueError("Expcted value True or False for outfeed_all")
-
-      outfeed_mode = IPUOutfeedMode.ALL if outfeed_all else IPUOutfeedMode.LAST
 
     # Default to all.
     self._outfeed_mode = outfeed_mode or IPUOutfeedMode.ALL

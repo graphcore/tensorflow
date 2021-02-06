@@ -160,13 +160,9 @@ def _group_norm_impl(inputs,
     return outputs
 
 
-@deprecation.deprecated_args(
-    None, "reduction_axes is deprecated as it has no effect.",
-    "reduction_axes")
 def group_norm(inputs,
                groups=2,
                channels_axis=-1,
-               reduction_axes=None,
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -193,7 +189,6 @@ def group_norm(inputs,
       broken into `groups`, each of which whose statistics will be computed
       across. Preferred usage is to specify negative integers to be agnostic as
       to whether a batch dimension is included.
-    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
@@ -229,12 +224,8 @@ def group_norm(inputs,
                           "GroupNorm", strided_channel_grouping)
 
 
-@deprecation.deprecated_args(
-    None, "reduction_axes is deprecated as it has no effect.",
-    "reduction_axes")
 def layer_norm(inputs,
                channels_axis=-1,
-               reduction_axes=None,
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -268,7 +259,6 @@ def layer_norm(inputs,
     channels_axis: An integer. Specifies index of channels axis. Preferred
       usage is to specify negative integers to be agnostic as to whether a
       batch dimension is included.
-    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
@@ -306,12 +296,8 @@ def layer_norm(inputs,
                           "LayerNorm", False)
 
 
-@deprecation.deprecated_args(
-    None, "reduction_axes is deprecated as it has no effect.",
-    "reduction_axes")
 def instance_norm(inputs,
                   channels_axis=-1,
-                  reduction_axes=None,
                   center=True,
                   scale=True,
                   epsilon=1e-6,
@@ -340,7 +326,6 @@ def instance_norm(inputs,
     channels_axis: An integer. Specifies index of channels axis. Preferred
       usage is to specify negative integers to be agnostic as to whether a
       batch dimension is included.
-    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
