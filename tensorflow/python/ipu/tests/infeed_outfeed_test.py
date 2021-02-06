@@ -1681,6 +1681,42 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       sess.run(table.initializer)
       self.assertAllEqual([0, 0, -1, 1, 2], sess.run(res))
 
+  @test_util.deprecated_graph_mode_only
+  def testFeedInt8(self):
+    dataset = tu.create_single_increasing_dataset(10, dtype=np.int8, shape=[])
+
+    def m(x):
+      x = x - 5
+      return (x, math_ops.cast(x, np.uint8))
+
+    dataset = dataset.map(m)
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def body(x1, x2):
+      x1 = math_ops.cast(x1, np.float16)
+      x2 = math_ops.cast(x2, np.float32)
+      x1 = x1 + 1
+      x2 = x2 - 1
+      x1 = math_ops.cast(x1, np.int8)
+      x2 = math_ops.cast(x2, np.uint8)
+      return outfeed_queue.enqueue((x1, x2))
+
+    def my_net():
+      return ipu.loops.repeat(10, body, infeed_queue=infeed_queue)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    dequeued = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(res)
+      out = sess.run(dequeued)
+      self.assertAllEqual([-4, -3, -2, -1, 0, 1, 2, 3, 4, 5], out[0])
+      self.assertAllEqual([250, 251, 252, 253, 254, 255, 0, 1, 2, 3], out[1])
+
 
 if __name__ == "__main__":
   googletest.main()

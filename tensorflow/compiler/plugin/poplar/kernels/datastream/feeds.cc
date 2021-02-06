@@ -50,10 +50,8 @@ namespace tensorflow {
 
 namespace {
 const std::set<DataType> ok_types = {
-    DataType::DT_INT32,
-    DataType::DT_FLOAT,
-    DataType::DT_HALF,
-    DataType::DT_BOOL,
+    DataType::DT_INT32, DataType::DT_FLOAT, DataType::DT_HALF,
+    DataType::DT_BOOL,  DataType::DT_INT8,  DataType::DT_UINT8,
 };
 
 struct TypeToStringFormatter {
