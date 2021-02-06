@@ -130,9 +130,9 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
                                const CompilerResources& resources);
 
 StatusOr<poplar::Tensor> AddTensorForTarget(
-    poplar::Graph& graph, const TensorTarget& tensor_target,
-    CompilerResources& resources, const TensorMap& tensor_map,
-    const poplar::DebugContext& debug_context);
+    poplar::Graph& graph, const TensorLocation& source,
+    const TensorTarget& tensor_target, CompilerResources& resources,
+    const TensorMap& tensor_map, const poplar::DebugContext& debug_context);
 
 StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                    const TensorLocation& src,
