@@ -180,50 +180,50 @@ class IPUSequentialPipelineTest(test.TestCase):
     with self.assertRaisesRegex(
         ValueError, "An IPU pipeline must take a non-empty list of "
         "stages"):
-      ipu.keras.SequentialPipelineModel([], gradient_accumulation_count=4)
+      ipu.keras.PipelineSequential([], gradient_accumulation_count=4)
 
   @test_util.run_v2_only
   def testPipelineCreation(self):
-    m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                          gradient_accumulation_count=4)
+    m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                     gradient_accumulation_count=4)
     self.assertEqual(len(m.layers), 4)
 
   @test_util.run_v2_only
   def testPipelineBadLayers(self):
     with self.assertRaisesRegex(ValueError,
                                 " may only contain lists of stages,"):
-      ipu.keras.SequentialPipelineModel([
+      ipu.keras.PipelineSequential([
           keras.layers.Dense(8),
           keras.layers.Dense(8),
       ],
-                                        gradient_accumulation_count=4)
+                                   gradient_accumulation_count=4)
 
   @test_util.run_v2_only
   def testPipelineBadLayersInStage(self):
     with self.assertRaisesRegex(ValueError, "must contain only Keras Layers"):
-      ipu.keras.SequentialPipelineModel([[
+      ipu.keras.PipelineSequential([[
           keras.layers.Dense(8),
       ], [
           keras.layers.Dense(8),
           [],
       ]],
-                                        gradient_accumulation_count=4)
+                                   gradient_accumulation_count=4)
 
   @test_util.run_v2_only
   def testCannotCallEagerly(self):
-    p = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                          gradient_accumulation_count=4)
+    p = ipu.keras.PipelineSequential(simple_pipeline(),
+                                     gradient_accumulation_count=4)
 
     c = constant_op.constant(np.zeros([1, 12], dtype=np.float32))
 
     with self.assertRaisesRegex(
-        ValueError, "SequentialPipelineModel can only be called through the"):
+        ValueError, "PipelineSequential can only be called through the"):
       p(c)
 
   @test_util.run_v2_only
   def testCannotUseKerasV1Optimizers(self):
-    p = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                          gradient_accumulation_count=4)
+    p = ipu.keras.PipelineSequential(simple_pipeline(),
+                                     gradient_accumulation_count=4)
 
     with self.assertRaisesRegex(
         ValueError,
@@ -235,8 +235,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testMustCallCompileFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -246,8 +246,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testMustCallCompileEvaluate(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -257,8 +257,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testNeedTupleDatasetFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -269,8 +269,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testNeedTupleDatasetEvaluate(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -281,8 +281,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testNeedNonTupleDatasetPredict(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
 
       with self.assertRaisesRegex(
           ValueError, r"requires a dataset containing a tuple of "):
@@ -292,21 +292,20 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testMismatchDatasetLengthToGradientAccumulationCount(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError,
-          "SequentialPipelineModel requires the size of the dataset "):
+          ValueError, "PipelineSequential requires the size of the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(simple_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(simple_pipeline(),
+                                       gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -317,8 +316,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testStepsPerEpochTooLargeForDataset(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=12)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -338,8 +337,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -376,8 +375,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryWithKerasOptimizer(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -400,8 +399,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -425,8 +424,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryStepsPerRun(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -450,8 +449,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryStepsPerEpochOneEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -476,8 +475,8 @@ class IPUSequentialPipelineTest(test.TestCase):
     with strategy.scope():
       ds = test_dataset()
 
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -534,8 +533,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryStepsPerEpochTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -559,8 +558,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -587,8 +586,8 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -613,8 +612,8 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -640,8 +639,8 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -664,8 +663,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testTrainPipelineWithLstm(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(pipeline_with_lstm(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(pipeline_with_lstm(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -684,8 +683,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitWithMetrics(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=24)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -713,8 +712,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -741,8 +740,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testPredict_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -766,8 +765,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testCanCallBuild(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       self.assertAllEqual(m.built, False)
       for l in m.layers:
@@ -790,8 +789,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testModelRetainsBuildWeights(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       self.assertAllEqual(m.built, False)
       for l in m.layers:
@@ -817,8 +816,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testFitWithNumpyData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -845,8 +844,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testEvalWithNumpyData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -869,8 +868,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testPredictWithNumpyData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(fixed_weight_pipeline(),
-                                            gradient_accumulation_count=8)
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
@@ -897,7 +896,7 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel(
+      m = ipu.keras.PipelineSequential(
           fixed_weight_pipeline(dtype=np.float16),
           gradient_accumulation_count=24,
           gradient_accumulation_dtype=dtype_getter,
@@ -967,14 +966,14 @@ class IPUSequentialPipelineTest(test.TestCase):
       ipu.utils.configure_ipu_system(cfg)
 
       # Compute output with substituition.
-      m = ipu.keras.SequentialPipelineModel(f(),
-                                            gradient_accumulation_count=8,
-                                            layer_replacement=True)
+      m = ipu.keras.PipelineSequential(f(),
+                                       gradient_accumulation_count=8,
+                                       layer_replacement=True)
       ipu_out = m.predict(data, batch_size=4)
 
       # Compute output with no substitution.
-      m_no_sub = ipu.keras.SequentialPipelineModel(
-          f(), gradient_accumulation_count=8)
+      m_no_sub = ipu.keras.PipelineSequential(f(),
+                                              gradient_accumulation_count=8)
       no_sub_out = m_no_sub.predict(data, batch_size=4)
 
     self.assertAllClose(ipu_out, no_sub_out)

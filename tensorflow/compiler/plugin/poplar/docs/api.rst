@@ -122,9 +122,15 @@ Estimators
 Keras
 ^^^^^
 
+.. note::
+
+  `tensorflow.python.ipu.keras.SequentialPipelineModel` has been renamed to
+  :py:class:`tensorflow.python.ipu.keras.PipelineSequential` and will be removed
+  in a future version.
+
 .. automodule:: tensorflow.python.ipu.keras
-  :members: Model, Sequential, PipelineStage, PipelineModel, SequentialPipelineModel
-  :imported-members: Model, Sequential, PipelineModel, PipelineStage, SequentialPipelineModel
+  :members: Model, Sequential, PipelineStage, PipelineModel, PipelineSequential
+  :imported-members: Model, Sequential, PipelineModel, PipelineStage, PipelineSequential
   :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.keras.model

@@ -31,22 +31,13 @@ from tensorflow.python.keras.layers import InputLayer
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import deprecation
 from tensorflow.python.util import tf_inspect
 from tensorflow.python.util import nest
 
 
-class PipelinedModel:
-  def __init__(self, *args, **kwargs):
-    raise NotImplementedError(
-        "PipelinedModel is no longer used. "
-        "For pipelining of ipu.keras.Sequential models, "
-        "use ipu.keras.SequentialPipelineModel and for ipu.keras.Model "
-        "use ipu.keras.PipelineModel.")
-
-
-class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=protected-access
-  """Keras Model for encapsulating a pipeline of stages to be run in parallel
-  on an IPU system.
+class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-access
+  """Keras Model for encapsulating a pipeline of stages to be run in parallel on an IPU system.
 
   A pipelined model will execute multiple sections (stages) of a model on more
   than one IPU at the same time, by pipelining mini-batches of data through
@@ -57,7 +48,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   and provides the `fit` API for training the model.
 
   The different stages are specified, similarly to the Keras Sequential model,
-  as a list in the constructor.  With the SequentialPipelineModel class the list
+  as a list in the constructor.  With the PipelineSequential class the list
   of layers becomes a list of lists of layers, where each list contains the
   layers for a particular stage.
 
@@ -66,7 +57,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
   pipeline.  The effective batch size is therefore the mini-batch size multipled
   by the gradient accumulation count.
 
-  There are some limitations with the SequentialPipelineModel compared to the
+  There are some limitations with the PipelineSequential class compared to the
   standard Keras Model:
 
   - Keras V1 optimizers cannot be used.
@@ -90,7 +81,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.SequentialPipelineModel([
+      m = ipu.keras.PipelineSequential([
         [
           keras.layers.Dense(4),
           keras.layers.Dense(4),
@@ -126,7 +117,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
                layer_replacement=False,
                **kwargs):
     """
-    Creates a sequential pipelined model.
+    Creates a pipelined Sequential model.
 
     Args:
         stages: A Python list of lists of Layers.
@@ -315,7 +306,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     This provides the same functionality as the Keras Model ``compile``
     method.
 
-    Certain features are not supported by the IPU SequentialPipelineModel:
+    Certain features are not supported by the IPU PipelineSequential class:
 
       - sample_weight_mode
       - weighted_metrics
@@ -325,7 +316,7 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
 
   def _get_internal_run_loop(self):
     if not self.internal_loop_fn:
-      fn = partial(SequentialPipelineModel._internal_run_loop, self)
+      fn = partial(PipelineSequential._internal_run_loop, self)
       self.internal_loop_fn = def_function.function(fn,
                                                     autograph=False,
                                                     experimental_compile=True)
@@ -568,6 +559,12 @@ class SequentialPipelineModel(ipu_model._IpuModelBase):  # pylint: disable=prote
     """
     raise NotImplementedError(
         "IPU Keras models do not support the `save` interface.")
+
+
+SequentialPipelineModel = deprecation.deprecated_alias(
+    deprecated_name="SequentialPipelineModel",
+    name="PipelineSequential",
+    func_or_class=PipelineSequential)
 
 
 class PipelineStage(object):

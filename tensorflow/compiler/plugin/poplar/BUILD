@@ -4780,9 +4780,9 @@ py_test(
 )
 
 py_test(
-    name = "example_tf2_sequential_pipelined_model",
+    name = "example_tf2_pipeline_sequential",
     size = "large",
-    srcs = ["docs/example_tf2_sequential_pipelined_model.py"],
+    srcs = ["docs/example_tf2_pipeline_sequential.py"],
     args = [
         "--epochs=1",
         "--steps-per-epoch=2",

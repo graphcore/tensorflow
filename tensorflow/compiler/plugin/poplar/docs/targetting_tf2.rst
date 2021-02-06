@@ -7,7 +7,7 @@ new way of targeting different pieces of hardware.
 
 The Graphcore implementation of TensorFlow includes IPU-specific implementations
 of the ``Model`` and ``Sequential`` classes, and adds ``PipelineModel`` and
-``SequentialPipelineModel`` classes for running a model on multiple IPUs. It
+``PipelineSequential`` classes for running a model on multiple IPUs. It
 also makes efficient use of the IPU by fusing operations into a single kernel
 that is executed repeatedly, amortising the cost of control and I/O.
 
@@ -115,7 +115,7 @@ available as :py:class:`tensorflow.python.ipu.keras.Sequential`.
 
 This is a substitute for the standard Keras ``Sequential`` class, using only a
 single IPU for training. For a high-performance, multi-IPU solution use
-the :ref:`sequential-pipeline-model`.
+the :ref:`pipeline-sequential`.
 
 Unlike the standard Keras ``Model`` class, it cannot be
 called directly. You must use use the ``fit()``, ``evaluate()`` and
@@ -156,20 +156,20 @@ Like the ``Sequential`` class, ``PipelineModel`` also supports automatic
 data-parallelism.
 
 
-.. _sequential-pipeline-model:
+.. _pipeline-sequential:
 
-SequentialPipelineModel class
+PipelineSequential class
 _____________________________
 
-:py:class:`~tensorflow.python.ipu.keras.SequentialPipelineModel` is an
+:py:class:`~tensorflow.python.ipu.keras.PipelineSequential` is an
 alternative to the ``PipelineModel`` class for the Keras ``Sequential`` class.
 
 Like the constructor for the standard Keras ``Sequential`` model,
-``SequentialPipelineModel`` takes a list of lists of layers, where each list of
+``PipelineSequential`` takes a list of lists of layers, where each list of
 layers is assigned to an IPU pipeline stage. See :ref:`tensorflow2examples` to
 see how the API is used.
 
-Like the ``Sequential`` class, ``SequentialPipelineModel`` also supports
+Like the ``Sequential`` class, ``PipelineSequential`` also supports
 automatic data-parallelism.
 
 Custom training loops
@@ -185,7 +185,7 @@ strategy's configuration.
 
 .. note::
   It is not possible to use either ``PipelineModel`` or
-  ``SequentialPipelineModel`` in a custom training loop.
+  ``PipelineSequential`` in a custom training loop.
 
 For more information on the ``@tf.function`` annotation, see the
 `TensorFlow function documentation <https://www.tensorflow.org/guide/function>`_.

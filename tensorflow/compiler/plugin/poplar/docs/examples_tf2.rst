@@ -43,16 +43,16 @@ This example shows how to use a custom training function with the
 Pipelined model
 ~~~~~~~~~~~~~~~
 
-This example shows how to use the IPU-specific Keras pipelined model
+This example shows how to use the IPU-specific Keras pipelined Model
 class to train a network.
 
 .. literalinclude:: example_tf2_pipelined_model.py
   :language: python
   :linenos:
 
-This example shows how to use the IPU-specific Keras pipelined Sequential model
+This example shows how to use the IPU-specific Keras pipelined Sequential
 class to train a network.
 
-.. literalinclude:: example_tf2_sequential_pipelined_model.py
+.. literalinclude:: example_tf2_pipeline_sequential.py
   :language: python
   :linenos:
