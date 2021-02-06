@@ -246,7 +246,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_training_loss_and_op(self, compiled_training_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_training_loop]):
-        loss = self._outfeed_queue.dequeue()
+        loss = self._outfeed_queue.dequeue(wait_for_completion=True)
 
       # Reduce loss over all dimensions (i.e. batch_size, gradient_accumulation_count)
       loss = math_ops.reduce_mean(math_ops.cast(loss, dtypes.float32))
@@ -280,7 +280,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_evaluation_loop]):
-        inputs = self._outfeed_queue.dequeue()
+        inputs = self._outfeed_queue.dequeue(wait_for_completion=True)
 
       args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
       metrics = self._captured_eval_metrics_fn(*args, **kwargs)
@@ -318,7 +318,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_predictions(self, compiled_prediction_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_prediction_loop]):
-        predictions = self._outfeed_queue.dequeue()
+        predictions = self._outfeed_queue.dequeue(wait_for_completion=True)
 
     if isinstance(predictions, dict):
       return predictions
