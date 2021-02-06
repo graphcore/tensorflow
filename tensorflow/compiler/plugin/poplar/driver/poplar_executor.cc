@@ -915,7 +915,6 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
     return;
   }
 
-  std::unique_lock<std::mutex> l(outfeeds_mutex_);
   for (const auto& outfeed_info : outfeed_infos) {
     const auto& outfeed_id = outfeed_info.config.feed_id();
     auto itr = outfeed_contexts_.find(outfeed_id);
@@ -1040,7 +1039,6 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
 IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
     const FeedInfo& outfeed_info) {
   TENSORFLOW_TRACEPOINT();
-  std::unique_lock<std::mutex> l(outfeeds_mutex_);
   auto itr = outfeed_contexts_.find(outfeed_info.config.feed_id());
   if (itr == outfeed_contexts_.end()) {
     LOG(FATAL)
@@ -2995,8 +2993,6 @@ InfeedAllocator* PoplarExecutor::GetInfeedAllocator() {
 std::vector<std::vector<tensorflow::Tensor>>
 PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
                                       const PoplarFeedConfig_Mode& mode) {
-  OutfeedContext* outfeed_context = nullptr;
-  std::unique_lock<std::mutex> outfeed_lock(outfeeds_mutex_);
   auto itr = outfeed_contexts_.find(feed_id);
   if (itr == outfeed_contexts_.end()) {
     LOG(INFO)
@@ -3006,10 +3002,9 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
            "program with the outfeed before trying to dequeue an outfeed.";
     return {};
   }
-  outfeed_context = itr->second.get();
+  auto& outfeed_context = itr->second;
   // Lock whilst we dequeue all the tensors.
   std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
-  outfeed_lock.unlock();
 
   if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
     std::vector<std::vector<tensorflow::Tensor>> output(
@@ -3036,7 +3031,6 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
 }
 
 Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
-  std::unique_lock<std::mutex> l(outfeeds_mutex_);
   for (auto& outfeed_info : outfeed_infos) {
     auto outfeed_id = outfeed_info.config.feed_id();
     const auto existing_feed = outfeed_contexts_.find(outfeed_id);
@@ -3075,7 +3069,6 @@ Status PoplarExecutor::DeleteOutfeed(const std::string& feed_id) {
         "Cannot delete outfeed with id='%s' while in use", feed_id.c_str());
   }
 
-  std::unique_lock<std::mutex> ol(outfeeds_mutex_);
   const auto num_erased = outfeed_contexts_.erase(feed_id);
   if (num_erased == 0) {
     return xla::NotFound(
