@@ -278,6 +278,8 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
       offload_gradient_accumulation_buffers
     self.replicated_weight_sharding = replicated_weight_sharding
     self.offload_weights = offload_weights
+    self._num_inputs = 1
+    self._num_outputs = 1
 
   def build(self, input_shape):
     """Builds the model based on input shapes received.
@@ -851,11 +853,18 @@ class PipelineModel(ipu_model.Model):
   def _assign_node_stages(self):
     # Get stages for each layer - used for mapping to nodes below.
     stages = dict()
+    max_stage_id = -1
+
+    loss_metrics_layer = self._get_output_loss_metrics()
+
     for n, layer in enumerate(self._layers):
       # Input layers need not have a pipeline stage assigned -
       # we don't have to wait for a computation to complete to
       # access the "result" of an input layer.
       if isinstance(layer, InputLayer):
+        continue
+
+      if layer is loss_metrics_layer:
         continue
 
       # Verify that a pipeline stage has been assigned.
@@ -867,28 +876,69 @@ class PipelineModel(ipu_model.Model):
 
       layer_id = id(layer)
       stages[layer_id] = layer._pipeline_stage  # pylint: disable=protected-access
+      max_stage_id = max(max_stage_id, layer._pipeline_stage)  # pylint: disable=protected-access
 
-    # Get the stage for each node from it's corresponding layer (above).
-    prev_stage = None
-    for n, node in enumerate(self._post_order_node_execution):
+    if loss_metrics_layer is not None:
+      stages[id(loss_metrics_layer)] = max_stage_id
+
+    num_inputs = len(self._input_layers)
+    nodes_per_stage = {}
+    for node in self._post_order_node_execution[num_inputs:]:
       layer = node.outbound_layer
-      if isinstance(layer, InputLayer):
-        continue
-
-      # Assign the node a pipeline stage.
       layer_id = id(layer)
       assert layer_id in stages
-      node._pipeline_stage = stages[layer_id]  # pylint: disable=protected-access
+      pipeline_stage = stages[layer_id]
+      node._pipeline_stage = pipeline_stage  # pylint: disable=protected-access
+      nodes_per_stage.setdefault(pipeline_stage, []).append(node)
 
-      # Verify stage order.
-      stage = node._pipeline_stage  # pylint: disable=protected-access
-      if prev_stage and prev_stage > stage:
-        raise ValueError(
-            "Post order execution node #%d has stage %d, but previous node had "
-            "stage %d. The pipeline stage for a node must be greater than or "
-            "equal to it's predecessor in the order of execution." %
-            (n, stage, prev_stage))
-      prev_stage = stage
+    # Check that all pipeline stages are visited.
+    found_stages = sorted(nodes_per_stage.keys())
+    num_stages = max_stage_id + 1
+
+    if found_stages != list(range(num_stages)):
+      missing_stages = set(range(num_stages)) - set(found_stages)
+      raise ValueError(
+          "Pipeline stages in the graph need to be strictly increasing, "
+          "found pipeline stages %s, however the following pipeline stages "
+          "are missing %s." % (", ".join(str(v)
+                                         for v in found_stages), ", ".join(
+                                             str(v) for v in missing_stages)))
+
+    # Post order does not take pipeline stages into account, for example
+    # multiple pipeline stages might have output layers. Try and reorder the
+    # the nodes to preserve post order and to make sure pipeline stages
+    # can still be executed in order.
+    new_post_order_node_execution = []
+
+    # Set of reference tensors which were computed.
+    computed_set = set()
+    for op, layer in zip(self.inputs, self._input_layers):
+      assert len(layer.inbound_nodes) == 1
+      new_post_order_node_execution.append(layer.inbound_nodes[0])
+      computed_set.add(str(id(op)))
+
+    # New post order executes all the layers within a pipeline stage and it
+    # makes sure that all the layer inputs have already executed.
+    for stage_id in range(num_stages):
+      for node in nodes_per_stage[stage_id]:
+        all_inputs_executed = all(
+            str(id(tensor)) in computed_set
+            for tensor in nest.flatten(node.input_tensors))
+        if not all_inputs_executed:
+          raise ValueError(
+              "Layer %s in pipeline stage %d has a dependency from a pipeline "
+              "stage which has not yet executed. Layers can only use outputs "
+              "from current or previous pipeline stages." %
+              (node.outbound_layer.name, node._pipeline_stage))  # pylint: disable=protected-access
+        new_post_order_node_execution.append(node)
+        # Update computed_set.
+        computed_set.update(
+            [str(id(x)) for x in nest.flatten(node.output_tensors)])
+
+    assert len(new_post_order_node_execution) == len(
+        self._post_order_node_execution)
+    self._post_order_node_execution = new_post_order_node_execution
+
     stage_node_ids = list(set(stages.values()))
     stage_node_ids.sort()
     return stage_node_ids
@@ -951,19 +1001,18 @@ class PipelineModel(ipu_model.Model):
           self._execute_layer_node(node, training, tensor_dict)  # pylint: disable=protected-access
 
       if stage_id == self.stages[-1]:
-        return self._get_output_tensors(tensor_dict)  # pylint: disable=protected-access
-      return list(tensor_dict.values()) + targets
+        return self._get_output_tensors(tensor_dict), targets  # pylint: disable=protected-access
+      return list(tensor_dict.values()), targets
 
     def inference_body(stage_id, *args):
-      return main_body(stage_id, *args)
+      return main_body(stage_id, *args)[0]
 
     def training_body(stage_id, *args):
-      x = main_body(stage_id, *args)
+      x, targets = main_body(stage_id, *args)
       if stage_id == self.stages[-1]:
         self._set_output_attrs(x)
-        targets = args[-len(self.outputs)]
         return self._add_loss(targets)
-      return x
+      return x + targets
 
     def optimizer_function(loss, *_):
       if not self.trainable_weights:

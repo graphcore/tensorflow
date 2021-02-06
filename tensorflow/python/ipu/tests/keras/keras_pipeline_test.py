@@ -224,7 +224,7 @@ class IPUPipelineTest(test.TestCase):
       x = simple_pipeline(input_layer, [2, 4, 2], [0, 1, 0])
 
       with self.assertRaisesRegex(
-          ValueError, "The pipeline stage for a node must be greater"):
+          ValueError, "Layer dense_2 in pipeline stage 0 has a dependency"):
         ipu.keras.PipelineModel(inputs=input_layer,
                                 outputs=x,
                                 gradient_accumulation_count=2)
@@ -302,7 +302,7 @@ class IPUPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.fit(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -318,7 +318,7 @@ class IPUPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.evaluate(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -332,7 +332,7 @@ class IPUPipelineTest(test.TestCase):
                                   gradient_accumulation_count=24)
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
@@ -659,6 +659,47 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(len(logs), 1)
       self.assertTrue("num_steps" in logs[0].keys())
       self.assertEqual(logs[0]['num_steps'], 3)
+
+  @test_util.run_v2_only
+  def testFitMultipleOutputs(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      init = keras.initializers.Constant(0.1)
+
+      with ipu.keras.PipelineStage(0):
+        y1 = keras.layers.Dense(2,
+                                activation=keras.activations.relu,
+                                kernel_initializer=init)(input_layer)
+
+      with ipu.keras.PipelineStage(1):
+        y2 = keras.layers.Dense(2, kernel_initializer=init)(input_layer)
+
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=[y1, y2],
+                                  gradient_accumulation_count=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Fit the weights to the dataset
+      dataset = test_dataset(length=144, batch_size=2)
+
+      def d(x, y):
+        return x, y, y
+
+      dataset = dataset.map(d)
+
+      history = m.fit(dataset, epochs=2)
+      self.assertEqual(list(history.history.keys()), ['loss'])
+      self.assertEqual(type(history.history['loss']), list)
+      losses = history.history['loss']
+      self.assertEqual(len(losses), 2)
+      self.assertTrue(losses[0] > losses[-1])
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):

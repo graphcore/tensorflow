@@ -312,7 +312,7 @@ class IPUModelModelTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.fit(test_inference_dataset())
 
   @test_util.run_v2_only
@@ -325,7 +325,7 @@ class IPUModelModelTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.evaluate(test_inference_dataset())
 
   @test_util.run_v2_only
@@ -337,7 +337,7 @@ class IPUModelModelTest(test.TestCase):
       m = ipu.keras.Model(inputs=input_layer, outputs=x)
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.predict(test_dataset())
 
   @test_util.run_v2_only
@@ -1524,11 +1524,13 @@ class IPUModelModelTest(test.TestCase):
       ds_y = dataset_ops.Dataset.from_tensors((y1, y2))
       ds_xy = dataset_ops.Dataset.zip(
           (ds_x, ds_y)).repeat(32).batch(4, drop_remainder=True)
-      ds_x = dataset_ops.Dataset.zip(
+      ds_x_tuple = dataset_ops.Dataset.zip(
           (ds_x,)).repeat(32).batch(4, drop_remainder=True)
+      ds_x_no_tuple = ds_x.repeat(32).batch(4, drop_remainder=True)
 
       m.fit(ds_xy)
-      m.predict(ds_x)
+      m.predict(ds_x_tuple)
+      m.predict(ds_x_no_tuple)
       m.evaluate(ds_xy)
 
       # No exceptions thrown

@@ -88,11 +88,11 @@ def _validate_args(kwargs, fn):
 
 def _validate_dataset_element_count(ds, count, fn_name):
   structure = dataset_ops.get_structure(ds)
-  if not isinstance(structure, tuple) or len(structure) != count:
-    if count > 1 or not isinstance(structure, tensor_spec.TensorSpec):
-      raise ValueError(fn_name +
-                       "() requires a dataset containing a tuple of " +
-                       str(count) + " elements.")
+  num_elements = len(nest.flatten(structure))
+  if num_elements != count:
+    raise ValueError(
+        "%s requires a dataset with a structure containing %d element(s), but "
+        "got %d element(s) instead." % (fn_name, num_elements, count))
 
 
 def _get_dataset_and_count(x, y, batch_size):
@@ -312,6 +312,8 @@ class _IpuModelBase(KerasModel):
 
     target_tensors = targets if isinstance(targets,
                                            (list, tuple)) else [targets]
+
+    target_tensors = self._process_target_tensor_for_compile(target_tensors)
 
     # Prepare list of loss functions, same size of model outputs.
     self.loss_functions = training_utils.prepare_loss_functions(
@@ -675,7 +677,8 @@ class _IpuModelBase(KerasModel):
     ds, size = _get_dataset_and_count(x, y, batch_size)
 
     _validate_args(kwargs, "fit")
-    _validate_dataset_element_count(ds, 2, "fit")
+    _validate_dataset_element_count(ds, self._num_inputs + self._num_outputs,
+                                    "fit")
 
     self._assert_compile_was_called()
 
@@ -702,7 +705,8 @@ class _IpuModelBase(KerasModel):
     ds, size = _get_dataset_and_count(x, y, batch_size)
 
     _validate_args(kwargs, "evaluate")
-    _validate_dataset_element_count(ds, 2, "evaluate")
+    _validate_dataset_element_count(ds, self._num_inputs + self._num_outputs,
+                                    "evaluate")
 
     self._assert_compile_was_called()
 
@@ -727,7 +731,7 @@ class _IpuModelBase(KerasModel):
     ds, size = _get_dataset_and_count(x, None, batch_size)
 
     _validate_args(kwargs, "predict")
-    _validate_dataset_element_count(ds, 1, "predict")
+    _validate_dataset_element_count(ds, self._num_inputs, "predict")
 
     result = self._do_internal(ModeKeys.PREDICT, ds, size, 1, verbose,
                                callbacks, 0, steps, steps_per_run,
@@ -854,6 +858,8 @@ class IPUSequential(_IpuModelBase):
     self.gradient_accumulation_count = gradient_accumulation_count
     self.gradient_accumulation_dtype = gradient_accumulation_dtype
     self.model_layers = layers
+    self._num_inputs = 1
+    self._num_outputs = 1
 
   def build(self, input_shape):
     """Builds the model based on input shapes received.
@@ -1200,7 +1206,7 @@ class IPUModel(_IpuModelBase):
     else:
       raise ValueError("Model was not provided with 'inputs' and 'outputs'")
 
-    # Substitute layers for IPU equivelants if enabled.
+    # Substitute layers for IPU equivalents if enabled.
     if self._layer_replacer:
       for layer in self._layers:
         layer = self._layer_replacer(layer)
@@ -1213,6 +1219,9 @@ class IPUModel(_IpuModelBase):
       for i in range(len(self.outputs)):
         name = "output_%d" % i
         self._loss_metrics.append(metrics_module.Mean(name=name))
+
+    self._num_inputs = len(self.inputs)
+    self._num_outputs = len(self.outputs)
 
   @trackable.no_automatic_dependency_tracking
   def _init_network(self, inputs, outputs, name=None, **kwargs):
@@ -1309,6 +1318,7 @@ class IPUModel(_IpuModelBase):
 
     for depth in depth_keys:
       nodes = self._nodes_by_depth[depth]
+
       for node in nodes:
         # Check all the node inputs have been executed.
         if all(
@@ -1443,9 +1453,9 @@ class IPUModel(_IpuModelBase):
           opt.apply_gradients(grads_and_vars)
       return []
 
-    def body(*args):
+    def body(*args, **kwargs):
       # Flatten all the arguments.
-      args = nest.flatten(args)
+      args = nest.flatten(args) + nest.flatten(kwargs)
       fn = functional_ops.outlined_function(
           inference_body if mode == ModeKeys.PREDICT else training_body)
       return fn(*args)

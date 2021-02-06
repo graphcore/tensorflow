@@ -262,7 +262,7 @@ class IPUSequentialPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.fit(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -274,7 +274,7 @@ class IPUSequentialPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.evaluate(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
@@ -285,7 +285,7 @@ class IPUSequentialPipelineTest(test.TestCase):
                                        gradient_accumulation_count=24)
 
       with self.assertRaisesRegex(
-          ValueError, r"requires a dataset containing a tuple of "):
+          ValueError, r"requires a dataset with a structure containing "):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
