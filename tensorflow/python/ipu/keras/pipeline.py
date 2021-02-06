@@ -804,7 +804,7 @@ class PipelineModel(ipu_model.Model):
     accumulation_count = gradient_accumulation_count * \
       batch_serialization_iterations
     super().__init__(*args,
-                     accumulation_count=accumulation_count,
+                     gradient_accumulation_count=accumulation_count,
                      layer_replacement=layer_replacement,
                      **kwargs)
 

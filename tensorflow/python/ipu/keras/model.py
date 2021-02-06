@@ -19,6 +19,7 @@ Keras Model interfaces for IPU
 
 from functools import partial
 import copy
+import inspect
 import math
 import weakref
 
@@ -143,6 +144,20 @@ def _autocast_dataset(dataset):
   return dataset.map(autocast_structure)
 
 
+def _handle_renamed_arg(old_arg, new_arg, old_arg_name, new_arg_name,
+                        is_supplied_fn):
+  if is_supplied_fn(old_arg):
+    calling_class = inspect.stack()[1][0].f_locals["self"].__class__
+    logging.warning(
+        f"From {calling_class.__name__}: Argument '{old_arg_name}' is"
+        f" deprecated, use '{new_arg_name}' instead.")
+    if is_supplied_fn(new_arg):
+      raise ValueError(f"Arguments {old_arg_name} and {new_arg_name}"
+                       " cannot be used together.")
+    return old_arg
+  return new_arg
+
+
 class _TensorflowOptimizerWrapper(Optimizer):
   """A class which wraps a standard TensorFlow optimizer, giving it a TF
   optimizer interface, but generating gradients against the Keras Model.
@@ -217,7 +232,7 @@ class _KerasOptimizerWrapper(Optimizer):
 class _IpuModelBase(KerasModel):
   """Base class for IPU Keras models"""
   def __init__(self,
-               accumulation_count,
+               gradient_accumulation_count,
                shard_count,
                layer_replacement=False,
                **kwargs):
@@ -225,7 +240,7 @@ class _IpuModelBase(KerasModel):
     super(_IpuModelBase, self).__init__(dtype=None, name=name)
 
     self.args = kwargs
-    self.accumulation_count = accumulation_count
+    self.gradient_accumulation_count = gradient_accumulation_count
 
     self.built = False
     self.history = None
@@ -409,7 +424,7 @@ class _IpuModelBase(KerasModel):
               "When using an infinitely repeating dataset, you must provide"
               " the number of steps per epoch (steps_per_epoch).")
         else:
-          steps_per_epoch = size // self.accumulation_count
+          steps_per_epoch = size // self.gradient_accumulation_count
 
     if steps_per_epoch is not None and steps_per_run is not None:
       if steps_per_epoch % (steps_per_run * self.replication_factor) != 0:
@@ -432,16 +447,17 @@ class _IpuModelBase(KerasModel):
     # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
     if mini_batches_per_epoch is not None:
-      mini_batches_per_epoch = mini_batches_per_epoch * self.accumulation_count
+      mini_batches_per_epoch *= self.gradient_accumulation_count
 
     # If there is a fixed length of dataset, and the user has also specified
     # a steps_per_epoch, then check that this won't exhaust the dataset.
     if verify_dataset_length and steps_per_epoch:
       if mini_batches_per_epoch > dataset_length:
         raise ValueError(
-            "Steps per epoch times accumulation count (%d x %d) is greater"
-            " than the number of samples in the dataset (%d)." %
-            (steps_per_epoch, self.accumulation_count, dataset_length))
+            "Steps per epoch times gradient accumulation count (%d x %d) is"
+            " greater than the number of samples in the dataset (%d)." %
+            (steps_per_epoch, self.gradient_accumulation_count,
+             dataset_length))
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
@@ -449,28 +465,29 @@ class _IpuModelBase(KerasModel):
     # dataset is of finite length. In that case mini_batches_per_epoch is set to
     # the size of the dataset in infer_steps_for_dataset.
     if steps_per_run is None:
-      if mini_batches_per_epoch % (self.accumulation_count *
+      if mini_batches_per_epoch % (self.gradient_accumulation_count *
                                    self.replication_factor) != 0:
         raise ValueError(
-            self.__class__.__name__ + " requires the size of the dataset (%d) "
-            "to be evenly divisible by the accumulation count (%d) multiplied "
-            "by the replication factor (%d)" %
-            (mini_batches_per_epoch, self.accumulation_count,
+            self.__class__.__name__ + " requires the size of the dataset (%d)"
+            " to be evenly divisible by the gradient accumulation count (%d)"
+            " multiplied by the replication factor (%d)" %
+            (mini_batches_per_epoch, self.gradient_accumulation_count,
              self.replication_factor))
     else:
-      if mini_batches_per_epoch % (self.accumulation_count *
+      if mini_batches_per_epoch % (self.gradient_accumulation_count *
                                    self.replication_factor *
                                    steps_per_run) != 0:
         raise ValueError(
-            self.__class__.__name__ + " requires the size of the dataset (%d) "
-            "to be evenly divisible by the product of 'steps_per_run' (%d), "
-            "the accumulation count (%d), and the replication factor (%d)." %
-            (mini_batches_per_epoch, steps_per_run, self.accumulation_count,
-             self.replication_factor))
+            self.__class__.__name__ + " requires the size of the dataset (%d)"
+            " to be evenly divisible by the product of 'steps_per_run' (%d),"
+            " the gradient accumulation count (%d), and the replication factor"
+            " (%d)." %
+            (mini_batches_per_epoch, steps_per_run,
+             self.gradient_accumulation_count, self.replication_factor))
 
     steps_per_epoch_per_replica = (
         mini_batches_per_epoch /
-        (self.accumulation_count * self.replication_factor))
+        (self.gradient_accumulation_count * self.replication_factor))
     if not steps_per_run:
       steps_per_run = steps_per_epoch_per_replica
 
@@ -777,19 +794,21 @@ class IPUSequential(_IpuModelBase):
   """
   def __init__(self,
                layers=None,
+               gradient_accumulation_count=1,
+               gradient_accumulation_dtype=None,
+               layer_replacement=False,
                accumulation_count=1,
-               accumulation_dtype=None,
-               layer_replacement=False):
+               accumulation_dtype=None):
     """
     Creates a Keras sequential model, optimized to run on the IPU.
 
     Args:
         layers: A Python list of Keras Layers.
-        accumulation_count: The number of mini-batches to process
+        gradient_accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
-        accumulation_dtype: The data type used for the gradient accumulation
-          buffer. One of:
+        gradient_accumulation_dtype: The data type used for the gradient
+          accumulation buffer. One of:
             - `None`: Use an accumulator of the same type as the variable type.
             - A `DType`: Use this type for all the accumulators.
             - A callable that takes the variable and returns a `DType`: Allows
@@ -801,8 +820,21 @@ class IPUSequential(_IpuModelBase):
           be done by using a custom optimizer.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
+        accumulation_count: Deprecated (renamed to gradient_accumulation_count).
+        accumulation_dtype: Deprecated (renamed to gradient_accumulation_dtype).
     """
-    super().__init__(accumulation_count=accumulation_count,
+
+    # We can use deprecated_args here instead, but IPUModel can't use it, so
+    # we do the same as IPUModel for consistency.
+    gradient_accumulation_count = _handle_renamed_arg(
+        accumulation_count, gradient_accumulation_count, "accumulation_count",
+        "gradient_accumulation_count", lambda arg: arg > 1)
+
+    gradient_accumulation_dtype = _handle_renamed_arg(
+        accumulation_dtype, gradient_accumulation_dtype, "accumulation_dtype",
+        "gradient_accumulation_dtype", lambda arg: arg)
+
+    super().__init__(gradient_accumulation_count=gradient_accumulation_count,
                      shard_count=1,
                      layer_replacement=layer_replacement)
 
@@ -814,8 +846,8 @@ class IPUSequential(_IpuModelBase):
         raise ValueError("An IPU Sequential's list of Layers may only contain"
                          " Keras Layers.")
 
-    self.accumulation_count = accumulation_count
-    self.accumulation_dtype = accumulation_dtype
+    self.gradient_accumulation_count = gradient_accumulation_count
+    self.gradient_accumulation_dtype = gradient_accumulation_dtype
     self.model_layers = layers
 
   def build(self, input_shape):
@@ -900,9 +932,11 @@ class IPUSequential(_IpuModelBase):
       if opt and mode == ModeKeys.TRAIN:
 
         # If it is gradient accumulation then wrap in that too
-        if self.accumulation_count > 1:
+        if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              opt, self.accumulation_count, dtype=self.accumulation_dtype)
+              opt,
+              self.gradient_accumulation_count,
+              dtype=self.gradient_accumulation_dtype)
 
         # Get gradients and apply them to the trainable variables
         grads_and_vars = opt.compute_gradients(l[0], self.trainable_variables)
@@ -915,7 +949,7 @@ class IPUSequential(_IpuModelBase):
           inference_body if mode == ModeKeys.PREDICT else training_body)
       return fn(*args)
 
-    result = loops.repeat(int(repeat_count * self.accumulation_count),
+    result = loops.repeat(int(repeat_count * self.gradient_accumulation_count),
                           body,
                           infeed_queue=infeed_queue)
 
@@ -1107,9 +1141,11 @@ class IPUModel(_IpuModelBase):
   """
   def __init__(self,
                *args,
+               gradient_accumulation_count=1,
+               gradient_accumulation_dtype=None,
+               layer_replacement=False,
                accumulation_count=1,
                accumulation_dtype=None,
-               layer_replacement=False,
                **kwargs):
     """
     Creates a Keras model, optimized to run on the IPU.
@@ -1118,11 +1154,11 @@ class IPUModel(_IpuModelBase):
     arguments.
 
     Args:
-        accumulation_count: The number of mini-batches to process
+        gradient_accumulation_count: The number of mini-batches to process
             while accumulating their gradients, before running a
             parameter/weight update step.
-        accumulation_dtype: The data type used for the gradient accumulation
-          buffer. One of:
+        gradient_accumulation_dtype: The data type used for the gradient
+          accumulation buffer. One of:
             - `None`: Use an accumulator of the same type as the variable type.
             - A `DType`: Use this type for all the accumulators.
             - A callable that takes the variable and returns a `DType`: Allows
@@ -1134,13 +1170,24 @@ class IPUModel(_IpuModelBase):
           be done by using a custom optimizer.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
+        accumulation_count: Deprecated (renamed to gradient_accumulation_count).
+        accumulation_dtype: Deprecated (renamed to gradient_accumulation_dtype).
     """
-    super().__init__(accumulation_count=accumulation_count,
+    # We can't use deprecated_args because it doesn't handle the *args well
+    gradient_accumulation_count = _handle_renamed_arg(
+        accumulation_count, gradient_accumulation_count, "accumulation_count",
+        "gradient_accumulation_count", lambda arg: arg > 1)
+
+    gradient_accumulation_dtype = _handle_renamed_arg(
+        accumulation_dtype, gradient_accumulation_dtype, "accumulation_dtype",
+        "gradient_accumulation_dtype", lambda arg: arg)
+
+    super().__init__(gradient_accumulation_count=gradient_accumulation_count,
                      shard_count=1,
                      layer_replacement=layer_replacement,
                      **kwargs)
 
-    self.accumulation_dtype = accumulation_dtype
+    self.gradient_accumulation_dtype = gradient_accumulation_dtype
 
     # Signature detection
     if len(args) == 2 - sum(['inputs' in kwargs, 'outputs' in kwargs]):
@@ -1380,9 +1427,11 @@ class IPUModel(_IpuModelBase):
 
       opt = self._get_optimizer()
       if opt and training:
-        if self.accumulation_count > 1:
+        if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              opt, self.accumulation_count, dtype=self.accumulation_dtype)
+              opt,
+              self.gradient_accumulation_count,
+              dtype=self.gradient_accumulation_dtype)
 
         for l in losses[:len(self.outputs)]:  # No grads for metrics.
           grads_and_vars = opt.compute_gradients(l, self.trainable_variables)
@@ -1396,7 +1445,7 @@ class IPUModel(_IpuModelBase):
           inference_body if mode == ModeKeys.PREDICT else training_body)
       return fn(*args)
 
-    result = loops.repeat(int(repeat_count * self.accumulation_count),
+    result = loops.repeat(int(repeat_count * self.gradient_accumulation_count),
                           body,
                           infeed_queue=infeed_queue)
 

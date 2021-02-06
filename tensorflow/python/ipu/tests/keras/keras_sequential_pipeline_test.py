@@ -329,8 +329,8 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Fit the weights to the dataset
       with self.assertRaisesRegex(
           ValueError,
-          r"Steps per epoch times accumulation count \(14 x 12\) is greater than"
-      ):
+          r"Steps per epoch times gradient accumulation count \(14 x 12\) is"
+          r" greater than"):
         m.fit(test_dataset(length=144), steps_per_epoch=14)
 
   @test_util.run_v2_only

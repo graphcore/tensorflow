@@ -68,8 +68,8 @@ def test_inference_dataset(length=None, batch_size=1, x_val=1.0):
   return ds
 
 
-def run_model_on_cpu(model, dataset, repeat_count, accumulation_count, loss,
-                     optimizer):
+def run_model_on_cpu(model, dataset, repeat_count, gradient_accumulation_count,
+                     loss, optimizer):
 
   it = iter(dataset)
   results = []
@@ -78,7 +78,7 @@ def run_model_on_cpu(model, dataset, repeat_count, accumulation_count, loss,
 
     accumulations = None
 
-    for _ in range(accumulation_count):
+    for _ in range(gradient_accumulation_count):
       x, t = next(it)
 
       with backprop.GradientTape() as tape:
@@ -258,7 +258,7 @@ class IPUModelTest(test.TestCase):
   def testMismatchDatasetLengthToModelDepth(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(simple_model(), gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -269,7 +269,7 @@ class IPUModelTest(test.TestCase):
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(simple_model(), gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -280,7 +280,7 @@ class IPUModelTest(test.TestCase):
   def testBuildSequentialModel(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(simple_model(), gradient_accumulation_count=24)
 
       self.assertAllEqual(m.built, False)
       for l in m.layers:
@@ -296,7 +296,8 @@ class IPUModelTest(test.TestCase):
   def testStepsPerEpochTooLargeForDataset(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -308,8 +309,8 @@ class IPUModelTest(test.TestCase):
       # Fit the weights to the dataset
       with self.assertRaisesRegex(
           ValueError,
-          r"Steps per epoch times accumulation count \(14 x 12\) is greater than"
-      ):
+          r"Steps per epoch times gradient accumulation count \(14 x 12\) is"
+          r" greater than"):
         m.fit(test_dataset(length=144), steps_per_epoch=14)
 
   @test_util.run_v2_only
@@ -353,7 +354,8 @@ class IPUModelTest(test.TestCase):
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -390,7 +392,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryWithKerasOptimizer(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -413,7 +416,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -437,7 +441,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerRun(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -447,7 +452,7 @@ class IPUModelTest(test.TestCase):
       m.compile(opt, loss='mse')
 
       # With a strategy saying 2 steps per run, and a step having a
-      # accumulation_count=24 mini-batches, we should consume a 96 sample
+      # gradient_accumulation_count=24 mini-batches, we should consume a 96 sample
       # epoch in 2 runs.  So we expect 2 'per-batch' callbacks.
       cb = BatchCallbackCounter()
 
@@ -461,7 +466,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerEpochOneEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -486,7 +492,8 @@ class IPUModelTest(test.TestCase):
     with strategy.scope():
       ds = test_dataset()
 
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -543,7 +550,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerEpochTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -567,7 +575,8 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -594,7 +603,8 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -619,7 +629,8 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -645,7 +656,8 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -668,7 +680,8 @@ class IPUModelTest(test.TestCase):
   def testFitWithMetrics(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -696,7 +709,8 @@ class IPUModelTest(test.TestCase):
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -723,7 +737,8 @@ class IPUModelTest(test.TestCase):
   def testPredictBs1_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -747,7 +762,8 @@ class IPUModelTest(test.TestCase):
   def testPredictBs2_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -771,7 +787,8 @@ class IPUModelTest(test.TestCase):
   def testFitWithTensorDataNoBatchSize(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -793,7 +810,8 @@ class IPUModelTest(test.TestCase):
   def testFitWithTensorData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -820,7 +838,8 @@ class IPUModelTest(test.TestCase):
   def testFitWithNumpyData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -847,7 +866,8 @@ class IPUModelTest(test.TestCase):
   def testEvalWithNumpyData(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -871,7 +891,8 @@ class IPUModelTest(test.TestCase):
   def testEvalWithNumpyDataBs2(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -895,7 +916,8 @@ class IPUModelTest(test.TestCase):
   def testPredictWithNumpyDataBs1(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -918,7 +940,8 @@ class IPUModelTest(test.TestCase):
   def testPredictWithNumpyDataBs2(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -943,7 +966,8 @@ class IPUModelTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -968,7 +992,8 @@ class IPUModelTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(),
+                               gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -1025,7 +1050,7 @@ class IPUModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.Sequential(f(),
-                               accumulation_count=8,
+                               gradient_accumulation_count=8,
                                layer_replacement=True)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)

@@ -135,8 +135,8 @@ def simple_cpu_model(layer_sizes, w=None):
   return layers
 
 
-def run_model_on_cpu(model, dataset, repeat_count, accumulation_count, loss,
-                     optimizer):
+def run_model_on_cpu(model, dataset, repeat_count, gradient_accumulation_count,
+                     loss, optimizer):
   it = iter(dataset)
   results = []
 
@@ -144,7 +144,7 @@ def run_model_on_cpu(model, dataset, repeat_count, accumulation_count, loss,
 
     accumulations = None
 
-    for _ in range(accumulation_count):
+    for _ in range(gradient_accumulation_count):
       x, t = next(it)
 
       with backprop.GradientTape() as tape:
@@ -346,7 +346,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       m.compile('sgd', loss='mse')
       with self.assertRaisesRegex(ValueError,
@@ -359,7 +361,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -372,7 +376,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=12)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -384,8 +390,8 @@ class IPUModelModelTest(test.TestCase):
       # Fit the weights to the dataset
       with self.assertRaisesRegex(
           ValueError,
-          r"Steps per epoch times accumulation count \(14 x 12\) is greater "
-          r"than"):
+          r"Steps per epoch times gradient accumulation count \(14 x 12\) is"
+          r" greater than"):
         m.fit(test_dataset(length=144), steps_per_epoch=14)
 
   @test_util.run_v2_only
@@ -436,7 +442,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=8)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -478,7 +486,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -502,7 +512,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -531,7 +543,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -560,7 +574,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -585,7 +601,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=12)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -617,7 +635,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -642,7 +662,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -668,7 +690,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -678,8 +702,8 @@ class IPUModelModelTest(test.TestCase):
       m.compile(opt, loss='mse')
 
       # With a strategy saying 2 steps per run, and a step having a
-      # accumulation_count=24 mini-batches, we should consume a 96 sample
-      # epoch in 2 runs.  So we expect 2 'per-batch' callbacks.
+      # gradient_accumulation_count=24 mini-batches, we should consume a 96
+      # sample epoch in 2 runs.  So we expect 2 'per-batch' callbacks.
       cb = BatchCallbackCounter()
 
       # Fit the weights to the dataset
@@ -694,7 +718,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -720,7 +746,9 @@ class IPUModelModelTest(test.TestCase):
       ds = test_dataset()
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -779,7 +807,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -805,7 +835,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -834,7 +866,9 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -861,7 +895,9 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -889,7 +925,9 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -914,7 +952,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=24)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -944,7 +984,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=8)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -974,7 +1016,9 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x, accumulation_count=8)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -1009,7 +1053,7 @@ class IPUModelModelTest(test.TestCase):
 
       m = ipu.keras.Model(inputs=[input_a, input_b],
                           outputs=[block_c, block_d],
-                          accumulation_count=8)
+                          gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -1038,7 +1082,7 @@ class IPUModelModelTest(test.TestCase):
 
       m = ipu.keras.Model(inputs=[input_a, input_b],
                           outputs=[block_c, block_d],
-                          accumulation_count=8)
+                          gradient_accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -1410,7 +1454,9 @@ class IPUModelModelTest(test.TestCase):
     # Compute IPU model output, uses layer replacement.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(*f(), accumulation_count=8, layer_replacement=True)
+      m = ipu.keras.Model(*f(),
+                          gradient_accumulation_count=8,
+                          layer_replacement=True)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -1461,7 +1507,9 @@ class IPUModelModelTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(*f(), accumulation_count=8, layer_replacement=True)
+      m = ipu.keras.Model(*f(),
+                          gradient_accumulation_count=8,
+                          layer_replacement=True)
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
