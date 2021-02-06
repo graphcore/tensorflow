@@ -184,6 +184,14 @@ class PoplarExecutable : public Executable {
                        const poplar::Target& target);
 
  private:
+  Status ExecuteComputeFunction(
+      const ExecutableRunOptions* run_options,
+      se::DeviceMemoryBase* result_buffer,
+      HloExecutionProfile* hlo_execution_profile,
+      const std::vector<se::DeviceMemoryBase>& argument_buffers,
+      const std::vector<Shape>& argument_shapes,
+      const PoplarExecutor::ArgsHandleMap& args_map, uint64 start_time_us);
+
   friend class GraphCompileIoMapTest;
 
   // If you add fields which are specific to a compiled engine, then you will

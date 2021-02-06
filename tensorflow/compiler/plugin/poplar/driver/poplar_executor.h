@@ -321,6 +321,20 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Poplar Interface
   static se::host::HostStream* AsPoplarStream(se::Stream* stream);
 
+  // Access the current status of the executor and reset it in case the executor
+  // is being re-used.
+  Status GetAndResetExecutorStatus();
+
+  // Increase the internal reference counters for a buffer (and any of its sub
+  // buffers).
+  static Status IncrementBufferReferenceCount(
+      const se::DeviceMemoryBase& buffer, const Shape& shape);
+
+  // Increase the internal reference counters for a buffer (and any of its sub
+  // buffers).
+  static Status DecrementBufferReferenceCount(
+      const se::DeviceMemoryBase& buffer, const Shape& shape);
+
   std::string GetDeviceTargetName() const;
 
   Status ConfigurePoplarDevice(const IpuOptions&);
@@ -562,12 +576,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       const PoplarExecutable& executable, se::DeviceMemoryAllocator* allocator,
       const ArgsHandleMap& args_map, int ordinal);
 
-  Status ExecuteEngine(se::DeviceMemoryBase* result_buffer,
-                       se::StreamExecutor* executor,
-                       PoplarExecutable& executable,
-                       const ArgsHandleMap& args_map,
-                       se::DeviceMemoryAllocator* allocator,
-                       const Args& arguments);
+  // Executes the executable on a Poplar device. This function is expected to
+  // be executed asynchronously and any execution errors can be obtained by
+  // calling GetAndResetExecutorStatus.
+  void ExecuteEngine(se::DeviceMemoryBase* result_buffer,
+                     se::StreamExecutor* executor, PoplarExecutable& executable,
+                     const ArgsHandleMap& args_map,
+                     se::DeviceMemoryAllocator* allocator,
+                     const Args& arguments);
 
   static StatusOr<se::DeviceMemoryBase> GetBufferByShapeIndex(
       const se::DeviceMemoryBase& top, const ShapeIndex& index);
@@ -659,6 +675,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void SetCurrentReplicationFactor(int64 executable_replication_factor);
 
  private:
+  Status ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
+                           se::StreamExecutor* executor,
+                           PoplarExecutable& executable,
+                           const ArgsHandleMap& args_map,
+                           se::DeviceMemoryAllocator* allocator,
+                           const Args& arguments);
+
   Status CreatePoplarTarget();
 
   // Compute literal(s) input for ConstantOutputAllocation when dealing with
@@ -913,6 +936,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   IPUConfig ipu_;
 
   int64 poplar_device_hash_;
+
+  Status current_status_ GUARDED_BY(ipu_.Mutex()) = Status::OK();
 
   poplar::OptionFlags option_flags_;
 
