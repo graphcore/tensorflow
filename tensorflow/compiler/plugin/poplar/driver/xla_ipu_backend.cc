@@ -53,6 +53,19 @@ static bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("Tout", DT_VARIANT, kdef);
   }
 
+  // Support (u)int8 for data feeding to the IPU.
+  if (kdef->op() == "Cast") {
+    AddDtypeToKernelDefConstraint("SrcT", DT_INT8, kdef);
+    AddDtypeToKernelDefConstraint("SrcT", DT_UINT8, kdef);
+    AddDtypeToKernelDefConstraint("DstT", DT_INT8, kdef);
+    AddDtypeToKernelDefConstraint("DstT", DT_UINT8, kdef);
+  }
+  if (kdef->op() == "PopDatastreamInfeedDequeue" ||
+      kdef->op() == "PopDatastreamOutfeedEnqueue") {
+    AddDtypeToKernelDefConstraint("output_types", DT_INT8, kdef);
+    AddDtypeToKernelDefConstraint("output_types", DT_UINT8, kdef);
+  }
+
   return true;
 }
 
