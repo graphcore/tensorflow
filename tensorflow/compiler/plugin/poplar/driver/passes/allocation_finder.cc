@@ -249,7 +249,13 @@ void AllocationFinder::FindConsumers(
     if (visited.count(user) == 0) {
       visited.insert(user);
       int64 op_index = user->operand_index(tgt);
-      auto tensor_target = TensorTarget(user, op_index, path, permutation);
+      // The backward path does not contain the source.
+      std::vector<const HloInstruction*> backward_path = path;
+      backward_path.erase(std::begin(backward_path));
+
+      auto tensor_target =
+          TensorTarget(user, op_index, backward_path, permutation);
+
       switch (user->opcode()) {
         case HloOpcode::kConvolution:
         case HloOpcode::kDot: {

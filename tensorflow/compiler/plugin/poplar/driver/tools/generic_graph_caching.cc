@@ -145,9 +145,9 @@ Status GenericGraphCache::ExecuteCached(
         if (allocating_indices.contains(arg_idx)) {
           // Just allocate the tensor.
           TF_ASSIGN_OR_RETURN(
-              new_arg,
-              AddTensorForTarget(graph, {inst, arg_idx}, resources, local_map,
-                                 {debug_name_and_id, name}));
+              new_arg, AddTensorForTarget(graph, {inst->operand(arg_idx), 0},
+                                          {inst, arg_idx}, resources, local_map,
+                                          {debug_name_and_id, name}));
         } else if (layout_dependencies.contains(arg_idx)) {
           // Need to allocate a tensor given a previously allocated tensor.
           int64 dependent_arg_idx = layout_dependencies.at(arg_idx);
@@ -156,7 +156,8 @@ Status GenericGraphCache::ExecuteCached(
           TF_ASSIGN_OR_RETURN(
               new_arg,
               AddTensorForTarget(
-                  graph, {inst, arg_idx, dependent_operand, dependent_arg_idx},
+                  graph, {inst->operand(arg_idx), 0},
+                  {inst, arg_idx, dependent_operand, dependent_arg_idx},
                   resources, local_map, {debug_name_and_id, name}));
         } else {
           // We don't have an allocator function and we assume linear mapping is
