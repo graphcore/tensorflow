@@ -99,7 +99,6 @@ def _poputil_op_layer_backward(op, grads, add_op):
 def _poputil_cpu_user_operation_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")
   op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
-  name = op.name + "_grad"
   gradient_attributes = op.get_attr("gradient_attributes")
 
   def add_op(layout, gradient_size, separate_gradients, op_input_index,
@@ -108,7 +107,6 @@ def _poputil_cpu_user_operation_layer_backward(op, *grads):
         layout,
         library_path=library_path,
         op_name=op_name,
-        name=name,
         separate_gradients=separate_gradients,
         gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
@@ -125,7 +123,6 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")
   op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
   gp_path = op.get_attr("gp_path").decode("utf-8")
-  name = op.name + "_grad"
   gradient_attributes = op.get_attr("gradient_attributes")
 
   def add_op(layout, gradient_size, separate_gradients, op_input_index,
@@ -135,7 +132,6 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
         library_path=library_path,
         op_name=op_name,
         gp_path=gp_path,
-        name=name,
         separate_gradients=separate_gradients,
         gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
