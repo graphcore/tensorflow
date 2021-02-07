@@ -321,6 +321,20 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Poplar Interface
   static se::host::HostStream* AsPoplarStream(se::Stream* stream);
 
+  // Access the current status of the executor and reset it in case the executor
+  // is being re-used.
+  Status GetAndResetExecutorStatus();
+
+  // Increase the internal reference counters for a buffer (and any of its sub
+  // buffers).
+  static Status IncrementBufferReferenceCount(
+      const se::DeviceMemoryBase& buffer, const Shape& shape);
+
+  // Increase the internal reference counters for a buffer (and any of its sub
+  // buffers).
+  static Status DecrementBufferReferenceCount(
+      const se::DeviceMemoryBase& buffer, const Shape& shape);
+
   std::string GetDeviceTargetName() const;
 
   Status ConfigurePoplarDevice(const IpuOptions&);
@@ -562,12 +576,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       const PoplarExecutable& executable, se::DeviceMemoryAllocator* allocator,
       const ArgsHandleMap& args_map, int ordinal);
 
-  Status ExecuteEngine(se::DeviceMemoryBase* result_buffer,
-                       se::StreamExecutor* executor,
-                       PoplarExecutable& executable,
-                       const ArgsHandleMap& args_map,
-                       se::DeviceMemoryAllocator* allocator,
-                       const Args& arguments);
+  // Executes the executable on a Poplar device. This function is expected to
+  // be executed asynchronously and any execution errors can be obtained by
+  // calling GetAndResetExecutorStatus.
+  void ExecuteEngine(se::DeviceMemoryBase* result_buffer,
+                     se::StreamExecutor* executor, PoplarExecutable& executable,
+                     const ArgsHandleMap& args_map,
+                     se::DeviceMemoryAllocator* allocator,
+                     const Args& arguments);
 
   static StatusOr<se::DeviceMemoryBase> GetBufferByShapeIndex(
       const se::DeviceMemoryBase& top, const ShapeIndex& index);
@@ -599,6 +615,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   InfeedAllocator* GetInfeedAllocator();
 
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
+  // Fails if the outfeed with the given name does not exist.
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
       const std::string& feed_id, const PoplarFeedConfig_Mode& mode);
 
@@ -658,6 +675,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void SetCurrentReplicationFactor(int64 executable_replication_factor);
 
  private:
+  Status ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
+                           se::StreamExecutor* executor,
+                           PoplarExecutable& executable,
+                           const ArgsHandleMap& args_map,
+                           se::DeviceMemoryAllocator* allocator,
+                           const Args& arguments);
+
   Status CreatePoplarTarget();
 
   // Compute literal(s) input for ConstantOutputAllocation when dealing with
@@ -913,6 +937,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int64 poplar_device_hash_;
 
+  Status current_status_ GUARDED_BY(ipu_.Mutex()) = Status::OK();
+
   poplar::OptionFlags option_flags_;
 
   poplar::OptionFlags conv_options_;
@@ -967,9 +993,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
       infeed_iterators_;
 
-  std::mutex outfeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
-      outfeed_contexts_ GUARDED_BY(outfeeds_mutex_);
+      outfeed_contexts_;
 
   absl::flat_hash_map<std::string, std::unique_ptr<HostEmbeddingInterface_>>
       host_embeddings_;

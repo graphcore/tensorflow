@@ -35,14 +35,7 @@ from tensorflow.python.eager import context
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
-@deprecation.deprecated_args(None, "stop passing this argument.",
-                             "one_hot_threshold", "min_encoding_size")
-def embedding_lookup(params,
-                     ids,
-                     name=None,
-                     serialization_factor=1,
-                     one_hot_threshold=0,
-                     min_encoding_size=1216):
+def embedding_lookup(params, ids, name=None, serialization_factor=1):
   """Looks up `ids` in a list of embedding tensors.
 
     This is designed to be a drop-in replacement for the typical use cases with
@@ -59,8 +52,6 @@ def embedding_lookup(params,
              `params` is used by another operation, such as matrix
              multiplication. If `params` has multiple users, then serialization
              can reduce the maximum memory at the cost of extra computation.
-        one_hot_threshold: Deprecated.
-        min_encoding_size: Deprecated.
     Returns:
         A `Tensor` with the same type as the tensors in `params`.
     """
@@ -431,15 +422,11 @@ class HostEmbedding:
         "HostEmbedding.__call__ is not supported. "
         "Please use the context manager created with HostEmbedding.register.")
 
-  @deprecation.deprecated_args(None, "This argument no longer has any effect.",
-                               "count")
-  def lookup(self, indices, count=1, clip_indices=True):
+  def lookup(self, indices, clip_indices=True):
     """ Perform a host embedding lookup on an IPU.
 
         Args:
           indices: The indices to lookup.
-          count: The number of times, per iteration, that this op will be
-                 executed.
           clip_indices: Whether to enforce a valid range on the lookup
                         indices with clipping. When False, out-of-range values
                         have undefined behaviour.

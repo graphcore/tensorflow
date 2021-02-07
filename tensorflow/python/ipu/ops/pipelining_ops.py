@@ -194,12 +194,7 @@ class PipelineStageOptions:
     return self._proto
 
 
-@deprecated_args(
-    None,
-    "pipeline_depth is deprecated, use gradient_accumulation_count instead",
-    "pipeline_depth")
 def pipeline(computational_stages,
-             pipeline_depth=None,
              gradient_accumulation_count=None,
              gradient_accumulation_dtype=None,
              repeat_count=1,
@@ -517,9 +512,6 @@ def pipeline(computational_stages,
 
   """
   name = name if name else "pipeline"
-
-  if pipeline_depth:
-    gradient_accumulation_count = pipeline_depth
 
   if not gradient_accumulation_count:
     raise ValueError("gradient_accumulation_count must be specified.")

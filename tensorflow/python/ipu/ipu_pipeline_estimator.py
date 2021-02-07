@@ -49,10 +49,6 @@ class IPUPipelineEstimatorSpec(
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
-  @deprecation.deprecated_args(
-      None,
-      "pipeline_depth is deprecated, use gradient_accumulation_count instead",
-      "pipeline_depth")
   @deprecation.deprecated_arg_values(
       None,
       "You are using the deprecated definition of `iterations_per_loop` with "
@@ -68,7 +64,6 @@ class IPUPipelineEstimatorSpec(
               gradient_accumulation_count=None,
               count_gradient_accumulation_as_iterations=False,
               gradient_accumulation_dtype=None,
-              pipeline_depth=None,
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
@@ -157,9 +152,6 @@ class IPUPipelineEstimatorSpec(
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`eval_metrics_fn` when evaluating")
 
-    if pipeline_depth:
-      gradient_accumulation_count = pipeline_depth
-
     if not gradient_accumulation_count:
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`gradient_accumulation_count`")
@@ -246,7 +238,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_training_loss_and_op(self, compiled_training_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_training_loop]):
-        loss = self._outfeed_queue.dequeue(wait_for_completion=True)
+        loss = self._outfeed_queue.dequeue()
 
       # Reduce loss over all dimensions (i.e. batch_size, gradient_accumulation_count)
       loss = math_ops.reduce_mean(math_ops.cast(loss, dtypes.float32))
@@ -280,7 +272,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_evaluation_loop]):
-        inputs = self._outfeed_queue.dequeue(wait_for_completion=True)
+        inputs = self._outfeed_queue.dequeue()
 
       args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
       metrics = self._captured_eval_metrics_fn(*args, **kwargs)
@@ -318,7 +310,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def get_predictions(self, compiled_prediction_loop):
     with ops.device(_HOST_DEVICE):
       with ops.control_dependencies([compiled_prediction_loop]):
-        predictions = self._outfeed_queue.dequeue(wait_for_completion=True)
+        predictions = self._outfeed_queue.dequeue()
 
     if isinstance(predictions, dict):
       return predictions
