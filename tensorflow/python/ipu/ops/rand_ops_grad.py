@@ -32,7 +32,6 @@ def _dropout_grad(op, *grads):
                                             seed=seed,
                                             rate=rate,
                                             scale=scale,
-                                            name=op.name + "_grad",
                                             noise_shape=noise_shape)[0]
   ]
 
