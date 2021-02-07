@@ -1373,11 +1373,8 @@ class IPUModel(_IpuModelBase):
     output_tensors = []
     for output_layer, node_index, tensor_index in self._output_coordinates:
       # Map the output node tensor to an output in the graph.
-      output = output_layer.get_output_at(node_index)
-      if isinstance(output, list):
-        output = output[tensor_index]
-      else:
-        assert tensor_index == 0
+      output = nest.flatten(
+          output_layer.get_output_at(node_index))[tensor_index]
 
       assert str(
           id(output)) in tensor_dict, "Could not compute output " + str(output)

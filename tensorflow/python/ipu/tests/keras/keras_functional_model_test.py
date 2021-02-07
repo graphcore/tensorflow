@@ -1291,6 +1291,84 @@ class IPUModelModelTest(test.TestCase):
     self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
 
   @test_util.run_v2_only
+  def testNestedClasses(self):
+    init = keras.initializers.Constant(1)
+
+    # 3 inputs, 2 outputs.
+    def data_fn():
+      x1 = np.ones((64, 32), dtype=np.float32)
+      x2 = np.ones((64, 32), dtype=np.float32)
+      x3 = np.ones((64, 32), dtype=np.float32)
+
+      y1 = np.ones((64, 1), dtype=np.float32)
+      y2 = np.ones((64, 1), dtype=np.float32)
+
+      return (x1, x2, x3), (y1, y2)
+
+    class MyDenseModel(keras.Model):
+      def __init__(self, units):
+        super().__init__()
+        self.dense1 = keras.layers.Dense(units,
+                                         kernel_initializer=init,
+                                         activation=keras.activations.relu)
+        self.dense2 = keras.layers.Dense(units,
+                                         kernel_initializer=init,
+                                         activation=keras.activations.softmax)
+
+      # pylint: disable=arguments-differ
+      def call(self, in0, in1):
+        x = self.dense1(in0)
+        return x, self.dense2(in1)
+
+    class MyLayer(keras.layers.Layer):
+      def __init__(self):
+        super().__init__()
+        self.concat = keras.layers.Concatenate()
+        self.dense1 = keras.layers.Dense(1,
+                                         kernel_initializer=init,
+                                         activation=keras.activations.relu)
+        self.dense2 = keras.layers.Dense(1,
+                                         kernel_initializer=init,
+                                         activation=keras.activations.softmax)
+
+      # pylint: disable=arguments-differ
+      def call(self, inputs):
+        cat = self.concat(inputs)
+        return ((self.dense1(cat),), self.dense2(cat))
+
+    def model_fn():
+      input_1 = keras.Input(32)
+      input_2 = keras.Input(32)
+      input_3 = keras.Input(32)
+
+      dense_1, dense_2 = MyDenseModel(16)(input_1, input_2)
+      output = MyLayer()([dense_1, dense_2, input_3])
+
+      return ((input_1, input_2, input_3), (output[0][0], output[1]))
+
+    # IPU Test.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      model = ipu.keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'])
+
+      out = model.fit(*data_fn(), batch_size=4)
+
+    # CPU Test.
+    cpu_model = keras.Model(*model_fn())
+    cpu_model.compile('sgd', ['mse', 'mse'])
+
+    cpu_out = cpu_model.fit(*data_fn(), batch_size=4)
+
+    # Comparison.
+    self.assertEqual(np.shape(cpu_out), np.shape(out))
+    self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
+
+  @test_util.run_v2_only
   def testPredictMultipleOutput(self):
     def predict_input_fn():
       x1 = np.ones((64, 32), dtype=np.float32)
