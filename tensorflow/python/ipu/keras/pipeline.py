@@ -245,8 +245,9 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
           raise ValueError("Each list in the `stages` list must contain "
                            "only Keras Layers.")
 
-    shard_count = max(
-        device_mapping if device_mapping else range(len(stages))) + 1
+    shard_count = max(device_mapping) + 1 if device_mapping else \
+                  len(stages)
+
     accumulation_count = gradient_accumulation_count * \
       batch_serialization_iterations
     super().__init__(accumulation_count,
@@ -813,11 +814,10 @@ class PipelineModel(ipu_model.Model):
     self._pipeline_init_network()
 
     # Compute shard count.
-    shard_count = max(
-        device_mapping if device_mapping else range(len(self.stages))) + 1
-
-    # Round the shard count to the next power of two
-    self.shard_count = 2**int(math.log2(shard_count))
+    shard_count = max(device_mapping) + 1 if device_mapping else \
+                  len(self.stages)
+    # Round the shard count to the next power of two.
+    self.shard_count = 2**int(math.ceil(math.log2(shard_count)))
 
     self.gradient_accumulation_count = gradient_accumulation_count
     self.gradient_accumulation_dtype = gradient_accumulation_dtype

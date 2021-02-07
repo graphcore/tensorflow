@@ -251,7 +251,7 @@ class _IpuModelBase(KerasModel):
     self.internal_loop_fn = None
 
     # Round the shard count to the next power of two
-    self.shard_count = 2**int(math.ceil(math.log(shard_count) / math.log(2)))
+    self.shard_count = 2**int(math.ceil(math.log2(shard_count)))
     self._replication_factor = None
 
     self._layer_replacer = IPULayerReplacer() if layer_replacement else None
@@ -753,6 +753,11 @@ class _IpuModelBase(KerasModel):
                          " can only be used on an IPU device.")
 
       num_ipus = utils.get_num_of_ipus_in_device(device_string)
+      if self.shard_count > num_ipus:
+        raise ValueError(
+            "Current device has %d IPUs attached, however the current model "
+            "requires a multiple of %d IPUs." % (num_ipus, self.shard_count))
+
       self._replication_factor = int(num_ipus / self.shard_count)
 
     return self._replication_factor

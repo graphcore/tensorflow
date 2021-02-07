@@ -199,6 +199,24 @@ class IPUPipelineTest(test.TestCase):
                                 gradient_accumulation_count=2)
 
   @test_util.run_v2_only
+  def testNotEnoughIPUs(self):
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 2)
+    ipu.utils.configure_ipu_system(cfg)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_pipeline(input_layer, [2, 4, 2], [0, 1, 2])
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=2)
+
+      with self.assertRaisesRegex(ValueError,
+                                  "Current device has 2 IPUs attached"):
+        m.replication_factor  # pylint: disable=pointless-statement
+
+  @test_util.run_v2_only
   def testBadStageOrder(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
