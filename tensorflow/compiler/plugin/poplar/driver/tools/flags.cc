@@ -114,6 +114,9 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
        "standard output stream."},
       {"fallback_scheduler",
        "Use the sync list scheduler rather than the default one."},
+      {"show_progress_bar",
+       "Whether to show the compilation progress bar. Either \"true\", "
+       "\"false\" or \"auto\". Defaults to \"auto\"."},
       {"allow_nans", "will allow NaNs."}};
   return flag_usage;
 }
@@ -153,6 +156,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(allow_nans)
     ADD_FLAG(null_data_feed)
     ADD_FLAG(dump_text_reports_to_stdio)
+    ADD_FLAG(show_progress_bar)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)

@@ -38,6 +38,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/execution_counter_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/progress_bar.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
@@ -166,6 +167,9 @@ struct CompilerResources {
   absl::flat_hash_map<const HloInstruction*, std::uint64_t>
       hlo_instruction_to_debug_id_mapping;
 
+  // The implementation of the progress bar.
+  std::unique_ptr<ProgressBarBase> progress_bar;
+
   CompilerResources(
       HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
@@ -181,7 +185,7 @@ struct CompilerResources {
       const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size,
       bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
-      int64 num_io_tiles)
+      int64 num_io_tiles, bool enable_progress_bar)
       : annotations(module),
         information(information),
         global_floating_point_behaviour(floating_point_behaviour),
@@ -206,7 +210,13 @@ struct CompilerResources {
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
         enable_fast_math(enable_fast_math),
-        num_io_tiles(num_io_tiles) {}
+        num_io_tiles(num_io_tiles) {
+    if (enable_progress_bar) {
+      progress_bar = absl::make_unique<ProgressBar>(module);
+    } else {
+      progress_bar = absl::make_unique<NoProgressBar>();
+    }
+  }
 
   static std::unique_ptr<CompilerResources> CreateTestDefault(
       HloModule* module,
@@ -227,7 +237,8 @@ struct CompilerResources {
         /*triangular_solve_expander_block_size=*/0,
         /*enable_experimental_remote_buffer_embedding=*/false,
         /*enable_fast_math=*/false,
-        /*num_io_tiles=*/0);
+        /*num_io_tiles=*/0,
+        /*enable_progress_bar=*/false);
   }
 };
 

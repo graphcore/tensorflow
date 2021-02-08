@@ -385,17 +385,6 @@ static StatusOr<std::size_t> FindSeqDim(const xla::Shape& shape_xla,
       "Cannot compute slice sequence dimension");
 }
 
-StatusOr<int64> GetSliceIndex(const HloInstruction* inst,
-                              const HloInstruction* slice) {
-  for (auto operand = inst->operands().begin();
-       operand != inst->operands().end(); operand++) {
-    if (*operand == slice) {
-      return operand - inst->operands().begin();
-    }
-  }
-  return xla::InternalError("Failed to find slice in operands");
-}
-
 namespace {
 int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
   CHECK_GE(to_factor, n);
@@ -440,14 +429,15 @@ poplar::Tensor CreateTensorFromSlice(
 }
 
 static StatusOr<poplar::Tensor> PathTransform(
-    poplar::Graph& graph, CompilerResources& resources, poplar::Tensor in,
-    int64 input_index, const std::vector<const HloInstruction*>& path,
+    poplar::Graph& graph, const TensorLocation& source,
+    CompilerResources& resources, poplar::Tensor in, int64 input_index,
+    const std::vector<const HloInstruction*>& path,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Now revert any transformations required by the path from the source to
   // the target
 
   for (auto i = path.rbegin(); i != path.rend(); ++i) {
-    auto& inst = *i;
+    const HloInstruction* inst = *i;
     switch (inst->opcode()) {
       case HloOpcode::kTranspose: {
         auto optional_permutation =
@@ -477,10 +467,9 @@ static StatusOr<poplar::Tensor> PathTransform(
         break;
       }
       case HloOpcode::kConcatenate: {
-        if (i + 1 == path.rend()) {
-          return xla::FailedPrecondition("Can't find concatenate source");
-        }
-        TF_ASSIGN_OR_RETURN(auto slice_index, GetSliceIndex(inst, *(i + 1)));
+        const HloInstruction* operand =
+            i + 1 == path.rend() ? source.instruction : *(i + 1);
+        const int64 slice_index = inst->operand_index(operand);
         TF_ASSIGN_OR_RETURN(in, SliceTensor(in, inst->operands(), slice_index,
                                             inst->concatenate_dimension()));
         TF_ASSIGN_OR_RETURN(auto poplar_type,
@@ -801,9 +790,9 @@ bool HasTensorAllocationTarget(const TensorLocation& src,
 }
 
 StatusOr<poplar::Tensor> AddTensorForTarget(
-    poplar::Graph& graph, const TensorTarget& tensor_target,
-    CompilerResources& resources, const TensorMap& tensor_map,
-    const poplar::DebugContext& debug_context) {
+    poplar::Graph& graph, const TensorLocation& source,
+    const TensorTarget& tensor_target, CompilerResources& resources,
+    const TensorMap& tensor_map, const poplar::DebugContext& debug_context) {
   PoplarOpDefDebugInfo debug_info(debug_context, "AddTensorForTarget");
 
   const auto* target = tensor_target.tgt;
@@ -896,7 +885,7 @@ StatusOr<poplar::Tensor> AddTensorForTarget(
   }
 
   TF_ASSIGN_OR_RETURN(out,
-                      PathTransform(graph, resources, out, input_index,
+                      PathTransform(graph, source, resources, out, input_index,
                                     tensor_target.backward_path, {debug_info}));
   return out;
 }
@@ -915,8 +904,9 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
     VLOG(1) << "Adding a tensor with layout for ("
             << src.instruction->ToString() << ", "
             << src.flattened_output_tuple_index << ").";
-    TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, resources,
-                                                tensor_map, {debug_info}));
+    TF_ASSIGN_OR_RETURN(
+        out, AddTensorForTarget(graph, src, itr->second, resources, tensor_map,
+                                {debug_info}));
 
   } else {
     TF_ASSIGN_OR_RETURN(out,

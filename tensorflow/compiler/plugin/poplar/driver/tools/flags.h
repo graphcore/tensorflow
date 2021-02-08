@@ -109,6 +109,9 @@ class PoplarXlaFlags {
   // processing.
   bool dump_text_reports_to_stdio = false;
 
+  // Whether to show the compilation progress bar.
+  std::string show_progress_bar = "false";
+
   // Stores all the values as a string.
   std::string as_string = "";
 
