@@ -490,6 +490,17 @@ bool EnableProgressBar(const HloModule* module) {
   } else if (show_progress_bar == "false") {
     return false;
   } else if (show_progress_bar == "auto") {
+    // Do not create the progress bar if this is not attached to a console.
+    if (!isatty(fileno(stdout))) {
+      return false;
+    }
+
+    // This doesn't check VLOG for all the files, but it's usually set for all
+    // the files.
+    if (VLOG_IS_ON(1)) {
+      return false;
+    }
+
     int64 num_expensive_ops = 0;
     for (const HloComputation* comp : module->computations()) {
       for (const HloInstruction* inst : comp->instructions()) {
@@ -509,7 +520,7 @@ bool EnableProgressBar(const HloModule* module) {
         }
       }
     }
-    return num_expensive_ops >= 2;
+    return num_expensive_ops >= 5;
   } else {
     LOG(FATAL) << "Unknown value for 'show_progress_bar' flag. Needs to be one "
                   "of 'true', 'false' or 'auto' but got "
