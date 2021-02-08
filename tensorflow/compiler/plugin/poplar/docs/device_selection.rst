@@ -174,7 +174,7 @@ For a full list, refer to  :ref:`api-section`.
   * - ``--dump_text_reports_to_stdio``
     - If profiling is enabled, then a text summary of the profile will be dumped
       to standard output, in addition to the normal report processing.
-  * - :samp:`--executable_cache_path {path}`
+  * - :samp:`--executable_cache_path={path}`
     - Enables the Poplar executable cache.
       See :ref:`caching_executables`.
   * - ``--fallback_scheduler``
@@ -182,24 +182,24 @@ For a full list, refer to  :ref:`api-section`.
       one.
   * - ``--help``
     - Print information for all the options.
-  * - :samp:`--log_cycle_count {int}`
+  * - :samp:`--log_cycle_count={int}`
     - Log the number of cycles used in evaluating the main graph. The numeric
       argument indicates the tile on which the cycle count operation will be
       created. This may be used as an alternative to profiling for graphs with
       dynamic control flow.
-  * - :samp:`--max_compilation_threads {int}`
+  * - :samp:`--max_compilation_threads={int}`
     - Sets the maximum number of threads which Poplar is allowed to use for
       compiling the executable.
-  * - :samp:`--max_infeed_threads {int}`
+  * - :samp:`--max_infeed_threads={int}`
     - Sets the maximum number of threads which each infeed queue is allowed to
       use when accessing data from datasets.
   * - ``--null_data_feed``
     - Cause any infeed queues to copy garbage data to the IPU rather than real
       data. This option can be used to determine whether the dataset provided to
       the infeed queue is the bottleneck during execution.
-  * - :samp:`--save_interval_report {path}`
+  * - :samp:`--save_interval_report={path}`
     - Dumps the Poplar interval report to the given directory.
-  * - :samp:`--save_vertex_graph {path}`
+  * - :samp:`--save_vertex_graph={path}`
     - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
   * - ``--synthetic_data_initializer``
     - Used in combination with the
@@ -208,7 +208,7 @@ For a full list, refer to  :ref:`api-section`.
       The values will be either random: ``--synthetic_data_initializer=random``
 
       Or a constant value *X*: :samp:`--synthetic_data_initializer={X}`
-  * - :samp:`--tensor_map_file_path {path}`
+  * - :samp:`--tensor_map_file_path={path}`
     - Cause a JSON file containing the tile mapping of all tensors to be written
       to this directory.
   * - ``--use_ipu_model``
@@ -231,15 +231,16 @@ For a full list, refer to  :ref:`api-section`.
       Executing the ``dequeue`` op for an ``IPUOutfeedQueue``
       with ``outfeed_mode`` set to ``IPUOutfeedMode.LAST`` will throw an
       exception when this flag is set.
-  * - :samp:`--while_loop_brute_force_max_trip_count {int}`
+  * - :samp:`--while_loop_brute_force_max_trip_count={int}`
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be
       executed.
-  * - :samp:`--show_progress_bar {true}|{false}|{auto}`
+  * - :samp:`--show_progress_bar={true}|{false}|{auto}`
     - Whether to show the compilation progress bar. Either ``true``, ``false``
       or ``auto``. When set to ``auto``, the progress bar will only be enabled
-      when compiling a graph which can take more than few seconds to compile.
-      Defaults to ``false``.
+      when attached to a console, ``VLOG`` logging is disabled and compiling a
+      graph which can take more than few seconds to compile. Defaults to
+      ``auto``.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
