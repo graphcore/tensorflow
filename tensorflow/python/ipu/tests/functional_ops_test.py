@@ -154,8 +154,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/MatMul_grad/MatMul_1/dot', '/Transpose'
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1371432)
-      report.assert_max_tile_memory(4111)
+      report.assert_total_tile_memory(1433879)
+      report.assert_max_tile_memory(2936)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
@@ -239,8 +239,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/matmul_grad/MatMul_1/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1319384)
-      report.assert_max_tile_memory(4131)
+      report.assert_total_tile_memory(1381719)
+      report.assert_max_tile_memory(2964)
 
       # Entry computastion and 4 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 5)
@@ -476,8 +476,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/MatMul_grad/MatMul_1/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1433456)
-      report.assert_max_tile_memory(6093)
+      report.assert_total_tile_memory(1495523)
+      report.assert_max_tile_memory(4898)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
