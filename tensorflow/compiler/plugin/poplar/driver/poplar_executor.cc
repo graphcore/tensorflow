@@ -2397,6 +2397,8 @@ PoplarExecutor::RemapOutputAllocation::AllocateBuffer(
   TF_ASSIGN_OR_RETURN(TensorControl * original,
                       GetRemapedTensorControl(output_index, flat_tensor_index));
 
+  // Add a reference to prevent this from being deallocated.
+  original->ref_count++;
   if (AddRemapCopy(output_index)) {
     TF_ASSIGN_OR_RETURN(auto allocated_owned,
                         allocator_->Allocate(ordinal_, original->size, false));
@@ -2404,7 +2406,6 @@ PoplarExecutor::RemapOutputAllocation::AllocateBuffer(
     return allocated;
   } else {
     // Return a reference.
-    original->ref_count++;
     return se::DeviceMemoryBase(original, original->size);
   }
 }
@@ -2419,6 +2420,8 @@ Status PoplarExecutor::RemapOutputAllocation::PopulateBuffer(
     TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
     CHECK(!original->on_device);
     std::memcpy(tc->data, original->data, original->size);
+    // Remove the extra reference as the buffer has been cloned.
+    original->ref_count--;
   }
   return Status::OK();
 }
@@ -2436,6 +2439,7 @@ PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
           "Could not find matching input resource tensor.");
     }
     TensorControl* tc = it->second.tc;
+    tc->ref_count++;
     return se::DeviceMemoryBase(tc, tc->size);
   } else {
     // The output is not one of the inputs.
@@ -2452,9 +2456,6 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
     int64 flat_tensor_index) const {
   const auto& output_info = io_map_.GetEntryOutputInfos().at(output_index);
   TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
-  if (output_info.IsResourceModified()) {
-    tc->ref_count++;
-  }
   tc->size = ShapeUtil::ByteSizeOf(shape);
   tc->element_type = shape.element_type();
   tc->on_device = output_info.IsStreaming() ? false : true;

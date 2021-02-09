@@ -119,7 +119,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   struct TensorControl {
     size_t size = 0;
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
-    unsigned int ref_count = 0;
+    std::atomic<uint32> ref_count;
     bool on_device = false;
     absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
     std::string input_handle;
