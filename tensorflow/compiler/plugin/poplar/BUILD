@@ -4632,7 +4632,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "logging_example_1",
-    size = "small",
+    size = "large",
     srcs = ["docs/logging_example_1.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4643,7 +4643,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "perf_training_example",
-    size = "small",
+    size = "large",
     srcs = ["docs/perf_training_example.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4654,7 +4654,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "outfeed_example",
-    size = "small",
+    size = "large",
     srcs = ["docs/outfeed_example.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4747,7 +4747,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "example_tf2_fit",
-    size = "small",
+    size = "large",
     srcs = ["docs/example_tf2_fit.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4758,7 +4758,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "example_tf2_custom_training",
-    size = "small",
+    size = "large",
     srcs = ["docs/example_tf2_custom_training.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4857,7 +4857,7 @@ cc_binary(
 
 tf_xla_py_test(
     name = "tutorial_custom_codelet",
-    size = "small",
+    size = "large",
     srcs = ["docs/tutorial_custom_codelet.py"],
     data = [
         ":custom_codelet_example",
@@ -4880,7 +4880,7 @@ cc_binary(
 
 tf_xla_py_test(
     name = "custom_add_inplace",
-    size = "small",
+    size = "large",
     srcs = ["docs/custom_add_inplace.py"],
     data = [
         ":libcustom_add_inplace.so",
@@ -4947,7 +4947,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "function_example1",
-    size = "small",
+    size = "large",
     srcs = ["docs/function_example1.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4958,7 +4958,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "function_example2",
-    size = "small",
+    size = "large",
     srcs = ["docs/function_example2.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4969,7 +4969,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "function_block1",
-    size = "small",
+    size = "large",
     srcs = ["docs/function_block1.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4980,7 +4980,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "function_block2",
-    size = "small",
+    size = "large",
     srcs = ["docs/function_block2.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4991,7 +4991,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "function_block3",
-    size = "small",
+    size = "large",
     srcs = ["docs/function_block3.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -5013,7 +5013,7 @@ cc_binary(
 
 tf_xla_py_test(
     name = "tutorial_attributes_example",
-    size = "small",
+    size = "large",
     srcs = ["docs/tutorial_attributes_example.py"],
     data = [
         ":libtutorial_attributes_example.so",
