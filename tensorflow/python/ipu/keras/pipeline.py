@@ -436,8 +436,10 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             For a dataset of known finite length, a default value will be
             calculated if no value is specified. In all other cases a value
             must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
-            the replication factor.
+            If `steps_per_run` is specified, then the value for
+            `steps_per_epoch` must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor. Otherwise it only needs to be
+          evenly divisible by the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
             multiplied by the `steps_per_epoch` value.
@@ -483,7 +485,9 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             For a dataset of known finite length, a default value will be
             calculated if no value is specified.
             In all other cases a value must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
+            If `steps_per_run` is specified, then the value for `steps`
+            must be evenly divisible by `steps_per_run` multiplied by the
+            replication factor. Otherwise it only needs to be divisible by
             the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
@@ -531,7 +535,9 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             For a dataset of known finite length, a default value will be
             calculated if no value is specified.
             In all other cases a value must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
+            If `steps_per_run` is specified, then the value for `steps`
+            must be evenly divisible by `steps_per_run` multiplied by the
+            replication factor. Otherwise it only needs to be divisible by
             the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
@@ -1116,8 +1122,10 @@ class PipelineModel(ipu_model.Model):
             For a dataset of known finite length, a default value will be
             calculated if no value is specified. In all other cases a value
             must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
-            the replication factor.
+            If `steps_per_run` is specified, then the value for
+            `steps_per_epoch` must be evenly divisible by `steps_per_run`
+            multiplied by the replication factor. Otherwise it only needs to be
+            divisible by the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
             multiplied by the `steps_per_epoch` value.
@@ -1163,7 +1171,9 @@ class PipelineModel(ipu_model.Model):
             For a dataset of known finite length, a default value will be
             calculated if no value is specified.
             In all other cases a value must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
+            If `steps_per_run` is specified, then the value for `steps`
+            must be evenly divisible by `steps_per_run` multiplied by the
+            replication factor. Otherwise it only needs to be divisible by
             the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
@@ -1211,7 +1221,9 @@ class PipelineModel(ipu_model.Model):
             For a dataset of known finite length, a default value will be
             calculated if no value is specified.
             In all other cases a value must be specified.
-            The value must be evenly divisible by `steps_per_run` multiplied by
+            If `steps_per_run` is specified, then the value for `steps`
+            must be evenly divisible by `steps_per_run` multiplied by the
+            replication factor. Otherwise it only needs to be divisible by
             the replication factor.
             The dataset should be able to provide enough samples to run for the
             mini-batch size multiplied by the gradient accumulation count
