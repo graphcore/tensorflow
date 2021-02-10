@@ -161,8 +161,9 @@ StatusOr<poplar::Type> PoplarDataType(const xla::PrimitiveType& element_type) {
     case PRED:
       return poplar::BOOL;
     case S8:
+      return poplar::SIGNED_CHAR;
     case U8:
-      return poplar::CHAR;
+      return poplar::UNSIGNED_CHAR;
     case S16:
       return poplar::SHORT;
     case S32:
