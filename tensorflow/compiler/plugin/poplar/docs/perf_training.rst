@@ -282,21 +282,21 @@ __________
 Gradient accumulation optimizers provide an easy way to add gradient
 accumulation to your model:
 
-* :class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+* :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
   is a general purpose optimizer which can be used to wrap any other TensorFlow
   optimizer. It supports optimizer state offloading (see the
   :ref:`optimiser-state-unloading` section).
 
-* :class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer`
+* :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizer`
   is an optimizer which can be used to wrap `tf.train.GradientDescentOptimizer`
   and `tf.train.MomentumOptimizer` only. Note that this optimizer does **not**
   support optimizer state offloading.
 
 The cross-replica versions of these optimizers can be used with replicated
 graphs, see
-:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2`
+:class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`
 and
-:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer`.
+:class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizer`.
 
 .. note:: These optimizers need to be used inside of a training loop generated
   by :func:`~tensorflow.python.ipu.loops.repeat`.
@@ -356,7 +356,7 @@ accumulator variables which are only accessed and modified during the weight
 update.
 This means that when gradient accumulation is used, whether through the use of
 pipelining or the
-:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
 optimizer, the optimizer state variables do not need to be stored in the device
 memory during the forward and backward propagation of the model. These variables
 are only required during the weight update and so they are streamed onto the
@@ -364,12 +364,12 @@ device during the weight update and then streamed back to remote memory after
 they have been updated.
 
 This feature is enabled by default for both pipelining and when
-:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
 is used.
 
 It can be disabled by setting the ``offload_weight_update_variables`` argument
 of :func:`~tensorflow.python.ipu.pipelining_ops.pipeline` or
-:class:`~tensorflow.python.ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`
+:class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`
 to ``False``.
 
 This feature requires the machine to be configured with support for
