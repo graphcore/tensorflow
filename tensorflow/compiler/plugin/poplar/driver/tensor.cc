@@ -1033,6 +1033,12 @@ Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
     case PRED:
       SetInitialTensorValueImpl<bool>(graph, tensor, literal);
       break;
+    case S8:
+      SetInitialTensorValueImpl<char>(graph, tensor, literal);
+      break;
+    case U8:
+      SetInitialTensorValueImpl<unsigned char>(graph, tensor, literal);
+      break;
     case S32:
       SetInitialTensorValueImpl<int>(graph, tensor, literal);
       break;
@@ -1137,6 +1143,12 @@ StatusOr<poplar::Tensor> CreateConstantTensor(
     case PRED:
       return CreateConstantTensorImpl<bool>(graph, literal, shape, poplar_type,
                                             debug_name_and_id);
+    case S8:
+      return CreateConstantTensorImpl<char>(graph, literal, shape, poplar_type,
+                                            debug_name_and_id);
+    case U8:
+      return CreateConstantTensorImpl<unsigned char>(
+          graph, literal, shape, poplar_type, debug_name_and_id);
     case S32:
       return CreateConstantTensorImpl<int>(graph, literal, shape, poplar_type,
                                            debug_name_and_id);
