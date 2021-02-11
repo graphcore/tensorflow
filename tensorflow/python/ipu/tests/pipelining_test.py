@@ -1502,7 +1502,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       def dataset_parser(value):
         label = math_ops.reduce_mean(value, axis=[1])
-        return value, math_ops.cast(label / 10, np.int32)
+        return math_ops.cast(value,
+                             np.int8), math_ops.cast(label / 10, np.int32)
 
       return dataset.map(dataset_parser)
 
@@ -1511,6 +1512,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(x, label):
+      x = math_ops.cast(x, np.float32)
       with variable_scope.variable_scope("vs", use_resource=True):
         weight = variable_scope.get_variable(
             "w2",
