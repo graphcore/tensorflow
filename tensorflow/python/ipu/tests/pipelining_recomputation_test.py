@@ -456,7 +456,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
       def dataset_parser(value):
-        img = value
+        img = math_ops.cast(value, np.int8)
         label = value[0][0] % 4
         return img, math_ops.cast(label, np.int32)
 
@@ -469,6 +469,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
     optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
+      x = math_ops.cast(x, np.float32)
       with variable_scope.variable_scope("vs", use_resource=True):
         weight = variable_scope.get_variable(
             "w0",
