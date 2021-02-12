@@ -38,14 +38,10 @@ class IPUPipelineEstimatorSpec(
         'computational_stages',
         'gradient_accumulation_count',
         'count_gradient_accumulation_as_iterations',
-        'gradient_accumulation_dtype',
         'eval_metrics_fn',
         'optimizer_function',
         'device_mapping',
-        'pipeline_schedule',
-        'recomputation_mode',
-        'offload_weight_update_variables',
-        'inputs',
+        'pipeline_op_kwargs',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
@@ -63,14 +59,10 @@ class IPUPipelineEstimatorSpec(
               computational_stages,
               gradient_accumulation_count=None,
               count_gradient_accumulation_as_iterations=False,
-              gradient_accumulation_dtype=None,
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
-              pipeline_schedule=None,
-              recomputation_mode=None,
-              offload_weight_update_variables=None,
-              inputs=None):
+              **pipeline_op_kwargs):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
     Depending on the value of `mode`, different arguments are required. Namely
@@ -96,17 +88,6 @@ class IPUPipelineEstimatorSpec(
         gives the number of mini-batches consumed per loop (per replica). The
         latter behaviour is consistent with the IPUEstimator and will be the
         only supported behaviour in the future.
-      gradient_accumulation_dtype: The data type used for the gradient
-        accumulation buffer. One of:
-          - `None`: Use an accumulator of the same type as the variable type.
-          - A `DType`: Use this type for all the accumulators.
-          - A callable that takes the variable and returns a `DType`: Allows
-            specifying the accumulator type on a per-variable basis.
-        The gradients passed to `Optimizer.apply_gradients` will have the dtype
-        requested here. If that dtype is different from the variable dtype
-        a cast is needed at some point to make them compatible. If you want
-        to cast the gradients immediately, you can wrap your optimizer in the
-        `MapGradientOptimizer` with a `tf.cast`.
       eval_metrics_fn: a Python function which takes the output of the
         last computational stage as parameters and returns a dict of evaluation
         metrics. The dict must contain a a loss tensor value with the key
@@ -117,25 +98,8 @@ class IPUPipelineEstimatorSpec(
         in order to generate the back-propagation and weight-update parts of the
         model suitable for training.
       device_mapping: optional stage to IPU mapping override.
-      pipeline_schedule: the scheduling algorithm to use for pipeline lowering.
-        Must be of type
-        :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
-      recomputation_mode: the recomputation mode to use for training pipeline
-        models. Must be of type
-        :class:`~tensorflow.python.ipu.pipelining_ops.RecomputationMode`.
-      offload_weight_update_variables: If True, any `tf.Variable` which is
-        only used by the weight update of the pipeline (for example the
-        accumulator variable when using the `tf.MomentumOptimizer`), will be
-        stored in the remote memory. During the weight update this variable will
-        be streamed onto the device and then streamed back to the remote memory
-        after it has been updated. Requires the machine to be configured with
-        support for `Poplar remote buffers`. Offloading variables into remote
-        memory can reduce maximum memory liveness, but can also increase the
-        computation time of the weight update. Note that this option has no
-        effect for inference only pipelines.
-      inputs: arguments passed to the first pipeline stage. Can be used to pass
-        e.g. a learning rate tensor or the `tf.train.get_global_step()` tensor
-        that cannot be accessed directly from within a pipeline stage function.
+      pipeline_op_kwargs: All remaining keyword arguments are forwarded to
+        :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`.
 
     Returns:
       A validated `IPUPipelineEstimatorSpec` object.
@@ -164,13 +128,9 @@ class IPUPipelineEstimatorSpec(
         gradient_accumulation_count=gradient_accumulation_count,
         count_gradient_accumulation_as_iterations=
         count_gradient_accumulation_as_iterations,
-        gradient_accumulation_dtype=gradient_accumulation_dtype,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
-        pipeline_schedule=pipeline_schedule,
-        recomputation_mode=recomputation_mode,
-        offload_weight_update_variables=offload_weight_update_variables,
-        inputs=inputs)
+        pipeline_op_kwargs=pipeline_op_kwargs)
 
 
 class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: disable=protected-access
@@ -222,16 +182,12 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           outfeed_queue=self._outfeed_queue,
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
-          gradient_accumulation_dtype=spec.gradient_accumulation_dtype,
           repeat_count=self._calc_repeat_count(spec),
-          inputs=spec.inputs,
           optimizer_function=spec.optimizer_function,
           device_mapping=spec.device_mapping,
-          pipeline_schedule=spec.pipeline_schedule,
-          recomputation_mode=spec.recomputation_mode,
           outfeed_loss=True,
-          offload_weight_update_variables=spec.offload_weight_update_variables,
-          name="ipu_pipeline_estimator_train")
+          name="ipu_pipeline_estimator_train",
+          **spec.pipeline_op_kwargs)
 
     return training_pipeline
 
@@ -261,11 +217,9 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._calc_repeat_count(spec),
-          inputs=spec.inputs,
           device_mapping=spec.device_mapping,
-          pipeline_schedule=spec.pipeline_schedule,
-          recomputation_mode=spec.recomputation_mode,
-          name="ipu_pipeline_estimator_eval")
+          name="ipu_pipeline_estimator_eval",
+          **spec.pipeline_op_kwargs)
 
     return evaluation_pipeline
 
@@ -299,11 +253,9 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._calc_repeat_count(spec),
-          inputs=spec.inputs,
           device_mapping=spec.device_mapping,
-          pipeline_schedule=spec.pipeline_schedule,
-          recomputation_mode=spec.recomputation_mode,
-          name="ipu_pipeline_estimator_predict")
+          name="ipu_pipeline_estimator_predict",
+          **spec.pipeline_op_kwargs)
 
     return prediction_pipeline
 
