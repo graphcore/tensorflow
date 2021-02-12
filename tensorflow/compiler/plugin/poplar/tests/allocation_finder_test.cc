@@ -3750,6 +3750,50 @@ ENTRY main {
   EXPECT_EQ(t.backward_path[0], c0);
 }
 
+TEST_F(AllocationFinderTest, AllocationsAvoidSlice) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY main {
+  p0 = f16[1,16,16,3] parameter(0)
+  p1 = f16[1,1,4,2] parameter(1)
+  slice = f16[1,16,16,1] slice(p0), slice={[0:1],[0:16],[0:16],[0:1]}
+  concat = f16[1,16,16,4] concatenate(p0, slice), dimensions={3}
+  ROOT conv = f16[1,16,16,2] convolution(concat, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  const HloInstruction* p0 = FindInstruction(module0, "p0");
+  const HloInstruction* p1 = FindInstruction(module0, "p1");
+  const HloInstruction* slice = FindInstruction(module0, "slice");
+  const HloInstruction* concat = FindInstruction(module0, "concat");
+  const HloInstruction* conv = FindInstruction(module0, "conv");
+
+  CompilerAnnotations annotations(module0);
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], concat);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+}
+
 TEST_F(AllocationFinderTest, AllocationsWithPad) {
   std::string hlo = R"(
 HloModule top
