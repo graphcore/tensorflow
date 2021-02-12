@@ -27,6 +27,8 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
+from tensorflow.core.protobuf import rewriter_config_pb2
+from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.data.ops.dataset_ops import Dataset
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -47,8 +49,19 @@ def compute_device_count(pipelining=False, sharded=False, replicated=False):
 
 
 @contextlib.contextmanager
-def ipu_session():
-  with session_lib.Session() as sess:
+def ipu_session(disable_grappler_optimizers=None):
+  config = None
+  # Disable any requested grappler optimizers
+  if disable_grappler_optimizers and \
+      isinstance(disable_grappler_optimizers, list):
+    config = config_pb2.ConfigProto()
+    for opt in disable_grappler_optimizers:
+      assert hasattr(config.graph_options.rewrite_options, opt), \
+          f"Tried to disable grappler optimizer '{opt}' but it's not an" \
+          " attribute of the RewriterConfig proto"
+      setattr(config.graph_options.rewrite_options, opt,
+              rewriter_config_pb2.RewriterConfig.OFF)
+  with session_lib.Session(config=config) as sess:
     yield sess
 
 
