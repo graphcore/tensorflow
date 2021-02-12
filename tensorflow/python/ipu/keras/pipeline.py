@@ -404,8 +404,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         offload_gradient_accumulation_buffers,
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
-        name=self.name,
-        **self.args)
+        name=self.name)
 
     return pipeline.outputs
 
@@ -1064,8 +1063,7 @@ class PipelineModel(ipu_model.Model):
         offload_gradient_accumulation_buffers,
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
-        name=self.name,
-        **self.args)
+        name=self.name)
 
     return pipeline.outputs
 
