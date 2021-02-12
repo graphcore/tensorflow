@@ -78,12 +78,12 @@ class MultiSliceOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
+    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
 
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq,
-        SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{}, {},
+        {1}, seq, use_plan ? *plan : popops::SlicePlan{}, {},
         {debug_info, "output"});
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
@@ -104,7 +104,7 @@ class MultiSliceOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
-        NotifySlicePlanAllocation(res, plan);
+        NotifySlicePlanAllocation(res, tensor_target);
         return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  {debug_info, "input"});
       }
@@ -243,10 +243,10 @@ class MultiUpdateOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 2, prog, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
+    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
     TF_RETURN_IF_ERROR(MultiUpdateInternal(
-        graph, SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{},
-        operand, indices, updates, prog, multi_update, UpdateMode::Replace,
-        {debug_info}));
+        graph, use_plan ? *plan : popops::SlicePlan{}, operand, indices,
+        updates, prog, multi_update, UpdateMode::Replace, {debug_info}));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
@@ -263,7 +263,7 @@ class MultiUpdateOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
-        NotifySlicePlanAllocation(res, plan);
+        NotifySlicePlanAllocation(res, tensor_target);
         return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  {debug_info, "input"});
       }
@@ -313,10 +313,12 @@ class MultiUpdateAddOp : public MultiUpdateOp {
         FindInstructionInput(tensor_map, res, inst, 3, prog, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_RETURN_IF_ERROR(MultiUpdateInternal(
-        graph, SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{},
-        operand, indices, updates, prog, multi_update_add,
-        UpdateMode::Accumulate, {debug_info}, scale));
+    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
+
+    TF_RETURN_IF_ERROR(
+        MultiUpdateInternal(graph, use_plan ? *plan : popops::SlicePlan{},
+                            operand, indices, updates, prog, multi_update_add,
+                            UpdateMode::Accumulate, {debug_info}, scale));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
     return prog;

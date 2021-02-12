@@ -197,8 +197,8 @@ int64 AllocationFinder::GetAllocationPriority(
   }
 }  // namespace poplarplugin
 
-bool AllocationFinder::ReplaceTarget(const TensorTarget& new_target,
-                                     const TensorTarget& existing_target) {
+bool AllocationFinder::ReplaceTarget(
+    const TensorTarget& new_target, const TensorTarget& existing_target) const {
   const int64 new_target_priority = GetAllocationPriority(new_target);
   const int64 existing_target_priority = GetAllocationPriority(existing_target);
   if (new_target_priority > existing_target_priority) {
@@ -215,13 +215,23 @@ bool AllocationFinder::ReplaceTarget(const TensorTarget& new_target,
   }
 }
 
+bool AllocationFinder::SlicePlanCompatibleTarget(const TensorTarget& a,
+                                                 const TensorTarget& b) const {
+  // Consider only allocating indices.
+  if (IsMultiSliceOrUpdate(a.tgt) && IsMultiSliceOrUpdate(b.tgt) &&
+      a.input_index == b.input_index && a.input_index < 2) {
+    return true;
+  }
+
+  return false;
+}
+
 void AllocationFinder::AddTensorTarget(const TensorLocation& source,
                                        const TensorTarget& new_target) {
-  TensorTarget target;
   // Check whether we should replace the tensor target.
   auto itr = tensor_allocation_map.find(source);
   if (itr != tensor_allocation_map.end()) {
-    target = itr->second;
+    TensorTarget& target = itr->second;
 
     // Combine the sliceable dimension.
     absl::optional<int64> sliceable_dimension = target.sliceable_dimension;
@@ -229,16 +239,21 @@ void AllocationFinder::AddTensorTarget(const TensorLocation& source,
       sliceable_dimension = new_target.sliceable_dimension;
     }
 
-    if (ReplaceTarget(new_target, target)) {
+    if (SlicePlanCompatibleTarget(new_target, target)) {
+      // We have new target with compatible plan. Add it and its compatible
+      // plans instructions if any.
+      target.compatible_slice_plans.insert(
+          new_target.compatible_slice_plans.begin(),
+          new_target.compatible_slice_plans.end());
+      target.compatible_slice_plans.insert(new_target.tgt);
+    } else if (ReplaceTarget(new_target, target)) {
       target = new_target;
     }
 
     target.sliceable_dimension = sliceable_dimension;
   } else {
-    target = new_target;
+    tensor_allocation_map[source] = new_target;
   }
-
-  tensor_allocation_map[source] = target;
 }
 
 void AllocationFinder::FindConsumers(
@@ -350,15 +365,26 @@ void AllocationFinder::FindConsumers(
               // Request that the tensor for operand 0 should be allocated to be
               // sliceable on dimension 0 if we have a valid dimension
               // permutation.
+              const bool is_multi_update =
+                  IsPoplarInstruction(PoplarOp::MultiUpdate)(user) ||
+                  IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(user);
               if (op_index == 0 && tensor_target.permutation &&
                   (IsPoplarInstruction(PoplarOp::MultiSlice)(user) ||
-                   IsPoplarInstruction(PoplarOp::MultiUpdate)(user) ||
-                   IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(user))) {
+                   is_multi_update)) {
                 CHECK(!tensor_target.permutation->empty());
                 tensor_target.sliceable_dimension =
                     (*tensor_target.permutation)[0];
               }
               AddTensorTarget(src, tensor_target);
+              if (op_index == 0 && is_multi_update) {
+                // In order to use slice plan for MultiSlice and MultiUpdate
+                // instructions, we have to ensure that tensor allocated for
+                // specific instruction has been allocated with equivalent slice
+                // plan. MultiUpdate/MultiUpdateAdd operand 0 is in-place, so
+                // it's possible to look through its consumers and find all
+                // instruction which may use this tensor later.
+                FindConsumers(src, user, index, permutation);
+              }
             }
           } else {
             auto shapes = FlattenedXlaShape(src.instruction->shape());

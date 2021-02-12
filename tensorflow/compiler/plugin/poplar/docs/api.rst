@@ -228,29 +228,36 @@ It is also possible to access the operators via the
 Optimisers
 ^^^^^^^^^^
 
-It is also possible to access the optimisers via the
-`tensorflow.python.ipu.optimizers` namespace, for example:
-`tensorflow.python.ipu.optimizers.CrossReplicaOptimizer` or
-`tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`.
+In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also possible to access the optimizer classes via other namespaces, as shown in the following table:
 
-.. automodule:: tensorflow.python.ipu.cross_replica_optimizer
-  :members:
-  :imported-members:
-  :special-members: __init__
++---------------------------------------------+--------------------------------------------------------------------+
+|                  Optimizer                  |                       Alternative namespaces                       |
++=============================================+====================================================================+
+| CrossReplicaOptimizer                       | - tensorflow.python.ipu.cross_replica_optimizer                    |
+|                                             | - tensorflow.python.ipu.optimizers.cross_replica_optimizer         |
++---------------------------------------------+--------------------------------------------------------------------+
+| CrossReplicaGradientAccumulationOptimizer   | - tensorflow.python.ipu.gradient_accumulation_optimizer            |
+|                                             | - tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
++---------------------------------------------+--------------------------------------------------------------------+
+| CrossReplicaGradientAccumulationOptimizerV2 | - tensorflow.python.ipu.gradient_accumulation_optimizer            |
+|                                             | - tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
++---------------------------------------------+--------------------------------------------------------------------+
+| GradientAccumulationOptimizer               | - tensorflow.python.ipu.gradient_accumulation_optimizer            |
+|                                             | - tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
++---------------------------------------------+--------------------------------------------------------------------+
+| GradientAccumulationOptimizerV2             | - tensorflow.python.ipu.gradient_accumulation_optimizer            |
+|                                             | - tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
++---------------------------------------------+--------------------------------------------------------------------+
+| MapGradientOptimizer                        | - tensorflow.python.ipu.map_gradient_optimizer                     |
+|                                             | - tensorflow.python.ipu.optimizers.map_gradient_optimizer          |
++---------------------------------------------+--------------------------------------------------------------------+
+| ShardedOptimizer                            | - tensorflow.python.ipu.sharded_optimizer                          |
+|                                             | - tensorflow.python.ipu.optimizers.sharded_optimizer               |
++---------------------------------------------+--------------------------------------------------------------------+
 
-.. automodule:: tensorflow.python.ipu.gradient_accumulation_optimizer
-  :members:
-  :imported-members:
-  :special-members: __init__
-
-.. automodule:: tensorflow.python.ipu.map_gradient_optimizer
-  :members:
-  :imported-members:
-  :special-members: __init__
-
-.. automodule:: tensorflow.python.ipu.sharded_optimizer
-  :members:
-  :imported-members:
+.. automodule:: tensorflow.python.ipu.optimizers
+  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, MapGradientOptimizer, ShardedOptimizer
+  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, MapGradientOptimizer, ShardedOptimizer
   :special-members: __init__
 
 .. _sharding-api:
