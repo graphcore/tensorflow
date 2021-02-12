@@ -161,9 +161,11 @@ If you set ``TF_POPLAR_FLAGS=--help`` and execute a TF session, it will output s
 help for each option. Some of the more common options are described below.
 For a full list, refer to  :ref:`api-section`.
 
-.. list-table::
-  :width: 99%
+.. list-table:: TensorFlow configuration options
+  :width: 100%
+  :widths: 45,55
   :header-rows: 1
+  :class: longtable
 
   * - Option
     - Description
@@ -174,7 +176,6 @@ For a full list, refer to  :ref:`api-section`.
       to standard output, in addition to the normal report processing.
   * - :samp:`--executable_cache_path {path}`
     - Enables the Poplar executable cache.
-
       See :ref:`caching_executables`.
   * - ``--fallback_scheduler``
     - Uses the standard TensorFlow scheduler, instead of the Graphcore specific
@@ -202,9 +203,8 @@ For a full list, refer to  :ref:`api-section`.
     - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
   * - ``--synthetic_data_initializer``
     - Used in combination with the
-      ``--use_synthetic_data`` or ``--synthetic_data_categories`` option to 
+      ``--use_synthetic_data`` or ``--synthetic_data_categories`` option to
       control how the inputs to the graph will be initialised on the IPU.
-
       The values will be either random: ``--synthetic_data_initializer=random``
 
       Or a constant value *X*: :samp:`--synthetic_data_initializer={X}`
@@ -235,7 +235,7 @@ For a full list, refer to  :ref:`api-section`.
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be
       executed.
-  * - :samp:`--show_progress_bar {true/false/auto}`
+  * - :samp:`--show_progress_bar {true}|{false}|{auto}`
     - Whether to show the compilation progress bar. Either ``true``, ``false``
       or ``auto``. When set to ``auto``, the progress bar will only be enabled
       when compiling a graph which can take more than few seconds to compile.
