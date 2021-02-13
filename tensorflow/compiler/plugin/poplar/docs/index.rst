@@ -25,6 +25,7 @@ Targeting the IPU from TensorFlow 1
     host_embedding
     logging
 
+    api-changes
     api
     supported_ops
     references

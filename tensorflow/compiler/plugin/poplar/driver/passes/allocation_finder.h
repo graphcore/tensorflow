@@ -127,7 +127,6 @@ class AllocationFinder : public HloModulePass {
   void AddTensorTarget(const TensorLocation& source,
                        const TensorTarget& tensor_target);
 
-  std::set<HloInstruction*> visited;
   std::vector<const HloInstruction*> path;
 
   const CompilerAnnotations& annotations;
