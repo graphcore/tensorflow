@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import os
 import numpy as np
 
@@ -41,7 +40,7 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
       e = d + c
       ipu.internal_ops.print_tensor(e)  # block some optimisation
       f = ipu.internal_ops.recompute(e)
-      g = f + f
+      g = f + d
       ipu.internal_ops.print_tensor(g)  # block some optimisation
       output = g + f
 
@@ -67,11 +66,11 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
       # 5 adds in a graph that only defined 4
       ok = [
           '__seed*',
-          'add_1/add.1/Op/Add',
+          'add_1/add.3/Op/Add',
           'add_2/add.10/Op/Add',
-          'add_1/add.1.clone.1/Op/Add',
-          'add/add.4/Op/Add',
-          'add_1/add.1.clone/Op/Add',
+          'add_1/add.3.clone.1/Op/Add',
+          'add/add/Op/Add',
+          'add_1/add.3.clone/Op/Add',
           'add_3/add.12/Op/Add',
       ]
       report.assert_all_compute_sets_and_list(ok)

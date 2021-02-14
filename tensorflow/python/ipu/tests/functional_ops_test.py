@@ -250,7 +250,11 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
-    with tu.ipu_session() as sess:
+    # Disable the arithmetic_optimization Grappler pass, as it combines the
+    # slice additions in this test into an AddN which gives them all the same
+    # name, which means we can't look for them individually in the compute sets.
+    with tu.ipu_session(
+        disable_grappler_optimizers=["arithmetic_optimization"]) as sess:
 
       @ipu.outlined_function(keep_input_layouts=False)
       def func(table, indices, min_idx, max_idx):
