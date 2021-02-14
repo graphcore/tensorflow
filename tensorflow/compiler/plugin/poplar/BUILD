@@ -923,6 +923,7 @@ cc_library(
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
         "kernels/poputil/codelet_expression.cc",
+        "kernels/poputil/device_sync.cc",
         "kernels/poputil/execution_counter.cc",
         "kernels/poputil/fifo.cc",
         "kernels/poputil/print_tensor.cc",
@@ -945,6 +946,7 @@ cc_library(
         ":dataset_exporters_kernel",
         ":driver",
         ":xla_util",
+        "//tensorflow/compiler/jit:xla_device",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -1134,6 +1136,7 @@ cc_library(
     name = "poputil_ops",
     srcs = [
         "ops/poputil/codelet_expression.cc",
+        "ops/poputil/device_sync.cc",
         "ops/poputil/execution_counter.cc",
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
@@ -3291,6 +3294,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/ipu_model_device_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 4,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
