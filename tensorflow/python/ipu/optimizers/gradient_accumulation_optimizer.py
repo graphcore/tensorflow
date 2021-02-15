@@ -74,7 +74,8 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
-      dtype: The data type used for the gradient accumulation buffer. One of:
+      dtype: The data type used for the gradient accumulation buffer.
+        One of:
           - `None`: Use an accumulator of the same type as the variable type.
           - A `DType`: Use this type for all the accumulators.
           - A callable that takes the variable and returns a `DType`: Allows
@@ -269,7 +270,8 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
         all-gather will be inserted to restore the tensor on each replica.
         If `None`, this value will match the value of
         `offload_weight_update_variables`.
-      dtype: The data type used for the gradient accumulation buffer. One of:
+      dtype: The data type used for the gradient accumulation buffer.
+        One of:
           - `None`: Use an accumulator of the same type as the variable type.
           - A `DType`: Use this type for all the accumulators.
           - A callable that takes the variable and returns a `DType`: Allows

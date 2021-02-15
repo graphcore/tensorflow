@@ -329,8 +329,8 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   consume `gradient_accumulation_count` batches from the dataset returned by
   the `input_fn` and accumulate the gradients, giving an effective batch size
   of `num_replicas * gradient_accumulation_count * batch_size`. The optimizer
-  in the `model_fn` should be wrapped in an
-  :class:`~tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`
+  in the `model_fn` should be wrapped in a
+  :class:`~tensorflow.python.ipu.optimizers.CrossReplicaOptimizer`
   in order to average the gradients across the replicas.
 
   This can further be combined with distributed multi-worker training using the

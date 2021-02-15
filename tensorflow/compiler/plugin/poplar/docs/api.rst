@@ -108,7 +108,7 @@ Estimators
 
 .. automodule:: tensorflow.python.ipu.ipu_run_config
   :members:
-  :special-members: __init__
+  :special-members: __new__, __init__
 
 .. Session run hooks
 
@@ -166,7 +166,7 @@ It is also possible to access the operators via the
   :members:
   :special-members: __init__
   :imported-members:
-  :exclude-members: deprecated_args, Enum, IntEnum
+  :exclude-members: Enum, IntEnum
 
 .. The following are all PopLibs ops
 
