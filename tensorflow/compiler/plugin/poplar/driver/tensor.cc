@@ -1083,7 +1083,7 @@ poplar::Tensor CreateConstantTensorImpl(
   }
   graph.setTileMapping(tensor, 0);
 
-  return ConvertToDeviceLayout(shape, tensor);
+  return ConvertToDeviceLayout(literal.shape(), tensor);
 }
 
 poplar::Tensor CreateFp16ConstantTensorImpl(
@@ -1104,7 +1104,7 @@ poplar::Tensor CreateFp16ConstantTensorImpl(
   }
   graph.setTileMapping(tensor, 0);
 
-  return ConvertToDeviceLayout(shape, tensor);
+  return ConvertToDeviceLayout(literal.shape(), tensor);
 }
 
 poplar::Tensor Create64BitConstantTensorImpl(
@@ -1130,7 +1130,7 @@ poplar::Tensor Create64BitConstantTensorImpl(
   }
   graph.setTileMapping(tensor, 0);
 
-  return ConvertToDeviceLayout(shape, tensor);
+  return ConvertToDeviceLayout(literal.shape(), tensor);
 }
 }  // namespace
 
@@ -1188,7 +1188,7 @@ StatusOr<poplar::Tensor> AddConstantTensor(
           poplar::Tensor tensor,
           AddTensor(graph, src, shape, resources, tensor_map, {debug_info}));
       TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
-      return ConvertToDeviceLayout(shape, tensor);
+      return ConvertToDeviceLayout(literal.shape(), tensor);
     }
   }
 
@@ -1197,7 +1197,7 @@ StatusOr<poplar::Tensor> AddConstantTensor(
         poplar::Tensor tensor,
         AddTensor(graph, src, shape, resources, tensor_map, {debug_info}));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
-    return ConvertToDeviceLayout(shape, tensor);
+    return ConvertToDeviceLayout(literal.shape(), tensor);
   }
 
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(literal.shape()));
