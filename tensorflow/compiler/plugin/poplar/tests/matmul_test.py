@@ -21,6 +21,7 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -249,6 +250,37 @@ class IpuXlaMatMulTest(xla_test.XLATestCase):
         fd = {pa: [[1.], [2.]], pb: [[1., 2., 3.], [4., 5., 6.]]}
         result = sess.run(output, fd)
         self.assertAllClose(result, [[9, 12., 15.]])
+
+  def testMatMul2x3TransposedConstLHS(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        a = constant_op.constant([1, 2, 3, 4, 5, 6],
+                                 dtype=np.float32,
+                                 shape=[3, 2])
+        pb = array_ops.placeholder(np.float32, [3, 2], name="a")
+        output = math_ops.matmul(a, pb, transpose_a=True)
+
+        fd = {
+            pb: [[
+                1,
+                2,
+            ], [3, 4], [5, 6]]
+        }
+        result = sess.run(output, fd)
+        self.assertAllClose(result, [[35, 44], [44, 56]])
+
+  def testMatMul2x3TransposedConstRHS(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [2, 3], name="a")
+        b = constant_op.constant([1, 2, 3, 4, 5, 6],
+                                 dtype=np.float32,
+                                 shape=[2, 3])
+        output = math_ops.matmul(pa, b, transpose_b=True)
+
+        fd = {pa: [[1, 2, 3], [4, 5, 6]]}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, [[14, 32], [32, 77]])
 
 
 if __name__ == "__main__":
