@@ -186,8 +186,9 @@ class LstmLayerFwdOp : public PoplarOpDef {
       std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
           graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
           prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-      args[6] = poputil::duplicate(graph, args[5][lstm_params.timeSteps - 1],
-                                   prog, {debug_name_and_id, "outputHState"});
+      args[6] =
+          poputil::duplicate(graph, args[5][lstm_params.rnn.timeSteps - 1],
+                             prog, {debug_name_and_id, "outputHState"});
     };
 
     poplar::Tensor output, output_h_state, output_c_state, intermediates;
