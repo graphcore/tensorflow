@@ -38,7 +38,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
-from tensorflow.python.util.deprecation import deprecated_args
 from tensorflow.python.util import nest
 
 

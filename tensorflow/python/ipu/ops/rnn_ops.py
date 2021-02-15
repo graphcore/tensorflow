@@ -285,10 +285,10 @@ class PopnnLSTM(_PopnnRNN):
       training: Set to False to use the LSTM model in inference mode.
 
     Returns:
-      A tuple of output and output states.
+      A tuple of output and output state.
 
       * output: a tensor of shape [time_len, batch_size, num_units].
-      * output_states: An `LSTMStateTuple` of the same shape and structure as
+      * output_state: An `LSTMStateTuple` of the same shape and structure as
         initial_state.
 
     Raises:
@@ -566,13 +566,15 @@ class PopnnDynamicGRU(PopnnGRU):
         inputs: 3-D tensor with shape [batch_size, time_len, input_size].
         seq_len: 1-D tensor with the sequence length of samples in each batch.
         initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
-        If not provided, the state is initialized to zeros.
+          If not provided, the state is initialized to zeros.
         training: whether this operation will be used in training or inference.
         time_major: whether the time dimension is the first demension.
 
       Returns:
-        output: a tensor of shape [time_len, batch_size, num_units].
-        output_state: The output state of the last cell.
+        A tuple of output and output state.
+
+        * output: a tensor of shape [time_len, batch_size, num_units].
+        * output_state: The output state of the last cell.
 
       Raises:
         ValueError: if initial_state is not valid.
@@ -684,22 +686,25 @@ class PopnnAUGRU(PopnnGRU):
            training=True,
            time_major=True):
     """Runs the forward step for the AUGRU model.
+
     Args:
-        inputs: 3-D tensor with shape [time_len, batch_size, input_size].
-        seq_len: 1-D tensor with the sequence length of samples in each batch.
-        attention_score: The output of attention layer, the score of samples
-          in each batch, shaped `[batch_size, max_seq_len]`.
-        initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
-          If not provided, the state is initialized to zeros.
-        training: whether this operation will be used in training or inference.
-        time_major: whether the time dimension is the first dimension.
+      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      seq_len: 1-D tensor with the sequence length of samples in each batch.
+      attention_score: The output of attention layer, the score of samples
+        in each batch, shaped `[batch_size, max_seq_len]`.
+      initial_state: Initial state tensor, shaped `[batch_size, num_units]`.
+        If not provided, the state is initialized to zeros.
+      training: whether this operation will be used in training or inference.
+      time_major: whether the time dimension is the first dimension.
 
-      Returns:
-        output: a tensor of shape [time_len, batch_size, num_units].
-        output_state: The output state of the last cell.
+    Returns:
+      A tuple of output and output state.
 
-      Raises:
-        ValueError: if initial_state is not valid.
+      * output: a tensor of shape [time_len, batch_size, num_units].
+      * output_state: The output state of the last cell.
+
+    Raises:
+      ValueError: if initial_state is not valid.
 
     """
 
