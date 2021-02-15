@@ -52,11 +52,6 @@ class XlaPlatformInfo {
     return xla_device_metadata_ && xla_device_metadata_->UseMultipleStreams();
   }
 
-  bool SupportsAsyncExecutableRun() const {
-    return xla_device_metadata_ &&
-           xla_device_metadata_->SupportsAsyncExecutableRun();
-  }
-
   // Non-null only when run on an XLA device.
   se::DeviceMemoryAllocator* custom_allocator() const {
     return device_allocator_;

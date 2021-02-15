@@ -143,15 +143,13 @@ static DeviceAttributes BuildXlaDeviceAttributes(const string& name_prefix,
 XlaDevice::Metadata::Metadata(
     int device_ordinal, se::Platform* platform, const DeviceType& device_type,
     XlaCompiler::ShapeRepresentationFn shape_representation_fn,
-    PaddedShapeFn padded_shape_fn, bool use_multiple_streams,
-    bool supports_async_executable_run)
+    PaddedShapeFn padded_shape_fn, bool use_multiple_streams)
     : device_ordinal_(device_ordinal),
       device_type_(device_type),
       platform_(platform),
       shape_representation_fn_(std::move(shape_representation_fn)),
       padded_shape_fn_(std::move(padded_shape_fn)),
-      use_multiple_streams_(use_multiple_streams),
-      supports_async_executable_run_(supports_async_executable_run) {}
+      use_multiple_streams_(use_multiple_streams) {}
 
 int XlaDevice::Metadata::device_ordinal() const { return device_ordinal_; }
 
@@ -202,8 +200,7 @@ XlaDevice::XlaDevice(const SessionOptions& session_options,
                     options.shape_representation_fn,
                     options.padded_shape_fn ? options.padded_shape_fn
                                             : DefaultPaddedShapeFn,
-                    options.use_multiple_streams,
-                    options.supports_async_executable_run),
+                    options.use_multiple_streams),
       device_ordinal_(options.device_ordinal),
       jit_device_name_(options.compilation_device_name),
       platform_(options.platform),
