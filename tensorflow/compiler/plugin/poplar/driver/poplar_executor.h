@@ -611,7 +611,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   InfeedAllocator* GetInfeedAllocator();
 
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
-  // Fails if the outfeed with the given name does not exist.
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
       const std::string& feed_id, const PoplarFeedConfig_Mode& mode);
 
@@ -989,8 +988,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
       infeed_iterators_;
 
+  std::mutex outfeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
-      outfeed_contexts_;
+      outfeed_contexts_ GUARDED_BY(outfeeds_mutex_);
 
   absl::flat_hash_map<std::string, std::unique_ptr<HostEmbeddingInterface_>>
       host_embeddings_;
