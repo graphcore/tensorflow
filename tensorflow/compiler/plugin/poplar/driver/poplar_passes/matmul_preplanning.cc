@@ -145,9 +145,9 @@ Status MatMulPreplanning::StorePreplanMatMulsGRU(const HloInstruction* inst) {
 
   const std::vector<std::pair<poplin::MatMulParams, poplar::OptionFlags>>
       mat_muls_to_pre_plan = popnn::rnn::getMatMulPrePlanParameters(
-          gru_params.timeSteps, gru_params.batchSize, gru_params.layerSizes[0],
-          gru_params.layerSizes[1], gru_params.dataType, partials_poplar_type,
-          inference_only, true);
+          gru_params.rnn.timeSteps, gru_params.rnn.batchSize,
+          gru_params.rnn.layerSizes[0], gru_params.rnn.layerSizes[1],
+          gru_params.rnn.dataType, partials_poplar_type, inference_only, true);
 
   for (const auto& mat_mul : mat_muls_to_pre_plan) {
     option_flags_store.push_back(mat_mul.second);

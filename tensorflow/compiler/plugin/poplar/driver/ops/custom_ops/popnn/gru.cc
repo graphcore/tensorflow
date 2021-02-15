@@ -150,7 +150,7 @@ class GRULayerBaseOp : public PoplarOpDef {
       case 4: {
         // Allocate AUGRU seq_len
         return popops::createSliceableTensor(
-            graph, poplar::INT, {gru_params.batchSize}, {0}, {1}, 0, name);
+            graph, poplar::INT, {gru_params.rnn.batchSize}, {0}, {1}, 0, name);
       }
       case 5: {
         // Allocate AUGRU attention
@@ -301,8 +301,8 @@ class GRULayerFwdOp : public GRULayerBaseOp {
         graph, gru_params, input_state, input_seq, weights, intermediates_ptr,
         prog, {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
-    args[5] = poputil::duplicate(graph, args[4][gru_params.timeSteps - 1], prog,
-                                 {debug_name_and_id, "outputHState"});
+    args[5] = poputil::duplicate(graph, args[4][gru_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(GRULayerFwd, GRULayerFwdOp);
@@ -421,8 +421,8 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
                            weights, intermediates_ptr, prog,
                            {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
-    args[6] = poputil::duplicate(graph, args[5][gru_params.timeSteps - 1], prog,
-                                 {debug_name_and_id, "outputHState"});
+    args[6] = poputil::duplicate(graph, args[5][gru_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(DynamicGRULayerFwd, DynamicGRULayerFwdOp);
@@ -542,7 +542,7 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
     args[7] = popnn::gru::createInitialState(graph, gru_params,
                                              {debug_name_and_id, "fwdState"},
                                              gru_opts, &res.matmul_cache);
-    for (unsigned i = 0; i < gru_params.batchSize; ++i) {
+    for (unsigned i = 0; i < gru_params.rnn.batchSize; ++i) {
       auto tmp_fwd_tensor = args[6].slice(i, i + 1, 1).squeeze({1});
       auto offset = updated_time_step.slice(i, i + 1);
       auto tmp_tensor =
