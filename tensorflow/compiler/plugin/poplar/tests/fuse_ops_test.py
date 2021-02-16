@@ -80,7 +80,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       # pylint: disable=line-too-long
-      ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add']
+      ok = [
+          '__seed*',
+          'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add'
+      ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
@@ -183,7 +186,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       # pylint: disable=line-too-long
-      ok = ['__seed*', 'Relu/relu/Nonlinearity', 'add/add.*/Add']
+      ok = [
+          '__seed*',
+          'Relu/relu/Nonlinearity', 'add/add.*/Add'
+      ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
@@ -205,7 +211,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log()
 
       # pylint: disable=line-too-long
-      ok = ['__seed*', 'Relu/relu/Nonlinearity']
+      ok = [
+          '__seed*',
+          'Relu/relu/Nonlinearity'
+      ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
@@ -1168,7 +1177,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log()
       ok = [
           'random_normal/RandomStandardNormal/rng.*/normal',
-          'mul/multiply.*/Op/Multiply', 'add/add/Op/Add', '__seed*'
+          'mul/multiply.*/Op/Multiply', 'add/add.*/Op/Add', '__seed*'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

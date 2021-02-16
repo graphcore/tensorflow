@@ -64,7 +64,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
 
-      result, rep = sess.run([output, report], fd)
+      result = sess.run(output, fd)
+      rep = sess.run(report, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
       self.assertTrue(len(rep) == 0)
 
@@ -84,7 +85,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
 
-      result, rep = sess.run([output, report], fd)
+      result = sess.run(output, fd)
+      rep = sess.run(report, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
       types = r.parse_events(rep, assert_len=4)
@@ -114,7 +116,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       result = sess.run(out1, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
-      result, rep = sess.run([out2, report], fd)
+      result = sess.run(out2, fd)
+      rep = sess.run(report, fd)
+
       self.assertAllClose(result, [[1., 0.], [-2., -2.]])
 
       # 2x engine, 2x compile_begin, 2x compile_end, 2x load engine
