@@ -102,6 +102,9 @@ def allreduce(tensor, op=None):
   if op == Adasum:
     raise NotImplementedError('The Adasum reduction is not implemented.')
 
+  if op is None:
+    op = Average
+
   # Averaging happens in framework code, so translate that to Sum for the actual call
   true_op = Sum if op == Average else op
 
