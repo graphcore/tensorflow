@@ -78,7 +78,8 @@ class HorovodTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def test_collectives(self):
     rank = constant_op.constant(hvd.rank(), dtype=np.float32)
-    allreduced = hvd.allreduce(rank, op=hvd.Sum)
+    summed = hvd.allreduce(rank, op=hvd.Sum)
+    averaged = hvd.allreduce(rank)
     allgathered = hvd.allgather(array_ops.expand_dims(rank, axis=0))
     broadcast = hvd.broadcast(rank, root_rank=0)
 
@@ -92,7 +93,8 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
     with session.Session() as sess:
       self.assertAllEqual(np.arange(hvd.size()), sess.run(allgathered))
-      self.assertAllEqual(np.sum(np.arange(hvd.size())), sess.run(allreduced))
+      self.assertAllEqual(np.sum(np.arange(hvd.size())), sess.run(summed))
+      self.assertAllEqual(np.mean(np.arange(hvd.size())), sess.run(averaged))
       self.assertAllEqual(0.0, sess.run(broadcast))
 
   @test_util.deprecated_graph_mode_only
