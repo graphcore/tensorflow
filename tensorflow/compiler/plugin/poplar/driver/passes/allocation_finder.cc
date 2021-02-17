@@ -356,10 +356,9 @@ void AllocationFinder::FindConsumers(
             // Look through the scaled inplace op.
             FindConsumers(src, user, index, permutation);
           } else if (IsPopOpsFusion(user, "implicit")) {
-            // Look through implicit elementwise ops if the shapes match.
-            auto shapes = FlattenedXlaShape(src.instruction->shape());
-            if (shapes[src.flattened_output_tuple_index] == user->shape() &&
-                user->shape() == user->operand(op_index)->shape()) {
+            // Look through implicit elementwise ops if the shape dimensions
+            // match.
+            if (user->shape() == user->operand(op_index)->shape()) {
               FindConsumers(src, user, index, permutation);
             }
           }
@@ -463,7 +462,9 @@ void AllocationFinder::FindConsumers(
       }
       default: {
         auto shapes = FlattenedXlaShape(src.instruction->shape());
-        if (shapes[src.flattened_output_tuple_index] == user->shape()) {
+        // Ignore the element type (paths can contain casts).
+        if (shapes[src.flattened_output_tuple_index].dimensions() ==
+            user->shape().dimensions()) {
           FindConsumers(src, user, index, permutation);
         }
         break;
