@@ -30,7 +30,6 @@ from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import cross_replica_ops
-from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest
 
@@ -167,17 +166,9 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
       try:
         xla_context.Enter()
         _validate_function_for_arguments(fn, args, kwargs)
-        outputs = fn(*args, **kwargs)
+        return fn(*args, **kwargs)
       finally:
         xla_context.Exit()
-      # Insert a sync at the end of the execution to make sure the execution
-      # has finished.
-      sync = gen_poputil_ops.device_sync()
-      flat_outputs = nest.flatten(outputs)
-      with ops.control_dependencies([sync]):
-        flat_outputs = [array_ops.identity(x) for x in flat_outputs]
-
-      return nest.pack_sequence_as(outputs, flat_outputs)
 
   def _reduce_to(self, reduce_op, value, destinations):
     del destinations
