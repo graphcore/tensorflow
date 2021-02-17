@@ -86,7 +86,6 @@ Status XlaIpuDeviceFactory::CreateDevices(
   devopts.device_name_prefix = name_prefix;
   devopts.compilation_device_name = DEVICE_IPU_XLA_JIT;
   devopts.device_name = DEVICE_XLA_IPU;
-  devopts.supports_async_executable_run = false;
 
   int num_devices = p->VisibleDeviceCount();
 
