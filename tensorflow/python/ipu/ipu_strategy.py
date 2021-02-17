@@ -166,9 +166,16 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
       try:
         xla_context.Enter()
         _validate_function_for_arguments(fn, args, kwargs)
-        return fn(*args, **kwargs)
+        outputs = fn(*args, **kwargs)
       finally:
         xla_context.Exit()
+
+      # Insert a sync at the end of the execution to make sure the execution
+      # has finished even if there are no outputs.
+      with context.eager_mode():
+        gen_poputil_ops.device_sync()
+
+      return outputs
 
   def _reduce_to(self, reduce_op, value, destinations):
     del destinations
