@@ -49,6 +49,12 @@ void MapTensorLinearlyImpl(
 }
 }  // namespace
 
+void MappingHelper::RemapTensor(LinearMapperState& state, poplar::Graph& graph,
+                                poplar::Tensor& tensor) {
+  auto mapping = graph.getTileMapping(tensor);
+  MapTensorLinearlyImpl(state, graph, tensor, mapping);
+}
+
 void MappingHelper::MapTensorLinearly(LinearMapperState& state,
                                       poplar::Graph& graph,
                                       poplar::Tensor& tensor) {

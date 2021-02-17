@@ -178,7 +178,7 @@ class TriangularSolveOp : public PoplarOpDef {
             "Input index %d of triangular-solve shouldn't be allocating",
             input_index);
     }
-
+    MappingHelper::RemapTensor(res.linear_mapping_state, graph, out);
     return out;
   }
 };
