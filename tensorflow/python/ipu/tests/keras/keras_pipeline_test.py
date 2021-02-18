@@ -670,10 +670,12 @@ class IPUPipelineTest(test.TestCase):
       with ipu.keras.PipelineStage(0):
         y1 = keras.layers.Dense(2,
                                 activation=keras.activations.relu,
-                                kernel_initializer=init)(input_layer)
+                                kernel_initializer=init,
+                                name="output1")(input_layer)
 
       with ipu.keras.PipelineStage(1):
-        y2 = keras.layers.Dense(2, kernel_initializer=init)(input_layer)
+        y2 = keras.layers.Dense(2, kernel_initializer=init,
+                                name="output2")(input_layer)
 
       m = ipu.keras.PipelineModel(inputs=input_layer,
                                   outputs=[y1, y2],
@@ -695,7 +697,8 @@ class IPUPipelineTest(test.TestCase):
       dataset = dataset.map(d)
 
       history = m.fit(dataset, epochs=2)
-      self.assertEqual(list(history.history.keys()), ['loss'])
+      self.assertEqual(set(history.history.keys()),
+                       set(['loss', 'output1_loss', 'output2_loss']))
       self.assertEqual(type(history.history['loss']), list)
       losses = history.history['loss']
       self.assertEqual(len(losses), 2)

@@ -1088,7 +1088,7 @@ class IPUModelModelTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
 
-      m.compile("sgd", loss=['mse', 'mse'])
+      m.compile("sgd", loss=['mse', 'mse'], metrics=['accuracy'])
 
       ds = test_dataset_two_input_output_np(length=96)
       m.fit(*ds, batch_size=4)
@@ -1233,14 +1233,16 @@ class IPUModelModelTest(test.TestCase):
   def testTrainMultipleInputMultipleOutput(self):
     # 3 inputs, 2 outputs.
     def data_fn():
-      x1 = np.ones((64, 32), dtype=np.float32)
-      x2 = np.ones((64, 32), dtype=np.float32)
-      x3 = np.ones((64, 32), dtype=np.float32)
-
-      y1 = np.ones((64, 1), dtype=np.float32)
-      y2 = np.ones((64, 1), dtype=np.float32)
-
-      return ((x1, x2, x3), (y1, y2))
+      x1 = np.ones((32), dtype=np.float64)
+      x2 = np.ones((32), dtype=np.float64)
+      x3 = np.ones((32), dtype=np.float64)
+      y1 = np.ones((1), dtype=np.float64)
+      y2 = np.ones((1), dtype=np.float64)
+      ds_x = dataset_ops.Dataset.from_tensors((x1, x2, x3))
+      ds_y = dataset_ops.Dataset.from_tensors((y1, y2))
+      ds_xy = dataset_ops.Dataset.zip(
+          (ds_x, ds_y)).repeat(32).batch(4, drop_remainder=True)
+      return ds_xy
 
     # Intentional skip from input to middle of model.
     def model_fn():
@@ -1261,10 +1263,12 @@ class IPUModelModelTest(test.TestCase):
 
       dense_3 = keras.layers.Dense(1,
                                    kernel_initializer=init,
-                                   activation=keras.activations.relu)(cat)
+                                   activation=keras.activations.relu,
+                                   name="output1")(cat)
       dense_4 = keras.layers.Dense(1,
                                    kernel_initializer=init,
-                                   activation=keras.activations.relu)(cat)
+                                   activation=keras.activations.relu,
+                                   name="output2")(cat)
 
       return ((input_1, input_2, input_3), (dense_3, dense_4))
 
@@ -1276,19 +1280,27 @@ class IPUModelModelTest(test.TestCase):
       ipu.utils.configure_ipu_system(cfg)
 
       model = ipu.keras.Model(*model_fn())
-      model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+      model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
-      out = model.fit(*data_fn(), batch_size=4)
+      out = model.fit(data_fn(), steps_per_epoch=1, epochs=4)
 
     # CPU Test.
     cpu_model = keras.Model(*model_fn())
-    cpu_model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+    cpu_model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
-    cpu_out = cpu_model.fit(*data_fn(), batch_size=4)
+    cpu_out = cpu_model.fit(data_fn(), steps_per_epoch=1, epochs=4)
 
     # Comparison.
-    self.assertEqual(np.shape(cpu_out), np.shape(out))
-    self.assertAllClose(out.history['loss'], cpu_out.history['loss'])
+    self.assertEqual(len(out.history), len(cpu_out.history))
+
+    # Check per output loss and metrics exist.
+    self.assertTrue("output1_loss" in out.history)
+    self.assertTrue("output2_loss" in out.history)
+    self.assertTrue("output1_accuracy" in out.history)
+    self.assertTrue("output2_accuracy" in out.history)
+
+    for key in out.history:
+      self.assertAllClose(out.history[key], cpu_out.history[key])
 
   @test_util.run_v2_only
   def testNestedClasses(self):

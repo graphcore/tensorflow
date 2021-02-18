@@ -38,8 +38,8 @@ from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.keras.layer_replacement import IPULayerReplacer
 from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import callbacks as cbks
-from tensorflow.python.keras import backend
 from tensorflow.python.keras import metrics as metrics_module
 from tensorflow.python.keras import Model as KerasModel
 from tensorflow.python.keras import optimizers
@@ -52,7 +52,9 @@ from tensorflow.python.keras.engine import training as keras_training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.keras.utils import generic_utils
+from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
+from tensorflow.python.ops.losses import util as tf_losses_utils
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
@@ -293,18 +295,6 @@ class _IpuModelBase(KerasModel):
                                               loss_weights=loss_weights,
                                               **kwargs)
 
-  # This method should be overridden in child classes that are capable of
-  # handling models with multiple outputs. The problem is that in _add_loss,
-  # ordinarily a new metric would be created with a new training endpoint,
-  # however this involves the creation of weights. This is problematic for
-  # graph execution (variables cannot be created in a tf.function decorated
-  # function). So, this method should be overridden to return instance lifetime
-  # metrics that are created outside of the training loop.
-  def _get_output_loss_metrics(self):
-    raise NotImplementedError(
-        "_get_ouput_loss_metrics must be overriden for multiple output models."
-    )
-
   # This is a duplication of the graph compilation section of the method
   # Model.compile in training.py
   def _add_loss(self, targets):
@@ -325,15 +315,6 @@ class _IpuModelBase(KerasModel):
       endpoint = keras_training._TrainingEndpoint(o, n, l)  # pylint: disable=protected-access
       endpoint.create_training_target(t, run_eagerly=self.run_eagerly)
       self._training_endpoints.append(endpoint)
-
-    # Create a metric wrapper for each output loss.
-    if len(self._training_endpoints) > 1:
-      metrics = self._get_output_loss_metrics()
-      assert len(metrics) == len(self._training_endpoints)
-
-      for endpoint, metric in zip(self._training_endpoints, metrics):
-        if not endpoint.should_skip_target():
-          endpoint.output_loss_metric = metric
 
     # Prepare list loss weights, same size of model outputs.
     training_utils.prepare_loss_weights(self._training_endpoints,
@@ -360,7 +341,6 @@ class _IpuModelBase(KerasModel):
 
     # Creates the model loss
     self.total_loss = self._prepare_total_loss(masks)
-
     return [self.total_loss] + metrics
 
   def _get_internal_run_loop(self):
@@ -403,7 +383,7 @@ class _IpuModelBase(KerasModel):
     require_steps_per_epoch = False
     verify_dataset_length = False
 
-    dataset_length = backend.get_value(cardinality.cardinality(ds))
+    dataset_length = K.get_value(cardinality.cardinality(ds))
     if dataset_length == cardinality.INFINITE:
       # An infinite dataset can be walked over indefinitely, but the user
       # must specify how many steps there are in each epoch.
@@ -939,10 +919,8 @@ class IPUSequential(_IpuModelBase):
         raise ValueError(
             "Sequential must have at least one trainable parameter.")
 
-      opt = self._get_optimizer()
-      if opt and mode == ModeKeys.TRAIN:
-
-        # If it is gradient accumulation then wrap in that too
+      if training:
+        opt = self._get_optimizer()
         if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
               opt,
@@ -1217,15 +1195,6 @@ class IPUModel(_IpuModelBase):
       for layer in self._layers:
         layer = self._layer_replacer(layer)
 
-    # Create an output loss metric for each output if there is more than
-    # one model output.
-    self._loss_metrics = None
-    if len(self.outputs) > 1:
-      self._loss_metrics = []
-      for i in range(len(self.outputs)):
-        name = "output_%d" % i
-        self._loss_metrics.append(metrics_module.Mean(name=name))
-
     self._num_inputs = len(self.inputs)
     self._num_outputs = len(self.outputs)
 
@@ -1303,9 +1272,6 @@ class IPUModel(_IpuModelBase):
 
     self._create_post_order()
 
-  def _get_output_loss_metrics(self):
-    return self._loss_metrics
-
   def _create_post_order(self):
     self._post_order_node_execution = []
     # Set of reference tensors which were computed.
@@ -1355,7 +1321,7 @@ class IPUModel(_IpuModelBase):
     if 'training' in argspec:
       kwargs.setdefault('training', training)
       if (isinstance(kwargs['training'], ops.Tensor)
-          and kwargs['training'] in backend._GRAPH_LEARNING_PHASES.values()):  # pylint: disable=protected-access
+          and kwargs['training'] in K._GRAPH_LEARNING_PHASES.values()):  # pylint: disable=protected-access
         kwargs['training'] = training  # Materialize placeholder.
 
     # Map Keras tensors in kwargs to their computed value.
@@ -1390,6 +1356,106 @@ class IPUModel(_IpuModelBase):
     output_tensors = nest.pack_sequence_as(self._nested_outputs,
                                            output_tensors)
     return output_tensors
+
+  # pylint: disable=arguments-differ
+  def _add_loss(self, outputs, targets):
+    assert len(outputs) == len(self.outputs)
+    assert len(targets) == len(self.outputs)
+
+    masks = self._prepare_output_masks()
+
+    # Invoke metric functions (unweighted) for all the outputs.
+    metrics = self._handle_metrics(
+        outputs,
+        targets=targets,
+        skip_target_masks=self._prepare_skip_target_masks(),
+        masks=masks)
+
+    # Loss calculation logic taken from training.py and adapted to take the in
+    # pipeline outputs and targets.
+    total_loss = None
+    output_losses = []
+    with K.name_scope('loss'):
+      for endpoint, mask, y_true, y_pred in zip(self._training_endpoints,
+                                                masks, targets, outputs):
+        if endpoint.should_skip_target():
+          continue
+        loss_fn = endpoint.loss_fn
+        loss_weight = endpoint.loss_weight
+        loss_name = endpoint.loss_name()
+        sample_weight = endpoint.sample_weight
+
+        with K.name_scope(loss_name):
+          if mask is not None:
+            mask = math_ops.cast(mask, y_pred.dtype)
+            # Update weights with mask.
+            if sample_weight is None:
+              sample_weight = mask
+            else:
+              # Update dimensions of weights to match with mask if possible.
+              mask, _, sample_weight = (
+                  tf_losses_utils.squeeze_or_expand_dimensions(
+                      mask, sample_weight=sample_weight))
+              sample_weight *= mask
+
+          if hasattr(loss_fn, 'reduction'):
+            per_sample_losses = loss_fn.call(y_true, y_pred)
+            weighted_losses = losses_utils.compute_weighted_loss(
+                per_sample_losses,
+                sample_weight=sample_weight,
+                reduction=losses_utils.ReductionV2.NONE)
+            loss_reduction = loss_fn.reduction
+
+            # `AUTO` loss reduction defaults to `SUM_OVER_BATCH_SIZE` for all
+            # compile use cases.
+            if loss_reduction == losses_utils.ReductionV2.AUTO:
+              loss_reduction = losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE
+
+            # Compute the stateless loss value.
+            output_loss = losses_utils.reduce_weighted_loss(
+                weighted_losses, reduction=loss_reduction)
+          else:
+            # Compute the stateless loss value for a custom loss class.
+            # Here we assume that the class takes care of loss reduction
+            # because if this class returns a vector value we cannot
+            # differentiate between use case where a custom optimizer
+            # expects a vector loss value vs unreduced per-sample loss value.
+            output_loss = loss_fn(y_true, y_pred, sample_weight=sample_weight)
+            loss_reduction = losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE
+
+        # If the number of outputs is 1 then we don't append the loss metric
+        # associated with each model output. When there are multiple outputs
+        # associated with a model, each output's loss is calculated and returned
+        # as part of the loss_metrics.
+        if len(self.outputs) > 1:
+          # Keep track of the stateful output loss result.
+          output_losses.append(endpoint.output_loss_metric(output_loss))
+
+        # Scale output loss for distribution. For custom losses we assume
+        # reduction was mean.
+        if loss_reduction == losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE:
+          output_loss = losses_utils.scale_loss_for_distribution(output_loss)
+
+        if total_loss is None:
+          total_loss = loss_weight * output_loss
+        else:
+          total_loss += loss_weight * output_loss
+      if total_loss is None:
+        if not self.losses:
+          raise ValueError('The model cannot be compiled '
+                           'because it has no loss to optimize.')
+        else:
+          total_loss = 0.
+
+      # Add regularization penalties and other layer-specific losses.
+      custom_losses = self.get_losses_for(None) + self.get_losses_for(
+          self.inputs)
+      if custom_losses:
+        raise ValueError('Custom layer losses are not supported.')
+    self.total_loss = total_loss
+
+    losses_and_metrics = [self.total_loss] + output_losses + metrics
+    return losses_and_metrics
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
@@ -1434,26 +1500,25 @@ class IPUModel(_IpuModelBase):
       inputs = list(args[:n_inputs])
       targets = list(args[n_inputs:])
 
-      x = main_body(inputs)
-      self._set_output_attrs(x)
-
-      losses = self._add_loss(targets)
-      outfeed_queue.enqueue(losses)
+      outputs = main_body(inputs)
+      losses_and_metrics = self._add_loss(nest.flatten(outputs), targets)
+      outfeed_queue.enqueue(losses_and_metrics)
 
       if not self.trainable_weights:
         raise ValueError("Model must have at least one trainable parameter.")
 
-      opt = self._get_optimizer()
-      if opt and training:
+      if training:
+        opt = self._get_optimizer()
         if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
               opt,
               self.gradient_accumulation_count,
               dtype=self.gradient_accumulation_dtype)
 
-        for l in losses[:len(self.outputs)]:  # No grads for metrics.
-          grads_and_vars = opt.compute_gradients(l, self.trainable_variables)
-          opt.apply_gradients(grads_and_vars)
+        grads_and_vars = opt.compute_gradients(losses_and_metrics[0],
+                                               self.trainable_variables)
+        opt.apply_gradients(grads_and_vars)
+
       return []
 
     def body(*args, **kwargs):

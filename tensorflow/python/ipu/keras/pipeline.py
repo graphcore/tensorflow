@@ -866,16 +866,11 @@ class PipelineModel(ipu_model.Model):
     stages = dict()
     max_stage_id = -1
 
-    loss_metrics_layer = self._get_output_loss_metrics()
-
     for n, layer in enumerate(self._layers):
       # Input layers need not have a pipeline stage assigned -
       # we don't have to wait for a computation to complete to
       # access the "result" of an input layer.
       if isinstance(layer, InputLayer):
-        continue
-
-      if layer is loss_metrics_layer:
         continue
 
       # Verify that a pipeline stage has been assigned.
@@ -888,9 +883,6 @@ class PipelineModel(ipu_model.Model):
       layer_id = id(layer)
       stages[layer_id] = layer._pipeline_stage  # pylint: disable=protected-access
       max_stage_id = max(max_stage_id, layer._pipeline_stage)  # pylint: disable=protected-access
-
-    if loss_metrics_layer is not None:
-      stages[id(loss_metrics_layer)] = max_stage_id
 
     num_inputs = len(self._input_layers)
     nodes_per_stage = {}
@@ -1019,18 +1011,17 @@ class PipelineModel(ipu_model.Model):
       return main_body(stage_id, *args)[0]
 
     def training_body(stage_id, *args):
-      x, targets = main_body(stage_id, *args)
+      outputs, targets = main_body(stage_id, *args)
       if stage_id == self.stages[-1]:
-        self._set_output_attrs(x)
-        return self._add_loss(targets)
-      return x + targets
+        return self._add_loss(nest.flatten(outputs), targets)
+      return outputs + targets
 
-    def optimizer_function(loss, *_):
+    def optimizer_function(total_loss, *_):
       if not self.trainable_weights:
         raise ValueError("Model must have at least one trainable parameter.")
 
       opt = self._get_optimizer()
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+      return pipelining_ops.OptimizerFunctionOutput(opt, total_loss)
 
     # The pipeline stages, a set of feed forward functions.
     if mode == ModeKeys.PREDICT:
