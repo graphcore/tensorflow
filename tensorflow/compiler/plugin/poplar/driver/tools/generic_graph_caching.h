@@ -49,7 +49,8 @@ class GenericGraphCache {
       PoplarFunction func, poputil::graphfn::Signature signature,
       std::vector<poplar::Tensor>& args,
       const absl::flat_hash_set<int64>& allocating_indices = {},
-      const absl::flat_hash_map<int64, int64>& layout_dependencies = {});
+      const absl::flat_hash_map<int64, int64>& layout_dependencies = {},
+      bool always_allocate = false);
 
  private:
   // Helper structs for the unordered map.
