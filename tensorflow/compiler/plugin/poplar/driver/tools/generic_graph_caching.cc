@@ -91,7 +91,8 @@ Status GenericGraphCache::ExecuteCached(
     PoplarFunction func, poputil::graphfn::Signature signature,
     std::vector<poplar::Tensor>& args,
     const absl::flat_hash_set<int64>& allocating_indices,
-    const absl::flat_hash_map<int64, int64>& layout_dependencies) {
+    const absl::flat_hash_map<int64, int64>& layout_dependencies,
+    bool always_allocate) {
   // Check if we have already executed this instruction.
 
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(resources, inst);
@@ -123,16 +124,18 @@ Status GenericGraphCache::ExecuteCached(
       const HloInstruction* operand = inst->operand(arg_idx);
       poputil::graphfn::ArgSig& sig = signature[arg_idx];
       poplar::Tensor input = sig.similarTensor;
-      bool needs_reallocating = false;
-      switch (sig.type) {
-        case poputil::graphfn::ArgType::InOutArg: {
-          needs_reallocating = !input.isParallelWriteable();
-          break;
-        }
-        case poputil::graphfn::ArgType::InputArg:
-        default: {
-          needs_reallocating = input.containsAliases();
-          break;
+      bool needs_reallocating = always_allocate;
+      if (!needs_reallocating) {
+        switch (sig.type) {
+          case poputil::graphfn::ArgType::InOutArg: {
+            needs_reallocating = !input.isParallelWriteable();
+            break;
+          }
+          case poputil::graphfn::ArgType::InputArg:
+          default: {
+            needs_reallocating = input.containsAliases();
+            break;
+          }
         }
       }
 

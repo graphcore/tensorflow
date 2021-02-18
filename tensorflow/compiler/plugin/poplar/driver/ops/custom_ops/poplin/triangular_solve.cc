@@ -112,7 +112,8 @@ class TriangularSolveOp : public PoplarOpDef {
     };
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
-        inst, graph, res, seq, func, signature, args, {0, 1}, {}));
+        inst, graph, res, seq, func, signature, args, {0, 1}, {},
+        /*always_allocate=*/true));
 
     x = args[2];
 
