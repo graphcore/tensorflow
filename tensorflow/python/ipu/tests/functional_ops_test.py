@@ -550,7 +550,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.broadcast_to(0., [1024]))
 
       report.parse_log()
-      report.assert_max_tile_memory(547)
+      report.assert_max_tile_memory(539)
 
       # Entry computation and outlined one.
       self.assertEqual(len(report.tensor_map.computation_names()), 2)
