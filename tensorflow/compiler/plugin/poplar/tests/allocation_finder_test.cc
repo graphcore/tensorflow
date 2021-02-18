@@ -3606,6 +3606,61 @@ ENTRY cast4 {
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 }
 
+TEST_F(AllocationFinderTest, AllocationsWithCast5) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY cast4 {
+  p0 = f16[1,16,16,2] parameter(0)
+  p1 = f32[1,16,16,2] parameter(1)
+  p2 = f32[3,3,2,4] parameter(2)
+  cast = f32[1,16,16,2] convert(p0)
+  add = f32[1,16,16,2] add(cast, p1)
+  ROOT conv = f32[1,16,16,4] convolution(add, p2), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const HloInstruction* p0 = FindInstruction(module0, "p0");
+  const HloInstruction* p1 = FindInstruction(module0, "p1");
+  const HloInstruction* p2 = FindInstruction(module0, "p2");
+  const HloInstruction* cast = FindInstruction(module0, "cast");
+  const HloInstruction* add = FindInstruction(module0, "add");
+  const HloInstruction* conv = FindInstruction(module0, "conv");
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], cast);
+  EXPECT_EQ(t.backward_path[1], add);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], add);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p2, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+}
+
 TEST_F(AllocationFinderTest, AllocationsWithIpuRemapDeduce) {
   std::string hlo = R"(
 HloModule top
