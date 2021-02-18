@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/variable.pb.h"
+#include "tensorflow/core/grappler/utils.h"
 #include "tensorflow/core/protobuf/queue_runner.pb.h"
 
 namespace tensorflow {
@@ -68,6 +69,8 @@ struct GrapplerItem {
   // referenced in various collections, and therefore must be preserved to
   // ensure that the optimized metagraph can still be loaded.
   std::vector<string> keep_ops;
+
+  GrapplerXlaHints xla_hints;
 
   // Return the set of node evaluated during a regular train/inference step.
   std::vector<const NodeDef*> MainOpsFanin() const;
