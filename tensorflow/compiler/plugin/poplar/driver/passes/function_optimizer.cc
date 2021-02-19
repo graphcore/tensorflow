@@ -111,14 +111,17 @@ StatusOr<bool> RemoveOutputInputParameters(HloInstruction* function) {
     for (HloInstruction* gte : output_gtes) {
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(gte, input));
     }
+    gtes.erase(info.output_index);
   }
 
-  // Remove these parameter outputs.
-  std::set<int64> outputs_to_remove;
-  for (const InputOutputInfo& info : input_output_parameters) {
-    outputs_to_remove.insert(info.output_index);
+  if (gtes.size()) {
+    // Remove these parameter outputs if the function is still there.
+    std::set<int64> outputs_to_remove;
+    for (const InputOutputInfo& info : input_output_parameters) {
+      outputs_to_remove.insert(info.output_index);
+    }
+    TF_RETURN_IF_ERROR(RemoveOutputsFromCall(function, outputs_to_remove));
   }
-  TF_RETURN_IF_ERROR(RemoveOutputsFromCall(function, outputs_to_remove));
 
   return true;
 }
