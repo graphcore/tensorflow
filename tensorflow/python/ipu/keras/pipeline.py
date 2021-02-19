@@ -119,6 +119,9 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     """
     Creates a pipelined Sequential model.
 
+    Note that arguments marked with (EXPERIMENTAL) are under active development
+    and might not provide representative performance.
+
     Args:
         stages: A Python list of lists of Layers.
         gradient_accumulation_count: The number of mini-batches processed by
@@ -134,9 +137,9 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
           be done by using a custom optimizer.
-        batch_serialization_iterations: number of times a loop executes to
-            compute a batch on each pipeline stage execution. Currently only
-            supported with the `PipelineSchedule.Sequential`.
+        batch_serialization_iterations: (EXPERIMENTAL) number of times a loop
+            executes to compute a batch on each pipeline stage execution.
+            Currently only supported with the `PipelineSchedule.Sequential`.
         device_mapping: If provided, a list of length equal to the number of
             computational stages. An element at index `i` in the list
             represents which IPU the computational stage
@@ -179,11 +182,11 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             in-processor or remote memory automatically based on the current
             best placement strategy.
             Note that this option has no effect for inference only pipelines.
-        replicated_optimizer_state_sharding: If True, any `tf.Variable` which
-            is offloaded (for example the accumulator variable when using the
-            `tf.MomentumOptimizer`), will be partitioned across the replicas.
-            This can exploit the additional bandwidth of the IPU-Links to
-            improve overall throughput.
+        replicated_optimizer_state_sharding: (EXPERIMENTAL) If True, any
+            `tf.Variable` which is offloaded (for example the accumulator
+            variable when using the `tf.MomentumOptimizer`), will be partitioned
+            across the replicas. This can exploit the additional bandwidth of
+            the IPU-Links to improve overall throughput.
             Note that this option has no effect for inference-only pipelines.
         offload_activations: When enabled, all the activations for the batches
             which are not being executed by the pipeline stages at the given
@@ -196,20 +199,20 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             currently only supported when the pipeline schedule is
             `PipelineSchedule.Sequential` and
             `batch_serialization_iterations > 1`.
-        offload_gradient_accumulation_buffers: When enabled, all the gradient
-            accumulation buffers are stored in remote memory. Offloading
-            gradient accumulation buffers into remote memory can reduce maximum
-            memory liveness, but can also increase the computation time as the
-            buffers have to be copied to the device, updated and the copied off
-            the device. Requires the machine to be configured with support for
-            `Poplar remote buffers`.
+        offload_gradient_accumulation_buffers: (EXPERIMENTAL) When enabled, all
+            the gradient accumulation buffers are stored in remote memory.
+            Offloading gradient accumulation buffers into remote memory can
+            reduce maximum memory liveness, but can also increase the
+            computation time as the buffers have to be copied to the device,
+            updated and the copied off the device. Requires the machine to be
+            configured with support for `Poplar remote buffers`.
             When set to `None`, the `offload_gradient_accumulation_buffers`
             might be offloaded when beneficial.
             Note that this option has no effect for inference-only pipelines.
-        replicated_weight_sharding: When enabled and running a replicated
-            model any `tf.Variable` objects used by the pipeline stage
-            computations (excluding those only used by the weight update) will
-            be partitioned across the replicas. Whenever a partitioned
+        replicated_weight_sharding: (EXPERIMENTAL) When enabled and running a
+            replicated model any `tf.Variable` objects used by the pipeline
+            stage computations (excluding those only used by the weight update)
+            will be partitioned across the replicas. Whenever a partitioned
             `tf.Variable` is accessed, it will be first all-gathered across
             replicas to make sure each replica has access to the whole
             `tf.Variable`. This can exploit the additional bandwidth of the
@@ -219,14 +222,14 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             `PipelineSchedule.Sequential` and
             `batch_serialization_iterations > 1`, where this option can reduce
             the memory usage at the cost of extra communication.
-        offload_weights: When enabled and `replicated_weight_sharding` is
-            enabled, any `tf.Variable` which are partitioned across replicas
-            will be stored in `Poplar remote buffers`.  Offloading variables
-            into remote memory can further reduce maximum memory liveness, but
-            can also increase the computation time due to extra communication.
-            When set to `None` the variables will be placed in either
-            in-processor or remote memory automatically based on the current
-            best placement strategy.
+        offload_weights: (EXPERIMENTAL) When enabled and
+            `replicated_weight_sharding` is enabled, any `tf.Variable` which are
+            partitioned across replicas will be stored in
+            `Poplar remote buffers`. Offloading variables into remote memory can
+            further reduce maximum memory liveness, but can also increase the
+            computation time due to extra communication. When set to `None` the
+            variables will be placed in either in-processor or remote memory
+            automatically based on the current best placement strategy.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
         name: Optional name for the pipeline operation.
@@ -697,6 +700,9 @@ class PipelineModel(ipu_model.Model):
     Needs to pass in ``inputs`` and ``outputs`` as either arguments or
     keyword arguments.
 
+    Note that arguments marked with (EXPERIMENTAL) are under active development
+    and might not provide representative performance.
+
     Args:
         gradient_accumulation_count: The number of mini-batches processed by
             the pipeline on each iteration.
@@ -711,9 +717,9 @@ class PipelineModel(ipu_model.Model):
           dtype requested here. If that dtype is different from the variable
           dtype a cast is needed at some point to make them compatible. This can
           be done by using a custom optimizer.
-        batch_serialization_iterations: number of times a loop executes to
-            compute a batch on each pipeline stage execution. Currently only
-            supported with the `PipelineSchedule.Sequential`.
+        batch_serialization_iterations: (EXPERIMENTAL) number of times a loop
+            executes to compute a batch on each pipeline stage execution.
+            Currently only supported with the `PipelineSchedule.Sequential`.
         device_mapping: If provided, a list of length equal to the number of
             computational stages. An element at index `i` in the list
             represents which IPU the computational stage
@@ -757,11 +763,11 @@ class PipelineModel(ipu_model.Model):
             in-processor or remote memory automatically based on the current
             best placement strategy.
             Note that this option has no effect for inference only pipelines.
-        replicated_optimizer_state_sharding: If True, any `tf.Variable` which
-            is offloaded (for example the accumulator variable when using the
-            `tf.MomentumOptimizer`), will be partitioned across the replicas.
-            This can exploit the additional bandwidth of the IPU-Links to
-            improve overall throughput.
+        replicated_optimizer_state_sharding: (EXPERIMENTAL) If True, any
+            `tf.Variable` which is offloaded (for example the accumulator
+            variable when using the `tf.MomentumOptimizer`), will be partitioned
+            across the replicas. This can exploit the additional bandwidth of
+            the IPU-Links to improve overall throughput.
             Note that this option has no effect for inference-only pipelines.
         offload_activations: When enabled, all the activations for the batches
             which are not being executed by the pipeline stages at the given
@@ -774,20 +780,20 @@ class PipelineModel(ipu_model.Model):
             currently only supported when the pipeline schedule is
             `PipelineSchedule.Sequential` and
             `batch_serialization_iterations > 1`.
-        offload_gradient_accumulation_buffers: When enabled, all the gradient
-            accumulation buffers are stored in remote memory. Offloading
-            gradient accumulation buffers into remote memory can reduce maximum
-            memory liveness, but can also increase the computation time as the
-            buffers have to be copied to the device, updated and the copied off
-            the device. Requires the machine to be configured with support for
-            `Poplar remote buffers`.
+        offload_gradient_accumulation_buffers: (EXPERIMENTAL) When enabled, all
+            the gradient accumulation buffers are stored in remote memory.
+            Offloading gradient accumulation buffers into remote memory can
+            reduce maximum memory liveness, but can also increase the
+            computation time as the buffers have to be copied to the device,
+            updated and the copied off the device. Requires the machine to be
+            configured with support for `Poplar remote buffers`.
             When set to `None`, the `offload_gradient_accumulation_buffers`
             might be offloaded when beneficial.
             Note that this option has no effect for inference-only pipelines.
-        replicated_weight_sharding: When enabled and running a replicated
-            model any `tf.Variable` objects used by the pipeline stage
-            computations (excluding those only used by the weight update) will
-            be partitioned across the replicas. Whenever a partitioned
+        replicated_weight_sharding: (EXPERIMENTAL) When enabled and running a
+            replicated model any `tf.Variable` objects used by the pipeline
+            stage computations (excluding those only used by the weight update)
+            will be partitioned across the replicas. Whenever a partitioned
             `tf.Variable` is accessed, it will be first all-gathered across
             replicas to make sure each replica has access to the whole
             `tf.Variable`. This can exploit the additional bandwidth of the
@@ -797,14 +803,14 @@ class PipelineModel(ipu_model.Model):
             `PipelineSchedule.Sequential` and
             `batch_serialization_iterations > 1`, where this option can reduce
             the memory usage at the cost of extra communication.
-        offload_weights: When enabled and `replicated_weight_sharding` is
-            enabled, any `tf.Variable` which are partitioned across replicas
-            will be stored in `Poplar remote buffers`.  Offloading variables
-            into remote memory can further reduce maximum memory liveness, but
-            can also increase the computation time due to extra communication.
-            When set to `None` the variables will be placed in either
-            in-processor or remote memory automatically based on the current
-            best placement strategy.
+        offload_weights: (EXPERIMENTAL) When enabled and
+            `replicated_weight_sharding` is enabled, any `tf.Variable` which are
+            partitioned across replicas will be stored in
+            `Poplar remote buffers`. Offloading variables into remote memory can
+            further reduce maximum memory liveness, but can also increase the
+            computation time due to extra communication. When set to `None` the
+            variables will be placed in either in-processor or remote memory
+            automatically based on the current best placement strategy.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
         name: Optional name for the pipeline operation.
