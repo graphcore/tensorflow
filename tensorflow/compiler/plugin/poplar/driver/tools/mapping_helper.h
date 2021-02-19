@@ -46,6 +46,10 @@ class MappingHelper {
                                 poplar::Tensor& tensor,
                                 uint32 min_elements_per_tile,
                                 uint32 grain_size);
+  // Remaps existing tensor mapping so its starting tile is dependent on
+  // previous allocations.
+  static void RemapTensor(LinearMapperState& state, poplar::Graph& graph,
+                          poplar::Tensor& tensor);
   // Return the next tile to be mapped to. When allocating the next tensor, the
   // mapping helper starts allocating after the tile returned.
   // Useful for e.g. spreading vertex mapping based on previous allocations.
