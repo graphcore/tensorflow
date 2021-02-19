@@ -71,30 +71,30 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
   def testLowerAdjoint(self):
     report = self._solveTestImpl(64, 64, 16, True, True)
     report.assert_num_execution_reports_equal(1)
-    report.assert_execution_report_cycles(0, 510357, tolerance=0.1)
-    report.assert_max_tile_memory(4194, tolerance=0.1)
-    report.assert_total_tile_memory(575744, tolerance=0.1)
+    report.assert_execution_report_cycles(0, 609786, tolerance=0.1)
+    report.assert_max_tile_memory(3538, tolerance=0.1)
+    report.assert_total_tile_memory(423760, tolerance=0.1)
 
   def testLowerNonAdjoint(self):
     report = self._solveTestImpl(64, 64, 16, True, False)
     report.assert_num_execution_reports_equal(1)
-    report.assert_execution_report_cycles(0, 537563, tolerance=0.1)
-    report.assert_max_tile_memory(4060, tolerance=0.1)
-    report.assert_total_tile_memory(577375, tolerance=0.1)
+    report.assert_execution_report_cycles(0, 607328, tolerance=0.1)
+    report.assert_max_tile_memory(3240, tolerance=0.1)
+    report.assert_total_tile_memory(426638, tolerance=0.1)
 
   def testUpperAdjoint(self):
     report = self._solveTestImpl(64, 64, 16, False, True)
     report.assert_num_execution_reports_equal(1)
-    report.assert_execution_report_cycles(0, 537045, tolerance=0.1)
-    report.assert_max_tile_memory(3990, tolerance=0.1)
-    report.assert_total_tile_memory(578697, tolerance=0.1)
+    report.assert_execution_report_cycles(0, 612307, tolerance=0.1)
+    report.assert_max_tile_memory(3206, tolerance=0.1)
+    report.assert_total_tile_memory(430342, tolerance=0.1)
 
   def testUpperNonAdjoint(self):
     report = self._solveTestImpl(64, 64, 16, False, False)
     report.assert_num_execution_reports_equal(1)
-    report.assert_execution_report_cycles(0, 510999, tolerance=0.1)
-    report.assert_max_tile_memory(4248, tolerance=0.1)
-    report.assert_total_tile_memory(576970, tolerance=0.1)
+    report.assert_execution_report_cycles(0, 604854, tolerance=0.1)
+    report.assert_max_tile_memory(3504, tolerance=0.1)
+    report.assert_total_tile_memory(423944, tolerance=0.1)
 
 
 if __name__ == "__main__":
