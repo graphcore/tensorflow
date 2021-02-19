@@ -42,6 +42,7 @@ limitations under the License.
 #include "tensorflow/core/grappler/optimizers/remapper.h"
 #include "tensorflow/core/grappler/optimizers/scoped_allocator_optimizer.h"
 #include "tensorflow/core/grappler/optimizers/shape_optimizer.h"
+#include "tensorflow/core/grappler/utils.h"
 #include "tensorflow/core/grappler/utils/canonicalizer.h"
 #include "tensorflow/core/grappler/utils/colocation.h"
 #include "tensorflow/core/grappler/utils/functions.h"
@@ -641,27 +642,10 @@ Status MetaOptimizer::Optimize(Cluster* cluster, const GrapplerItem& item,
     find_differentiable_functions(function.node_def());
   }
 
-  // Find functions that are formed by XLA and will be compiled later. We do it
-  // by looking for a function attribute in XlaLaunch ops. Grappler rewrites
-  // potentially can add nodes that are not supported by XLA, so we choose to
-  // skip such functions when we optimize function library.
-  absl::flat_hash_set<string> xla_compiled_functions;
-
-  const auto find_xla_compiled_functions = [&](const NodeDefs& nodes) -> void {
-    NameAttrList function;
-    for (const NodeDef& node : nodes) {
-      if (!IsXlaLaunch(node)) continue;
-      if (!GetNodeAttr(node, "function", &function).ok()) continue;
-      xla_compiled_functions.insert(function.name());
-    }
-  };
-
-  // XlaLaunch ops inside the main graph ...
-  find_xla_compiled_functions(optimized_graph->node());
-  // ... and inside the function library.
-  for (const FunctionDef& function : optimized_graph->library().function()) {
-    find_xla_compiled_functions(function.node_def());
-  }
+  // Generate XLA hints. Some optimizations grappler does can be incompatible
+  // with XLA. With these hints, grappler optimizers can conditionally not apply
+  // XLA-incompatible optimizations to functions.
+  auto xla_hints = GenerateXlaHints(optimized_graph, flib);
 
   // Optimize each function only once.
   absl::flat_hash_set<string> optimized_funcs;
@@ -681,8 +665,6 @@ Status MetaOptimizer::Optimize(Cluster* cluster, const GrapplerItem& item,
       if (!flib.Contains(func_name)) continue;
       // Skip already optimized functions.
       if (optimized_funcs.contains(func_name)) continue;
-      // Skip functions that will be compiled by XLA.
-      if (xla_compiled_functions.contains(func_name)) continue;
 
       // Skip parametrized functions (function type or body is defined only at
       // function call time by caller node attributes).
@@ -723,6 +705,9 @@ Status MetaOptimizer::Optimize(Cluster* cluster, const GrapplerItem& item,
       // function_optimizer.cc).
       func_item.optimization_options().allow_pruning_stateful_and_dataset_ops =
           false;
+
+      // Add XLA hints
+      func_item.xla_hints = xla_hints[func_name];
 
       // TODO(b/129545186): Shape inference in GraphProperties doesn't work well
       // with _Arg nodes. Replace them with Placeholders with unknown shape.

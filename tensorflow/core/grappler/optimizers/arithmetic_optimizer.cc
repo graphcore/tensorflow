@@ -3672,6 +3672,17 @@ Status ArithmeticOptimizer::Optimize(Cluster* /*cluster*/,
     GRAPPLER_RETURN_IF_DEADLINE_EXCEEDED();
   }
 
+  // Do not rearrange arithmetic if the item will be compiled by XLA and
+  // contains an extracted subgraph, since the rearrangement can interleave the
+  // subgraphs in such a way as to cause a host<->device communication deadlock.
+  if (item.xla_hints.will_be_compiled_by_xla &&
+      item.xla_hints.contains_outside_subgraph) {
+    VLOG(1) << "Skipping arithmetic optimizer's simplification since it's"
+            << " unsafe for XLA.";
+    optimized_graph->Swap(optimized_graph_);
+    return Status::OK();
+  }
+
   graph_properties_.reset(new GraphProperties(optimized_item));
   const bool assume_valid_feeds = opt_level_ == RewriterConfig::AGGRESSIVE;
   const Status status =

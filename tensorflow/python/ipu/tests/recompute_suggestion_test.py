@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import os
 import numpy as np
 
@@ -53,7 +52,8 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(my_model, inputs=[inp])
 
-    with tu.ipu_session() as sess:
+    with tu.ipu_session(
+        disable_grappler_optimizers=['arithmetic_optimization']) as sess:
       report = tu.ReportJSON(self,
                              sess,
                              replicated=False,
