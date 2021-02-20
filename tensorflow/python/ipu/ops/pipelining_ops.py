@@ -38,7 +38,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
-from tensorflow.python.util.deprecation import deprecated_args
 from tensorflow.python.util import nest
 
 
@@ -391,6 +390,9 @@ def pipeline(computational_stages,
   only be modified by the `apply_gradients` member function of the applied
   Optimizer.
 
+  Note that arguments marked with (EXPERIMENTAL) are under active development
+  and might not provide representative performance.
+
   Args:
     computational_stages: a list of python functions, where each function
       represents a computational pipeline stage. The function takes the
@@ -410,9 +412,9 @@ def pipeline(computational_stages,
       to cast the gradients immediately, you can wrap your optimizer in the
       `MapGradientOptimizer` with a `tf.cast`.
     repeat_count: the number of times the pipeline will be executed.
-    batch_serialization_iterations: number of times a loop executes to compute a
-      batch on each pipeline stage execution. Currently only supported with the
-      `PipelineSchedule.Sequential`.
+    batch_serialization_iterations: (EXPERIMENTAL) number of times a loop
+      executes to compute a batch on each pipeline stage execution. Currently
+      only supported with the `PipelineSchedule.Sequential`.
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and
       passed as an input in the first pipeline stage.
@@ -456,11 +458,11 @@ def pipeline(computational_stages,
       When set to `None` the variables will be placed in either in-processor or
       remote memory automatically based on the current best placement strategy.
       Note that this option has no effect for inference only pipelines.
-    replicated_optimizer_state_sharding: If True, any `tf.Variable` which is
-      offloaded (for example the accumulator variable when using the
-      `tf.MomentumOptimizer`), will be partitioned across the replicas. This
-      can exploit the additional bandwidth of the IPU-Links to improve overall
-      throughput.
+    replicated_optimizer_state_sharding: (EXPERIMENTAL) If True, any
+      `tf.Variable` which is offloaded (for example the accumulator variable
+      when using the `tf.MomentumOptimizer`), will be partitioned across the
+      replicas. This can exploit the additional bandwidth of the IPU-Links to
+      improve overall throughput.
       Note that this option has no effect for inference only pipelines.
     offload_activations: When enabled, all the activations for the batches which
       are not being executed by the pipeline stages at the given time are stored
@@ -469,9 +471,9 @@ def pipeline(computational_stages,
       reduce maximum memory liveness, but can also increase the computation time
       as activations have to be copied from/to the device(s).
       When set to `None`, the activations might be offloaded when beneficial.
-    offload_gradient_accumulation_buffers: When enabled, all the gradient
-      accumulation buffers are stored in remote memory. Offloading gradient
-      accumulation buffers into remote memory can reduce maximum memory
+    offload_gradient_accumulation_buffers: (EXPERIMENTAL) When enabled, all the
+      gradient accumulation buffers are stored in remote memory. Offloading
+      gradient accumulation buffers into remote memory can reduce maximum memory
       liveness, but can also increase the computation time as the buffers have
       to be copied to the device, updated and the copied off the device.
       Requires the machine to be configured with support for `Poplar remote
@@ -479,9 +481,10 @@ def pipeline(computational_stages,
       When set to `None`, the `offload_gradient_accumulation_buffers` might be
       offloaded when beneficial.
       Note that this option has no effect for inference only pipelines.
-    replicated_weight_sharding: When enabled and running a replicated model, any
-      `tf.Variable` used by the pipeline stage computations (excluding those
-      only used by the weight update), will be partitioned across the replicas.
+    replicated_weight_sharding: (EXPERIMENTAL) When enabled and running a
+      replicated model, any `tf.Variable` used by the pipeline stage
+      computations (excluding those only used by the weight update), will be
+      partitioned across the replicas.
       Whenever the a partitioned `tf.Variable` is accessed, it will be first
       all-gathered across replicas to make sure each replica has access to the
       whole `tf.Variable`. This can exploit the additional bandwidth of the
@@ -491,13 +494,14 @@ def pipeline(computational_stages,
       `PipelineSchedule.Sequential` and `batch_serialization_iterations > 1`,
       where this option can reduce the memory usage at the cost of extra
       communication.
-    offload_weights: When enabled and `replicated_weight_sharding` is enabled,
-      any `tf.Variable` which are partitioned across replicas will be stored in
-      `Poplar remote buffers`.  Offloading variables into remote memory can
-      further reduce maximum memory liveness, but can also increase the
-      computation time due to extra communication. When set to `None` the
-      variables will be placed in either in-processor or remote memory
-      automatically based on the current best placement strategy.
+    offload_weights: (EXPERIMENTAL) When enabled and
+      `replicated_weight_sharding` is enabled, any `tf.Variable` which are
+      partitioned across replicas will be stored in `Poplar remote buffers`.
+      Offloading variables into remote memory can further reduce maximum memory
+      liveness, but can also increase the computation time due to extra
+      communication. When set to `None` the variables will be placed in either
+      in-processor or remote memory automatically based on the current best
+      placement strategy.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -929,7 +933,10 @@ def recomputation_checkpoint(tensors, name=None):
   backpropagation operations can be executed.
 
   This operation should be used with the
-  'RecomputationMode.Recompute_and_backpropagate_interleaved' pipeliening
+  'RecomputationMode.RecomputeAndBackpropagateInterleaved' pipeliening
+  recomputation mode.
+  Note that this operation has no effect when used with
+  'RecomputationMode.RecomputeThenBackpropagate' pipelining
   recomputation mode.
 
   Args:

@@ -29,28 +29,11 @@ class IPURunConfig(
     ])):
   """IPU related configuration required by `IPUEstimator`.
 
-  Args:
-    iterations_per_loop: The number of mini-batches consumed on the IPU device
-      before returning to the CPU host for each `Session.run`. The global step
-      counter is increased by `iterations_per_loop` for every `Session.run`.
-      The number of weight updates can be less than the number of iterations if
-      gradient accumulation is used.
-    ipu_options: An IpuOptions configuration protobuf which is populated prior
-      to being passed into IPURunConfig. Note that if more than one device is
-      being used then `ipu_options` needs to be populated with a `device_config`.
-    compile_summary: Generate compilation summary
-    num_replicas: Number of replicated graphs (data parallelism)
-    num_shards: Number of IPU devices on which the graph is sharded (model parallelism)
-    autosharding: Use the IPU `automatic_sharding` to automatically shard the graph
-      across `num_shards` devices
-    ordinal: The IPU device ordinal to use.  For instance `0` corresponds
-      to `/device:IPU:0`.
   """
   @deprecation.deprecated_arg_values(
       None,
       "autosharding is deprecated, use alternative execution modes, such as "
-      "pipelining, instead",
-      warn_once=True,
+      "pipelining, instead.",
       autosharding=True)
   def __new__(cls,
               iterations_per_loop=1,
@@ -60,6 +43,27 @@ class IPURunConfig(
               num_shards=1,
               autosharding=False,
               ordinal=0):
+    """ Creates an `IPURunConfig` instance.
+
+    Args:
+      iterations_per_loop: The number of mini-batches consumed on the IPU device
+        before returning to the CPU host for each `Session.run`. The global step
+        counter is increased by `iterations_per_loop` for every `Session.run`.
+        The number of weight updates can be less than the number of iterations
+        if gradient accumulation is used.
+      ipu_options: An IpuOptions configuration protobuf which is populated prior
+        to being passed into IPURunConfig. Note that if more than one device is
+        being used then `ipu_options` needs to be populated with a
+        `device_config`.
+      compile_summary: Generate compilation summary
+      num_replicas: Number of replicated graphs (data parallelism)
+      num_shards: Number of IPU devices on which the graph is sharded (model
+        parallelism)
+      autosharding: Use the IPU `automatic_sharding` to automatically shard the
+        graph across `num_shards` devices
+      ordinal: The IPU device ordinal to use.  For instance `0` corresponds
+        to `/device:IPU:0`.
+    """
 
     num_devices = num_replicas * num_shards
     if num_devices > 1 and ipu_options is None:

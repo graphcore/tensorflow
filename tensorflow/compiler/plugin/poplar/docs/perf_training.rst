@@ -157,7 +157,7 @@ in sync across replicas.
 
 A wrapper for standard TensorFlow optimisers is used to add extra operations to
 the parameter update nodes in the graph to average updates across replicas.
-See :py:class:`tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`.
+See :py:class:`tensorflow.python.ipu.optimizers.CrossReplicaOptimizer`.
 
 Pipelined training
 ~~~~~~~~~~~~~~~~~~

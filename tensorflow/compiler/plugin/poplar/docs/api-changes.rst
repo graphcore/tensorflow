@@ -1,8 +1,8 @@
 API changes
 -----------
 
-The following changes have been made to the TensorFlow API in SDK 2.0. This may
-require you to change your code.
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.0.
+This may require you to change your code.
 
 Breaking changes
 ~~~~~~~~~~~~~~~~
@@ -85,17 +85,11 @@ release.
 
     This must be an ``LSTMStateTuple`` now.
 
-The following deprecated namespaces have been removed:
+The following deprecated namespace has been removed:
 
-* ``tensorflow.python.ipu.gradient_accumulation_optimizer``
-* ``tensorflow.python.ipu.sharded_optimizer``
-* ``tensorflow.python.ipu.ipu_optimizer``
+  * ``tensorflow.python.ipu.ipu_optimizer``
 
-  These equivalent namespaces can be used instead:
-
-  * ``tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer``
-  * ``tensorflow.python.ipu.optimizers.sharded_optimizer``
-  * ``tensorflow.python.ipu.optimizers.cross_replica_optimizer``
+  Use the ``tensorflow.python.ipu.optimizers`` namespace instead.
 
 
 

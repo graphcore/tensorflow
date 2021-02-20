@@ -123,6 +123,39 @@ ENTRY e {
   EXPECT_FALSE(FunctionOptimizer().Run(module.get()).ValueOrDie());
 }
 
+TEST_F(FunctionOptimizerTest, RemoveAllUsers) {
+  std::string hlo = R"(
+HloModule top
+
+func {
+  p0 = s32[2] parameter(0)
+  p1 = s32[2] parameter(1)
+  a = s32[2] add(p0, p1)
+  ROOT t = (s32[2], s32[2], s32[2], s32[2]) tuple(a, p0, p0, p1)
+}
+
+ENTRY e {
+  p0 = s32[2] parameter(0)
+  p1 = s32[2] parameter(1)
+  c = (s32[2], s32[2], s32[2], s32[2]) call(p0, p1), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  gte1 = s32[2] get-tuple-element(c), index=1
+  gte2 = s32[2] get-tuple-element(c), index=2
+  gte3 = s32[2] get-tuple-element(c), index=3
+  ROOT tuple = (s32[2], s32[2], s32[2]) tuple(gte1, gte2, gte3)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
+  EXPECT_TRUE(FunctionOptimizer().Run(module.get()).ValueOrDie());
+
+  // All the GTEs and the function have been removed due to no users.
+  ASSERT_EQ(module->entry_computation()->instruction_count(), 3);
+
+  auto root = module->entry_computation()->root_instruction();
+  ASSERT_TRUE(
+      Match(root, m::Tuple(m::Parameter(0), m::Parameter(0), m::Parameter(1))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
