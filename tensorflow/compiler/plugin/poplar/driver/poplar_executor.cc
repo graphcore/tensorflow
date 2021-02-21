@@ -1226,12 +1226,14 @@ void PoplarExecutor::DeferredDeallocation() {
   TENSORFLOW_TRACEPOINT();
   std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
 
-  const auto new_end =
-      std::partition(allocations_.begin(), allocations_.end(),
-                     [](TensorControl* tc) { return tc->ref_count > 0; });
+  const auto new_end = std::partition(
+      allocations_.begin(), allocations_.end(),
+      [](TensorControl* tc) { return tc->ref_count > 0 || tc->on_device; });
 
-  std::for_each(new_end, allocations_.end(),
-                [](TensorControl* tc) { delete tc; });
+  std::for_each(new_end, allocations_.end(), [](TensorControl* tc) {
+    VLOG(2) << "Deallocated " << tc;
+    delete tc;
+  });
 
   allocations_.erase(new_end, allocations_.end());
 }
@@ -2982,8 +2984,8 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
   TENSORFLOW_TRACEPOINT();
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   if (current_engine_) {
-    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (engine == current_engine_) {
       auto status = MoveDeviceToHost();
       if (!status.ok()) {
