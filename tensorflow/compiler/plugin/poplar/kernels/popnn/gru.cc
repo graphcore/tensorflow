@@ -239,9 +239,18 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape biases_backprop_shape =
         TensorShapeToXLAShape(input_type, ctx->InputShape(3));
 
-    xla::Shape output_tuple_shape = xla::ShapeUtil::MakeTupleShape(
-        {input_backprop_shape, input_state_backprop_shape,
-         kernel_backprop_shape, biases_backprop_shape});
+    std::vector<xla::Shape> output_shapes = {
+        input_backprop_shape, input_state_backprop_shape, kernel_backprop_shape,
+        biases_backprop_shape};
+
+    if (gru_type == GruType::AUGRU) {
+      xla::Shape attn_backprop_shape =
+          TensorShapeToXLAShape(input_type, ctx->InputShape(5));
+      output_shapes.push_back(attn_backprop_shape);
+    }
+
+    xla::Shape output_tuple_shape =
+        xla::ShapeUtil::MakeTupleShape(output_shapes);
 
     xla::XlaBuilder& b = *ctx->builder();
 
@@ -263,6 +272,10 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     ctx->SetOutput(1, input_state_backprop);
     ctx->SetOutput(2, kernel_backprop);
     ctx->SetOutput(3, biases_backprop);
+    if (gru_type == GruType::AUGRU) {
+      xla::XlaOp attn_backprop = xla::GetTupleElement(output_tuple, 4);
+      ctx->SetOutput(4, attn_backprop);
+    }
   }
 
  private:

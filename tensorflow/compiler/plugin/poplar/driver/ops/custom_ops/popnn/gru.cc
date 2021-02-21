@@ -584,7 +584,7 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
 
   int64 InputTensorCount() const override { return 11; }
 
-  int64 OutputTensorCount() const override { return 4; }
+  int64 OutputTensorCount() const override { return 5; }
 
   void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
                      const HloInstruction* inst,
@@ -635,13 +635,16 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
     weights.biases = biases;
 
     popnn::gru::GruWeights weights_backprop;
+    poplar::Tensor attention_backprop;
     args[12] = popnn::gru::auGruBwdWithWU(
         graph, gru_params, prog, input_state, intermediates, weights, input_seq,
         seq_len, output, step_output_backprop, &args[11], weights_backprop,
-        attention, &args[15], debug_name_and_id, gru_opts, &res.matmul_cache);
+        attention, &attention_backprop, debug_name_and_id, gru_opts,
+        &res.matmul_cache);
     args[13] = PackGruKernel(weights_backprop.inputWeights,
                              weights_backprop.outputWeights);
     args[14] = weights_backprop.biases;
+    args[15] = attention_backprop.transpose();
   }
 };
 REGISTER_POPLAR_OP(AUGRULayerBwd, AUGRULayerBwdOp);
