@@ -207,6 +207,7 @@ REGISTER_OP("PopnnAUGRULayerBackprop")
     .Output("initial_state_backprop: dtype")
     .Output("kernel_backprop: dtype")
     .Output("biases_backprop: dtype")
+    .Output("att_backprop: dtype")
     .Attr("num_channels: int")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
@@ -218,10 +219,12 @@ REGISTER_OP("PopnnAUGRULayerBackprop")
       auto in_state_shape = c->input(1);
       auto kernel_shape = c->input(2);
       auto biases_shape = c->input(3);
+      auto att_shape = c->input(5);
       c->set_output(0, in_shape);
       c->set_output(1, in_state_shape);
       c->set_output(2, kernel_shape);
       c->set_output(3, biases_shape);
+      c->set_output(4, att_shape);
       return Status::OK();
     })
     .Doc(R"doc(

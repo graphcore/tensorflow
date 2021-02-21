@@ -113,4 +113,4 @@ def _popnn_augru_layer_backward(op, *grads):
       partials_dtype=op.get_attr("partials_dtype"),
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"))
-  return [g[0], g[1], g[2], g[3], None, None]
+  return [g[0], g[1], g[2], g[3], None, g[4]]
