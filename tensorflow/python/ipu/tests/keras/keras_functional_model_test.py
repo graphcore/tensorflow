@@ -1011,6 +1011,29 @@ class IPUModelModelTest(test.TestCase):
     self.assertAllClose(result, cpu_loss)
 
   @test_util.run_v2_only
+  def testCallOrder(self):
+    # Test which verifies that we can call evaluate/predict before run.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      m.compile(optimizer="rmsprop", loss='mse')
+
+      # Fit the weights to the dataset
+      m.evaluate(test_dataset(length=96))
+      m.predict(test_inference_dataset(length=96))
+      m.fit(test_dataset(length=96))
+      # No exception.
+
+  @test_util.run_v2_only
   def testPredict_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():

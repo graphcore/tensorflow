@@ -320,13 +320,12 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
-  def _get_internal_run_loop(self):
-    if not self.internal_loop_fn:
+  def _get_internal_run_loop(self, mode):
+    if not mode in self._per_mode_loop_fns:
       fn = partial(PipelineSequential._internal_run_loop, self)
-      self.internal_loop_fn = def_function.function(fn,
-                                                    autograph=False,
-                                                    experimental_compile=True)
-    return self.internal_loop_fn
+      self._per_mode_loop_fns[mode] = def_function.function(
+          fn, autograph=False, experimental_compile=True)
+    return self._per_mode_loop_fns[mode]
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
@@ -1064,13 +1063,12 @@ class PipelineModel(ipu_model.Model):
 
     return pipeline.outputs
 
-  def _get_internal_run_loop(self):
-    if not self.internal_loop_fn:
+  def _get_internal_run_loop(self, mode):
+    if not mode in self._per_mode_loop_fns:
       fn = partial(PipelineModel._internal_run_loop, self)
-      self.internal_loop_fn = def_function.function(fn,
-                                                    autograph=False,
-                                                    experimental_compile=True)
-    return self.internal_loop_fn
+      self._per_mode_loop_fns[mode] = def_function.function(
+          fn, autograph=False, experimental_compile=True)
+    return self._per_mode_loop_fns[mode]
 
   @trackable.no_automatic_dependency_tracking
   def compile(self,

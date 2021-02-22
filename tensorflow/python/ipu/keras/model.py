@@ -250,7 +250,7 @@ class _IpuModelBase(KerasModel):
     self.outfeed = None
     self.last_ds = None
     self.last_mode = None
-    self.internal_loop_fn = None
+    self._per_mode_loop_fns = {}
 
     # Round the shard count to the next power of two
     self.shard_count = 2**int(math.ceil(math.log2(shard_count)))
@@ -343,7 +343,7 @@ class _IpuModelBase(KerasModel):
     self.total_loss = self._prepare_total_loss(masks)
     return [self.total_loss] + metrics
 
-  def _get_internal_run_loop(self):
+  def _get_internal_run_loop(self, mode):
     raise NotImplementedError(
         "_IpuModelBase should not be used directly.  Use PipelinedModel or "
         "Model instead.")
@@ -544,7 +544,7 @@ class _IpuModelBase(KerasModel):
 
           # Create and run the core graph.
           strategy = distribution_strategy_context.get_strategy()
-          func = self._get_internal_run_loop()
+          func = self._get_internal_run_loop(mode)
           strategy.experimental_run_v2(
               func, args=[self.infeed, self.outfeed, steps_per_run, mode])
 
@@ -873,13 +873,12 @@ class IPUSequential(_IpuModelBase):
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
-  def _get_internal_run_loop(self):
-    if not self.internal_loop_fn:
+  def _get_internal_run_loop(self, mode):
+    if not mode in self._per_mode_loop_fns:
       fn = partial(IPUSequential._internal_run_loop, self)
-      self.internal_loop_fn = def_function.function(fn,
-                                                    autograph=False,
-                                                    experimental_compile=True)
-    return self.internal_loop_fn
+      self._per_mode_loop_fns[mode] = def_function.function(
+          fn, autograph=False, experimental_compile=True)
+    return self._per_mode_loop_fns[mode]
 
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
@@ -1534,13 +1533,12 @@ class IPUModel(_IpuModelBase):
 
     return result.outputs
 
-  def _get_internal_run_loop(self):
-    if not self.internal_loop_fn:
+  def _get_internal_run_loop(self, mode):
+    if not mode in self._per_mode_loop_fns:
       fn = partial(IPUModel._internal_run_loop, self)
-      self.internal_loop_fn = def_function.function(fn,
-                                                    autograph=False,
-                                                    experimental_compile=True)
-    return self.internal_loop_fn
+      self._per_mode_loop_fns[mode] = def_function.function(
+          fn, autograph=False, experimental_compile=True)
+    return self._per_mode_loop_fns[mode]
 
   def build(self, input_shape):
     """Builds the model based on input shapes received.
