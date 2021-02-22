@@ -336,7 +336,7 @@ class IPUPipelineTest(test.TestCase):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
-  def testMismatchDatasetLengthToPipelineDepth(self):
+  def testMismatchDatasetLengthToGradientAccumulationCount(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
@@ -347,7 +347,8 @@ class IPUPipelineTest(test.TestCase):
 
       m.compile('sgd', loss='mse')
       with self.assertRaisesRegex(
-          ValueError, "PipelineModel requires the size of the dataset "):
+          ValueError,
+          "PipelineModel requires the number of mini-batches in the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only

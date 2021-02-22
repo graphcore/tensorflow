@@ -255,14 +255,15 @@ class IPUModelTest(test.TestCase):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
-  def testMismatchDatasetLengthToModelDepth(self):
+  def testMismatchDatasetLengthToGradientAccumulationCount(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.Sequential(simple_model(), gradient_accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, "Sequential requires the size of the dataset "):
+          ValueError,
+          "Sequential requires the number of mini-batches in the dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only

@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Test for IPU Keras Model."""
+"""Tests for IPU Keras Model"""
 
+import sys
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -342,7 +343,7 @@ class IPUModelModelTest(test.TestCase):
         m.predict(test_dataset())
 
   @test_util.run_v2_only
-  def testMismatchDatasetLengthToModelDepth(self):
+  def testMismatchDatasetLengthToGradientAccumulationCount(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
@@ -352,9 +353,12 @@ class IPUModelModelTest(test.TestCase):
                           gradient_accumulation_count=24)
 
       m.compile('sgd', loss='mse')
-      with self.assertRaisesRegex(ValueError,
-                                  "Model requires the size of the dataset "):
-        m.fit(test_dataset(length=64), epochs=4)
+      with self.assertRaisesRegex(
+          ValueError,
+          r"Model requires the number of mini-batches in the dataset \(32\)"
+          r" to be evenly divisible by the gradient accumulation count \(24\)"
+      ):
+        m.fit(test_dataset(length=64, batch_size=2), epochs=4)
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
@@ -372,7 +376,7 @@ class IPUModelModelTest(test.TestCase):
         m.fit(test_dataset(), epochs=4)
 
   @test_util.run_v2_only
-  def testStepsPerEpochTooLargeForDataset(self):
+  def testStepsPerEpochTooLargeForDatasetFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
@@ -394,6 +398,234 @@ class IPUModelModelTest(test.TestCase):
           r"Steps per epoch times gradient accumulation count \(14 x 12\) is"
           r" greater than"):
         m.fit(test_dataset(length=144), steps_per_epoch=14)
+
+  @test_util.run_v2_only
+  def testStepsPerEpochTooLargeForDatasetPredict(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Generate predictions
+      with self.assertRaisesRegex(
+          ValueError, r"Steps times gradient accumulation count \(14 x 12\) is"
+          r" greater than"):
+        m.predict(test_inference_dataset(length=144), steps=14)
+
+  @test_util.run_v2_only
+  def testStepsPerEpochTooLargeForNumpyArrayPredict(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([144, 32], 1.0, dtype=np.single)
+
+      # Generate predictions
+      with self.assertRaisesRegex(
+          ValueError, r"Steps times gradient accumulation count \(14 x 12\) is"
+          r" greater than"):
+        m.predict(input_x, batch_size=2, steps=14)
+
+  @test_util.run_v2_only
+  def testStepsPerRunTooLargeForNumpyArrayPredict(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([144, 32], 1.0, dtype=np.single)
+
+      # Generate predictions
+      with self.assertRaisesRegex(
+          ValueError,
+          r"The number of mini-batches in the dataset \(72\) must be"
+          r" at least the gradient accumulation count \(12\) multiplied by the"
+          r" replication factor \(1\) multiplied by steps_per_run \(14\)."):
+        m.predict(input_x, batch_size=2, steps_per_run=14)
+
+  @test_util.run_v2_only
+  def testStepsPerRunNumpyArrayFitDroppedSamples(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([144, 32], 1.0, dtype=np.single)
+      input_y = np.full([144, 1], 1.0, dtype=np.single)
+
+      # Call fit
+      with self.captureWritesToStream(sys.stderr) as printed:
+        m.fit(input_x, input_y, batch_size=2, epochs=1, steps_per_run=4)
+        expected = (
+            r"The number of mini-batches in the dataset \(72\) must be a"
+            r" multiple of the gradient accumulation count \(12\)"
+            r" multiplied by the replication factor \(1\) multiplied by"
+            r" steps_per_run \(4\). Samples have"
+            r" been dropped to give a dataset of 48 mini-batches.")
+        self.assertRegex(printed.contents(), expected)
+
+  @test_util.run_v2_only
+  def testPredictWithNumpyDroppedSamples(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([54, 32], 1.0, dtype=np.single)
+
+      # Generate predictions
+      with self.captureWritesToStream(sys.stderr) as printed:
+        result = m.predict(input_x, batch_size=2)
+        expected = (
+            r"The number of mini-batches in the dataset \(27\) must be a"
+            r" multiple of the gradient accumulation count \(12\)"
+            r" multiplied by the replication factor \(1\). Samples have"
+            r" been dropped to give a dataset of 24 mini-batches.")
+        self.assertRegex(printed.contents(), expected)
+        self.assertEqual(result.shape[0], 48)
+
+  @test_util.run_v2_only
+  def testPredictWithNumpyStepsPerRunDroppedSamples(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=4)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([54, 32], 1.0, dtype=np.single)
+
+      # Generate predictions
+      with self.captureWritesToStream(sys.stderr) as printed:
+        result = m.predict(input_x, batch_size=2, steps_per_run=3)
+        expected = (
+            r"The number of mini-batches in the dataset \(27\) must be a"
+            r" multiple of the gradient accumulation count \(4\)"
+            r" multiplied by the replication factor \(1\) multiplied by"
+            r" steps_per_run \(3\). Samples have been dropped to give a dataset"
+            r" of 24 mini-batches.")
+        self.assertRegex(printed.contents(), expected)
+        self.assertEqual(result.shape[0], 48)
+
+  @test_util.run_v2_only
+  def testNumpyArrayTooSmallForGradientAccumulationCount(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=12)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([22, 32], 1.0, dtype=np.single)
+
+      # Fit the weights to the dataset
+      with self.assertRaisesRegex(
+          ValueError,
+          r"The number of mini-batches in the dataset \(11\) must be at least"
+          r" the gradient accumulation count \(12\) multiplied by the"
+          r" replication factor \(1\)."):
+        m.predict(input_x, batch_size=2)
+
+  @test_util.run_v2_only
+  def testNumpyArrayTooSmallForGradientAccumulationCountStepsPerRun(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_model(input_layer, [32, 32, 2], w=0.4)
+      m = ipu.keras.Model(inputs=input_layer,
+                          outputs=x,
+                          gradient_accumulation_count=6)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Input data
+      input_x = np.full([22, 32], 1.0, dtype=np.single)
+
+      # Fit the weights to the dataset
+      with self.assertRaisesRegex(
+          ValueError,
+          r"The number of mini-batches in the dataset \(11\) must be at least"
+          r" the gradient accumulation count \(6\) multiplied by the"
+          r" replication factor \(1\) multiplied by steps_per_run \(2\)."):
+        m.predict(input_x, batch_size=2, steps_per_run=2)
 
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizerNoAccumulation_CpuMatch(self):

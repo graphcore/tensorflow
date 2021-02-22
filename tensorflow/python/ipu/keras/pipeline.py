@@ -309,7 +309,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
               loss_weights=None,
               **kwargs):
     """
-    This provides the same functionality as the Keras Model ``compile``
+    This provides the same functionality as the Keras Sequential ``compile``
     method.
 
     Certain features are not supported by the IPU PipelineSequential class:
@@ -426,30 +426,64 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
           prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
-    This provides the same functionality as the Keras Model `fit` method.
+    This provides equivalent functionality to the Keras Sequential `fit` method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
+
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples before updating the weights. Therefore, the
+    effective batch size for a weight update is the mini-batch size multiplied
+    by the gradient accumulation count multiplied by the replication factor.
+
+    The number of weight update steps per epoch is the `steps_per_epoch` value
+    divided by the replication factor, and this is the number of steps that
+    will be shown in the progress bar.
+
+    For a finite dataset the iterator over the data will be reset at the start
+    of each epoch. This means that the dataset does not need to be repeated
+    `epochs` times if `steps_per_epoch` is not specified. It also means that if
+    a small value for `steps_per_epoch` is supplied then not all samples will be
+    used.
+
+    A shuffled Dataset should be supplied. Array (or list of arrays) inputs for
+    `x` and `y` will be accepted but will not be shuffled, and this may lead to
+    over-fitting.
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps_per_epoch: Specifies the total number of steps to be performed
-            per epoch.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified. In all other cases a value
-            must be specified.
-            If `steps_per_run` is specified, then the value for
-            `steps_per_epoch` must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor. Otherwise it only needs to be
-          evenly divisible by the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps_per_epoch` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps_per_epoch` divided by the replication
-            factor.
-            The value of 'steps_per_epoch' must be evenly divisible by
-            `steps_per_run` multiplied by the replication factor.
+      steps_per_epoch: Integer or `None`. Specifies the total number of steps to
+        be performed per epoch.
+        If `steps_per_run` is specified then the value for `steps_per_epoch`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps_per_epoch`
+        must be specified.
+        For a finite dataset if `steps_per_epoch` is specified then it must
+        contain at least mini-batch size * gradient accumulation count * `steps`
+        samples.
+        For a dataset of known finite length a value for `steps_per_epoch`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is
+        specified).
+        For array inputs a value for `steps_per_epoch` will be calculated
+        if no value is specified. If the number of samples provided is
+        not a multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps_per_epoch` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps_per_epoch` (which will
+        be calculated if not specified) divided by the replication factor.
+        The value of 'steps_per_epoch' (if specified) must be evenly
+        divisible by `steps_per_run` multiplied by the replication factor.
     """
     return super().fit(x,
                        y,
@@ -476,28 +510,49 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
                prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
-    This provides the same functionality as the Keras Model `evaluate` method.
+    This provides equivalent functionality to the Keras Sequential `evaluate`
+    method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    evaluation run in a single call to hardware.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
+
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples. Therefore, the effective batch size is the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the replication factor.
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps: Specifies the total number of steps to be performed.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified.
-            In all other cases a value must be specified.
-            If `steps_per_run` is specified, then the value for `steps`
-            must be evenly divisible by `steps_per_run` multiplied by the
-            replication factor. Otherwise it only needs to be divisible by
-            the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps` divided by the replication factor.
-            The value of 'steps' must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor.
+      steps: Integer or `None`. Specifies the total number of steps to be
+        performed.
+        If `steps_per_run` is specified then the value for `steps`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps`
+        must be specified.
+        For a finite dataset if `steps` is specified then it must contain at
+        least mini-batch size * gradient accumulation count * `steps` samples.
+        For a dataset of known finite length a value for `steps`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is specified).
+        For array inputs a value for `steps` will be calculated
+        if no value is specified. If the number of samples provided is not a
+        multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps` (which will be calculated
+        if not specified) divided by the replication factor.
+        The value of 'steps' (if specified) must be evenly divisible by
+        `steps_per_run` multiplied by the replication factor.
     """
     return super().evaluate(x,
                             y,
@@ -520,34 +575,54 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
               prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
-    This provides the same functionality as the Keras Model `predict` method.
+    This provides equivalent functionality to the Keras Sequential `predict`
+    method.
 
-    The predict method operates on a DataSet, because the IPU pipelining
-    mechanism relies on feeding data to the system in a stream.  So single
-    predictions cannot be performed using this method.  Exporting the model
-    parameters, and importing them into the same model but not pipelined will
-    allow single mini-batches.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    prediction run in a single call to hardware.
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples. Therefore, the effective batch size is the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the replication factor.
+
+    This means that single predications cannot be performed using this method.
+    Saving the model weights, and loading them into a non-pipelined version of
+    the same model will allow single mini-batches (using gradient accumulation
+    count = 1).
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps: Specifies the total number of steps to be performed.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified.
-            In all other cases a value must be specified.
-            If `steps_per_run` is specified, then the value for `steps`
-            must be evenly divisible by `steps_per_run` multiplied by the
-            replication factor. Otherwise it only needs to be divisible by
-            the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps` divided by the replication factor.
-            The value of 'steps' must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor.
+      steps: Integer or `None`. Specifies the total number of steps to be
+        performed.
+        If `steps_per_run` is specified then the value for `steps`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps`
+        must be specified.
+        For a finite dataset if `steps` is specified then it must contain at
+        least mini-batch size * gradient accumulation count * `steps` samples.
+        For a dataset of known finite length a value for `steps`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is specified).
+        For array inputs a value for `steps` will be calculated
+        if no value is specified. If the number of samples provided is not a
+        multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps` (which will be calculated
+        if not specified) divided by the replication factor.
+        The value of 'steps' (if specified) must be evenly divisible by
+        `steps_per_run` multiplied by the replication factor.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -1104,30 +1179,64 @@ class PipelineModel(ipu_model.Model):
           prefetch_depth=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
-    This provides the same functionality as the Keras Model `fit` method.
+    This provides equivalent functionality to the Keras Model `fit` method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
+
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples before updating the weights. Therefore, the
+    effective batch size for a weight update is the mini-batch size multiplied
+    by the gradient accumulation count multiplied by the replication factor.
+
+    The number of weight update steps per epoch is the `steps_per_epoch` value
+    divided by the replication factor, and this is the number of steps that
+    will be shown in the progress bar.
+
+    For a finite dataset the iterator over the data will be reset at the start
+    of each epoch. This means that the dataset does not need to be repeated
+    `epochs` times if `steps_per_epoch` is not specified. It also means that if
+    a small value for `steps_per_epoch` is supplied then not all samples will be
+    used.
+
+    A shuffled dataset should be supplied. Array (or list of arrays) inputs for
+    `x` and `y` will be accepted but will not be shuffled, and this may lead to
+    over-fitting.
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps_per_epoch: Specifies the total number of steps to be performed
-            per epoch.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified. In all other cases a value
-            must be specified.
-            If `steps_per_run` is specified, then the value for
-            `steps_per_epoch` must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor. Otherwise it only needs to be
-            divisible by the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps_per_epoch` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps_per_epoch` divided by the replication
-            factor.
-            The value of 'steps_per_epoch' must be evenly divisible by
-            `steps_per_run` multiplied by the replication factor.
+      steps_per_epoch: Integer or `None`. Specifies the total number of steps to
+        be performed per epoch.
+        If `steps_per_run` is specified then the value for `steps_per_epoch`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps_per_epoch`
+        must be specified.
+        For a finite dataset if `steps_per_epoch` is specified then it must
+        contain at least mini-batch size * gradient accumulation count * `steps`
+        samples.
+        For a dataset of known finite length a value for `steps_per_epoch`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is
+        specified).
+        For array inputs a value for `steps_per_epoch` will be calculated
+        if no value is specified. If the number of samples provided is
+        not a multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps_per_epoch` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps_per_epoch` (which will
+        be calculated if not specified) divided by the replication factor.
+        The value of 'steps_per_epoch' (if specified) must be evenly
+        divisible by `steps_per_run` multiplied by the replication factor.
     """
     return super().fit(x,
                        y,
@@ -1154,28 +1263,49 @@ class PipelineModel(ipu_model.Model):
                prefetch_depth=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
-    This provides the same functionality as the Keras Model `evaluate` method.
+    This provides equivalent functionality to the Keras Model `evaluate`
+    method.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    evaluation run in a single call to hardware.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
+
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples. Therefore, the effective batch size is the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the replication factor.
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps: Specifies the total number of steps to be performed.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified.
-            In all other cases a value must be specified.
-            If `steps_per_run` is specified, then the value for `steps`
-            must be evenly divisible by `steps_per_run` multiplied by the
-            replication factor. Otherwise it only needs to be divisible by
-            the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps` divided by the replication factor.
-            The value of 'steps' must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor.
+      steps: Integer or `None`. Specifies the total number of steps to be
+        performed.
+        If `steps_per_run` is specified then the value for `steps`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps`
+        must be specified.
+        For a finite dataset if `steps` is specified then it must contain at
+        least mini-batch size * gradient accumulation count * `steps` samples.
+        For a dataset of known finite length a value for `steps`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is specified).
+        For array inputs a value for `steps` will be calculated
+        if no value is specified. If the number of samples provided is not a
+        multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps` (which will be calculated
+        if not specified) divided by the replication factor.
+        The value of 'steps' (if specified) must be evenly divisible by
+        `steps_per_run` multiplied by the replication factor.
     """
     return super().evaluate(x,
                             y,
@@ -1198,34 +1328,53 @@ class PipelineModel(ipu_model.Model):
               prefetch_depth=None,
               **kwargs):  # pylint: disable=useless-super-delegation
     """
-    This provides the same functionality as the Keras Model `predict` method.
+    This provides equivalent functionality to the Keras Model `predict` method.
 
-    The predict method operates on a DataSet, because the IPU pipelining
-    mechanism relies on feeding data to the system in a stream.  So single
-    predictions cannot be performed using this method.  Exporting the model
-    parameters, and importing them into the same model but not pipelined will
-    allow single mini-batches.
+    Note that `batch_size` here is the number of samples that is processed on
+    each replica in each forward pass. This is referred to as the mini-batch
+    size. Prepare Dataset input on this basis.
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    prediction run in a single call to hardware.
+    Each step (per replica) will process mini-batch multiplied by gradient
+    accumulation count samples. Therefore, the effective batch size is the
+    mini-batch size multiplied by the gradient accumulation count multiplied by
+    the replication factor.
+
+    This means that single predications cannot be performed using this method.
+    Saving the model weights, and loading them into a non-pipelined version of
+    the same model will allow single mini-batches (using gradient accumulation
+    count = 1).
+
+    Array (or list of arrays) inputs will be converted into a Dataset internally
+    based on the `batch_size`, dropping any partial batch.
 
     Args:
-        steps: Specifies the total number of steps to be performed.
-            For a dataset of known finite length, a default value will be
-            calculated if no value is specified.
-            In all other cases a value must be specified.
-            If `steps_per_run` is specified, then the value for `steps`
-            must be evenly divisible by `steps_per_run` multiplied by the
-            replication factor. Otherwise it only needs to be divisible by
-            the replication factor.
-            The dataset should be able to provide enough samples to run for the
-            mini-batch size multiplied by the gradient accumulation count
-            multiplied by the `steps` value.
-        steps_per_run: Specifies how many steps should be performed on each
-            hardware execution.
-            The default value is `steps` divided by the replication factor.
-            The value of 'steps' must be evenly divisible by `steps_per_run`
-            multiplied by the replication factor.
+      steps: Integer or `None`. Specifies the total number of steps to be
+        performed.
+        If `steps_per_run` is specified then the value for `steps`
+        must be evenly divisible by `steps_per_run` multiplied by the
+        replication factor. Otherwise it must be divisible by the
+        replication factor.
+        For an infinitely repeating dataset a value for `steps`
+        must be specified.
+        For a finite dataset if `steps` is specified then it must contain at
+        least mini-batch size * gradient accumulation count * `steps` samples.
+        For a dataset of known finite length a value for `steps`
+        will be calculated if no value is specified. The number of
+        samples in the dataset must be a multiple of the mini-batch size
+        multiplied by the gradient accumulation count multiplied by the
+        replication factor (multiplied by `steps_per_run` if it is specified).
+        For array inputs a value for `steps` will be calculated
+        if no value is specified. If the number of samples provided is not a
+        multiple of the mini-batch size multiplied by the gradient
+        accumulation count multiplied by the replication factor (multiplied by
+        `steps_per_run` if it is specified) then samples will be dropped when
+        deriving a value for `steps` and a warning will be logged.
+      steps_per_run: Integer or `None`. Specifies how many steps will be
+        performed per replica on each hardware execution.
+        If not specified this will be set to `steps` (which will be calculated
+        if not specified) divided by the replication factor.
+        The value of 'steps' (if specified) must be evenly divisible by
+        `steps_per_run` multiplied by the replication factor.
     """
     return super().predict(x,
                            batch_size=batch_size,

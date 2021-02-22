@@ -297,7 +297,9 @@ class IPUSequentialPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, "PipelineSequential requires the size of the dataset "):
+          ValueError,
+          "PipelineSequential requires the number of mini-batches in the"
+          " dataset "):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only
