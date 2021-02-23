@@ -79,6 +79,7 @@ class FullVisitor : public BaseVisitor {
   HANDLE_AS_HLO_OP(HandleBatchNormInference)
   HANDLE_AS_HLO_OP(HandleBatchNormTraining)
   HANDLE_AS_HLO_OP(HandleBatchNormGrad)
+  HANDLE_AS_HLO_OP(HandleCholesky)
   HANDLE_AS_HLO_OP(HandleGather)
   HANDLE_AS_HLO_OP(HandleScatter)
   HANDLE_AS_HLO_OP(HandleSort)

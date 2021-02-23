@@ -104,6 +104,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
         cfg, triangular_solve_expander_block_size=42)
     self.assertEqual(cfg.triangular_solve_expander_block_size, 42)
 
+    cfg = ipu.utils.set_optimization_options(cfg, cholesky_block_size=42)
+    self.assertEqual(cfg.cholesky_block_size, 42)
+
     self.assertFalse(cfg.use_stable_norm_statistics)
     cfg = ipu.utils.set_norm_options(cfg, use_stable_statistics=True)
     self.assertTrue(cfg.use_stable_norm_statistics)

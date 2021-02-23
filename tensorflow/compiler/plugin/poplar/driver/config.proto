@@ -274,4 +274,7 @@ message IpuOptions {
   // THREESTATE_UNDEFINED: Merge remote buffers only when it is
   //     considered beneficial to enable code re-use.
   ThreeState remote_buffer_merging_mode = 40;
+
+  // Block size for triangular solve expander pass.
+  int64 cholesky_block_size = 41;
 };

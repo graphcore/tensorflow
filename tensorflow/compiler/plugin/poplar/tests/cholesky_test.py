@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+from numpy.random import rand
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -33,6 +34,19 @@ from tensorflow.python.training import gradient_descent
 
 
 class IpuXlaCholeskyTest(xla_test.XLATestCase):
+  BLOCK_SIZE = 16
+  configured = False
+
+  def __configureIPU(self):
+    if not self.configured:
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      cfg = ipu.utils.set_optimization_options(
+          cfg, cholesky_block_size=IpuXlaCholeskyTest.BLOCK_SIZE)
+      ipu.utils.configure_ipu_system(cfg)
+      self.configured = True
+
   # Overriding abstract method.
   def cached_session(self):
     return 0
@@ -41,13 +55,47 @@ class IpuXlaCholeskyTest(xla_test.XLATestCase):
   def test_session(self):
     return 0
 
+  def run_cholesky_test(self, n, lower, num_matrices=1):
+    with self.session() as sess:
+      self.__configureIPU()
+
+      a_h = np.empty((num_matrices, n, n), dtype='float32')
+      for i in range(num_matrices):
+        m = rand(n, n)
+        m = np.dot(m.T, np.dot(np.eye(n) * n, m))
+
+        if lower:
+          a_h[i, :, :] = m
+        else:
+          a_h[i, :, :] = m
+
+      with ops.device("/device:IPU:0"):
+        a = array_ops.placeholder(np.float32, shape=[num_matrices, n, n])
+        t = linalg_ops.cholesky(a)
+
+        if lower:
+          a2 = math_ops.matmul(t, t, transpose_b=True)
+        else:
+          a2 = math_ops.matmul(t, t, transpose_a=True)
+
+        a2_h = sess.run(a2, {a: a_h})
+
+        for ref, test in zip(a_h.flatten(), a2_h.flatten()):
+          self.assertAlmostEqual(ref, test, delta=ref * 1e-6)
+
+  def testCholesky16Lower(self):
+    self.run_cholesky_test(16, True)
+
+  def testCholesky20Lower(self):
+    self.run_cholesky_test(20, True)
+
+  def testCholesky32Lower(self):
+    self.run_cholesky_test(32, True)
+
   def testCholeskyFwdBackwd(self):
     with self.session() as sess:
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      self.__configureIPU()
 
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):

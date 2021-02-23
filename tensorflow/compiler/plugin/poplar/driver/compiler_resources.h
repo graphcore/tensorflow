@@ -140,6 +140,8 @@ struct CompilerResources {
 
   int64 triangular_solve_expander_block_size;
 
+  int64 cholesky_block_size;
+
   std::unique_ptr<CallGraph> module_call_graph;
 
   absl::flat_hash_map<std::string, poplar::RemoteBuffer> remote_buffers;
@@ -184,7 +186,7 @@ struct CompilerResources {
       const std::string& scheduler_selection, bool recomputation_enabled,
       bool use_stable_norm_statistics, bool remote_memory_supported,
       const poplar::OptionFlags& gcl_options,
-      int64 triangular_solve_expander_block_size,
+      int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
       bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
       int64 num_io_tiles, bool enable_progress_bar)
       : annotations(module),
@@ -208,6 +210,7 @@ struct CompilerResources {
         gcl_options(gcl_options),
         triangular_solve_expander_block_size(
             triangular_solve_expander_block_size),
+        cholesky_block_size(cholesky_block_size),
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
         enable_fast_math(enable_fast_math),
@@ -236,6 +239,7 @@ struct CompilerResources {
         /*remote_memory_supported=*/false,
         /*gcl_options=*/poplar::OptionFlags(),
         /*triangular_solve_expander_block_size=*/0,
+        /*cholesky_block_size=*/0,
         /*enable_experimental_remote_buffer_embedding=*/false,
         /*enable_fast_math=*/false,
         /*num_io_tiles=*/0,

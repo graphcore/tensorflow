@@ -68,6 +68,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleCholesky(HloInstruction* inst) override {
+    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
+    return Status::OK();
+  }
+
   Status HandleConstant(HloInstruction* inst) override {
     allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
     return Status::OK();
@@ -283,6 +288,12 @@ void AllocationFinder::FindConsumers(
         TensorTarget(user, op_index, backward_path, permutation);
 
     switch (user->opcode()) {
+      case HloOpcode::kCholesky: {
+        if (op_index == 0) {
+          AddTensorTarget(src, tensor_target);
+        }
+        break;
+      }
       case HloOpcode::kConvolution:
       case HloOpcode::kDot: {
         AddTensorTarget(src, tensor_target);

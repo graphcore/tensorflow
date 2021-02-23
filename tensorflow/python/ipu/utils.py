@@ -474,6 +474,7 @@ def set_optimization_options(opts,
                              merge_remote_buffers=False,
                              gather_simplifier=True,
                              triangular_solve_expander_block_size=0,
+                             cholesky_block_size=0,
                              enable_fast_math=False):
   """Set the IPU options related to performance / optimizations.
 
@@ -517,6 +518,8 @@ def set_optimization_options(opts,
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
       expander blocks. 0 - implementation defined default.
+    cholesky_block_size: Defines size for cholesky factoriser.
+      0 - implementation defined default.
     enable_fast_math: Enables optimizations which allow arbitrary reassociations
       and transformations of mathemtical operations with no accuracy guarantees.
       Enabling this option can result in incorrect output for programs that
@@ -546,6 +549,7 @@ def set_optimization_options(opts,
   opts.disable_gather_simplifier = not gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
+  opts.cholesky_block_size = cholesky_block_size
   opts.enable_fast_math = enable_fast_math
 
   return opts
