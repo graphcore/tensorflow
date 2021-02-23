@@ -26,6 +26,7 @@ limitations under the License.
 #include <poplar/OptionFlags.hpp>
 #include <poplin/Convolution.hpp>
 #include <poplin/MatMul.hpp>
+#include <popnn/CTCLoss.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poputil/GraphFunction.hpp>
@@ -70,6 +71,8 @@ struct CompilerResources {
   std::list<popops::SlicePlan> slice_plans;
   absl::flat_hash_map<const HloInstruction*, const HloInstruction*>
       slice_plan_allocators;
+
+  absl::flat_hash_map<const HloInstruction*, const popnn::ctc::Plan> ctc_plans;
 
   CompilerAnnotations annotations;
 

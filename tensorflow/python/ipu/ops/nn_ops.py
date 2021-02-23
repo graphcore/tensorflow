@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -505,3 +505,77 @@ def nce_loss(weights,
   # sampled_losses is batch_size x {true_loss, sampled_losses...}
   # We sum out true and sampled losses.
   return nn_impl._sum_rows(sampled_losses)  # pylint: disable=protected-access
+
+
+def ctc_loss(labels,
+             data,
+             label_length,
+             data_length,
+             blank_index,
+             name="ctc_loss"):
+  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
+  This op is designed and optimized for the IPU and cannot be used with other
+  systems.
+
+  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+
+  Args:
+    labels: The labels input [batch_size, max_label_length] tensor.
+    data: The data input [max_time, batch_size, num_classes] tensor
+        The data is expected in the form of log probabilities.
+    label_length: A tensor of shape [batch_size] containing the number of
+        labels in each `labels` batch entry.
+    data_length: A tensor of shape [batch_size] containing the number of
+        timesteps in each `data` batch entry.
+    blank_index: The class index to use for the blank label.
+    name: A name for this op. Defaults to "ctc_loss".
+
+  Returns:
+    A loss tensor of shape [batch_size].
+  """
+  loss, _ = gen_popnn_ops.popnn_ctc_loss(data,
+                                         labels,
+                                         data_length,
+                                         label_length,
+                                         out_dtype=data.dtype,
+                                         blank_index=blank_index,
+                                         name=name)
+
+  return loss
+
+
+def ctc_loss_with_logits(labels,
+                         logits,
+                         label_length,
+                         logit_length,
+                         blank_index,
+                         name="ctc_loss_with_logits"):
+  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
+  This op is designed and optimized for the IPU and cannot be used with other
+  systems.
+
+  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+
+  Args:
+    labels: The labels input [batch_size, max_label_length] tensor.
+    logits: The data input [max_time, batch_size, num_classes] tensor
+        The data is expected in the form of logits.
+    label_length: A tensor of shape [batch_size] containing the number of
+        labels in each `labels` batch entry.
+    logit_length: A tensor of shape [batch_size] containing the number of
+        timesteps in each `logits` batch entry.
+    blank_index: The class index to use for the blank label.
+    name: A name for this op. Defaults to "ctc_loss".
+
+  Returns:
+    A loss tensor of shape [batch_size].
+  """
+  loss, _ = gen_popnn_ops.popnn_ctc_loss_with_logits(logits,
+                                                     labels,
+                                                     logit_length,
+                                                     label_length,
+                                                     out_dtype=logits.dtype,
+                                                     blank_index=blank_index,
+                                                     name=name)
+
+  return loss

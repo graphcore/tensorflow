@@ -22,6 +22,7 @@ limitations under the License.
 #include <poplar/Program.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplin/Convolution.hpp>
+#include <popnn/CTCLoss.hpp>
 #include <popnn/Pooling.hpp>
 #include <popops/Expr.hpp>
 #include <poputil/exceptions.hpp>
@@ -186,6 +187,10 @@ StatusOr<bool> SlicePlansCompatible(CompilerResources& res,
 // Get a slice plan for an instruction.
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
                                                 const HloInstruction* inst);
+
+// Get a ctc plan for an instruction
+StatusOr<const popnn::ctc::Plan*> GetCTCPlan(CompilerResources& res,
+                                             const HloInstruction* inst);
 
 // A helper function to convert inputs into deferred inputs.
 using DeferredArgVectors =
