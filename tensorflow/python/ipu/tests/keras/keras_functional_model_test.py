@@ -25,6 +25,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import training_utils
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
@@ -1647,6 +1648,26 @@ class IPUModelModelTest(test.TestCase):
       m.evaluate(ds_xy)
 
       # No exceptions thrown
+
+  @test_util.run_v2_only
+  def testUint8(self):
+    dataset = dataset_ops.Dataset.from_tensor_slices(np.array(range(30)))
+    dataset = dataset.map(lambda x: math_ops.cast(x, dtype=np.uint8)).batch(
+        1, drop_remainder=True).batch(1, drop_remainder=True)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      i = keras.layers.Input(shape=[1])
+      ci = keras.layers.Lambda(lambda x: math_ops.cast(x, dtype=np.float16))(i)
+      o = keras.layers.Dense(1, kernel_initializer='ones')(ci)
+      m = ipu.keras.Model(i, o)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      output = m.predict(dataset, steps_per_run=1)
+      self.assertAllClose(output.flatten(), range(30))
 
 
 if __name__ == '__main__':
