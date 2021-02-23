@@ -90,6 +90,8 @@ enum PoplarOp {
   CandidateSampler = 86;
   AUGRULayerFwd = 87;
   AUGRULayerBwd = 88;
+  CTCLoss = 89;
+  CTCLossWithLogits = 90;
 
   // Supported Fusions.
   Conv_biasadd = 200;

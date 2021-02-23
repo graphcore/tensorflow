@@ -24,6 +24,9 @@ from tensorflow.python.framework import random_seed
 from tensorflow.python.framework import test_util
 from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import ctc_ops
+from tensorflow.python.ops import nn_ops as tf_nn_ops
+from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
@@ -352,6 +355,195 @@ class PopnnGeluTest(test_util.TensorFlowTestCase):
                                                           mat_value * ab_size),
                               gradients_res_grads[0][0],
                               rtol=test_type[1])
+
+
+class PopnnCTCLossTest(test_util.TensorFlowTestCase):
+  @staticmethod
+  def create_input_values(batch_size, max_time, num_classes, max_label_length,
+                          label_length):
+    labels = np.random.randint(1,
+                               num_classes,
+                               size=[batch_size, max_label_length])
+    logits = np.random.randint(0,
+                               num_classes,
+                               size=[max_time, batch_size, num_classes])
+    label_length = [label_length] * batch_size
+    logit_length = [max_time] * batch_size
+
+    return labels, logits, label_length, logit_length
+
+  @staticmethod
+  def logits_to_log_probs(inputs):
+    inputs[1] = tf_nn_ops.log_softmax_v2(inputs[1], axis=2)
+    return inputs
+
+  @staticmethod
+  def create_inputs(batch_size, max_time, num_classes, max_label_length):
+    labels = array_ops.placeholder(np.int32,
+                                   shape=[batch_size, max_label_length])
+    logits = array_ops.placeholder(np.float32,
+                                   shape=[max_time, batch_size, num_classes])
+    label_length = array_ops.placeholder(np.int32, shape=[batch_size])
+    logit_length = array_ops.placeholder(np.int32, shape=[batch_size])
+
+    return [labels, logits, label_length, logit_length]
+
+  @staticmethod
+  def loss_and_grad(loss_function, inputs, blank_index):
+    loss = loss_function(inputs[0],
+                         inputs[1],
+                         inputs[2],
+                         inputs[3],
+                         blank_index=blank_index)
+    grad = gradients_impl.gradients(loss, inputs[1])
+    return loss, grad
+
+  @staticmethod
+  def create_feed_dict(inputs, input_values):
+    return {
+        inputs[0]: input_values[0],
+        inputs[1]: input_values[1],
+        inputs[2]: input_values[2],
+        inputs[3]: input_values[3],
+    }
+
+  @test_util.deprecated_graph_mode_only
+  def testCTCLoss(self):
+    batch_size = 8
+    label_length = 4
+    # randomly generated labels need 2n+1 time steps because there are
+    # implicit blank steps around repeated labels
+    max_label_length = 2 * label_length + 1
+    max_time = max_label_length
+    num_classes = 8
+    blank_index = 0
+
+    with se.Session() as sess:
+      input_values = self.create_input_values(batch_size, max_time,
+                                              num_classes, max_label_length,
+                                              label_length)
+      with ops.device('cpu'):
+        inputs_cpu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        loss_cpu, _ = self.loss_and_grad(ctc_ops.ctc_loss_v2, inputs_cpu,
+                                         blank_index)
+        feed_dict_cpu = self.create_feed_dict(inputs_cpu, input_values)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
+        inputs_ipu = self.logits_to_log_probs(inputs_ipu)
+        loss_ipu, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss, inputs_ipu,
+                                         blank_index)
+
+      loss_value_cpu = sess.run(loss_cpu, feed_dict=feed_dict_cpu)
+      loss_value_ipu = sess.run(loss_ipu, feed_dict=feed_dict_ipu)
+
+    self.assertAllClose(loss_value_cpu, loss_value_ipu)
+
+  @test_util.deprecated_graph_mode_only
+  def testCTCGradient(self):
+    batch_size = 2
+    label_length = 2
+    # randomly generated labels need 2n+1 time steps because there are
+    # implicit blank steps around repeated labels
+    max_label_length = 2 * label_length + 1
+    max_time = max_label_length
+    num_classes = 4
+    blank_index = 0
+
+    with se.Session() as sess:
+      input_values = self.create_input_values(batch_size, max_time,
+                                              num_classes, max_label_length,
+                                              label_length)
+      with ops.device('cpu'):
+        inputs_cpu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        feed_dict_cpu = self.create_feed_dict(inputs_cpu, input_values)
+        _, grad_cpu = self.loss_and_grad(ctc_ops.ctc_loss_v2, inputs_cpu,
+                                         blank_index)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
+        inputs_ipu = self.logits_to_log_probs(inputs_ipu)
+        _, grad_ipu = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss, inputs_ipu,
+                                         blank_index)
+
+      grad_value_cpu = sess.run(grad_cpu, feed_dict=feed_dict_cpu)
+      grad_value_ipu = sess.run(grad_ipu, feed_dict=feed_dict_ipu)
+
+    self.assertAllClose(grad_value_cpu, grad_value_ipu)
+
+  @test_util.deprecated_graph_mode_only
+  def testCTCLossWithLogits(self):
+    batch_size = 8
+    label_length = 4
+    # randomly generated labels need 2n+1 time steps because there are
+    # implicit blank steps around repeated labels
+    max_label_length = 2 * label_length + 1
+    max_time = max_label_length
+    num_classes = 8
+    blank_index = 0
+
+    with se.Session() as sess:
+      input_values = self.create_input_values(batch_size, max_time,
+                                              num_classes, max_label_length,
+                                              label_length)
+      with ops.device('cpu'):
+        inputs_cpu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        loss_cpu, _ = self.loss_and_grad(ctc_ops.ctc_loss_v2, inputs_cpu,
+                                         blank_index)
+        feed_dict_cpu = self.create_feed_dict(inputs_cpu, input_values)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        loss_ipu, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+                                         inputs_ipu, blank_index)
+        feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
+
+      loss_value_cpu = sess.run(loss_cpu, feed_dict=feed_dict_cpu)
+      loss_value_ipu = sess.run(loss_ipu, feed_dict=feed_dict_ipu)
+
+    self.assertAllClose(loss_value_cpu, loss_value_ipu)
+
+  @test_util.deprecated_graph_mode_only
+  def testCTCGradientWithLogits(self):
+    batch_size = 2
+    label_length = 2
+    # randomly generated labels need 2n+1 time steps because there are
+    # implicit blank steps around repeated labels
+    max_label_length = 2 * label_length + 1
+    max_time = max_label_length
+    num_classes = 4
+    blank_index = 0
+
+    with se.Session() as sess:
+      input_values = self.create_input_values(batch_size, max_time,
+                                              num_classes, max_label_length,
+                                              label_length)
+      with ops.device('cpu'):
+        inputs_cpu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        feed_dict_cpu = self.create_feed_dict(inputs_cpu, input_values)
+        _, grad_cpu = self.loss_and_grad(ctc_ops.ctc_loss_v2, inputs_cpu,
+                                         blank_index)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
+                                        max_label_length)
+        feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
+        _, grad_ipu = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+                                         inputs_ipu, blank_index)
+
+      grad_value_cpu = sess.run(grad_cpu, feed_dict=feed_dict_cpu)
+      grad_value_ipu = sess.run(grad_ipu, feed_dict=feed_dict_ipu)
+
+    self.assertAllClose(grad_value_cpu, grad_value_ipu)
 
 
 if __name__ == "__main__":
