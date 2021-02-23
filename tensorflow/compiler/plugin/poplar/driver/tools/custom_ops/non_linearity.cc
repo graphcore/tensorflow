@@ -58,6 +58,19 @@ std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand) {
   return absl::make_unique<HloSigmoidInstruction>(operand);
 }
 
+// HardSigmoid
+std::unique_ptr<HloInstruction>
+HloHardSigmoidInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloHardSigmoidInstruction>(new_operands[0]);
+}
+
+std::unique_ptr<HloInstruction> CreateHardSigmoid(
+    HloInstruction* const operand) {
+  return absl::make_unique<HloHardSigmoidInstruction>(operand);
+}
+
 // ReluGrad
 std::unique_ptr<HloInstruction>
 HloReluGradInstruction::CloneWithNewOperandsImpl(
@@ -100,6 +113,20 @@ std::unique_ptr<HloInstruction> CreateSigmoidGrad(HloInstruction* const out,
   return absl::make_unique<HloSigmoidGradInstruction>(out, grad);
 }
 
+// HardSigmoidGrad
+std::unique_ptr<HloInstruction>
+HloHardSigmoidGradInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloHardSigmoidGradInstruction>(new_operands[0],
+                                                          new_operands[1]);
+}
+
+std::unique_ptr<HloInstruction> CreateHardSigmoidGrad(
+    HloInstruction* const out, HloInstruction* const grad) {
+  return absl::make_unique<HloHardSigmoidGradInstruction>(out, grad);
+}
+
 // TanhGrad
 std::unique_ptr<HloInstruction>
 HloTanhGradInstruction::CloneWithNewOperandsImpl(
@@ -140,6 +167,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidInstructionFactoryFunc(
 static HloPoplarInstructionFactory sigmoid_factory(
     PoplarOp::Sigmoid, HloSigmoidInstructionFactoryFunc);
 
+StatusOr<std::unique_ptr<HloInstruction>> HloHardSigmoidInstructionFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateHardSigmoid(call->mutable_operand(0));
+}
+
+static HloPoplarInstructionFactory hard_sigmoid_factory(
+    PoplarOp::HardSigmoid, HloHardSigmoidInstructionFactoryFunc);
+
 StatusOr<std::unique_ptr<HloInstruction>> HloReluGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
   return CreateReluGrad(call->mutable_operand(0), call->mutable_operand(1));
@@ -163,6 +198,15 @@ StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidGradInstructionFactoryFunc(
 
 static HloPoplarInstructionFactory sigmoid_grad_factory(
     PoplarOp::SigmoidGrad, HloSigmoidGradInstructionFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>>
+HloHardSigmoidGradInstructionFactoryFunc(HloCustomCallInstruction* call) {
+  return CreateHardSigmoidGrad(call->mutable_operand(0),
+                               call->mutable_operand(1));
+}
+
+static HloPoplarInstructionFactory hard_sigmoid_grad_factory(
+    PoplarOp::HardSigmoidGrad, HloHardSigmoidGradInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloTanhGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {

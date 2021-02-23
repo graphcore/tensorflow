@@ -1046,6 +1046,7 @@ cc_library(
         "ops/popnn/ctc_loss.cc",
         "ops/popnn/gelu.cc",
         "ops/popnn/gru.cc",
+        "ops/popnn/hard_sigmoid.cc",
         "ops/popnn/lstm.cc",
         "ops/popnn/norm.cc",
     ],
@@ -3788,6 +3789,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "nonlinearity_hlo_test",
+    srcs = ["tests/nonlinearity_hlo_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -5049,6 +5063,7 @@ test_suite(
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
         "multi_use_feeds_finder_test",
+        "nonlinearity_hlo_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
