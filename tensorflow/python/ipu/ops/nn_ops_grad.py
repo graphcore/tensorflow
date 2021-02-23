@@ -32,6 +32,13 @@ def _ipu_gelu_grad(op, grad):
   return [gen_popnn_ops.ipu_gelu_grad(grad, x)]
 
 
+@ops.RegisterGradient("IpuHardSigmoid")
+def _ipu_hard_sigmoid_grad(op, grad):
+  """Gradients for the IpuHardSigmoid op."""
+  x = op.inputs[0]
+  return [gen_popnn_ops.ipu_hard_sigmoid_grad(grad, x)]
+
+
 @ops.RegisterGradient("MultiConv")
 def _multi_conv_grad(op, *grads):
   """The gradient of a MultiConv op."""
