@@ -60,13 +60,23 @@ template <GruType gru_type>
 class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGRULayerOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("activation", &activation_));
+    attribute_map_.AddAttribute("activation", activation_);
+
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("recurrent_activation", &recurrent_activation_));
+    attribute_map_.AddAttribute("recurrent_activation", recurrent_activation_);
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_channels", &num_channels_));
     attribute_map_.AddAttribute("num_channels", num_channels_);
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("is_training", &is_training_));
     attribute_map_.AddAttribute("is_training", is_training_);
+
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after_));
     attribute_map_.AddAttribute("reset_after", reset_after_);
   }
@@ -191,6 +201,8 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
   bool is_training_;
   int32 num_channels_;
   bool reset_after_;
+  std::string activation_;
+  std::string recurrent_activation_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGRULayerOp);
 };
@@ -207,15 +219,27 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGRULayerBackpropOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
+    std::string activation;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("activation", &activation));
+    attribute_map_.AddAttribute("activation", activation);
+
+    std::string recurrent_activation;
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("recurrent_activation", &recurrent_activation));
+    attribute_map_.AddAttribute("recurrent_activation", recurrent_activation);
+
     int32 num_channels;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_channels", &num_channels));
     attribute_map_.AddAttribute("num_channels", num_channels);
+
     bool is_training;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("is_training", &is_training));
     attribute_map_.AddAttribute("is_training", is_training);
+
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
+
     bool reset_after;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after));
     attribute_map_.AddAttribute("reset_after", reset_after);

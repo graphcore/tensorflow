@@ -21,11 +21,16 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+using ActivationType = rnn_helper::ActivationType;
+
 HloLSTMFwdInstruction::HloLSTMFwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
+    bool is_training, ActivationType activation,
+    ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type)
     : HloRNNFwdInstruction(PoplarOp::LstmLayerFwd, shape, operands, is_training,
-                           num_channels, partials_type) {}
+                           activation, recurrent_activation, num_channels,
+                           partials_type) {}
 
 absl::flat_hash_set<int64> HloLSTMFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4};
@@ -36,35 +41,44 @@ bool HloLSTMFwdInstruction::AllocatingOutput() const { return false; }
 std::unique_ptr<HloInstruction> HloLSTMFwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext* ctx) const {
-  return CreateLSTMFwd(shape, operands, is_training(), num_channels(),
-                       partials_type());
+  return CreateLSTMFwd(shape, operands, is_training(), activation(),
+                       recurrent_activation(), num_channels(), partials_type());
 }
 
 std::unique_ptr<HloInstruction> CreateLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type) {
-  return absl::make_unique<HloLSTMFwdInstruction>(shape, operands, is_training,
-                                                  num_channels, partials_type);
+    bool is_training, ActivationType activation,
+    ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type) {
+  return absl::make_unique<HloLSTMFwdInstruction>(
+      shape, operands, is_training, activation, recurrent_activation,
+      num_channels, partials_type);
 }
 
 HloLSTMBwdInstruction::HloLSTMBwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
+    bool is_training, ActivationType activation,
+    ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type)
     : HloRNNBwdInstruction(PoplarOp::LstmLayerBwd, shape, operands, is_training,
-                           num_channels, partials_type) {}
+                           activation, recurrent_activation, num_channels,
+                           partials_type) {}
 
 std::unique_ptr<HloInstruction> HloLSTMBwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext* ctx) const {
-  return CreateLSTMBwd(shape, operands, is_training(), num_channels(),
-                       partials_type());
+  return CreateLSTMBwd(shape, operands, is_training(), activation(),
+                       recurrent_activation(), num_channels(), partials_type());
 }
 
 std::unique_ptr<HloInstruction> CreateLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type) {
-  return absl::make_unique<HloLSTMBwdInstruction>(shape, operands, is_training,
-                                                  num_channels, partials_type);
+    bool is_training, ActivationType activation,
+    ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type) {
+  return absl::make_unique<HloLSTMBwdInstruction>(
+      shape, operands, is_training, activation, recurrent_activation,
+      num_channels, partials_type);
 }
 
 namespace {
@@ -75,6 +89,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMFwdFactoryFunc(
 
   return CreateLSTMFwd(
       call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 
@@ -88,6 +103,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMBwdFactoryFunc(
 
   return CreateLSTMBwd(
       call->shape(), call->operands(), parsed_attributes.is_training,
+      parsed_attributes.activation, parsed_attributes.recurrent_activation,
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 

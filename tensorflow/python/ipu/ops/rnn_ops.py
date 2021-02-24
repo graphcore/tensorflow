@@ -27,6 +27,7 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.ipu.ops import op_util
 
 POPNN_LSTM = "lstm"
 POPNN_GRU = "gru"
@@ -51,6 +52,8 @@ class _PopnnRNN(base_layer.Layer):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                name=None):
     """Creates a _PopnnRNN model from model spec.
 
@@ -65,6 +68,11 @@ class _PopnnRNN(base_layer.Layer):
         (default is all zeros).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
@@ -84,6 +92,12 @@ class _PopnnRNN(base_layer.Layer):
     # Init input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
+
+    activation = op_util.get_activation_name(activation)
+    recurrent_activation = op_util.get_activation_name(recurrent_activation)
+
+    self._activation = activation
+    self._recurrent_activation = recurrent_activation
 
   @property
   def num_layers(self):
@@ -233,6 +247,8 @@ class PopnnLSTM(_PopnnRNN):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                name=None):
     """Creates a PopnnLSTM model from model spec.
 
@@ -247,6 +263,11 @@ class PopnnLSTM(_PopnnRNN):
         (default is Glorot uniform initializer).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
@@ -257,6 +278,8 @@ class PopnnLSTM(_PopnnRNN):
                                     seed=seed,
                                     weights_initializer=weights_initializer,
                                     bias_initializer=bias_initializer,
+                                    activation=activation,
+                                    recurrent_activation=recurrent_activation,
                                     name=name)
 
   def build(self, input_shape):
@@ -323,6 +346,8 @@ class PopnnLSTM(_PopnnRNN):
         input_c_state=c,
         is_training=training,
         partials_dtype=self._partials_dtype,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         name=self._name)
     state = rnn_cell.LSTMStateTuple(output_c, output_h)
 
@@ -373,6 +398,8 @@ class PopnnGRU(_PopnnRNN):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                name=None,
                reset_after=False):
     """Creates a PopnnGRU model from model spec.
@@ -388,6 +415,11 @@ class PopnnGRU(_PopnnRNN):
         (default is Glorot uniform initializer).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
@@ -403,6 +435,8 @@ class PopnnGRU(_PopnnRNN):
                                    seed=seed,
                                    weights_initializer=weights_initializer,
                                    bias_initializer=bias_initializer,
+                                   activation=activation,
+                                   recurrent_activation=recurrent_activation,
                                    name=name)
     self._reset_after = reset_after
 
@@ -460,6 +494,8 @@ class PopnnGRU(_PopnnRNN):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         name=self._name,
         reset_after=self._reset_after)
     return output, output_c
@@ -514,6 +550,8 @@ class PopnnDynamicGRU(PopnnGRU):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                name=None,
                reset_after=False):
     """Creates a PopnnDynamicGRU model from model spec.
@@ -529,6 +567,11 @@ class PopnnDynamicGRU(PopnnGRU):
           (default is Glorot uniform initializer).
         bias_initializer: starting value to initialize the bias
           (default is all zeros).
+        activation: Activation function. Defaults to "tanh".
+          Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+        recurrent_activation: Recurrent activation function. Defaults to
+          "sigmoid". Must generate output in the [0,1] range.
+          Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
         name: VariableScope for the created subgraph; defaults to class name.
           This only serves the default scope if later no scope is specified when
           invoking ``__call__()``.
@@ -546,6 +589,8 @@ class PopnnDynamicGRU(PopnnGRU):
                          seed=seed,
                          weights_initializer=weights_initializer,
                          bias_initializer=bias_initializer,
+                         activation=activation,
+                         recurrent_activation=recurrent_activation,
                          name=name,
                          reset_after=reset_after)
 
@@ -619,6 +664,8 @@ class PopnnDynamicGRU(PopnnGRU):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         name=self._name,
         reset_after=self._reset_after)
     return output, output_c
@@ -649,6 +696,8 @@ class PopnnAUGRU(PopnnGRU):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                name=None,
                reset_after=False):
     """Creates a PopnnAUGRU model from model spec.
@@ -662,6 +711,11 @@ class PopnnAUGRU(PopnnGRU):
         initializer weights_initializer.
       weights_initializer: starting value to initialize the weight
         (default is Glorot uniform initializer).
+      activation: Activation function. Defaults to "tanh".
+        Accepted values: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
+      recurrent_activation: Recurrent activation function. Defaults to
+        "sigmoid". Must generate output in the [0,1] range.
+        Accepted values: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
       name: VariableScope for the created subgraph; defaults to class name.
@@ -674,6 +728,8 @@ class PopnnAUGRU(PopnnGRU):
                                      seed=seed,
                                      weights_initializer=weights_initializer,
                                      bias_initializer=bias_initializer,
+                                     activation=activation,
+                                     recurrent_activation=recurrent_activation,
                                      name=name,
                                      reset_after=reset_after)
 
@@ -744,6 +800,8 @@ class PopnnAUGRU(PopnnGRU):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         name=self._name,
         reset_after=self._reset_after)
     return output, output_c

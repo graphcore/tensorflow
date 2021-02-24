@@ -14,17 +14,48 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 
+#include <string>
+
 #include <popnn/GruDef.hpp>
 #include <popnn/LstmDef.hpp>
+#include <popnn/NonLinearityDef.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 namespace xla {
 namespace poplarplugin {
+
+StatusOr<popnn::NonLinearityType> convertToNonLinearityType(
+    rnn_helper::ActivationType activation) {
+  switch (activation) {
+    case rnn_helper::ActivationType::SOFTMAX: {
+      return popnn::NonLinearityType::SOFTMAX;
+    }
+
+    case rnn_helper::ActivationType::RELU: {
+      return popnn::NonLinearityType::RELU;
+    }
+
+    case rnn_helper::ActivationType::TANH: {
+      return popnn::NonLinearityType::TANH;
+    }
+
+    case rnn_helper::ActivationType::SIGMOID: {
+      return popnn::NonLinearityType::SIGMOID;
+    }
+
+    case rnn_helper::ActivationType::HARD_SIGMOID: {
+      return popnn::NonLinearityType::HARD_SIGMOID;
+    }
+
+    default: { return InvalidArgument("Invalid activation type"); }
+  }
+}
 
 StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
     const HloInstruction* inst) {
@@ -52,10 +83,18 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
   popnn::lstm::LstmParams lstm_params(type, batch_size, time_steps,
                                       {input_size, num_channels});
 
+  TF_ASSIGN_OR_RETURN(popnn::NonLinearityType activation,
+                      convertToNonLinearityType(lstm_inst->activation()));
+  TF_ASSIGN_OR_RETURN(
+      popnn::NonLinearityType recurrent_activation,
+      convertToNonLinearityType(lstm_inst->recurrent_activation()));
+
   lstm_params.calcInputGradients = lstm_inst->is_training();
   lstm_params.cellOrder = {
       BASIC_LSTM_CELL_INPUT_GATE, BASIC_LSTM_CELL_FORGET_GATE,
       BASIC_LSTM_CELL_CANDIDATE, BASIC_LSTM_CELL_OUTPUT_GATE};
+  lstm_params.activation = activation;
+  lstm_params.recurrentActivation = recurrent_activation;
   return lstm_params;
 }
 
@@ -102,9 +141,17 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
   popnn::gru::GruParams gru_params(type, batch_size, time_steps,
                                    {input_size, num_channels});
 
+  TF_ASSIGN_OR_RETURN(popnn::NonLinearityType activation,
+                      convertToNonLinearityType(gru_inst->activation()));
+  TF_ASSIGN_OR_RETURN(
+      popnn::NonLinearityType recurrent_activation,
+      convertToNonLinearityType(gru_inst->recurrent_activation()));
+
   gru_params.calcInputGradients = gru_inst->is_training();
   gru_params.cellOrder = {BASIC_GRU_CELL_UPDATE_GATE, BASIC_GRU_CELL_RESET_GATE,
                           BASIC_GRU_CELL_CANDIDATE};
+  gru_params.activation = activation;
+  gru_params.recurrentActivation = recurrent_activation;
 
   const HloGRUInstructionCommon* gru_common_inst;
   if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst)) {
