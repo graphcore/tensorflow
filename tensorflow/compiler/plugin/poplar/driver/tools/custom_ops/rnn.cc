@@ -20,12 +20,38 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+using ActivationType = rnn_helper::ActivationType;
+
 namespace rnn_helper {
+
+namespace {
+
+StatusOr<ActivationType> strToActivationType(const std::string name) {
+  if (name == "softmax") {
+    return ActivationType::SOFTMAX;
+  } else if (name == "relu") {
+    return ActivationType::RELU;
+  } else if (name == "tanh") {
+    return ActivationType::TANH;
+  } else if (name == "sigmoid") {
+    return ActivationType::SIGMOID;
+  } else if (name == "hard_sigmoid") {
+    return ActivationType::HARD_SIGMOID;
+  } else {
+    return InvalidArgument("Invalid activation type");
+  }
+}
+}  // namespace
+
 RNNAttributes::RNNAttributes(int32 num_channels, bool is_training,
-                             xla::PrimitiveType partials_xla_type)
+                             xla::PrimitiveType partials_xla_type,
+                             ActivationType activation,
+                             ActivationType recurrent_activation)
     : num_channels(num_channels),
       is_training(is_training),
-      partials_xla_type(partials_xla_type) {}
+      partials_xla_type(partials_xla_type),
+      activation(activation),
+      recurrent_activation(recurrent_activation) {}
 // Helper for parsing the attribute map when converting the custom call
 // instruction.
 StatusOr<RNNAttributes> RNNAttributes::Parse(
@@ -41,13 +67,31 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
   TF_ASSIGN_OR_RETURN(tensorflow::DataType partials_dtype,
                       attribute_map.GetAttributeAsTFDataType("partials_dtype"));
 
+  TF_ASSIGN_OR_RETURN(std::string activation_string,
+                      attribute_map.GetAttributeAsString("activation"));
+
+  TF_ASSIGN_OR_RETURN(
+      std::string recurrent_activation_string,
+      attribute_map.GetAttributeAsString("recurrent_activation"));
+
+  TF_ASSIGN_OR_RETURN(ActivationType activation,
+                      strToActivationType(activation_string));
+
+  TF_ASSIGN_OR_RETURN(ActivationType recurrent_activation,
+                      strToActivationType(recurrent_activation_string));
+
   xla::PrimitiveType partials_xla_type;
   TF_CHECK_OK(DataTypeToPrimitiveType(partials_dtype, &partials_xla_type));
-  return RNNAttributes(num_channels, is_training, partials_xla_type);
+  return RNNAttributes(num_channels, is_training, partials_xla_type, activation,
+                       recurrent_activation);
 }
 }  // namespace rnn_helper
 
 bool HloRNNInstruction::is_training() const { return is_training_; }
+ActivationType HloRNNInstruction::activation() const { return activation_; }
+ActivationType HloRNNInstruction::recurrent_activation() const {
+  return recurrent_activation_;
+}
 int32 HloRNNInstruction::num_channels() const { return num_channels_; }
 xla::PrimitiveType HloRNNInstruction::partials_type() const {
   return partials_type_;

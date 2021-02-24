@@ -71,13 +71,21 @@ def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
 
 
 class LSTMTest(xla_test.XLATestCase):
-  def _LSTMLayerCPU(self, inputs, weights_value, initial_state, forget_bias,
-                    training, name):
+  def _LSTMLayerCPU(self,
+                    inputs,
+                    weights_value,
+                    initial_state,
+                    forget_bias,
+                    training,
+                    name,
+                    activation='tanh',
+                    recurrent_activation='sigmoid'):
+    del forget_bias
     del name
     with ops.device("/device:CPU:0"):
       lstm = LSTM(num_channels,
-                  activation='tanh',
-                  recurrent_activation='sigmoid',
+                  activation=activation,
+                  recurrent_activation=recurrent_activation,
                   kernel_initializer=init_ops.constant_initializer(
                       weights_value, dataType),
                   recurrent_initializer=init_ops.constant_initializer(
@@ -91,8 +99,15 @@ class LSTMTest(xla_test.XLATestCase):
       outputs = lstm(inputs, initial_state=initial_state, training=training)
       return outputs
 
-  def _LSTMLayer(self, inputs, weights_value, initial_state, forget_bias,
-                 training, name):
+  def _LSTMLayer(self,
+                 inputs,
+                 weights_value,
+                 initial_state,
+                 forget_bias,
+                 training,
+                 name,
+                 activation='tanh',
+                 recurrent_activation='sigmoid'):
     del forget_bias
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("lstm_layer", use_resource=True):
@@ -105,6 +120,8 @@ class LSTMTest(xla_test.XLATestCase):
                                initializer=init_ops.constant_initializer(
                                    0.0, dataType))
       outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
+          activation=activation,
+          recurrent_activation=recurrent_activation,
           inputs=inputs,
           num_channels=num_channels,
           kernel=kernel,
@@ -293,6 +310,55 @@ class LSTMTest(xla_test.XLATestCase):
                                       h_value=h_init,
                                       c_value=c_init,
                                       training_steps=3)
+
+  def testLSTMActivations(self):
+    input_value = 0.7
+    weights_value = 0.3
+    h_value = 0.5
+    c_value = 10.5
+
+    inputs = _createLSTMInput(input_value, batch_size, seq_len, input_size)
+    initial_state = _createLSTMInitialState(h_value, c_value, batch_size,
+                                            num_channels)
+
+    forget_bias = 0.0
+
+    def run(lstm_layer_function, act, rec_act):
+      ops.reset_default_graph()
+      with self.session() as sess:
+        pinputs = array_ops.placeholder(dataType,
+                                        [seq_len, batch_size, input_size],
+                                        name="inputs")
+        pinitial_h_state = array_ops.placeholder(dataType,
+                                                 [batch_size, num_channels],
+                                                 name="init_h_state")
+        pinitial_c_state = array_ops.placeholder(dataType,
+                                                 [batch_size, num_channels],
+                                                 name="init_c_state")
+        lstm_output_seq = lstm_layer_function(inputs=pinputs,
+                                              weights_value=weights_value,
+                                              initial_state=(pinitial_h_state,
+                                                             pinitial_c_state),
+                                              forget_bias=forget_bias,
+                                              training=False,
+                                              name=None,
+                                              activation=act,
+                                              recurrent_activation=rec_act)
+
+        fd = {
+            pinputs: inputs,
+            pinitial_h_state: initial_state[0],
+            pinitial_c_state: initial_state[1],
+        }
+        sess.run(variables.global_variables_initializer())
+        return sess.run(lstm_output_seq, fd)
+
+    for activation in ['tanh', 'relu', 'softmax', 'sigmoid', 'hard_sigmoid']:
+      for recurrent_activation in ['softmax', 'sigmoid', 'hard_sigmoid']:
+        output_cpu = run(self._LSTMLayerCPU, activation, recurrent_activation)
+        output_ipu = run(self._LSTMLayer, activation, recurrent_activation)
+
+        self.assertAllClose(output_cpu, output_ipu)
 
   def testLSTMCached(self):
     with self.session() as sess:

@@ -28,6 +28,7 @@ from tensorflow.python.keras import initializers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import state_ops
+from tensorflow.python.ipu.ops import op_util
 
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -40,12 +41,22 @@ POPNN_GRU_NUM_GATES = 3
 
 __all__ = ["PopnnLSTM", "PopnnGRU"]
 
+ACCEPTED_ACTIVATIONS = ['tanh', 'relu', 'softmax', 'sigmoid', 'hard_sigmoid']
+ACCEPTED_RECURRENT_ACTIVATIONS = ['tanh', 'softmax', 'sigmoid', 'hard_sigmoid']
+
+ACCEPTED_ACTIVATIONS_STR = ",".join(
+    map(lambda s: f'"{s}"', ACCEPTED_ACTIVATIONS))
+ACCEPTED_RECURRENT_ACTIVATIONS_STR = ",".join(
+    map(lambda s: f'"{s}"', ACCEPTED_RECURRENT_ACTIVATIONS))
+
 
 class _PopnnRNN(ipu_layer.IPULayer):
   """Base class for implementing XLA and Popnn compatible RNN layers.
   """
   def __init__(self,
                num_units,
+               activation='tanh',
+               recurrent_activation='sigmoid',
                partials_dtype=dtypes.float32,
                seed=None,
                dropout_seed=None,
@@ -61,9 +72,25 @@ class _PopnnRNN(ipu_layer.IPULayer):
                **kwargs):
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
+    activation = op_util.get_activation_name(activation)
+    recurrent_activation = op_util.get_activation_name(recurrent_activation)
+
+    if activation not in ACCEPTED_ACTIVATIONS:
+      raise ValueError("IPU custom RNN layer does not support '" + activation +
+                       "' as an activation. Acceptable value are " +
+                       ACCEPTED_ACTIVATIONS_STR)
+
+    if recurrent_activation not in ACCEPTED_RECURRENT_ACTIVATIONS:
+      raise ValueError("IPU custom RNN layer does not support '" +
+                       recurrent_activation + "' as a "
+                       "recurrent activation. Acceptable value are " +
+                       ACCEPTED_RECURRENT_ACTIVATIONS_STR)
+
     if dtype not in [dtypes.float16, dtypes.float32]:
       raise ValueError("Only support float16, float32, provided %s" % dtype)
     # Layer self.dtype is type name, the original DType object is kept here.
+    self._activation = activation
+    self._recurrent_activation = recurrent_activation
     self._plain_dtype = dtype
     self._partials_dtype = partials_dtype
     self._num_units = num_units
@@ -235,12 +262,14 @@ class PopnnLSTM(_PopnnRNN):
   Arguments:
     units: Positive integer, dimensionality of the output space.
     activation: Activation function to use.
-      Default: hyperbolic tangent (`tanh`).
+      Default: hyperbolic tangent ("tanh").
+      Accepted activations: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
     recurrent_activation: Activation function to use
       for the recurrent step.
-      Default: sigmoid (`sigmoid`).
+      Default: sigmoid ("sigmoid").
+      Accepted activations: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
     use_bias: Boolean. If True then the layer will use a bias vector.
@@ -380,15 +409,6 @@ class PopnnLSTM(_PopnnRNN):
     if recurrent_activation == 'hard_sigmoid':
       recurrent_activation = 'sigmoid'
 
-    if activation != 'tanh':
-      raise ValueError(
-          "IPU custom LSTM layer does not support alternative activations.")
-
-    if recurrent_activation != 'sigmoid':
-      raise ValueError(
-          "IPU custom LSTM layer does not support recurrent activations other "
-          "than `sigmoid`.")
-
     if not use_bias:
       raise ValueError(
           "IPU custom LSTM layer does not support use_bias = False.")
@@ -438,6 +458,8 @@ class PopnnLSTM(_PopnnRNN):
 
     super(PopnnLSTM,
           self).__init__(num_units=units,
+                         activation=activation,
+                         recurrent_activation=recurrent_activation,
                          partials_dtype=partials_dtype,
                          seed=seed,
                          kernel_initializer=kernel_initializer,
@@ -553,6 +575,8 @@ class PopnnLSTM(_PopnnRNN):
 
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         num_channels=self._num_units,
         kernel=combined_kernel,
         biases=bias_tensor,
@@ -620,12 +644,14 @@ class PopnnGRU(_PopnnRNN):
   Arguments:
     units: Positive integer, dimensionality of the output space.
     activation: Activation function to use.
-      Default: hyperbolic tangent (`tanh`).
+      Default: hyperbolic tangent ("tanh").
+      Accepted activations: "tanh", "relu", "softmax", "sigmoid", "hard_sigmoid".
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
     recurrent_activation: Activation function to use
       for the recurrent step.
-      Default: sigmoid (`sigmoid`).
+      Default: sigmoid ("sigmoid").
+      Accepted activations: "tanh", "softmax", "sigmoid", "hard_sigmoid".
       If you pass `None`, no activation is applied
       (ie. "linear" activation: `a(x) = x`).
     use_bias: Boolean. If True then the layer will use a bias vector.
@@ -762,14 +788,6 @@ class PopnnGRU(_PopnnRNN):
     if recurrent_activation == 'hard_sigmoid':
       recurrent_activation = 'sigmoid'
 
-    if activation != 'tanh':
-      raise ValueError("IPU custom GRU layer does not support activation.")
-
-    if recurrent_activation != 'sigmoid':
-      raise ValueError(
-          "IPU custom GRU layer does not support recurrent activations other "
-          "than `sigmoid`.")
-
     if not use_bias:
       raise ValueError(
           "IPU custom GRU layer does not support use_bias = False.")
@@ -819,6 +837,8 @@ class PopnnGRU(_PopnnRNN):
     self._reset_after = reset_after
 
     super(PopnnGRU, self).__init__(num_units=units,
+                                   activation=activation,
+                                   recurrent_activation=recurrent_activation,
                                    partials_dtype=partials_dtype,
                                    seed=seed,
                                    kernel_initializer=kernel_initializer,
@@ -925,6 +945,8 @@ class PopnnGRU(_PopnnRNN):
 
     output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
         inputs=inputs,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
         num_channels=self._num_units,
         kernel=combined_kernel,
         biases=bias_tensor,

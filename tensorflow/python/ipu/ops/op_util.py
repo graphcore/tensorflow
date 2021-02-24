@@ -16,6 +16,8 @@
 Utilities for IPU ops
 ~~~~~~~~~~~~~~~~~~~~~
 """
+import six
+
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
@@ -256,3 +258,22 @@ def get_accumulator_dtype(variable, dtype_override):
       return dtypes.as_dtype(dtype_override(variable))
     else:
       raise
+
+
+_activation_modules = set(
+    ['tensorflow.python.keras.activations', 'tensorflow.python.ops.math_ops'])
+
+
+def get_activation_name(identifier):
+  "Get activation name from string or activation function object"
+  if isinstance(identifier, six.string_types):
+    return identifier
+  elif callable(identifier):
+    if identifier.__module__ not in _activation_modules:
+      raise TypeError('Unrecognized function : '
+                      f'{identifier.__module__}.{identifier.__name__}')
+    return identifier.__name__
+
+  raise TypeError(
+      f'Could not interpret activation function identifier: {repr(identifier)}'
+  )

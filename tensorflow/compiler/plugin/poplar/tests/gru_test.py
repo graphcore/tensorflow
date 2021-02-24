@@ -64,14 +64,22 @@ def _createGRUInitialState(value, shape):
 
 
 class GRUTest(xla_test.XLATestCase):
-  def _GRULayerCPU(self, inputs, weights_value, seq_length, seq_val,
-                   initial_state, training, name):
+  def _GRULayerCPU(self,
+                   inputs,
+                   weights_value,
+                   seq_length,
+                   seq_val,
+                   initial_state,
+                   training,
+                   name,
+                   activation='tanh',
+                   recurrent_activation='sigmoid'):
     #pylint: disable=unused-argument
     del name
     with ops.device("/device:CPU:0"):
       gru = GRU(num_channels,
-                activation='tanh',
-                recurrent_activation='sigmoid',
+                activation=activation,
+                recurrent_activation=recurrent_activation,
                 kernel_initializer=init_ops.constant_initializer(
                     weights_value, dataType),
                 recurrent_initializer=init_ops.constant_initializer(
@@ -86,8 +94,16 @@ class GRUTest(xla_test.XLATestCase):
           seq_len, seq_val[0])]
       return outputs
 
-  def _GRULayer(self, inputs, weights_value, seq_length, seq_val,
-                initial_state, training, name):
+  def _GRULayer(self,
+                inputs,
+                weights_value,
+                seq_length,
+                seq_val,
+                initial_state,
+                training,
+                name,
+                activation='tanh',
+                recurrent_activation='sigmoid'):
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("gru_layer", use_resource=True):
         kernel = _get_variable(
@@ -100,6 +116,8 @@ class GRUTest(xla_test.XLATestCase):
                                    0.0, dataType))
       if seq_length is None:
         outputs, _, _ = gen_popnn_ops.popnn_gru_layer(
+            activation=activation,
+            recurrent_activation=recurrent_activation,
             inputs=inputs,
             num_channels=num_channels,
             kernel=kernel,
@@ -109,6 +127,8 @@ class GRUTest(xla_test.XLATestCase):
             name=name)
       else:
         outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
+            activation=activation,
+            recurrent_activation=recurrent_activation,
             inputs=inputs,
             seq_len=seq_length,
             num_channels=num_channels,
@@ -325,6 +345,52 @@ class GRUTest(xla_test.XLATestCase):
                                     init_state_value=init_state_value,
                                     training_steps=3,
                                     seq_val=[1])
+
+  def testGRUActivations(self):
+    input_value = 0.7
+    weights_value = 0.3
+    init_state_value = 1.
+    seq_val = None
+
+    inputs = _createGRUInput(input_value, [seq_len, batch_size, input_size])
+    initial_state = _createGRUInitialState(init_state_value,
+                                           [batch_size, num_channels])
+
+    def run(gru_layer_function, act, rec_act):
+      ops.reset_default_graph()
+      with self.session() as sess:
+        pinputs = array_ops.placeholder(dataType,
+                                        [seq_len, batch_size, input_size],
+                                        name="inputs")
+        pinitial_state = array_ops.placeholder(dataType,
+                                               [batch_size, num_channels],
+                                               name="initial_state")
+        pseq_len = array_ops.placeholder(
+            np.int32, [batch_size],
+            name="seq_len") if seq_val is not None else None
+
+        gru_output_seq = gru_layer_function(inputs=pinputs,
+                                            weights_value=weights_value,
+                                            seq_length=pseq_len,
+                                            seq_val=seq_val,
+                                            initial_state=pinitial_state,
+                                            training=False,
+                                            name=None,
+                                            activation=act,
+                                            recurrent_activation=rec_act)
+
+        fd = {pinputs: inputs, pinitial_state: initial_state}
+        if pseq_len is not None:
+          fd[pseq_len] = seq_val
+        sess.run(variables.global_variables_initializer())
+        return sess.run(gru_output_seq, fd)
+
+    for activation in ['tanh', 'relu', 'softmax', 'sigmoid', 'hard_sigmoid']:
+      for recurrent_activation in ['softmax', 'sigmoid', 'hard_sigmoid']:
+        output_cpu = run(self._GRULayerCPU, activation, recurrent_activation)
+        output_ipu = run(self._GRULayer, activation, recurrent_activation)
+
+        self.assertAllClose(output_cpu, output_ipu)
 
   def testGRUCached(self):
     with self.session() as sess:
