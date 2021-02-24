@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import functional_ops_grad
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.ops.nn_grad import _BroadcastMul
 
 
 @ops.RegisterGradient("IpuGelu")
@@ -44,3 +46,15 @@ def _multi_conv_grad(op, *grads):
 
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
+
+
+@ops.RegisterGradient("PopnnCTCLoss")
+@ops.RegisterGradient("PopnnCTCLossWithLogits")
+def _ctc_loss_grad(op, loss_grad, _):
+  """The gradient of CTCLoss and CTCLossWithLogits ops."""
+  op_grad = array_ops.prevent_gradient(
+      op.outputs[1],
+      message="Second order derivative is not currently available for CTC Loss."
+  )
+
+  return [_BroadcastMul(loss_grad, op_grad), None, None, None]

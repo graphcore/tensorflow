@@ -255,11 +255,11 @@ poplar::Target CreateIpuTarget(uint num_ipus, int64 ipu_version) {
 // to the current process using the Poplar "runtime replica subset" feature.
 poplar::Target CreateMultiReplicaDistributionTarget(
     const poplar::Target& target, int64 process_count) {
-  const auto target_arch = target.getTargetArchString();
   const int64 num_ipus = target.getNumIPUs();
   CHECK_GT(process_count, 0);
   const int64 global_num_ipus = process_count * num_ipus;
-  return poplar::Target::createIPUTarget(global_num_ipus, target_arch);
+  return poplar::Target::createIPUTarget(
+      global_num_ipus, target.getTargetArchString(), target.getTargetOptions());
 }
 
 struct UserOpsExecutionState {

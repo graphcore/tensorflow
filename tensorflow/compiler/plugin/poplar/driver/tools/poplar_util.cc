@@ -825,6 +825,16 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
   return plan->second;
 }
 
+StatusOr<const popnn::ctc::Plan*> GetCTCPlan(CompilerResources& res,
+                                             const HloInstruction* inst) {
+  auto mapping = res.ctc_plans.find(inst);
+  if (mapping == res.ctc_plans.end()) {
+    return xla::FailedPrecondition("Could not find a ctc plan for %s.",
+                                   inst->ToString().c_str());
+  }
+  return &mapping->second;
+}
+
 DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs) {
   DeferredArgVectors deferred_inputs(inputs.size());
   for (uint64 i = 0; i != inputs.size(); ++i) {
