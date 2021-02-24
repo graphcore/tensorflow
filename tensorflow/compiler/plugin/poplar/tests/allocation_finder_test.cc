@@ -4346,7 +4346,7 @@ HloModule top
 
 ENTRY c1 {
   p = (f32[]) parameter(0)
-  ROOT c = f32[] custom-call(p), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":1, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
+  ROOT c = f32[] custom-call(p), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":1, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\"}\n"
 }
 
 )";
