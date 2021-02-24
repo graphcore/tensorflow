@@ -95,7 +95,7 @@ void ProgressBar::Start() {
                            (static_cast<float>(bar_width_) / 100.f)));
 
             // Clear the current line and return to the begining.
-            std::cout << "\33[2K\r" << start_symbol_;
+            std::cout << "\33[2K" << start_symbol_;
 
             for (std::size_t i = 0; i != current_bar_position; ++i) {
               std::cout << progress_symbol_;
@@ -112,7 +112,7 @@ void ProgressBar::Start() {
               std::cout << std::endl;
               break;
             } else {
-              std::cout << std::flush;
+              std::cout << "\r" << std::flush;
             }
           }
 
