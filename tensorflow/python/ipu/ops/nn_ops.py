@@ -346,28 +346,28 @@ def sampled_softmax_loss(weights,
   A common use case is to use this method for training, and calculate the full
   softmax loss for evaluation or inference, as in the following example:
 
-  ```python
-  if mode == "train":
-    loss = tf.nn.sampled_softmax_loss(
-        weights=weights,
-        biases=biases,
-        labels=labels,
-        inputs=inputs,
-        ...)
-  elif mode == "eval":
-    logits = tf.matmul(inputs, tf.transpose(weights))
-    logits = tf.nn.bias_add(logits, biases)
-    labels_one_hot = tf.one_hot(labels, n_classes)
-    loss = tf.nn.softmax_cross_entropy_with_logits(
-        labels=labels_one_hot,
-        logits=logits)
-  ```
+  .. code-block:: python
 
-  See our [Candidate Sampling Algorithms Reference]
-  (https://www.tensorflow.org/extras/candidate_sampling.pdf)
+    if mode == "train":
+      loss = tf.nn.sampled_softmax_loss(
+          weights=weights,
+          biases=biases,
+          labels=labels,
+          inputs=inputs,
+          ...)
+    elif mode == "eval":
+      logits = tf.matmul(inputs, tf.transpose(weights))
+      logits = tf.nn.bias_add(logits, biases)
+      labels_one_hot = tf.one_hot(labels, n_classes)
+      loss = tf.nn.softmax_cross_entropy_with_logits(
+          labels=labels_one_hot,
+          logits=logits)
 
-  Also see Section 3 of [Jean et al., 2014](http://arxiv.org/abs/1412.2007)
-  ([pdf](http://arxiv.org/pdf/1412.2007.pdf)) for the math.
+  See the TensorFlow `Candidate Sampling Algorithms Reference
+  <https://www.tensorflow.org/extras/candidate_sampling.pdf>`_
+
+  Also see Section 3 of `Jean et al., 2014 <http://arxiv.org/abs/1412.2007>`_
+  (`pdf <http://arxiv.org/pdf/1412.2007.pdf>`_) for the maths.
 
   Args:
     weights: A `Tensor` of shape `[num_classes, dim]`, or a list of `Tensor`
@@ -426,32 +426,32 @@ def nce_loss(weights,
   tensorflow/python/ops/nn_impl.py which targets the IPU-optimized embedding
   lookup.
 
-  See [Noise-contrastive estimation: A new estimation principle for
-  unnormalized statistical
-  models](http://www.jmlr.org/proceedings/papers/v9/gutmann10a/gutmann10a.pdf).
-  Also see our [Candidate Sampling Algorithms
-  Reference](https://www.tensorflow.org/extras/candidate_sampling.pdf)
+  See `Noise-contrastive estimation: A new estimation principle for
+  unnormalized statistical models
+  <http://www.jmlr.org/proceedings/papers/v9/gutmann10a/gutmann10a.pdf>`_.
+  Also see the TensorFlow `Candidate Sampling Algorithms Reference
+  <https://www.tensorflow.org/extras/candidate_sampling.pdf>`_.
 
   A common use case is to use this method for training, and calculate the full
   sigmoid loss for evaluation or inference, as in the following example:
 
-  ```python
-  if mode == "train":
-    loss = tf.nn.nce_loss(
-        weights=weights,
-        biases=biases,
-        labels=labels,
-        inputs=inputs,
-        ...)
-  elif mode == "eval":
-    logits = tf.matmul(inputs, tf.transpose(weights))
-    logits = tf.nn.bias_add(logits, biases)
-    labels_one_hot = tf.one_hot(labels, n_classes)
-    loss = tf.nn.sigmoid_cross_entropy_with_logits(
-        labels=labels_one_hot,
-        logits=logits)
-    loss = tf.reduce_sum(loss, axis=1)
-  ```
+  .. code-block:: python
+
+    if mode == "train":
+      loss = tf.nn.nce_loss(
+          weights=weights,
+          biases=biases,
+          labels=labels,
+          inputs=inputs,
+          ...)
+    elif mode == "eval":
+      logits = tf.matmul(inputs, tf.transpose(weights))
+      logits = tf.nn.bias_add(logits, biases)
+      labels_one_hot = tf.one_hot(labels, n_classes)
+      loss = tf.nn.sigmoid_cross_entropy_with_logits(
+          labels=labels_one_hot,
+          logits=logits)
+      loss = tf.reduce_sum(loss, axis=1)
 
   Note: By default this uses a log-uniform (Zipfian) distribution for sampling,
   so your labels must be sorted in order of decreasing frequency to achieve
@@ -463,7 +463,7 @@ def nce_loss(weights,
   sum to 1 per-example.
 
   Note: It would be useful to allow a variable number of target classes per
-  example.  We hope to provide this functionality in a future release.
+  example.  TensorFlow hopes to provide this functionality in a future release.
   For now, if you have a variable number of target classes, you can pad them
   out to a constant number by either repeating them or by padding
   with an otherwise unused class.
