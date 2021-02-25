@@ -343,6 +343,13 @@ StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
   return opts;
 }
 
+StatusOr<poplar::OptionFlags> GetCholeskyOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res) {
+  poplar::OptionFlags opts = res.default_matmul_options;
+  opts.set("blockSize", std::to_string(res.cholesky_block_size));
+  return opts;
+}
+
 Status SetPartialsTypeIfPresent(
     const PoplarBackendConfig& poplar_backend_config,
     poplar::OptionFlags& option_flags) {

@@ -132,6 +132,9 @@ StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
 StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
 
+StatusOr<poplar::OptionFlags> GetCholeskyOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res);
+
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
 

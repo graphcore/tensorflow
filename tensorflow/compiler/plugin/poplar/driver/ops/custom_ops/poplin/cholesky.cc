@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -54,13 +55,16 @@ class CholeskyOp : public PoplarOpDef {
       return InvalidArgument("Invalid rank for the input matrix.");
     }
 
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                        GetCholeskyOptionsForInst(inst, res));
+
     poplar::DebugNameAndId dnai(debug_info);
-    auto func = [&graph, lower, &res, dnai](std::vector<poplar::Tensor>& args,
-                                            poplar::program::Sequence& prog) {
+    auto func = [&graph, lower, poplar_options, &res, dnai](
+                    std::vector<poplar::Tensor>& args,
+                    poplar::program::Sequence& prog) {
       auto a = args[0];
-      auto x = poplin::cholesky(graph, a, lower, res.cholesky_block_size, prog,
-                                {dnai, "Cholesky"}, res.default_matmul_options,
-                                &res.matmul_cache);
+      auto x = poplin::cholesky(graph, a, lower, prog, {dnai, "Cholesky"},
+                                poplar_options, &res.matmul_cache);
       args[1] = x;
     };
 
@@ -98,9 +102,12 @@ class CholeskyOp : public PoplarOpDef {
 
     auto shape = PoplarShapeFromXlaShape(xla_shape);
 
-    auto out = poplin::createCholeskyInput(
-        graph, type, shape, lower, res.cholesky_block_size,
-        {debug_context, "createInput"}, {}, &res.matmul_cache);
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                        GetCholeskyOptionsForInst(inst, res));
+
+    auto out = poplin::createCholeskyInput(graph, type, shape, lower,
+                                           {debug_context, "createInput"},
+                                           poplar_options, &res.matmul_cache);
 
     MappingHelper::RemapTensor(res.linear_mapping_state, graph, out);
 
