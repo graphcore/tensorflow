@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -170,8 +171,11 @@ Status MatMulPreplanning::StorePreplanMatMulsCholesky(
   auto poplar_shape = PoplarShapeFromXlaShape(shape);
   auto& options = as_solve->cholesky_options();
 
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                      GetCholeskyOptionsForInst(inst, resources_));
+
   auto preplan_params = poplin::getCholeskyMatMulPrePlanParameters(
-      type, poplar_shape, options.lower(), resources_.cholesky_block_size, {});
+      type, poplar_shape, options.lower(), poplar_options);
 
   for (const auto& preplan_param : preplan_params) {
     option_flags_store.push_back(preplan_param.second);
