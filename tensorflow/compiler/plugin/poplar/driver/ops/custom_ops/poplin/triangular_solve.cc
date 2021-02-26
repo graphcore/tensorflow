@@ -90,16 +90,19 @@ class TriangularSolveOp : public PoplarOpDef {
       lower = !lower;
     }
 
-    auto func = [&graph, &res, options, lower, rank, options,
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                        GetTriangularSolveOptionsForInst(inst, res));
+
+    auto func = [&graph, &res, options, poplar_options, lower, rank, options,
                  debug_name_and_id](std::vector<poplar::Tensor>& args,
                                     poplar::program::Sequence& prog) {
       poplar::Tensor a_f = args[0];
       poplar::Tensor b_f = args[1];
 
-      auto x_f = poplin::triangularSolve(
-          graph, a_f, b_f, options.left_side(), lower, options.unit_diagonal(),
-          res.triangular_solve_expander_block_size, prog,
-          {debug_name_and_id, "TriangularSolve"}, {}, &res.matmul_cache);
+      auto x_f = poplin::triangularSolve(graph, a_f, b_f, options.left_side(),
+                                         lower, options.unit_diagonal(), prog,
+                                         {debug_name_and_id, "TriangularSolve"},
+                                         poplar_options, &res.matmul_cache);
       args[2] = x_f;
     };
 
@@ -158,20 +161,21 @@ class TriangularSolveOp : public PoplarOpDef {
     VLOG(2) << "Allocating input " << input_index << " for " << aShape << " "
             << bShape << " solver.";
 
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                        GetTriangularSolveOptionsForInst(inst, res));
+
     poplar::Tensor out;
     switch (input_index) {
       case 0: {
         out = poplin::createTriangularSolveInputLHS(
             graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            res.triangular_solve_expander_block_size, {debug_info, "lhs"}, {},
-            &res.matmul_cache);
+            {debug_info, "lhs"}, poplar_options, &res.matmul_cache);
         break;
       }
       case 1: {
         out = poplin::createTriangularSolveInputRHS(
             graph, type_a, type_b, poplar_shape_a, poplar_shape_b, left_side,
-            res.triangular_solve_expander_block_size, {debug_info, "rhs"}, {},
-            &res.matmul_cache);
+            {debug_info, "rhs"}, poplar_options, &res.matmul_cache);
         break;
       }
       default:

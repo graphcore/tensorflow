@@ -350,6 +350,14 @@ StatusOr<poplar::OptionFlags> GetCholeskyOptionsForInst(
   return opts;
 }
 
+StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res) {
+  poplar::OptionFlags opts = res.default_matmul_options;
+  opts.set("blockSize",
+           std::to_string(res.triangular_solve_expander_block_size));
+  return opts;
+}
+
 Status SetPartialsTypeIfPresent(
     const PoplarBackendConfig& poplar_backend_config,
     poplar::OptionFlags& option_flags) {
