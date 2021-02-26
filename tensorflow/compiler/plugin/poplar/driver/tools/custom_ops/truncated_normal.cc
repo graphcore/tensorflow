@@ -31,6 +31,8 @@ absl::flat_hash_set<int64> HloTruncatedNormalInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloTruncatedNormalInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloTruncatedNormalInstruction::LayoutDependencies() const {
   return {};

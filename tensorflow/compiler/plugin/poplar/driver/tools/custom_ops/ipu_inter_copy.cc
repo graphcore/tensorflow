@@ -29,6 +29,8 @@ absl::flat_hash_set<int64> HloIpuInterCopy::AllocatingIndices() const {
   return {};
 }
 
+bool HloIpuInterCopy::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloIpuInterCopy::LayoutDependencies() const {
   return {};
 }

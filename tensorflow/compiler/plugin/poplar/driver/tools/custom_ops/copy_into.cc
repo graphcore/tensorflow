@@ -32,6 +32,8 @@ HloCopyInto::HloCopyInto(HloInstruction* const destination,
 
 absl::flat_hash_set<int64> HloCopyInto::AllocatingIndices() const { return {}; }
 
+bool HloCopyInto::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloCopyInto::LayoutDependencies() const {
   return {};
 }

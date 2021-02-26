@@ -78,6 +78,8 @@ absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
   return set;
 }
 
+bool HloUserOpInstruction::AllocatingOutput() const { return IsReadWrite(); }
+
 absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
     const {
   return {};

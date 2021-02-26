@@ -59,6 +59,7 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction,
                                 bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -100,6 +101,7 @@ class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
       bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -141,6 +143,7 @@ class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
                                   bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

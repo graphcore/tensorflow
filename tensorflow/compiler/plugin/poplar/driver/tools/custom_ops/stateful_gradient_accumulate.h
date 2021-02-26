@@ -33,6 +33,7 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
       PoplarOp op = PoplarOp::StatefulGradientAccumulate);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -133,6 +134,7 @@ class HloGradientAccumulatorCreate : public HloPoplarInstruction {
       absl::optional<HloRemoteBufferInfo> remote_buffer_info = absl::nullopt);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -167,6 +169,7 @@ class HloGradientAccumulatorAdd : public HloPoplarInstruction {
                                      HloInstruction* const gradient);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -191,6 +194,7 @@ class HloGradientAccumulatorSink : public HloPoplarInstruction {
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;

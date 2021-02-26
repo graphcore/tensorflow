@@ -37,6 +37,8 @@ class HloElementwiseUnaryBase : public HloPoplarInstruction {
       : HloPoplarInstruction(operand->shape(), {operand}, Op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  bool AllocatingOutput() const override { return false; }
+
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
     return {};
   }

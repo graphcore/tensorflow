@@ -31,6 +31,8 @@ absl::flat_hash_set<int64> HloStatelessRandom::AllocatingIndices() const {
   return {};
 }
 
+bool HloStatelessRandom::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloStatelessRandom::LayoutDependencies()
     const {
   return {};

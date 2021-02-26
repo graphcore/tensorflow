@@ -84,6 +84,8 @@ absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloRNNBwdInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloRNNBwdInstruction::LayoutDependencies()
     const {
   return {};

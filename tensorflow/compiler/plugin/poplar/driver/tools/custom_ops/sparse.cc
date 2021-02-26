@@ -29,6 +29,10 @@ HloSelectScalarFromRowsInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloSelectScalarFromRowsInstruction::AllocatingOutput() const {
+  return false;
+}
+
 absl::flat_hash_map<int64, int64>
 HloSelectScalarFromRowsInstruction::LayoutDependencies() const {
   return {};
@@ -74,6 +78,10 @@ HloUpdateScalarInRowsInstruction::HloUpdateScalarInRowsInstruction(
 absl::flat_hash_set<int64> HloUpdateScalarInRowsInstruction::AllocatingIndices()
     const {
   return {};
+}
+
+bool HloUpdateScalarInRowsInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>

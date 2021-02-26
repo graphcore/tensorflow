@@ -30,6 +30,7 @@ class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
                                  xla::PrimitiveType partials_type);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

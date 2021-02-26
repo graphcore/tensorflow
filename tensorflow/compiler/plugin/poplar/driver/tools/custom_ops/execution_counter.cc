@@ -30,6 +30,8 @@ absl::flat_hash_set<int64> HloExecutionCounter::AllocatingIndices() const {
   return {};
 }
 
+bool HloExecutionCounter::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloExecutionCounter::LayoutDependencies()
     const {
   return {};

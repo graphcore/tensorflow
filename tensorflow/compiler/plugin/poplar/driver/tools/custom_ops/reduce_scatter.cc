@@ -35,6 +35,8 @@ absl::flat_hash_set<int64> HloReduceScatterInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloReduceScatterInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloReduceScatterInstruction::LayoutDependencies() const {
   return {};

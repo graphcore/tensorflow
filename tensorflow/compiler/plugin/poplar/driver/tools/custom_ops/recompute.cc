@@ -35,6 +35,8 @@ absl::flat_hash_set<int64> HloSuggestRecomputeInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloSuggestRecomputeInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloSuggestRecomputeInstruction::LayoutDependencies() const {
   return {};
@@ -87,6 +89,8 @@ absl::flat_hash_set<int64> HloBlockRecomputeInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloBlockRecomputeInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloBlockRecomputeInstruction::LayoutDependencies() const {
   return {};
@@ -130,6 +134,10 @@ HloRecomputationCheckpointInstruction::HloRecomputationCheckpointInstruction(
 absl::flat_hash_set<int64>
 HloRecomputationCheckpointInstruction::AllocatingIndices() const {
   return {};
+}
+
+bool HloRecomputationCheckpointInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>
@@ -180,6 +188,10 @@ HloRecomputationInputInstruction::HloRecomputationInputInstruction(
 absl::flat_hash_set<int64> HloRecomputationInputInstruction::AllocatingIndices()
     const {
   return {};
+}
+
+bool HloRecomputationInputInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>

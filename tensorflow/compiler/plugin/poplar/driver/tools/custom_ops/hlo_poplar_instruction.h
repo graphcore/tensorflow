@@ -60,6 +60,9 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // Allocating indexes used by the Allocation Finder - op specific.
   virtual absl::flat_hash_set<int64> AllocatingIndices() const = 0;
 
+  // Return whether this instruction needs an output tensor allocated for it.
+  virtual bool AllocatingOutput() const = 0;
+
   // Layout dependent indexes used by the Forward Allocation Finder - op
   // specific.
   // Example - custom op has 3 inputs a(0), b(1), c(2) - a is an input, and b

@@ -28,6 +28,7 @@ class HloTopK : public HloPoplarInstruction {
                    bool sorted);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 

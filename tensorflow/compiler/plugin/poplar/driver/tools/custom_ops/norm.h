@@ -79,6 +79,7 @@ class HloGroupNormInstruction : public HloGroupNormBaseInstruction {
   const HloInstruction* variance_or_inv_std_dev() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -112,6 +113,7 @@ class HloGroupNormTrainInstruction : public HloGroupNormBaseInstruction {
   const HloInstruction* offset() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -144,6 +146,7 @@ class HloGroupNormGradInstruction : public HloGroupNormBaseInstruction {
   const HloInstruction* grad_output() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -173,6 +176,7 @@ class HloGroupNormStatsInstruction : public HloGroupNormBaseInstruction {
   const HloInstruction* operand() const;
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
