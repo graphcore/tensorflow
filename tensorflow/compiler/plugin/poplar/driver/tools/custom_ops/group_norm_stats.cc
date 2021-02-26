@@ -37,6 +37,8 @@ absl::flat_hash_set<int64> HloGroupNormStatsInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloGroupNormStatsInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloGroupNormStatsInstruction::LayoutDependencies() const {
   return {};

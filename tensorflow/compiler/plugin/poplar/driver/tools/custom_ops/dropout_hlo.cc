@@ -38,6 +38,8 @@ HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
 
 absl::flat_hash_set<int64> HloDropout::AllocatingIndices() const { return {}; }
 
+bool HloDropout::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloDropout::LayoutDependencies() const {
   return {};
 }

@@ -57,6 +57,8 @@ absl::flat_hash_set<int64> HloMultiConvInstruction::AllocatingIndices() const {
   return allocating_indices_;
 }
 
+bool HloMultiConvInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloMultiConvInstruction::LayoutDependencies()
     const {
   return {};

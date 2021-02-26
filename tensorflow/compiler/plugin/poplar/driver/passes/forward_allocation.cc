@@ -433,35 +433,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
         break;
       }
       case HloOpcode::kCustomCall: {
-        const bool is_remap_deduce =
-            IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
-        const bool is_host_embedding_lookup =
-            IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
-        const bool is_remote_buffer_load =
-            IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
-        const bool is_rw_user_op =
-            IsPoplarInstruction(PoplarOp::UserOp)(inst)
-                ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
-                : false;
-        const bool is_recv_from_host =
-            IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
-        const bool is_gradient_accumulator_create =
-            IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
-        const bool is_in_memory_create_buffer =
-            IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)
-                ? !Cast<HloCreateBuffer>(inst)->IsRemoteBuffer()
-                : false;
-        const bool is_buffer_load_slice =
-            IsPoplarInstruction(PoplarOp::BufferLoadSlice)(inst);
-        const bool is_inter_tileset_copy =
-            IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst);
-        const bool is_one_hot = IsPoplarInstruction(PoplarOp::OneHot)(inst);
-
-        is_input = is_remap_deduce || is_host_embedding_lookup ||
-                   is_remote_buffer_load || is_rw_user_op ||
-                   is_recv_from_host || is_gradient_accumulator_create ||
-                   is_in_memory_create_buffer || is_buffer_load_slice ||
-                   is_inter_tileset_copy || is_one_hot;
+        is_input = Cast<HloPoplarInstruction>(inst)->AllocatingOutput();
         break;
       }
       default: { break; }

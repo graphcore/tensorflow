@@ -34,6 +34,8 @@ absl::flat_hash_set<int64> HloPoolingInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloPoolingInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloPoolingInstruction::LayoutDependencies()
     const {
   return {};

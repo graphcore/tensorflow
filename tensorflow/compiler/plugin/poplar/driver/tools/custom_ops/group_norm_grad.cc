@@ -58,6 +58,8 @@ absl::flat_hash_set<int64> HloGroupNormGradInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloGroupNormGradInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloGroupNormGradInstruction::LayoutDependencies() const {
   return {};

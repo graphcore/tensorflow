@@ -59,6 +59,8 @@ absl::flat_hash_set<int64> HloCTCLossInstructionBase::AllocatingIndices()
   return {0, 1};
 }
 
+bool HloCTCLossInstructionBase::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloCTCLossInstructionBase::LayoutDependencies() const {
   return {};

@@ -31,6 +31,8 @@ HloSeed::HloSeed(const Shape& shape)
 
 absl::flat_hash_set<int64> HloSeed::AllocatingIndices() const { return {}; }
 
+bool HloSeed::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloSeed::LayoutDependencies() const {
   return {};
 }

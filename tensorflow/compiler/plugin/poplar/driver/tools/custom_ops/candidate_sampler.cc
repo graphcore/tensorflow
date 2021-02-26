@@ -28,6 +28,8 @@ absl::flat_hash_set<int64> HloCandidateSampler::AllocatingIndices() const {
   return {};
 }
 
+bool HloCandidateSampler::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloCandidateSampler::LayoutDependencies()
     const {
   return {};

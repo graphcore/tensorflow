@@ -51,6 +51,8 @@ absl::flat_hash_set<int64> HloStatefulGradientAccumulate::AllocatingIndices()
   return {};
 }
 
+bool HloStatefulGradientAccumulate::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloStatefulGradientAccumulate::LayoutDependencies() const {
   return {};
@@ -238,6 +240,8 @@ absl::flat_hash_set<int64> HloGradientAccumulatorCreate::AllocatingIndices()
   return {};
 }
 
+bool HloGradientAccumulatorCreate::AllocatingOutput() const { return true; }
+
 absl::flat_hash_map<int64, int64>
 HloGradientAccumulatorCreate::LayoutDependencies() const {
   return {};
@@ -319,6 +323,8 @@ absl::flat_hash_set<int64> HloGradientAccumulatorAdd::AllocatingIndices()
   return {};
 }
 
+bool HloGradientAccumulatorAdd::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloGradientAccumulatorAdd::LayoutDependencies() const {
   return {};
@@ -365,6 +371,8 @@ absl::flat_hash_set<int64> HloGradientAccumulatorSink::AllocatingIndices()
     const {
   return {};
 }
+
+bool HloGradientAccumulatorSink::AllocatingOutput() const { return false; }
 
 absl::flat_hash_map<int64, int64>
 HloGradientAccumulatorSink::LayoutDependencies() const {

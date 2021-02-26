@@ -43,6 +43,10 @@ HloHostEmbeddingLookupInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloHostEmbeddingLookupInstruction::AllocatingOutput() const {
+  return true;
+}
+
 absl::flat_hash_map<int64, int64>
 HloHostEmbeddingLookupInstruction::LayoutDependencies() const {
   return {};
@@ -109,6 +113,10 @@ HloHostEmbeddingUpdateInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloHostEmbeddingUpdateInstruction::AllocatingOutput() const {
+  return false;
+}
+
 absl::flat_hash_map<int64, int64>
 HloHostEmbeddingUpdateInstruction::LayoutDependencies() const {
   return {};
@@ -170,6 +178,10 @@ HloHostEmbeddingNotifyInstruction::HloHostEmbeddingNotifyInstruction(
 absl::flat_hash_set<int64>
 HloHostEmbeddingNotifyInstruction::AllocatingIndices() const {
   return {};
+}
+
+bool HloHostEmbeddingNotifyInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>

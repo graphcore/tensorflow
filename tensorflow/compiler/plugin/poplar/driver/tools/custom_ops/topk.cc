@@ -31,6 +31,8 @@ HloTopK::HloTopK(HloInstruction* input, const Shape shape, int64 K, bool sort)
 
 absl::flat_hash_set<int64> HloTopK::AllocatingIndices() const { return {}; }
 
+bool HloTopK::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloTopK::LayoutDependencies() const {
   return {};
 }

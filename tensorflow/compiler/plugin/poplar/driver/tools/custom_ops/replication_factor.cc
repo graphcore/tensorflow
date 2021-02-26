@@ -32,6 +32,8 @@ absl::flat_hash_set<int64> HloReplicationFactorInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloReplicationFactorInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloReplicationFactorInstruction::LayoutDependencies() const {
   return {};
@@ -80,6 +82,10 @@ const HloInstruction* HloReplicationNormaliseInstruction::input() const {
 absl::flat_hash_set<int64>
 HloReplicationNormaliseInstruction::AllocatingIndices() const {
   return {};
+}
+
+bool HloReplicationNormaliseInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>
