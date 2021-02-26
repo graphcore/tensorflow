@@ -512,6 +512,7 @@ def ctc_loss(labels,
              label_length,
              data_length,
              blank_index,
+             out_dtype=None,
              name="ctc_loss"):
   """Calculates and returns CTC (Connectionist Temporal Classification) loss.
   This op is designed and optimized for the IPU and cannot be used with other
@@ -528,16 +529,25 @@ def ctc_loss(labels,
     data_length: A tensor of shape [batch_size] containing the number of
         timesteps in each `data` batch entry.
     blank_index: The class index to use for the blank label.
+    out_dtype: The dtype of the loss tensor.
+        Cannot be float16 if the dtype of `data` is float32.
+        Default: the same dtype as `data`.
     name: A name for this op. Defaults to "ctc_loss".
 
   Returns:
     A loss tensor of shape [batch_size].
   """
+  if out_dtype is None:
+    out_dtype = data.dtype
+  elif data.dtype == dtypes.float32 and out_dtype == dtypes.float16:
+    raise ValueError(
+        "out_dtype cannot be float16 when dtype of data is float32.")
+
   loss, _ = gen_popnn_ops.popnn_ctc_loss(data,
                                          labels,
                                          data_length,
                                          label_length,
-                                         out_dtype=data.dtype,
+                                         out_dtype=out_dtype,
                                          blank_index=blank_index,
                                          name=name)
 
@@ -549,6 +559,7 @@ def ctc_loss_with_logits(labels,
                          label_length,
                          logit_length,
                          blank_index,
+                         out_dtype=None,
                          name="ctc_loss_with_logits"):
   """Calculates and returns CTC (Connectionist Temporal Classification) loss.
   This op is designed and optimized for the IPU and cannot be used with other
@@ -565,16 +576,25 @@ def ctc_loss_with_logits(labels,
     logit_length: A tensor of shape [batch_size] containing the number of
         timesteps in each `logits` batch entry.
     blank_index: The class index to use for the blank label.
+    out_dtype: The dtype of the loss tensor (float16 or float32).
+        Cannot be float16 if the dtype of `logits` is float32.
+        Default: the same dtype as `logits`.
     name: A name for this op. Defaults to "ctc_loss".
 
   Returns:
     A loss tensor of shape [batch_size].
   """
+  if out_dtype is None:
+    out_dtype = logits.dtype
+  elif logits.dtype == dtypes.float32 and out_dtype == dtypes.float16:
+    raise ValueError(
+        "out_dtype cannot be float16 when dtype of logits is float32.")
+
   loss, _ = gen_popnn_ops.popnn_ctc_loss_with_logits(logits,
                                                      labels,
                                                      logit_length,
                                                      label_length,
-                                                     out_dtype=logits.dtype,
+                                                     out_dtype=out_dtype,
                                                      blank_index=blank_index,
                                                      name=name)
 
