@@ -54,6 +54,8 @@ class MatMulPreplanning : public HloModulePass {
 
   Status StorePreplanMatMulsCholesky(const HloInstruction* inst);
 
+  Status StorePreplanMatMulsTriangularSolve(const HloInstruction* inst);
+
   Status StorePreplanMatMuls(const HloInstruction* inst);
 
   CompilerResources& resources_;
