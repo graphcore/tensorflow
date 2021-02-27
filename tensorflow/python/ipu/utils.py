@@ -176,11 +176,15 @@ class DeviceConnectionType(Enum):
   * `ALWAYS` indicates that the system will attach when configuring the
     device.
   * `ON_DEMAND` will defer connection to when the IPU is needed.
-  * `NEVER` will never try to attach to a device. Used when compiling offline.
+  * `PRE_COMPILE` will never try to attach to a device and anything which is
+    meant to be executed on the device will return all zeros. Used to
+    pre-compile Poplar programs on machines without IPUs.
+  * `NEVER` will never try to attach to a device.
   """
-  ALWAYS = config_pb2.IpuDeviceConnectionType.Value("ALWAYS")
-  ON_DEMAND = config_pb2.IpuDeviceConnectionType.Value("ON_DEMAND")
-  NEVER = config_pb2.IpuDeviceConnectionType.Value("NEVER")
+  ALWAYS = config_pb2.IpuDeviceConnectionType.ALWAYS
+  ON_DEMAND = config_pb2.IpuDeviceConnectionType.ON_DEMAND
+  PRE_COMPILE = config_pb2.IpuDeviceConnectionType.PRE_COMPILE
+  NEVER = config_pb2.IpuDeviceConnectionType.NEVER
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -1316,12 +1320,13 @@ def set_ipu_connection_type(opts,
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
     ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
                  and 2 for Mk2. Required if the `connection_type`
-                 provided is `DeviceConnectionType.NEVER`.
+                 provided is `DeviceConnectionType.PRE_COMPILE` or
+                 `DeviceConnectionType.NEVER`.
     enable_remote_buffers: When `connection_type` is
-      `DeviceConnectionType.NEVER` or `DeviceConnectionType.ON_DEMAND`, this
-      argument is used to indicate whether remote buffers are enabled and
-      supported in the system which will eventually be used to execute the
-      compiled programs.
+      `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
+      `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate
+      whether remote buffers are enabled and supported in the system which will
+      eventually be used to execute the compiled programs.
   Returns:
     The IpuOptions configuration protobuf.
   """
@@ -1331,6 +1336,12 @@ def set_ipu_connection_type(opts,
   if connection_type == DeviceConnectionType.NEVER and ipu_version is None:
     raise Exception("`ipu_version` must be set when `connection_type` is set "
                     "to `DeviceConnectionType.NEVER`")
+
+  if (connection_type == DeviceConnectionType.PRE_COMPILE
+      and ipu_version is None):
+    raise Exception("`ipu_version` must be set when `connection_type` is set "
+                    "to `DeviceConnectionType.PRE_COMPILE`")
+
   opts.device_connection_type = connection_type.value
 
   if ipu_version is not None:

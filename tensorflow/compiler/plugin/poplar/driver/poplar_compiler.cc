@@ -274,10 +274,44 @@ bool ShardingEnabled(const HloModule* module) {
   return false;
 }
 
+Status CheckUnsupportedPrecompileInstructions(const HloModule* module) {
+  // Verify the operations in the module.
+  for (const auto* comp : module->computations()) {
+    for (const auto* inst : comp->instructions()) {
+      if (inst->opcode() != HloOpcode::kCustomCall) {
+        continue;
+      }
+
+      if (IsPoplarInstruction(PoplarOp::UserOp)(inst)) {
+        if (!Cast<HloUserOpInstruction>(inst)->IsHashable()) {
+          const std::string error_message = absl::StrCat(
+              "IPU devices have been configured for pre-compilation, however "
+              "the program contains custom user operation ",
+              inst->ToString(),
+              " which cannot be safely pre-compiled. If it is safe to "
+              "pre-compile these Custom User operations, please set the "
+              "'is_hashable' attribute to 'true' in the operations metadata "
+              "function. Please see the documentation for further details.");
+          return FailedPrecondition("%s", error_message);
+        }
+      }
+
+      if (IsPoplarInstruction(PoplarOp::RecvFromHost)(inst) ||
+          IsPoplarInstruction(PoplarOp::SendToHost)(inst)) {
+        return FailedPrecondition(
+            "IPU devices have been configured for pre-compilation, however "
+            "the program contains `outside_compilation_scope` operations which "
+            "cannot be safely pre-compiled.");
+      }
+    }
+  }
+  return Status::OK();
+}
+
 // Can only be called after CustomOpReplacer
 bool IsCacheable(const HloModule* module) {
-  for (const auto* comp : module->MakeComputationPostOrder()) {
-    for (const auto* inst : comp->MakeInstructionPostOrder()) {
+  for (const auto* comp : module->computations()) {
+    for (const auto* inst : comp->instructions()) {
       if (IsPoplarInstruction(PoplarOp::UserOp)(inst) &&
           !(Cast<HloUserOpInstruction>(inst)->IsHashable())) {
         return false;
@@ -1004,6 +1038,18 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   poplar::OptionFlags opt_flags = poplar_executor->GetOptionsFlags();
 
+  const bool in_precompile_mode =
+      poplar_executor->ConnectionType() == IpuDeviceConnectionType::PRE_COMPILE;
+  if (in_precompile_mode &&
+      PoplarXlaFlags::Get().executable_cache_path.empty()) {
+    return FailedPrecondition(
+        "IPU devices have been configured for pre-compilation, however "
+        "'executable_cache_path' in 'TF_POPLAR_FLAGS' has not been set. Please "
+        "set the path to a directory where the compiled binaries should be "
+        "stored using the 'TF_POPLAR_FLAGS' environment variable, for example "
+        "'TF_POPLAR_FLAGS=--executable_cache_path=/path/to/storage'.");
+  }
+
   // If the user hasn't set autoReport.directory, set it for them.
   absl::optional<std::string> auto_dir =
       GetPoplarEngineOption("autoReport.directory");
@@ -1458,6 +1504,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   bool logging_cycle_count;
 
   if (compile) {
+    if (in_precompile_mode) {
+      TF_RETURN_IF_ERROR(CheckUnsupportedPrecompileInstructions(module.get()));
+    }
+    const bool is_cacheable = IsCacheable(module.get());
+
     // Generate a framework.json if autoReport.all or directory is configured.
     TF_ASSIGN_OR_RETURN(std::string tensorflow_info,
                         GetFrameworkInfo(module->name()));
@@ -1579,7 +1630,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar::Executable exec =
           poplar::compileGraph(main_graph, progs, opt_flags, progress_logging);
 
-      const bool is_cacheable = IsCacheable(module.get());
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.
         if (executable_cache_lock) {
@@ -1593,6 +1643,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               options_to_serialize, logging_cycle_count,
               resources.streams_indices.GetAssignedIds(),
               resources.streams_indices.CheckpointFeedsOrder()));
+
+          if (in_precompile_mode) {
+            LOG(INFO) << "A pre-compiled Poplar program has been saved to "
+                      << filenames.CachedExecutableFilename();
+          }
         }
 
         if (poplar_executor->EnableSerialization()) {
@@ -1603,6 +1658,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               filenames, exec, resources, replication_factor,
               {} /* device_opts */, opt_flags,
               poplar_executor->GetOrCreatePoplarTarget()));
+        }
+      } else {
+        if (executable_cache_lock) {
+          LOG(INFO)
+              << "Executable caching has been enabled, however the "
+                 "program being compiled contains custom user operations "
+                 "which cannot be safely serialized. If it is safe to "
+                 "pre-compile these custom user operations, please set "
+                 "the 'is_hashable' attribute to 'true' in the "
+                 "operations metadata function. Please see the documentation "
+                 "for further details.";
         }
       }
 

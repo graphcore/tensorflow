@@ -6,7 +6,7 @@ load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod")
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load(
     "//tensorflow/core/platform:default/build_config.bzl",
     "tf_proto_library",
@@ -4568,6 +4568,24 @@ tf_xla_py_test(
     ],
 )
 
+py_binary(
+    name = "pre_compile_example",
+    srcs = ["docs/pre_compile_example.py"],
+    python_version = "PY3",
+)
+
+tf_xla_py_test(
+    name = "pre_compile_example_runner",
+    size = "large",
+    srcs = ["docs/pre_compile_example_runner.py"],
+    data = [":pre_compile_example"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "outfeed_example",
     size = "small",
@@ -4912,6 +4930,22 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "pre_compile_test",
+    size = "large",
+    srcs = ["tests/pre_compile_test.py"],
+    data = [
+        ":libadd_incrementing_custom_with_metadata.so",
+    ],
+    enabled_backends = ["poplar"],
+    shard_count = 4,
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -5043,6 +5077,7 @@ test_suite(
         "poplar_algebraic_simplifier_test",
         "poplar_executable_runner_test",
         "post_serialize_gradient_accumulation_test",
+        "pre_compile_test",
         "recomputation_checkpoint_remover_test",
         "recomputation_input_remover_test",
         "recomputation_test",
@@ -5133,6 +5168,7 @@ test_suite(
         "logging_example_1",
         "outfeed_example",
         "perf_training_example",
+        "pre_compile_example_runner",
         "tutorial_attributes_example",
         "tutorial_basic",
         "tutorial_custom_codelet",
