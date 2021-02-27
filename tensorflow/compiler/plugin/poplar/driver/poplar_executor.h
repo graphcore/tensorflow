@@ -103,7 +103,6 @@ class ModuleFilenames {
   ModuleFilenames(const HloModule& module, int64 device_hash,
                   const std::string& serialization_folder);
   std::string CachedExecutableFilename() const;
-  std::string CachedEngineFilename() const;
   std::string CompilationLockFilename() const;
   std::string SerializedExecutableFilename() const;
   std::string SerializedMetadataFilename() const;
