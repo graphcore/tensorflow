@@ -154,9 +154,24 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
     for (int64 i = 0; i != static_cast<int64>(stages.size()); ++i) {
       const int64 stage_id = GetPipelineStageID(stages[i]);
       if (stage_id != i) {
-        return FailedPrecondition(
-            "Detected Pipeline Stage with id %d but expected id %d.", stage_id,
-            i);
+        if (i - 1 == stage_id) {
+          // Because we know that checks up to i-1 have passed and the stages
+          // have been sorted by id:
+          return FailedPrecondition(
+              "Error checking pipeline stage ids. There is more than one "
+              "pipeline stage in the graph with stage id %d. One reason for "
+              "this error could be that tf.gradients has been called more than "
+              "once for a variable on a pipeline stage, which is not supported "
+              "when using pipelining. Stage Op: \n%s",
+              stage_id, stages[i]->ToString());
+        } else {
+          return FailedPrecondition(
+              "Error checking pipeline stage ids. Detected Pipeline Stage with "
+              "id %d but expected id %d. Stage ids should be from 0..N stages "
+              "with no gaps and a single forward/backward stage per id. Stage "
+              "Op: \n%s",
+              stage_id, i, stages[i]->ToString());
+        }
       }
     }
     return Status::OK();
