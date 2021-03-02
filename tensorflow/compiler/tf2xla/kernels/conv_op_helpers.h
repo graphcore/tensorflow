@@ -65,7 +65,8 @@ xla::StatusOr<xla::XlaOp> MakeXlaBackpropFilterConvOp(
     StringPiece type_string, xla::XlaOp activations,
     const xla::Shape& filter_shape, xla::XlaOp gradients,
     const ConvOpAttrs& attrs,
-    const xla::PrecisionConfig* precision_config = nullptr);
+    const xla::PrecisionConfig* precision_config = nullptr,
+    bool disable_batch_group_count = false);
 
 }  // namespace tensorflow
 

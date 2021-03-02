@@ -33,59 +33,6 @@ namespace poplarplugin {
 
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
-  // ------ Convolutions ------
-  // DepthwiseConv2DBackpropFilter
-  HloMatcherPattern(
-    PatternType("depthwise_filter"),
-    PatternMetaTarget(12),
-    PatternInputs({13, 14}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloOpcode::kReshape, NodeOperands({1})},
-      {HloOpcode::kReduce, NodeOperands({3, 2})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloOpcode::kSelect, NodeOperands({6, 12, 4})},
-      {HloOpcode::kBroadcast, NodeOperands({5})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloOpcode::kCompare, NodeOperands({8, 7}), IsCompareEqual},
-      {HloOpcode::kIota, NodeOperands({})},
-      {HloOpcode::kDivide, NodeOperands({11, 9})},
-      {HloOpcode::kBroadcast, NodeOperands({10})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kIota, NodeOperands({})},
-      {HloOpcode::kConvolution, NodeOperands({13, 14}), IsOpWithWindowNoBaseDilation},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
-
-  // DepthwiseConv2DBackpropInput
-  HloMatcherPattern(
-    PatternType("conv_with_reverse"),
-    PatternMetaTarget(0),
-    PatternInputs({16, 17}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloOpcode::kConvolution, NodeOperands({16, 1}), IsOpWithWindowNoStride},
-      {HloOpcode::kReverse, NodeOperands({2}), IsConvFilterTranspose},
-      {HloOpcode::kSelect, NodeOperands({8, 3, 6})},
-      {HloOpcode::kAdd, NodeOperands({4, 6})},
-      {HloOpcode::kBroadcast, NodeOperands({5})},
-      {HloOpcode::kReshape, NodeOperands({17})},
-      {HloOpcode::kBroadcast, NodeOperands({7})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloOpcode::kCompare, NodeOperands({11, 9}), IsCompareEqual},
-      {HloOpcode::kBroadcast, NodeOperands({10})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kBroadcast, NodeOperands({12})},
-      {HloOpcode::kDivide, NodeOperands({15, 13})},
-      {HloOpcode::kBroadcast, NodeOperands({14})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
 
   // Conv{2,3}DBackpropInput
   HloMatcherPattern(
@@ -96,33 +43,6 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kConvolution, NodeOperands({2, 1}), IsOpWithWindowNoStride},
       {HloOpcode::kReverse, NodeOperands({3}), IsConvFilterTranspose},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
-
-  // DepthwiseConv2D
-  HloMatcherPattern(
-    PatternType("depthwise_conv"),
-    PatternMetaTarget(0),
-    PatternInputs({15, 16}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloOpcode::kConvolution, NodeOperands({15, 1})},
-      {HloOpcode::kSelect, NodeOperands({7, 2, 5})},
-      {HloOpcode::kAdd, NodeOperands({3, 5})},
-      {HloOpcode::kBroadcast, NodeOperands({4})},
-      {HloOpcode::kReshape, NodeOperands({16})},
-      {HloOpcode::kBroadcast, NodeOperands({6})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloOpcode::kCompare, NodeOperands({10, 8}), IsCompareEqual},
-      {HloOpcode::kBroadcast, NodeOperands({9})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kBroadcast, NodeOperands({11})},
-      {HloOpcode::kDivide, NodeOperands({14, 12})},
-      {HloOpcode::kBroadcast, NodeOperands({13})},
-      {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })

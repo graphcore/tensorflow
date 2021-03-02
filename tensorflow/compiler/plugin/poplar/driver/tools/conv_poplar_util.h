@@ -39,7 +39,8 @@ poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
                                                const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor);
+    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionOutputToPoplar(const HloInstruction* inst,
                                                 const poplar::Tensor& tensor);
@@ -59,7 +60,8 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor);
+    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor,

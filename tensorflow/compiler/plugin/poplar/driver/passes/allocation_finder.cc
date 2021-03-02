@@ -334,9 +334,7 @@ void AllocationFinder::FindConsumers(
       case HloOpcode::kFusion: {
         HloComputation* comp = user->fused_instructions_computation();
         if (IsPopOpsFusion(user)) {
-          if (IsPopOpsFusion(user, "depthwise_conv")) {
-            AddTensorTarget(src, tensor_target);
-          } else if (IsPopOpsFusion(user, "zero_pad")) {
+          if (IsPopOpsFusion(user, "zero_pad")) {
             FindConsumers(src, user, index, permutation);
           } else if (IsPopOpsFusion(user, "scaled_inplace") && op_index < 2) {
             // Look through the scaled inplace op.
