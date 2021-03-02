@@ -933,10 +933,10 @@ def recomputation_checkpoint(tensors, name=None):
   backpropagation operations can be executed.
 
   This operation should be used with the
-  'RecomputationMode.RecomputeAndBackpropagateInterleaved' pipeliening
+  `RecomputationMode.RecomputeAndBackpropagateInterleaved` pipelining
   recomputation mode.
   Note that this operation has no effect when used with
-  'RecomputationMode.RecomputeThenBackpropagate' pipelining
+  `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.
 
   Args:
