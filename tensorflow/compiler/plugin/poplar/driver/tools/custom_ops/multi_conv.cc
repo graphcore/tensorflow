@@ -41,8 +41,7 @@ HloMultiConvInstruction::HloMultiConvInstruction(
   for (int64 i = 0; i != convolution_specs_.size(); ++i) {
     const ConvolutionSpec& convolution_spec = convolution_specs_[i];
     switch (convolution_spec.type) {
-      case ConvType::Conv:
-      case ConvType::DepthwiseConv: {
+      case ConvType::Conv: {
         // The [0, n) inputs are the convolution inputs.
         allocating_indices_.insert(i);
         // The [n, 2n) inputs are the convolution kernels.
@@ -109,7 +108,8 @@ HloMultiConvInstruction::ExtraPoplarAttributesToStringImpl(
         ", window=", xla::window_util::ToString(convolution_spec.window),
         ", dims=",
         xla::ConvolutionDimensionNumbersToString(convolution_spec.dims),
-        ", feature_group_count=", convolution_spec.feature_group_count, "}");
+        ", feature_group_count=", convolution_spec.feature_group_count,
+        ", batch_group_count=", convolution_spec.batch_group_count, "}");
   }
   return output;
 }
@@ -140,7 +140,8 @@ struct hash<ConvolutionSpec> {
         convolution_spec.type,
         xla::window_util::ToString(convolution_spec.window),
         xla::ConvolutionDimensionNumbersToString(convolution_spec.dims),
-        convolution_spec.feature_group_count);
+        convolution_spec.feature_group_count,
+        convolution_spec.batch_group_count);
   }
 };
 

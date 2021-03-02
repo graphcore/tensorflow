@@ -154,8 +154,7 @@ bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
       return IsTransposeLike(arg0) || IsOuterProductOfVectors(inst);
     }
     case HloOpcode::kFusion: {
-      return (IsPopOpsFusion(inst, "depthwise_filter") ||
-              IsPopOpsFusion(inst, "conv_scaled_inplace"));
+      return IsPopOpsFusion(inst, "conv_scaled_inplace");
     }
     case HloOpcode::kCustomCall: {
       if (IsPoplarInstruction(PoplarOp::MultiConv)(inst)) {

@@ -33,6 +33,7 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
     Window window;
     ConvolutionDimensionNumbers dims;
     int64 feature_group_count;
+    int64 batch_group_count;
   };
   struct OptionFlag {
     std::string key;

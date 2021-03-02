@@ -1246,6 +1246,24 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "group_conv_test",
+    size = "large",
+    srcs = ["tests/group_conv_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:constant_op",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:nn_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "augru_test",
     size = "medium",
     srcs = ["tests/augru_test.py"],
@@ -1273,6 +1291,7 @@ test_suite(
         "functional_ops_test",
         "gcl_test",
         "gradient_accumulation_test",
+        "group_conv_test",
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",

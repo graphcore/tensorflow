@@ -284,9 +284,7 @@ bool IsF16ToF32Convert(const HloInstruction* inst) {
 }
 
 bool IsPopOpsConvolution(const HloInstruction* inst) {
-  if (IsPopOpsFusion(inst, "depthwise_conv")) return true;
   if (IsPopOpsFusion(inst, "conv_with_reverse")) return true;
-  if (IsPopOpsFusion(inst, "depthwise_filter")) return true;
   return false;
 }
 

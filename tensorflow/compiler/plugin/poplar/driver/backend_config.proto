@@ -79,8 +79,10 @@ enum MLType {
 enum ConvType {
   Conv = 0;
   ConvWithReverse = 1;
-  DepthwiseConv = 2;
-  DepthwiseFilter = 3;
+  /*
+  Retired2 = 2;
+  Retired3 = 3;
+  */
 };
 
 // An enum representing a subset of tiles per IPU.

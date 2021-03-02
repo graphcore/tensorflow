@@ -466,7 +466,8 @@ xla::StatusOr<xla::XlaOp> MakeXlaBackpropInputConvOp(
 xla::StatusOr<xla::XlaOp> MakeXlaBackpropFilterConvOp(
     StringPiece type_string, xla::XlaOp activations,
     const xla::Shape& filter_shape, xla::XlaOp gradients,
-    const ConvOpAttrs& attrs, const xla::PrecisionConfig* precision_config) {
+    const ConvOpAttrs& attrs, const xla::PrecisionConfig* precision_config,
+    bool disable_batch_group_count) {
   TF_RETURN_IF_ERROR(CheckConvAttrs(attrs));
 
   auto* builder = activations.builder();
@@ -521,8 +522,8 @@ xla::StatusOr<xla::XlaOp> MakeXlaBackpropFilterConvOp(
 
   // In the case of depthwise convolution with no multiplier,
   // the computation can be done by the batch_group_count parameter.
-  bool use_batch_group_count = false;
-      //filter_shape.dimensions(num_dims - 1) == 1 && attrs.depthwise;
+  bool use_batch_group_count = disable_batch_group_count? false:
+    filter_shape.dimensions(num_dims - 1) == 1 && attrs.depthwise;
 
   std::vector<std::pair<int64, int64>> padding(attrs.num_spatial_dims);
   std::vector<int64> rhs_dilation(attrs.num_spatial_dims);

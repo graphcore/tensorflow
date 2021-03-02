@@ -64,10 +64,6 @@ Status ReplaceConvsWithMultiConv(
       convolution_spec.type = ConvType::Conv;
     } else if (IsPopOpsFusion(new_conv, "conv_with_reverse")) {
       convolution_spec.type = ConvType::ConvWithReverse;
-    } else if (IsPopOpsFusion(new_conv, "depthwise_conv")) {
-      convolution_spec.type = ConvType::DepthwiseConv;
-    } else if (IsPopOpsFusion(new_conv, "depthwise_filter")) {
-      convolution_spec.type = ConvType::DepthwiseFilter;
     } else {
       return InternalErrorStrCat("Could not classify the ",
                                  new_conv->ToString(),
@@ -76,6 +72,7 @@ Status ReplaceConvsWithMultiConv(
     convolution_spec.window = GetConvolutionWindow(new_conv);
     convolution_spec.dims = GetConvolutionDims(new_conv);
     convolution_spec.feature_group_count = GetFeatureGroupCount(new_conv);
+    convolution_spec.batch_group_count = GetBatchGroupCount(new_conv);
     convolution_specs[i] = convolution_spec;
   }
 
