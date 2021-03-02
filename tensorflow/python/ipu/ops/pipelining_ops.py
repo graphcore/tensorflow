@@ -98,7 +98,7 @@ class RecomputationMode(Enum):
     `PipelineSchedule.Grouped` and `PipelineSchedule.Sequential` pipeline
     schedules.
     This is the default recomputation mode for the
-    `PipelineSchedule.Interleaved` pipeline schedule.
+    `PipelineSchedule.Sequential` pipeline schedule.
   """
   # pylint: disable=line-too-long
   Auto = backend_config_pb2.PoplarBackendConfig.CallConfig.PipelineConfig.Auto
@@ -154,7 +154,8 @@ class PipelineStageOptions:
   A helper class which can be used to configure Poplar compilation options (such
   as 'availableMemoryProportion') inside a pipeline forward, backward and weight
   update stage. This will override the global options set by
-  `ipu.utils.set_convolution_options` and `ipu.utils.set_matmul_options`.
+  :func:`tensorflow.python.ipu.utils.set_convolution_options` and
+  :func:`tensorflow.python.ipu.utils.set_matmul_options`.
   """
   def __init__(self, convolution_options=None, matmul_options=None):
     """Creates an PipelineStageOptions object.
@@ -257,9 +258,12 @@ def pipeline(computational_stages,
   is required and all the outputs from the last computational stage are enqueued
   to the `outfeed_queue`.
 
-  Note that pipelining also supports recomputation, to enable it, use the
-  `tensorflow.ipu.utils.set_recomputation_options()` function when configuring
-  the device.
+  Note that pipelining supports the recomputation of activations for stateless
+  ops during the backwards pass. This reduces the number of activations that
+  will be stored on the device, saving memory at the expense of additional
+  computation. To enable recomputation, use the
+  :func:`tensorflow.python.ipu.utils.set_recomputation_options()` function when
+  configuring the device.
 
   For example a simple inference network for the MNIST can be split across two
   IPUs:
@@ -433,8 +437,11 @@ def pipeline(computational_stages,
       `tf.Variable` are resident on the same IPU.
     pipeline_schedule: Which scheduling algorithm to use for pipeline
       lowering. Defaults to `PipelineSchedule.Grouped`.
-    recomputation_mode: Which recomputation mode to use for training pipeline
-      models. Defaults to `RecomputationMode.Auto`.
+    recomputation_mode: The recomputation mode to use for training pipeline
+      models. Defaults to RecomputationMode.Auto. Only applies if recomputation
+      is enabled. This must be done by using the
+      :func:`tensorflow.python.ipu.utils.set_recomputation_options` function
+      when configuring the device.
     forward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
       PipelineStageOptions object which allows for fine grain control of the
@@ -933,19 +940,19 @@ def recomputation_checkpoint(tensors, name=None):
   backpropagation operations can be executed.
 
   This operation should be used with the
-  'RecomputationMode.RecomputeAndBackpropagateInterleaved' pipeliening
+  `RecomputationMode.RecomputeAndBackpropagateInterleaved` pipelining
   recomputation mode.
   Note that this operation has no effect when used with
-  'RecomputationMode.RecomputeThenBackpropagate' pipelining
+  `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.
 
   Args:
-    tensors: A 'Tensor' or a structure of tensors which should be checkpointed.
+    tensors: A tensor or a structure of tensors which should be checkpointed.
     name: name of this operation.
 
   Returns:
-    A 'Tensor' or a structure of tensors which matches shape and type of
-    'tensors'.
+    A tensor or a structure of tensors which matches shape and type of
+    tensors.
   """
   inputs = nest.flatten(tensors, expand_composites=True)
   outputs = [
