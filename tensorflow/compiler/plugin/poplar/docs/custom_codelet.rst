@@ -138,8 +138,9 @@ The arguments are:
 * ``is_stateless``: indicates that this operation is stateless. Custom ops
   are stateful by default.
 
-* ``is_hashable``: indicates whether this operation can be uniquely hashed reliably.
-  Custom ops are not hashable by default.
+* ``is_hashable``: indicates whether this operation can be uniquely hashed
+  reliably. Custom ops are not hashable by default. This attribute is required
+  to be set to ``true`` when pre-compiling Poplar programs.
 
 * ``num_inputs``: indicates how many inputs are on the operation.
 

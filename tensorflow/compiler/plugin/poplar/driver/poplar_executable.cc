@@ -177,14 +177,26 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   // executing an engine, so make sure the previous execution was ok.
   TF_RETURN_IF_ERROR(poplar_executor->GetAndResetExecutorStatus());
 
-  if (!poplar_executor->PoplarDeviceIsAttached() && poplar_engine_) {
-    if (poplar_executor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
-      return InvalidArgument(
-          "Trying to run an executable on a device that was configured for "
-          "compilation only.");
+  switch (poplar_executor->ConnectionType()) {
+    case IpuDeviceConnectionType::NEVER: {
+      if (poplar_engine_) {
+        return InvalidArgument(
+            "Trying to run an executable on a device that was configured for "
+            "compilation only.");
+      }
+      break;
     }
-
-    TF_RETURN_IF_ERROR(poplar_executor->AttachToPoplarDevice());
+    case IpuDeviceConnectionType::PRE_COMPILE: {
+      VLOG(2) << "No device attached for pre compilation of Poplar programs, "
+                 "output buffer will be populated with zeros.";
+      break;
+    }
+    default: {
+      if (!poplar_executor->PoplarDeviceIsAttached() && poplar_engine_) {
+        TF_RETURN_IF_ERROR(poplar_executor->AttachToPoplarDevice());
+      }
+      break;
+    }
   }
 
   if (poplar_engine_ && poplar_executor->UseVerifiedTransfers()) {
@@ -205,7 +217,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   TF_ASSIGN_OR_RETURN(
       se::DeviceMemoryBase result,
       PoplarExecutor::AllocateOutputBuffer(*this, memory_allocator, args_map,
-                                           poplar_executor->device_ordinal()));
+                                           poplar_executor->device_ordinal(),
+                                           poplar_executor->ConnectionType()));
 
   // Make sure the result is not deallocated until the execution has finished by
   // increasing the reference counters.

@@ -20,6 +20,8 @@ enum IpuDeviceConnectionType {
   ON_DEMAND = 1;
   // Never attach to the device. (Device can only be used for compilation).
   NEVER = 2;
+  // Do not attach to a device and any execution will just return zeros.
+  PRE_COMPILE = 3;
 }
 
 // Who instantiated the IpuOptions object.

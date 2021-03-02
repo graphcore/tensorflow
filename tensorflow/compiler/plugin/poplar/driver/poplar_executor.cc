@@ -1080,6 +1080,28 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
     }
   }
 }
+
+inline void AllocateTensorsWithDefaults(
+    std::deque<std::vector<tensorflow::Tensor>>& queue,
+    const std::vector<Shape>& xla_shapes,
+    const std::vector<tensorflow::DataType>& types,
+    const std::vector<tensorflow::TensorShape>& shapes, int count) {
+  std::vector<Literal> default_values;
+  for (auto& shape : xla_shapes) {
+    default_values.push_back(Literal::CreateFromShape(shape));
+  }
+
+  for (int c = 0; c != count; c++) {
+    queue.emplace_front(types.size());
+    auto& tensors = queue.front();
+    for (size_t i = 0; i != types.size(); ++i) {
+      tensors[i] = tensorflow::Tensor(types[i], shapes[i]);
+      auto* tb = tensorflow::DMAHelper::buffer(&tensors[i]);
+      std::memcpy(tb->data(), default_values[i].untyped_data(),
+                  tensors[i].TotalBytes());
+    }
+  }
+}
 }  // namespace
 
 IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
@@ -1558,8 +1580,8 @@ Status PoplarExecutor::CreatePoplarTarget() {
   bool has_user_config = (current_config_.device_config_size() > 0);
 
   if (!PoplarXlaFlags::Get().use_ipu_model) {
-    if (current_config_.device_connection_type() !=
-            IpuDeviceConnectionType::NEVER &&
+    if (ConnectionType() != IpuDeviceConnectionType::NEVER &&
+        ConnectionType() != IpuDeviceConnectionType::PRE_COMPILE &&
         !HasIpuHardware()) {
       return InvalidArgument(
           "Target configuration failed: model disabled and no hardware IPU "
@@ -1617,7 +1639,7 @@ Status PoplarExecutor::CreatePoplarTarget() {
             CreateIpuTarget(num_target_devices, current_config_.ipu_version()));
       } else {
         // Deduce the IPU target given the configuration.
-        switch (current_config_.device_connection_type()) {
+        switch (ConnectionType()) {
           case IpuDeviceConnectionType::ALWAYS:
           case IpuDeviceConnectionType::ON_DEMAND: {
             CHECK(HasIpuHardware());
@@ -1646,6 +1668,12 @@ Status PoplarExecutor::CreatePoplarTarget() {
                 "Expected the `ipu_version` to be set when the "
                 "`device_connection_type` is set to "
                 "`IpuDeviceConnectionType.NEVER`");
+          }
+          case IpuDeviceConnectionType::PRE_COMPILE: {
+            return FailedPrecondition(
+                "Expected the `ipu_version` to be set when the "
+                "`device_connection_type` is set to "
+                "`IpuDeviceConnectionType.PRE_COMPILE`");
           }
           default: {
             return FailedPrecondition("Unrecognised connection type.");
@@ -2319,21 +2347,30 @@ void PoplarExecutor::UpdateOutputsHandleMap(const PoplarExecutable& executable,
 PoplarExecutor::GetOutputAllocator(const PoplarExecutable& executable,
                                    const ArgsHandleMap& args_map,
                                    se::DeviceMemoryAllocator* allocator,
-                                   int ordinal) {
+                                   int ordinal,
+                                   IpuDeviceConnectionType connection_type) {
   if (executable.Engine()) {
-    return absl::make_unique<PoplarExecutor::BufferOutputAllocation>(
-        allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
-  } else {
-    if (executable.IsConstantGraph() || executable.IsScalarElementwiseGraph()) {
-      return absl::make_unique<PoplarExecutor::ConstantOutputAllocation>(
+    if (connection_type == IpuDeviceConnectionType::PRE_COMPILE) {
+      return absl::make_unique<PoplarExecutor::PrecompileOutputAllocation>(
           allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
-    } else if (executable.IsRemapGraph()) {
-      return absl::make_unique<PoplarExecutor::RemapOutputAllocation>(
-          allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal,
-          executable.RemapMap());
+    } else {
+      return absl::make_unique<PoplarExecutor::BufferOutputAllocation>(
+          allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
     }
-    LOG(FATAL) << "Cannot get an output allocator.";
   }
+
+  if (executable.IsConstantGraph() || executable.IsScalarElementwiseGraph()) {
+    return absl::make_unique<PoplarExecutor::ConstantOutputAllocation>(
+        allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal);
+  }
+
+  if (executable.IsRemapGraph()) {
+    return absl::make_unique<PoplarExecutor::RemapOutputAllocation>(
+        allocator, executable.GetInputOutputAliasingMap(), args_map, ordinal,
+        executable.RemapMap());
+  }
+  LOG(FATAL) << "Cannot get an output allocator.";
+
   return std::unique_ptr<PoplarExecutor::OutputAllocation>{};
 }
 
@@ -2362,6 +2399,33 @@ Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
 
   void* buf = static_cast<void*>(tc->data);
   std::memcpy(buf, constant.untyped_data(), constant.size_bytes());
+  return Status::OK();
+}
+
+StatusOr<se::DeviceMemoryBase>
+PoplarExecutor::PrecompileOutputAllocation::AllocateBuffer(const Shape& shape,
+                                                           int64, int64) const {
+  const int64 size = ShapeUtil::ByteSizeOf(shape);
+  TF_ASSIGN_OR_RETURN(auto allocated_owned,
+                      allocator_->Allocate(ordinal_, size, false));
+  se::DeviceMemoryBase allocated = allocated_owned.Release();
+  return allocated;
+}
+
+Status PoplarExecutor::PrecompileOutputAllocation::PopulateBuffer(
+    se::DeviceMemoryBase& buffer, const Shape& shape, int64, int64) const {
+  const int64 size = ShapeUtil::ByteSizeOf(shape);
+  TensorControl* tc = reinterpret_cast<TensorControl*>(buffer.opaque());
+  tc->size = size;
+  tc->element_type = shape.element_type();
+  tc->on_device = false;
+  tc->output_handle = std::string();
+  tc->output_convertor = nullptr;
+
+  void* buf = static_cast<void*>(tc->data);
+  // Create a literal with the right datatype.
+  Literal default_values = Literal::CreateFromShape(shape);
+  std::memcpy(buf, default_values.untyped_data(), default_values.size_bytes());
   return Status::OK();
 }
 
@@ -2468,14 +2532,15 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
 
 /*static*/ StatusOr<se::DeviceMemoryBase> PoplarExecutor::AllocateOutputBuffer(
     const PoplarExecutable& executable, se::DeviceMemoryAllocator* allocator,
-    const ArgsHandleMap& args_map, int ordinal) {
+    const ArgsHandleMap& args_map, int ordinal,
+    IpuDeviceConnectionType connection_type) {
   TENSORFLOW_TRACEPOINT();
   const Shape& shape = executable.result_shape();
   VLOG(2) << "Allocating output buffer " << shape << " for "
           << executable.module().name();
 
-  auto output_allocator =
-      GetOutputAllocator(executable, args_map, allocator, ordinal);
+  auto output_allocator = GetOutputAllocator(executable, args_map, allocator,
+                                             ordinal, connection_type);
 
   if (!shape.IsTuple()) {
     return output_allocator->AllocateBuffer(shape, /*output_index=*/0,
@@ -3062,6 +3127,15 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
   std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
   outfeed_lock.unlock();
 
+  if (ConnectionType() == IpuDeviceConnectionType::PRE_COMPILE) {
+    // For pre-compilation mode ensure that each dequeue call has a tensor of
+    // zeros to allow applications to continue.
+    AllocateTensorsWithDefaults(
+        outfeed_context->io_thread_output_queues, outfeed_context->shapes,
+        outfeed_context->tf_data_types, outfeed_context->tf_shapes,
+        outfeed_context->config.io_batch_size());
+  }
+
   if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
     std::vector<std::vector<tensorflow::Tensor>> output(
         outfeed_context->io_thread_output_queues.size());
@@ -3321,8 +3395,8 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
   const bool engine_changed = current_engine_ != engine;
 
-  auto output_allocator =
-      GetOutputAllocator(executable, args_map_, allocator, ordinal_);
+  auto output_allocator = GetOutputAllocator(executable, args_map_, allocator,
+                                             ordinal_, ConnectionType());
 
   if (!executable.GetHostEmbeddingLookupInfos().empty()) {
     std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
@@ -3374,6 +3448,12 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
     TF_RETURN_IF_ERROR(PopulateOutputBuffer(*result_buffer, executable,
                                             allocator, *output_allocator,
                                             output_shape));
+  } else if (ConnectionType() == IpuDeviceConnectionType::PRE_COMPILE) {
+    TF_RETURN_IF_ERROR(PopulateOutputBuffer(*result_buffer, executable,
+                                            allocator, *output_allocator,
+                                            output_shape));
+    // Create outfeed queues.
+    TF_RETURN_IF_ERROR(RegisterOutfeeds(executable.GetOutfeedInfos()));
   } else {
     if (!executable.has_module()) {
       return tensorflow::errors::InvalidArgument(
