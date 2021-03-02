@@ -57,6 +57,16 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
   pipeline.  The effective batch size is therefore the mini-batch size multipled
   by the gradient accumulation count.
 
+  Note that pipelining supports the recomputation of activations for stateless
+  ops during the backwards pass. This reduces the number of activations that
+  will be stored on the device, saving memory at the expense of additional
+  computation. To enable recomputation, use the
+  :func:`tensorflow.python.ipu.utils.set_recomputation_options()` function when
+  configuring the device.
+
+  Refer to the :py:mod:`tensorflow.python.ipu.pipelining_ops` documentation for
+  more details about pipelining.
+
   There are some limitations with the PipelineSequential class compared to the
   standard Keras Model:
 
@@ -706,6 +716,16 @@ class PipelineModel(ipu_model.Model):
   mini-batches which are sent through the pipeline in a single operation of the
   pipeline. The effective batch size is therefore the mini-batch size multipled
   by the gradient accumulation count.
+
+  Note that pipelining supports the recomputation of activations for stateless
+  ops during the backwards pass. This reduces the number of activations that
+  will be stored on the device, saving memory at the expense of additional
+  computation. To enable recomputation, use the
+  :func:`tensorflow.python.ipu.utils.set_recomputation_options()` function when
+  configuring the device.
+
+  Refer to the :py:mod:`tensorflow.python.ipu.pipelining_ops` documentation for
+  more details about pipelining.
 
   There are some limitations with the PipelineModel compared to the
   standard Keras Model:
