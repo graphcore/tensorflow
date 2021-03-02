@@ -71,6 +71,8 @@ absl::flat_hash_set<int64> HloGRUFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3};
 }
 
+bool HloGRUFwdInstruction::AllocatingOutput() const { return false; }
+
 std::unique_ptr<HloInstruction> HloGRUFwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext* ctx) const {
@@ -122,6 +124,8 @@ absl::flat_hash_set<int64> HloDynamicGRUFwdInstruction::AllocatingIndices()
     const {
   return {0, 1, 2, 3};
 }
+
+bool HloDynamicGRUFwdInstruction::AllocatingOutput() const { return false; }
 
 std::unique_ptr<HloInstruction>
 HloDynamicGRUFwdInstruction::CloneWithNewOperandsImpl(
@@ -176,6 +180,8 @@ HloAUGRUFwdInstruction::HloAUGRUFwdInstruction(
 absl::flat_hash_set<int64> HloAUGRUFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4, 5};
 }
+
+bool HloAUGRUFwdInstruction::AllocatingOutput() const { return false; }
 
 std::unique_ptr<HloInstruction>
 HloAUGRUFwdInstruction::CloneWithNewOperandsImpl(

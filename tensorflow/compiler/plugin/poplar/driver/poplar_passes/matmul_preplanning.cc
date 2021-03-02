@@ -203,10 +203,13 @@ Status MatMulPreplanning::StorePreplanMatMulsTriangularSolve(
 
   auto& options = as_solve->triangular_solve_options();
 
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags poplar_options,
+                      GetTriangularSolveOptionsForInst(inst, resources_));
+
   const std::vector<std::pair<poplin::MatMulParams, poplar::OptionFlags>>
       mat_muls_to_pre_plan = poplin::getTriangularSolveMatMulPrePlanParameters(
           aType, bType, aPoplarShape, bPoplarShape, options.left_side(),
-          options.lower(), resources_.triangular_solve_expander_block_size, {});
+          options.lower(), poplar_options);
 
   VLOG(2) << "Preplanned " << mat_muls_to_pre_plan.size() << " mat muls for "
           << inst->ToString();

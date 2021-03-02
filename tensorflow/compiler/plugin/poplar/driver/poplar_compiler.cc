@@ -1060,11 +1060,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       }
 
       VLOG(1) << "Loaded " << poplar_executable->module().name() << " from "
-              << filenames.CachedEngineFilename();
+              << filenames.CachedExecutableFilename();
 
       return std::unique_ptr<Executable>(std::move(poplar_executable));
     } else {
-      VLOG(1) << "Couldn't find " << filenames.CachedEngineFilename()
+      VLOG(1) << "Couldn't find " << filenames.CachedExecutableFilename()
               << " in executable cache";
     }
   }

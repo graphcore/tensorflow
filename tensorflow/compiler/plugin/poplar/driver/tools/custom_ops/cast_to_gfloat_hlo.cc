@@ -73,6 +73,8 @@ absl::flat_hash_set<int64> HloGfloatParamsInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloGfloatParamsInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloGfloatParamsInstruction::LayoutDependencies() const {
   return {};
@@ -193,6 +195,10 @@ absl::flat_hash_set<int64> HloCastNativeToGfloatInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloCastNativeToGfloatInstruction::AllocatingOutput() const {
+  return false;
+}
+
 absl::flat_hash_map<int64, int64>
 HloCastNativeToGfloatInstruction::LayoutDependencies() const {
   return {};
@@ -282,6 +288,10 @@ HloCastGfloatToNativeInstruction::ExtraPoplarAttributesToStringImpl(
 absl::flat_hash_set<int64> HloCastGfloatToNativeInstruction::AllocatingIndices()
     const {
   return {};
+}
+
+bool HloCastGfloatToNativeInstruction::AllocatingOutput() const {
+  return false;
 }
 
 absl::flat_hash_map<int64, int64>

@@ -38,6 +38,8 @@ absl::flat_hash_set<int64> HloSliceApplyBase::AllocatingIndices() const {
   return {};
 }
 
+bool HloSliceApplyBase::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloSliceApplyBase::LayoutDependencies()
     const {
   return {{0, 1}, {1, 0}};

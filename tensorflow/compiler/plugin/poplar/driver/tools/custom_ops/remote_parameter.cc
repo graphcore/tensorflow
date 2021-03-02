@@ -95,6 +95,8 @@ absl::flat_hash_set<int64> HloRemoteParameterLoad::AllocatingIndices() const {
   return {};
 }
 
+bool HloRemoteParameterLoad::AllocatingOutput() const { return true; }
+
 absl::flat_hash_map<int64, int64> HloRemoteParameterLoad::LayoutDependencies()
     const {
   return {};
@@ -154,6 +156,8 @@ HloRemoteParameterStore::HloRemoteParameterStore(
 absl::flat_hash_set<int64> HloRemoteParameterStore::AllocatingIndices() const {
   return {};
 }
+
+bool HloRemoteParameterStore::AllocatingOutput() const { return false; }
 
 absl::flat_hash_map<int64, int64> HloRemoteParameterStore::LayoutDependencies()
     const {
@@ -264,6 +268,8 @@ absl::flat_hash_set<int64> HloCreateBuffer::AllocatingIndices() const {
   return {};
 }
 
+bool HloCreateBuffer::AllocatingOutput() const { return !IsRemoteBuffer(); }
+
 absl::flat_hash_map<int64, int64> HloCreateBuffer::LayoutDependencies() const {
   return {};
 }
@@ -347,6 +353,8 @@ HloBufferLoadSlice::HloBufferLoadSlice(
 absl::flat_hash_set<int64> HloBufferLoadSlice::AllocatingIndices() const {
   return {};
 }
+
+bool HloBufferLoadSlice::AllocatingOutput() const { return true; }
 
 absl::flat_hash_map<int64, int64> HloBufferLoadSlice::LayoutDependencies()
     const {

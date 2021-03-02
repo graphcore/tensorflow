@@ -46,6 +46,8 @@ absl::flat_hash_set<int64> HloRecvFromHostInstruction::AllocatingIndices()
   return result;
 }
 
+bool HloRecvFromHostInstruction::AllocatingOutput() const { return true; }
+
 absl::flat_hash_map<int64, int64>
 HloRecvFromHostInstruction::LayoutDependencies() const {
   return {};

@@ -35,6 +35,7 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
       HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
@@ -77,6 +78,7 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
       HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
@@ -116,6 +118,7 @@ class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
   explicit HloHostEmbeddingNotifyInstruction(const std::string& embedding_id);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 

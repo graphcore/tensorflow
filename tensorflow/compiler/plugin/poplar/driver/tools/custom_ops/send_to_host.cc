@@ -44,6 +44,8 @@ absl::flat_hash_set<int64> HloSendToHostInstruction::AllocatingIndices() const {
   return result;
 }
 
+bool HloSendToHostInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloSendToHostInstruction::LayoutDependencies()
     const {
   return {};

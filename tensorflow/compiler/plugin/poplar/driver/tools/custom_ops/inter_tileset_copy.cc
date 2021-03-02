@@ -39,6 +39,8 @@ absl::flat_hash_set<int64> HloInterTilesetCopy::AllocatingIndices() const {
   return {0};
 }
 
+bool HloInterTilesetCopy::AllocatingOutput() const { return true; }
+
 absl::flat_hash_map<int64, int64> HloInterTilesetCopy::LayoutDependencies()
     const {
   return {};

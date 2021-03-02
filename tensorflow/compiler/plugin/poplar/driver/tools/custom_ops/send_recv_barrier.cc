@@ -35,6 +35,8 @@ absl::flat_hash_set<int64> HloSendRecvBarrierInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloSendRecvBarrierInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64>
 HloSendRecvBarrierInstruction::LayoutDependencies() const {
   return {};

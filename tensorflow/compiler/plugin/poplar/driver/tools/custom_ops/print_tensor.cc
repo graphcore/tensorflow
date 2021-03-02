@@ -37,6 +37,8 @@ absl::flat_hash_set<int64> HloPrintTensor::AllocatingIndices() const {
   return {};
 }
 
+bool HloPrintTensor::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloPrintTensor::LayoutDependencies() const {
   return {};
 }

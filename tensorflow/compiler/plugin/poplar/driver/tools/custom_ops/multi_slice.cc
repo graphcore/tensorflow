@@ -33,6 +33,8 @@ absl::flat_hash_set<int64> HloMultiSliceInstruction::AllocatingIndices() const {
   return {0, 1};
 }
 
+bool HloMultiSliceInstruction::AllocatingOutput() const { return false; }
+
 absl::flat_hash_map<int64, int64> HloMultiSliceInstruction::LayoutDependencies()
     const {
   return {};
@@ -85,6 +87,8 @@ absl::flat_hash_set<int64> HloMultiUpdateInstruction::AllocatingIndices()
     const {
   return {0, 1, 2};
 }
+
+bool HloMultiUpdateInstruction::AllocatingOutput() const { return false; }
 
 absl::flat_hash_map<int64, int64>
 HloMultiUpdateInstruction::LayoutDependencies() const {

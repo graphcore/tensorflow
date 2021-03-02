@@ -34,6 +34,8 @@ absl::flat_hash_set<int64> HloRemapDeduceInstruction::AllocatingIndices()
   return {};
 }
 
+bool HloRemapDeduceInstruction::AllocatingOutput() const { return true; }
+
 absl::flat_hash_map<int64, int64>
 HloRemapDeduceInstruction::LayoutDependencies() const {
   return {};

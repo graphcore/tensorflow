@@ -31,6 +31,8 @@ absl::flat_hash_set<int64> HloLSTMFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4};
 }
 
+bool HloLSTMFwdInstruction::AllocatingOutput() const { return false; }
+
 std::unique_ptr<HloInstruction> HloLSTMFwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext* ctx) const {

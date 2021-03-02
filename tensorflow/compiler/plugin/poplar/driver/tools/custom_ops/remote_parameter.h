@@ -37,6 +37,7 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
                                       1});
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
@@ -79,6 +80,7 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
       std::vector<uint64> replication_factors = {1});
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
@@ -122,6 +124,7 @@ class HloCreateBuffer : public HloPoplarInstruction {
       absl::optional<HloRemoteBufferInfo> remote_buffer_info);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
@@ -163,6 +166,7 @@ class HloBufferLoadSlice : public HloPoplarInstruction {
                      absl::Span<HloInstruction* const> rbuffers_and_offsets);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -197,6 +201,7 @@ class HloBufferStoreSlice : public HloPoplarInstruction {
       absl::Span<HloInstruction* const> rbuffers_values_and_offsets);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  bool AllocatingOutput() const override { return false; }
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
     return {};

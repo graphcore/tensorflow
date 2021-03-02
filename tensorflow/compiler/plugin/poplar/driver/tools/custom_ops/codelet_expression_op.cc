@@ -37,6 +37,10 @@ HloCodeletExpressionOpInstruction::AllocatingIndices() const {
   return {};
 }
 
+bool HloCodeletExpressionOpInstruction::AllocatingOutput() const {
+  return false;
+}
+
 absl::flat_hash_map<int64, int64>
 HloCodeletExpressionOpInstruction::LayoutDependencies() const {
   return {};

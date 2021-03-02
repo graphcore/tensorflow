@@ -46,6 +46,7 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
                           bool is_weight_update);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 

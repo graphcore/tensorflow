@@ -28,6 +28,7 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
                                     HloInstruction* const indices);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
@@ -54,6 +55,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
                                      bool is_update_add = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;

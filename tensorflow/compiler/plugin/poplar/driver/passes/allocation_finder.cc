@@ -111,34 +111,9 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
 
   Status HandleCustomCall(HloInstruction* inst) override {
-    const bool is_remap_deduce =
-        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
-    const bool is_host_embedding_lookup =
-        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
-    const bool is_remote_buffer_load =
-        IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
-    const bool is_rw_user_op =
-        IsPoplarInstruction(PoplarOp::UserOp)(inst)
-            ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
-            : false;
-    const bool is_recv_from_host =
-        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
-    const bool is_gradient_accumulator_create =
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
-    const bool is_in_memory_create_buffer =
-        IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)
-            ? !Cast<HloCreateBuffer>(inst)->IsRemoteBuffer()
-            : false;
-    const bool is_buffer_load_slice =
-        IsPoplarInstruction(PoplarOp::BufferLoadSlice)(inst);
-    const bool is_inter_tileset_copy =
-        IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst);
-    const bool is_one_hot = IsPoplarInstruction(PoplarOp::OneHot)(inst);
-
-    if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
-        is_rw_user_op || is_recv_from_host || is_gradient_accumulator_create ||
-        is_in_memory_create_buffer || is_buffer_load_slice ||
-        is_inter_tileset_copy || is_one_hot) {
+    const auto is_allocating =
+        Cast<HloPoplarInstruction>(inst)->AllocatingOutput();
+    if (is_allocating) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});

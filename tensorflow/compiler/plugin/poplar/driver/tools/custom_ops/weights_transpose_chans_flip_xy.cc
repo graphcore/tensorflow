@@ -71,6 +71,10 @@ HloWeightsTransposeChansFlipXYInstruction::AllocatingIndices() const {
   return {0};
 }
 
+bool HloWeightsTransposeChansFlipXYInstruction::AllocatingOutput() const {
+  return false;
+}
+
 absl::flat_hash_map<int64, int64>
 HloWeightsTransposeChansFlipXYInstruction::LayoutDependencies() const {
   return {};

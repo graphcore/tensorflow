@@ -1915,12 +1915,8 @@ ModuleFilenames::ModuleFilenames(const HloModule& module, int64 device_hash,
       serialization_folder_(serialization_folder) {}
 
 std::string ModuleFilenames::CachedExecutableFilename() const {
-  return absl::StrCat(CachedEngineFilename(), ".poplar_exec");
-}
-
-std::string ModuleFilenames::CachedEngineFilename() const {
   return tensorflow::io::JoinPath(GetExecutableCachePath(),
-                                  basename_ + ".xla_engine");
+                                  basename_ + ".poplar_exec");
 }
 
 std::string ModuleFilenames::CompilationLockFilename() const {
@@ -1936,7 +1932,7 @@ ModuleFilenames PoplarExecutor::GetModuleFilenames(
 bool PoplarExecutor::HaveCachedExecutable(
     const ModuleFilenames& filenames) const {
   return tensorflow::Env::Default()
-      ->FileExists(filenames.CachedEngineFilename())
+      ->FileExists(filenames.CachedExecutableFilename())
       .ok();
 }
 
