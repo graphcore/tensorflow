@@ -64,7 +64,7 @@ def ipu_scope(device):
   """Provides a scope for placing operations onto a particular IPU/IPU cluster.
 
   Args:
-    device: The name of the Tensorflow device, eg '/device:IPU:0'
+    device: The name of the TensorFlow device, such as '/device:IPU:0'
 
   Returns:
     A context

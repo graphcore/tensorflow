@@ -58,7 +58,7 @@ def _group_norm_impl(inputs,
                      scope=None,
                      norm_type="",
                      strided_channel_grouping=True):
-  """Internal implemenation of any group norm type operation."""
+  """Internal implementation of any group norm type operation."""
 
   inputs = ops.convert_to_tensor(inputs)
 

@@ -13,10 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popnn primitive neural network operators
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Utilities for IPU ops
+~~~~~~~~~~~~~~~~~~~~~
 """
-
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2

@@ -122,8 +122,8 @@ class IPUInfeedQueue:
         fewer round trips to host memory. It may be that larger number of
         batches should be prefetched at once in order to see any benefit as the
         lookup itself has some overhead from internal copies.
-      prefetch_depth: the number of elements poplar will prefetch.
-        The depth of the poplar datastream buffer size which may be prefetched
+      prefetch_depth: the number of elements Poplar will prefetch.
+        The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is
         automatically determined. Increasing the size of the prefetch_depth
         allows for prefetching of multiple entries, increasing the probability

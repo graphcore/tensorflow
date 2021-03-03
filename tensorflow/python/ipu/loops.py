@@ -51,7 +51,7 @@ def while_loop(condition,
     inputs: a list of initial values passed into the loop, or
       None (equivalent to an empty list).
     infeed_queue: if not None, the IPUInfeedQueue from which data is consumed.
-    use_while_v1: if True, then use a Tensorflow v1.x dataflow while loop.
+    use_while_v1: if True, then use a TensorFlow v1.x dataflow while loop.
 
   Returns:
     The final values of the loop-carried tensors.
@@ -194,7 +194,7 @@ def repeat(n, body, inputs=None, infeed_queue=None, use_while_v1=True):
     inputs: a list of initial values passed into the loop or
       None (equivalent to an empty list).
     infeed_queue: if not None, the IPUInfeedQueue from which data is consumed.
-    use_while_v1: if True, then use a Tensorflow v1.x dataflow while loop.
+    use_while_v1: if True, then use a TensorFlow v1.x dataflow while loop.
   Returns:
     The final values of the loop-carried tensors.
   Raises:
