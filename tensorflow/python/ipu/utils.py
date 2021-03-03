@@ -517,9 +517,23 @@ def set_optimization_options(opts,
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
-      expander blocks. 0 - implementation defined default.
-    cholesky_block_size: Defines size for cholesky factoriser.
-      0 - implementation defined default.
+      expander blocks. The processing within each block is performed on a
+      single tile. The control code for performing computations over blocks
+      are unrolled on the device. For a matrix of rank ``N`` and block size
+      ``B``, there are ``log2(N/B)`` iterations of the control code. The choice
+      of this parameter therefore has to balance between the amount of data in
+      a tile (lower value is better, gives better parallelism) and the amount
+      of control code (larger value is better, less control code). A value of 0
+      selects an implementation defined default.
+    cholesky_block_size: Defines the block size for the Cholesky factoriser.
+      The processing within each block is performed on a single tile. The
+      control code for performing computations over blocks are unrolled on the
+      device. For a matrix of rank ``N`` and block size ``B``, there are
+      ``N/B`` iterations of the control code. The choice of this parameter
+      therefore has to balance between the amount of data in a tile (lower
+      value is better, gives better parallelism) and the amount of control code
+      (larger value is better, less control code). A value of 0 selects an
+      implementation defined default.
     enable_fast_math: Enables optimizations which allow arbitrary reassociations
       and transformations of mathemtical operations with no accuracy guarantees.
       Enabling this option can result in incorrect output for programs that
