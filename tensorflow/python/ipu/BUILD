@@ -119,6 +119,8 @@ py_library(
         "keras/layers/math.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
+        "keras/losses/__init__.py",
+        "keras/losses/ctc.py",
         "keras/model.py",
         "keras/pipeline.py",
         "loops.py",
@@ -429,6 +431,18 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
     ],
     shard_count = 12,
+)
+
+tf_py_test(
+    name = "keras_ctc_loss_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_ctc_loss_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
 )
 
 tf_py_test(
@@ -1252,6 +1266,7 @@ test_suite(
         "ipu_session_run_hooks_test",
         "ipu_strategy_test",
         "iteration_counter_test",
+        "keras_ctc_loss_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_functional_model_test",
