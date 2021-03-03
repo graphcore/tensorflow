@@ -1568,7 +1568,7 @@ class IPUModelModelTest(test.TestCase):
       x3 = np.ones((64, 32), dtype=np.float32)
 
       y1 = np.ones((64, 1), dtype=np.float32)
-      y2 = np.ones((64, 1), dtype=np.float32)
+      y2 = np.ones((64, 3), dtype=np.float32)
 
       return (x1, x2, x3), (y1, y2)
 
@@ -1594,7 +1594,7 @@ class IPUModelModelTest(test.TestCase):
         self.dense1 = keras.layers.Dense(1,
                                          kernel_initializer=init,
                                          activation=keras.activations.relu)
-        self.dense2 = keras.layers.Dense(1,
+        self.dense2 = keras.layers.Dense(3,
                                          kernel_initializer=init,
                                          activation=keras.activations.softmax)
 
@@ -1611,7 +1611,7 @@ class IPUModelModelTest(test.TestCase):
       dense_1, dense_2 = MyDenseModel(16)(input_1, input_2)
       output = MyLayer()([dense_1, dense_2, input_3])
 
-      return ((input_1, input_2, input_3), (output[0][0], output[1]))
+      return ((input_1, input_2, input_3), ((output[0][0], output[1])))
 
     # IPU Test.
     strategy = ipu.ipu_strategy.IPUStrategy()
@@ -1668,7 +1668,7 @@ class IPUModelModelTest(test.TestCase):
                                    kernel_initializer=init,
                                    activation=keras.activations.relu)(cat)
 
-      return ((input_1, input_2, input_3), (dense_3, dense_4))
+      return ((input_1, input_2, input_3), ((dense_3, dense_4)))
 
     # IPU Test.
     strategy = ipu.ipu_strategy.IPUStrategy()
@@ -1689,12 +1689,7 @@ class IPUModelModelTest(test.TestCase):
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
     # Comparison.
-    self.assertEqual(np.shape(cpu_predict_out), np.shape(ipu_predict_out))
-
-    for output in range(2):
-      for cpu_predict, ipu_predict in zip(cpu_predict_out[output],
-                                          ipu_predict_out[output]):
-        self.assertAllClose(cpu_predict, ipu_predict)
+    self.assertAllClose(cpu_predict_out, ipu_predict_out)
 
   @test_util.run_v2_only
   def testPredictMultipleOutputDifferentShapes(self):
@@ -1728,12 +1723,15 @@ class IPUModelModelTest(test.TestCase):
       dense_4 = keras.layers.Dense(2,
                                    kernel_initializer=init,
                                    activation=keras.activations.relu)(cat)
+      dense_5 = keras.layers.Dense(2,
+                                   kernel_initializer=init,
+                                   activation=keras.activations.relu)(cat)
 
-      return ((input_1, input_2, input_3), (dense_3, dense_4))
+      return ((input_1, input_2, input_3), (dense_3, (dense_4, dense_5)))
 
     # CPU Test.
     cpu_model = keras.Model(*model_fn())
-    cpu_model.compile('sgd', ['mse', 'mse'])
+    cpu_model.compile('sgd', ['mse', 'mse', 'mse'])
 
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
@@ -1745,23 +1743,11 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       model = ipu.keras.Model(*model_fn())
-      model.compile('sgd', ['mse', 'mse'])
+      model.compile('sgd', ['mse', 'mse', 'mse'])
 
       ipu_predict_out = model.predict(predict_input_fn(), batch_size=4)
 
-    # Comparison.
-    self.assertEqual(np.shape(cpu_predict_out[0]),
-                     np.shape(ipu_predict_out[0]))
-    for cpu_predict, ipu_predict in zip(cpu_predict_out[0],
-                                        ipu_predict_out[0]):
-      np.testing.assert_almost_equal(cpu_predict, ipu_predict)
-
-    self.assertEqual(np.shape(cpu_predict_out[1]),
-                     np.shape(ipu_predict_out[1]))
-    for cpu_predict, ipu_predict in zip(cpu_predict_out[1],
-                                        ipu_predict_out[1]):
-      np.testing.assert_almost_equal(cpu_predict[0], ipu_predict[0])
-      np.testing.assert_almost_equal(cpu_predict[1], ipu_predict[1])
+    self.assertAllClose(cpu_predict_out, ipu_predict_out)
 
   @test_util.run_v2_only
   def testPredictReplaceableLayers(self):

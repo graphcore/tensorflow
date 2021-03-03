@@ -295,7 +295,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_embedding_lookup_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_embedding_lookup_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",
@@ -307,7 +307,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_rnn_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_rnn_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",
@@ -408,7 +408,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_layer_replacement_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_layer_replacement_test.py"],
     additional_deps = [
         ":pipelining_test_util",
@@ -422,7 +422,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_normalization_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_normalization_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",
@@ -435,7 +435,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_ctc_loss_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_ctc_loss_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",

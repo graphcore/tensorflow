@@ -681,7 +681,10 @@ class _IpuModelBase(KerasModel):
         #       RF is replication factor
         #       output_shape may have multiple dimensions
 
-        results = [map(lambda x: x.numpy(), r) for r in results]
+        # Note that to match the upstream Keras behaviour, all the outputs are
+        # flattened, however we do not put them back into the original
+        # structure.
+        results = [map(lambda x: x.numpy(), r) for r in nest.flatten(results)]
         results = zip(*results)
 
         if self.replication_factor > 1:
