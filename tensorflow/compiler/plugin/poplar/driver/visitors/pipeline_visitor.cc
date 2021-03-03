@@ -1938,7 +1938,7 @@ StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
       return SequentialPipelineVisitor::Create(pipeline, res, inputs,
                                                description, debug_name_and_id);
     default:
-      return FailedPrecondition("Uknown pipeline schedule.");
+      return FailedPrecondition("Unknown pipeline schedule.");
   }
 }
 

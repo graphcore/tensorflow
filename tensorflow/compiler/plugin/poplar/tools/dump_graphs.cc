@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
   tensorflow::string FLAGS_logdir;
 
   std::vector<tensorflow::Flag> flag_list = {
-      tensorflow::Flag("xla_in", &FLAGS_xla_graphdef, "XLA Graphdef file"),
+      tensorflow::Flag("xla_in", &FLAGS_xla_graphdef, "XLA GraphDef file"),
       tensorflow::Flag("compute_in", &FLAGS_poplar_compute,
                        "Poplar compute graph file"),
       tensorflow::Flag("logdir", &FLAGS_logdir,

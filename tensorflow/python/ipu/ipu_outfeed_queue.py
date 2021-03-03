@@ -96,7 +96,7 @@ class IPUOutfeedQueue:
     self._outfeed_mode = outfeed_mode or IPUOutfeedMode.ALL
 
     if not isinstance(self._outfeed_mode, IPUOutfeedMode):
-      raise ValueError("Expcted `outfeed_mode` value to be of "
+      raise ValueError("Expected `outfeed_mode` value to be of "
                        "`ipu_outfeed_queue.IPUOutfeedMode` type, but is %s." %
                        (str(type(outfeed_mode))))
 

@@ -151,7 +151,7 @@ def export_model(save_path, output_file, gc_metadata=None):
       logging.info("Loading v2 Keras SavedModel from folder %s", save_path)
       SavedModel(session, save_path).export_variables(output_file, gc_metadata)
     else:
-      logging.fatal(("Could not find any Tensorflow v1 (%s) or v2 (%s or %s)"
+      logging.fatal(("Could not find any TensorFlow v1 (%s) or v2 (%s or %s)"
                      " models"), meta_file, pb_file, pbtxt_file)
       exit(1)
 
@@ -197,7 +197,7 @@ def import_data_in_model(import_path, save_path, data_files):
       model.import_variables(data_files)
       model.save(save_path)
     else:
-      logging.fatal(("Could not find any Tensorflow v1 (%s) or v2 (%s or %s)"
+      logging.fatal(("Could not find any TensorFlow v1 (%s) or v2 (%s or %s)"
                      " models"), meta_file, pb_file, pbtxt_file)
       exit(1)
 

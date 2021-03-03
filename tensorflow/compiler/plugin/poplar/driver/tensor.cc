@@ -177,7 +177,7 @@ StatusOr<poplar::Type> PoplarDataType(const xla::PrimitiveType& element_type) {
     case F32:
       return poplar::FLOAT;
     default:
-      return xla::FailedPrecondition("unsupported primitive type in poplar %s",
+      return xla::FailedPrecondition("unsupported primitive type in Poplar %s",
                                      PrimitiveType_Name(element_type));
   }
 }
@@ -1430,7 +1430,7 @@ StatusOr<TensorVector> TensorOrRemoteBufferVectorToTensorVector(
   for (int i = 0; i < tv.size(); ++i) {
     if (!tv[i].IsTensor()) {
       return tensorflow::errors::FailedPrecondition(
-          "Expected all members of the TensorOrRemoteBufferVector to be poplar "
+          "Expected all members of the TensorOrRemoteBufferVector to be Poplar "
           "tensors, but input " +
               std::to_string(i) + " is not: ",
           context);

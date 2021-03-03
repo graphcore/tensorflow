@@ -1513,7 +1513,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       if (!ipu_.Device().attach()) {
         if (use_ipu_model) {
           return xla::InternalError(
-              "Unable to acquire poplar device model for ordinal %d", ordinal_);
+              "Unable to acquire Poplar device model for ordinal %d", ordinal_);
         } else {
           const int32 cfg_index =
               current_config_.device_config(ordinal_).cfg_index();
@@ -1568,7 +1568,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
     device_attached_ = true;
   } catch (poplar::poplar_error e) {
-    return xla::InternalError("Unable to open poplar device for ordinal %d: %s",
+    return xla::InternalError("Unable to open Poplar device for ordinal %d: %s",
                               ordinal_, e.what());
   }
 
@@ -3509,7 +3509,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
       UpdateOutputsHandleMap(executable, output_shape, *result_buffer);
     }
 
-    VLOG(1) << "Executing on poplar stream ordinal " << ordinal_ << " of type "
+    VLOG(1) << "Executing on Poplar stream ordinal " << ordinal_ << " of type "
             << GetDeviceTargetName();
 
     // Create any outfeed queues which do not already exist
