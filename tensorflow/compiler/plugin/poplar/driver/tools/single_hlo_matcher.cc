@@ -52,7 +52,7 @@ StatusOr<bool> SingleHloMatcher::HandleMatch(
 
   if (!parse) {
     return InternalError(
-        "Matched fusion is NOT a known poplar operation registered with XLA ",
+        "Matched fusion is NOT a known Poplar operation registered with XLA ",
         name);
   }
 

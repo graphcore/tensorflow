@@ -256,8 +256,7 @@ class IPUPipelineTest(test.TestCase):
                                   gradient_accumulation_count=4)
 
       with self.assertRaisesRegex(
-          ValueError,
-          "Optimizer must be a native Tensorflow optimizer, or a Keras V2"):
+          ValueError, "Optimizer must be a native TensorFlow or Keras V2"):
         opt = keras.optimizers.SGD(lr=0.001)
         m.compile(opt, 'mse')
 

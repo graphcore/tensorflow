@@ -42,10 +42,7 @@ namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
   VLOG(tensorflow::INFO) << "Poplar version: " << poplar::versionString()
-                         << " Poplar package: "
-                         << poplar::packageHash()
-                         //<< " Poplar Tensorflow version: " << tf_git_version()
-                         << ")";
+                         << " Poplar package: " << poplar::packageHash();
 }
 
 PoplarPlatform::~PoplarPlatform() {}
@@ -101,11 +98,11 @@ PoplarPlatform::GetUncachedExecutor(const se::StreamExecutorConfig& config) {
 
 void PoplarPlatform::RegisterTraceListener(
     std::unique_ptr<se::TraceListener> listener) {
-  LOG(FATAL) << "not yet implemented: register poplar trace listener";
+  LOG(FATAL) << "not yet implemented: register Poplar trace listener";
 }
 
 void PoplarPlatform::UnregisterTraceListener(se::TraceListener* listener) {
-  LOG(FATAL) << "not yet implemented: unregister poplar trace listener";
+  LOG(FATAL) << "not yet implemented: unregister Poplar trace listener";
 }
 
 StatusOr<std::unique_ptr<se::DeviceDescription>>

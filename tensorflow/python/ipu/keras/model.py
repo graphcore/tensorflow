@@ -276,8 +276,8 @@ class _IpuModelBase(KerasModel):
               **kwargs):
     if isinstance(optimizer, optimizers.Optimizer):
       raise ValueError(
-          "Optimizer must be a native Tensorflow optimizer, or a Keras V2"
-          " optimizer found in tensorflow.keras.optimizer_v2.")
+          "Optimizer must be a native TensorFlow or Keras V2 optimizer"
+          " found in tensorflow.keras.optimizer_v2.")
 
     if not isinstance(loss_weights, (list, type(None))):
       raise ValueError("loss_weights can only be specified as a list.")
@@ -368,7 +368,7 @@ class _IpuModelBase(KerasModel):
     # Other optimizer types are not supported
     else:
       raise ValueError(
-          "Only Keras optimizer_v2.Optimizer and Tensorflow native"
+          "Only Keras optimizer_v2.Optimizer and TensorFlow native"
           " training.Optimizer subclasses are supported.")
 
   @trackable.no_automatic_dependency_tracking

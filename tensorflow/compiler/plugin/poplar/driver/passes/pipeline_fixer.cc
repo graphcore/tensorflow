@@ -615,7 +615,7 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     HloInstruction* lhs = sink_input->mutable_operand(0);
     if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(lhs)) {
       return FailedPrecondition(
-          "Expected the input to the GradientAccumulatorAdd to be a "
+          "Expected the first input to the GradientAccumulatorAdd to be a "
           "GradientAccumulatorCreate, but is %s.",
           lhs->ToString().c_str());
     }
@@ -791,7 +791,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
   if (stages_.recomputation.size()) {
     return FailedPrecondition(
-        "PipelineStageRecomputation are not allowed in the PiplineFixer pass.");
+        "PipelineStageRecomputation stages are not allowed in the"
+        " PipelineFixer pass.");
   }
 
   // Go through the stages and insert stateful no-ops to make sure DCE does not

@@ -162,7 +162,7 @@ StatusOr<TensorVector> TensorMap::FindInstructionOutputTensors(
     if (!outputs[i].IsTensor()) {
       return tensorflow::errors::FailedPrecondition(
           "Expected all outputs of " + inst->name() +
-          " to be poplar tensors, but output " + std::to_string(i) + " is not");
+          " to be Poplar tensors, but output " + std::to_string(i) + " is not");
     }
 
     result.push_back(outputs[i]);

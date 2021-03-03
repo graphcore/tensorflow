@@ -57,7 +57,7 @@ ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst) {
       auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
       return inst_wtxy->convolution_dimension_numbers();
     } else {
-      LOG(FATAL) << "Trying to access convolution_dimension_numbersn on a non "
+      LOG(FATAL) << "Trying to access convolution_dimension_numbers on a non "
                     "HloWeightsTransposeChansFlipXYInstruction.";
     }
   } else {

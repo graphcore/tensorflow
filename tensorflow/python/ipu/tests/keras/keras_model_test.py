@@ -197,8 +197,7 @@ class IPUModelTest(test.TestCase):
     p = ipu.keras.Sequential(simple_model())
 
     with self.assertRaisesRegex(
-        ValueError,
-        "Optimizer must be a native Tensorflow optimizer, or a Keras V2"):
+        ValueError, "Optimizer must be a native TensorFlow or Keras V2"):
       opt = keras.optimizers.SGD(lr=0.001)
       p.compile(opt, 'mse')
 

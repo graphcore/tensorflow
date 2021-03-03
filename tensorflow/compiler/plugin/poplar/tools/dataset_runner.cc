@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
   std::vector<tensorflow::Flag> flag_list = {
       tensorflow::Flag(
           "graph", &FLAGS_graphdef,
-          "Tensorflow Graphdef file containing the input pipeline"),
+          "TensorFlow GraphDef file containing the input pipeline"),
       tensorflow::Flag("count", &FLAGS_count,
                        "Number of samples per displayed line"),
       tensorflow::Flag("output_node", &FLAGS_ret_val_input_name,

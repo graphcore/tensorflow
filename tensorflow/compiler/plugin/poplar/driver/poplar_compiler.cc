@@ -1012,7 +1012,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   TENSORFLOW_TRACEPOINT();
   if (stream_exec == nullptr) {
     return tensorflow::errors::Unknown(
-        "NULL stream pointer in poplar compiler");
+        "NULL stream pointer in Poplar compiler");
   }
 
   if (PoplarXlaFlags::Get().help) {
@@ -1139,7 +1139,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     return xla::InternalErrorStrCat(
         "Trying to compile a graph for an IPU device with ", num_ipus,
         " IPUs and ", num_shards,
-        " shards. The number of shards needs to "
+        " shards. The number of shards needs to"
         " divide the number of IPUs.");
   }
 
