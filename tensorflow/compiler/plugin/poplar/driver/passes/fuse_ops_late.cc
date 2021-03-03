@@ -247,7 +247,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({9, 3})},
       {HloOpcode::kMultiply, NodeOperands({10, 4})},
       {HloOpcode::kBroadcast, NodeOperands({5})},
@@ -271,7 +271,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({7, 3})},
       {HloOpcode::kMultiply, NodeOperands({8, 4})},
       {HloOpcode::kBroadcast, NodeOperands({5})},
@@ -328,7 +328,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 6}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 6}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({5, 2})},
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
@@ -347,7 +347,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 5}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 5}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({4, 2})},
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},
@@ -397,7 +397,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({5, 1}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({5, 1}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({6, 2})},
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
@@ -416,7 +416,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     PatternInplaceDescriptionFn(GetSimpleInplaceUseDescription),
     Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAddOrSubtract},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAdd},
       {HloOpcode::kMultiply, NodeOperands({5, 2})},
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},

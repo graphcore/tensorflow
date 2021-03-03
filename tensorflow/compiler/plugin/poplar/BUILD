@@ -1540,20 +1540,6 @@ xla_test(
 )
 
 xla_test(
-    name = "scaled_arithmetic_test",
-    size = "small",
-    srcs = ["tests/scaled_arithmetic_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    deps = [
-        ":optimizers",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
-    ],
-)
-
-xla_test(
     name = "hlo_hash_test",
     srcs = ["tests/hlo_hash_test.cc"],
     backends = ["poplar"],
@@ -5196,7 +5182,6 @@ test_suite(
         "resource_update_schedule_optimizer_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
-        "scaled_arithmetic_test",
         "scatter_simplifier_test",
         "scheduler_tree_test",
         "seed_hoisting_test",
