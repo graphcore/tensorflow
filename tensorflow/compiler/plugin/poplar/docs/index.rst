@@ -11,6 +11,7 @@ Targeting the IPU from TensorFlow 2
 
     intro
     device_selection
+    compiling
 
     targetting_tf2
     examples_tf2
