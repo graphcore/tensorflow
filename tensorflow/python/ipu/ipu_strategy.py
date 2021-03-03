@@ -65,15 +65,15 @@ class IPUStrategy(distribute_lib.StrategyV1):
 
         # Or call a tf.function
         res = strategy.experimental_run_v2(my_fn, [...])
-  
+
 
   """
   def __init__(self, ipu_device="/device:IPU:0", cpu_device="/device:CPU:0"):
     """Create a new IPUStrategy.
 
     Args:
-      ipu_device: The Tensorflow device representing the IPUs.
-      cpu_device: The Tensorflow device for the CPU.
+      ipu_device: The TensorFlow device representing the IPUs.
+      cpu_device: The TensorFlow device for the CPU.
     """
     super().__init__(IPUExtended(self, ipu_device, cpu_device))
 
