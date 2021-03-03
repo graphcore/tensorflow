@@ -214,7 +214,7 @@ For a full list, refer to  :ref:`api-section`.
   * - ``--use_ipu_model``
     - Use the Poplar IPUModel for graph compilation and execution.
   * - ``--synthetic_data_categories``
-    - Prevents the system from transfering data of the given types to/from the IPU
+    - Prevents the system from transferring data of the given types to/from the IPU
       when executing code. This is used for testing performance without the overhead
       of data transfer.
 

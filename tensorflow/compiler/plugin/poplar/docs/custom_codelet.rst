@@ -273,7 +273,7 @@ ___________________
 The external objects used by custom operations are opaque. The compiler cannot
 detect if these objects or their dependencies change, so compilation graphs
 containing custom operations cannot be uniquely hashed reliably. If you can
-gaurantee that these objects and their dependencies will not change then this
+guarantee that these objects and their dependencies will not change then this
 flag can be set to true.
 
 When compiling a graph, if all ops in the graph are hashable the executable will
