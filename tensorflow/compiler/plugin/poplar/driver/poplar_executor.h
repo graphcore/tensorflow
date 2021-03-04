@@ -579,7 +579,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static StatusOr<se::DeviceMemoryBase> AllocateOutputBuffer(
       const PoplarExecutable& executable, se::DeviceMemoryAllocator* allocator,
-      const ArgsHandleMap& args_map, int ordinal);
+      const ArgsHandleMap& args_map, int ordinal,
+      IpuDeviceConnectionType connection_type);
 
   // Executes the executable on a Poplar device. This function is expected to
   // be executed asynchronously and any execution errors can be obtained by
@@ -761,6 +762,22 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::vector<std::vector<Literal>> const* constants_;
   };
 
+  class PrecompileOutputAllocation : public OutputAllocation {
+   public:
+    PrecompileOutputAllocation(se::DeviceMemoryAllocator* allocator,
+                               const InputOutputAliasingMap& io_map,
+                               const ArgsHandleMap& args_map, int ordinal)
+        : OutputAllocation(allocator, io_map, args_map, ordinal) {}
+
+    StatusOr<se::DeviceMemoryBase> AllocateBuffer(
+        const Shape& shape, int64 output_index,
+        int64 flat_tuple_index) const override;
+
+    Status PopulateBuffer(se::DeviceMemoryBase& buffer, const Shape& shape,
+                          int64 output_index,
+                          int64 flat_tuple_index) const override;
+  };
+
   class RemapOutputAllocation : public OutputAllocation {
    public:
     RemapOutputAllocation(se::DeviceMemoryAllocator* allocator,
@@ -808,7 +825,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static std::unique_ptr<OutputAllocation> GetOutputAllocator(
       const PoplarExecutable& executable, const ArgsHandleMap& args_map,
-      se::DeviceMemoryAllocator* allocator, int ordinal);
+      se::DeviceMemoryAllocator* allocator, int ordinal,
+      IpuDeviceConnectionType connection_type);
 
   Status PopulateOutputBuffer(se::DeviceMemoryBase& buffer,
                               const PoplarExecutable& executable,

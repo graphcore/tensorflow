@@ -370,7 +370,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
                         GetRecomputationCluster(fwd_stage, oi_info));
 
     if (cluster_info.instructions.empty()) {
-      LOG(INFO) << "Cannot recompute pipline stage " << fwd_stage->ToString();
+      LOG(INFO) << "Cannot recompute pipeline stage " << fwd_stage->ToString();
       continue;
     }
 

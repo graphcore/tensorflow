@@ -315,7 +315,7 @@ class GradientAccumulatorCreateOp : public PoplarOpDef {
         "Instruction ", inst->name(),
         " should have been allocated by the DeferredVisitor. This error is "
         "most likely caused by inappropriate use of gradient accumulation. "
-        "Please use the Pipelinining API.");
+        "Please use the Pipelining API.");
   }
 };
 REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);

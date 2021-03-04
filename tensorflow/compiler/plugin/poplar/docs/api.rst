@@ -41,7 +41,7 @@ For example, this will not work:
   :members:
   :special-members: __init__
 
-.. General utiltities
+.. General utilities
 
 .. automodule:: tensorflow.python.ipu.utils
   :members:

@@ -12,6 +12,7 @@ Targeting the IPU from TensorFlow 1
     intro
     tutorial
     device_selection
+    compiling
 
     perf_training
     ipu_estimator_example

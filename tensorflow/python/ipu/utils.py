@@ -176,11 +176,15 @@ class DeviceConnectionType(Enum):
   * `ALWAYS` indicates that the system will attach when configuring the
     device.
   * `ON_DEMAND` will defer connection to when the IPU is needed.
-  * `NEVER` will never try to attach to a device. Used when compiling offline.
+  * `PRE_COMPILE` will never try to attach to a device and anything which is
+    meant to be executed on the device will return all zeros. Used to
+    pre-compile Poplar programs on machines without IPUs.
+  * `NEVER` will never try to attach to a device.
   """
-  ALWAYS = config_pb2.IpuDeviceConnectionType.Value("ALWAYS")
-  ON_DEMAND = config_pb2.IpuDeviceConnectionType.Value("ON_DEMAND")
-  NEVER = config_pb2.IpuDeviceConnectionType.Value("NEVER")
+  ALWAYS = config_pb2.IpuDeviceConnectionType.ALWAYS
+  ON_DEMAND = config_pb2.IpuDeviceConnectionType.ON_DEMAND
+  PRE_COMPILE = config_pb2.IpuDeviceConnectionType.PRE_COMPILE
+  NEVER = config_pb2.IpuDeviceConnectionType.NEVER
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -307,7 +311,7 @@ def create_ipu_config(profiling=False,
 
   Args:
     profiling: Enable compilation reports, and IPU trace events.
-    enable_ipu_events: Enable IPU trace events without poplar reports.
+    enable_ipu_events: Enable IPU trace events without Poplar reports.
     use_poplar_text_report: Enable the Poplar textual report summary.
     use_poplar_cbor_report: Enable the Poplar CBOR reports.
     profile_execution: Include Poplar execution profiles in the execution
@@ -329,8 +333,8 @@ def create_ipu_config(profiling=False,
     always_rearrange_copies_on_the_host: *** Experimental Flag ***
       The data which is streamed to/from the device might be stored in different
       layouts on the device and on the host. If that is the case the
-      rearrangment is performed on the device by default. By enabling this
-      option the rearrangment will be performed on the host at the expense of
+      rearrangement is performed on the device by default. By enabling this
+      option the rearrangement will be performed on the host at the expense of
       latency.
     merge_infeed_io_copies: When true, this flag will merge the streamed
       host->device input copies into one larger copy.  This may reduce the time
@@ -360,7 +364,7 @@ def create_ipu_config(profiling=False,
       not specified, then automatic selection order is used, otherwise an
       instance of `SelectionOrder`.
     enable_experimental_remote_buffer_embedding: When set to true,
-      `HostEmbedding` will make use of poplar remote buffers.
+      `HostEmbedding` will make use of Poplar remote buffers.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -535,11 +539,11 @@ def set_optimization_options(opts,
       (larger value is better, less control code). A value of 0 selects an
       implementation defined default.
     enable_fast_math: Enables optimizations which allow arbitrary reassociations
-      and transformations of mathemtical operations with no accuracy guarantees.
-      Enabling this option can result in incorrect output for programs that
-      depend on an exact implementation of IEEE for math functions. It may,
-      however, yield faster code for programs that do not require the guarantees
-      of these specifications.
+      and transformations of mathematical operations with no accuracy
+      guarantees. Enabling this option can result in incorrect output for
+      programs that depend on an exact implementation of IEEE for math
+      functions. It may, however, yield faster code for programs that do not
+      require the guarantees of these specifications.
 
   Returns:
     The IpuOptions configuration protobuf.
@@ -695,7 +699,7 @@ def set_compilation_options(opts, compilation_options=None):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    compilation_options: A dictionary of poplar compilation option flags to be
+    compilation_options: A dictionary of Poplar compilation option flags to be
       sent to the executor.
 
   Returns:
@@ -728,7 +732,7 @@ def set_convolution_options(opts, convolution_options=None):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    convolution_options: A dictionary of poplar option flags for
+    convolution_options: A dictionary of Poplar option flags for
       convolutions. The "availableMemoryProportion" flag indicates the
       proportion of tile memory to be made available as
       temporary memory for convolutions (float between 0 and 1.0).
@@ -768,7 +772,7 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    matmul_options: A dictionary containing the poplar option flag
+    matmul_options: A dictionary containing the Poplar option flag
       "availableMemoryProportion" for the matrix multiplication operations.
       It indicates the proportion of tile memory to be made available as
       temporary memory for the matrix multiplications (float between 0 and 1.0).
@@ -778,7 +782,7 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
       a multiplication using less temporary memory may use more memory overall,
       due to an increase of always live memory.
     clear_pass_type: When set to True, the Pass type will not
-      be set in the options passed to the poplar operation.
+      be set in the options passed to the Poplar operation.
 
   Returns:
     The IpuOptions configuration protobuf, with matmul options set.
@@ -812,7 +816,7 @@ def set_pooling_options(opts, pooling_options=None):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    pooling_options: A dictionary of poplar option flags for the pooling
+    pooling_options: A dictionary of Poplar option flags for the pooling
       operation.
 
   Returns:
@@ -854,11 +858,11 @@ def set_report_options(opts,
 
   Args:
     opts: An IpuOptions session control protobuf.
-    report_options: (Deprecated) A dictionary of poplar option flags for
+    report_options: (Deprecated) A dictionary of Poplar option flags for
       the report generation.
-    graph_options: A dictionary of poplar option flags for the graph report
+    graph_options: A dictionary of Poplar option flags for the graph report
       generation.
-    execution_options: A dictionary of poplar option flags for the execution
+    execution_options: A dictionary of Poplar option flags for the execution
       report generation.
 
   Returns:
@@ -1035,7 +1039,7 @@ def set_gcl_options(opts, num_io_tiles=0, gcl_options=None):
 def auto_select_ipus(opts, num_ipus):
   """Configure the IPUs to be used by the session.
 
-  The configuration describes a system consisting of multiple Tensorflow
+  The configuration describes a system consisting of multiple TensorFlow
   devices, each with control of one of more IPUs. The devices will be labeled
   ``/device:IPU:0``, ``/device:IPU:1`` and so on.
 
@@ -1076,7 +1080,7 @@ def auto_select_ipus(opts, num_ipus):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    num_ipus: List of IPUs per Tensorflow device
+    num_ipus: List of IPUs per TensorFlow device
 
   Returns:
     The IpuOptions configuration protobuf, configured for auto-selecting a set
@@ -1102,11 +1106,11 @@ def auto_select_ipus(opts, num_ipus):
 def select_ipus(opts, indices):
   """Configure the IPUs to be used by the session.
 
-  The configuration describes a system consisting of multiple Tensorflow
-  devices, each with control of one of more IPUs. The Tensorflow devices will be
+  The configuration describes a system consisting of multiple TensorFlow
+  devices, each with control of one of more IPUs. The TensorFlow devices will be
   labeled ``/device:IPU:0``, ``/device:IPU:1`` and so on.
 
-  Each Tensorflow device uses a specific configuration consisting of one or more
+  Each TensorFlow device uses a specific configuration consisting of one or more
   IPUs from the list of devices.  These can be found by running the Graphcore
   utility ``gc-info -l``.  For instance, the following listing shows the device
   configurations available on a system with 16 IPUs.
@@ -1316,12 +1320,13 @@ def set_ipu_connection_type(opts,
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
     ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
                  and 2 for Mk2. Required if the `connection_type`
-                 provided is `DeviceConnectionType.NEVER`.
+                 provided is `DeviceConnectionType.PRE_COMPILE` or
+                 `DeviceConnectionType.NEVER`.
     enable_remote_buffers: When `connection_type` is
-      `DeviceConnectionType.NEVER` or `DeviceConnectionType.ON_DEMAND`, this
-      argument is used to indicate whether remote buffers are enabled and
-      supported in the system which will eventually be used to execute the
-      compiled programs.
+      `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
+      `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate
+      whether remote buffers are enabled and supported in the system which will
+      eventually be used to execute the compiled programs.
   Returns:
     The IpuOptions configuration protobuf.
   """
@@ -1331,6 +1336,12 @@ def set_ipu_connection_type(opts,
   if connection_type == DeviceConnectionType.NEVER and ipu_version is None:
     raise Exception("`ipu_version` must be set when `connection_type` is set "
                     "to `DeviceConnectionType.NEVER`")
+
+  if (connection_type == DeviceConnectionType.PRE_COMPILE
+      and ipu_version is None):
+    raise Exception("`ipu_version` must be set when `connection_type` is set "
+                    "to `DeviceConnectionType.PRE_COMPILE`")
+
   opts.device_connection_type = connection_type.value
 
   if ipu_version is not None:
@@ -1494,7 +1505,7 @@ def extract_compile_reports(events):
 
 
 def extract_poplar_serialized_graphs(events):
-  """Get a list of all poplar serialized graphs in the event list.
+  """Get a list of all Poplar serialized graphs in the event list.
 
   Args:
     events: A list of trace event serialized protobufs.

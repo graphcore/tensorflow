@@ -138,8 +138,9 @@ The arguments are:
 * ``is_stateless``: indicates that this operation is stateless. Custom ops
   are stateful by default.
 
-* ``is_hashable``: indicates whether this operation can be uniquely hashed reliably.
-  Custom ops are not hashable by default.
+* ``is_hashable``: indicates whether this operation can be uniquely hashed
+  reliably. Custom ops are not hashable by default. This attribute is required
+  to be set to ``true`` when pre-compiling Poplar programs.
 
 * ``num_inputs``: indicates how many inputs are on the operation.
 
@@ -272,7 +273,7 @@ ___________________
 The external objects used by custom operations are opaque. The compiler cannot
 detect if these objects or their dependencies change, so compilation graphs
 containing custom operations cannot be uniquely hashed reliably. If you can
-gaurantee that these objects and their dependencies will not change then this
+guarantee that these objects and their dependencies will not change then this
 flag can be set to true.
 
 When compiling a graph, if all ops in the graph are hashable the executable will

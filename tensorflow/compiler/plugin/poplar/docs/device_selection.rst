@@ -214,7 +214,7 @@ For a full list, refer to  :ref:`api-section`.
   * - ``--use_ipu_model``
     - Use the Poplar IPUModel for graph compilation and execution.
   * - ``--synthetic_data_categories``
-    - Prevents the system from transfering data of the given types to/from the IPU
+    - Prevents the system from transferring data of the given types to/from the IPU
       when executing code. This is used for testing performance without the overhead
       of data transfer.
 
@@ -244,30 +244,6 @@ For a full list, refer to  :ref:`api-section`.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
-
-.. _caching_executables:
-
-Caching of compiled executables
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-It can take a long time to compile a large fused graph into an executable
-suitable for the IPU.  To prevent the need for compiling every time a
-TensorFlow process is started, you can enable an executable cache.
-
-You can use the option ``--executable_cache_path`` to specify a directory where
-compiled files will be placed.  Fused XLA/HLO graphs are hashed with a 64-bit
-hash and stored in this directory. For example:
-
-.. code-block:: python
-
-  TF_POPLAR_FLAGS='--executable_cache_path=/tmp/cachedir'
-
-A pair of files will be saved for each compiled graph, the TensorFlow
-metadata and the Poplar executable.
-
-The cache does not manage the files within the directory. It is your
-responsibility to delete files.  No index is kept of the
-files, so they can be deleted without risk.
 
 Supported operations
 ~~~~~~~~~~~~~~~~~~~~

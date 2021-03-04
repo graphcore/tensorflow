@@ -102,10 +102,10 @@ class OpManager {
 class PoplarOpManager : public OpManager<PoplarOp> {
  public:
   static StatusOr<PoplarOpDef*> GetOp(const HloInstruction* inst) {
-    // Find the poplar info given a CustomCall instruction.
+    // Find the Poplar info given a CustomCall instruction.
     auto ret = GetPoplarCustomOp(inst);
     if (!ret) {
-      return FailedPrecondition("Could not find poplar op %s.",
+      return FailedPrecondition("Could not find Poplar op %s.",
                                 inst->ToString().c_str());
     }
     auto def = GetOpImpl(*ret);
