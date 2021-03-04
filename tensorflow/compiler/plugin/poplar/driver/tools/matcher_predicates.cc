@@ -128,6 +128,10 @@ bool CheckValidMultiSliceAttributes(const HloGatherInstruction* inst) {
 }
 }  // namespace
 
+bool HasSingleUser(const HloInstruction* inst) {
+  return inst->user_count() == 1;
+}
+
 bool IsRandomNormal(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kRng &&
          inst->random_distribution() == RandomDistribution::RNG_NORMAL;
