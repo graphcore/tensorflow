@@ -294,6 +294,7 @@ cc_library(
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
         "driver/tools/custom_ops/all_gather.cc",
+        "driver/tools/custom_ops/assert.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -474,6 +475,7 @@ cc_library(
         "driver/tools/conv_util.h",
         "driver/tools/custom_ops/all_gather.h",
         "driver/tools/custom_ops/arg_min_max.h",
+        "driver/tools/custom_ops/assert.h",
         "driver/tools/custom_ops/candidate_sampler.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
@@ -668,6 +670,7 @@ cc_library(
         "driver/ops/custom_ops/poprand/candidate_sampler.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
+        "driver/ops/custom_ops/poputil/assert.cc",
         "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
         "driver/ops/custom_ops/poputil/copy_into.cc",
         "driver/ops/custom_ops/poputil/fifo.cc",
@@ -934,6 +937,7 @@ cc_library(
         "kernels/poprand/categorical.cc",
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
+        "kernels/poputil/assert.cc",
         "kernels/poputil/codelet_expression.cc",
         "kernels/poputil/device_sync.cc",
         "kernels/poputil/execution_counter.cc",
@@ -3840,6 +3844,23 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "assert_test",
+    size = "small",
+    srcs = ["tests/assert_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "gather_simplifier_embedding_lookup_test",
     size = "medium",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
@@ -4921,6 +4942,7 @@ test_suite(
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
         "arithmetic_expr_test",
+        "assert_test",
         "auto_report_directory_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
