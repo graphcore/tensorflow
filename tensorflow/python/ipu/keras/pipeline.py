@@ -138,10 +138,11 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
             the pipeline on each iteration.
         gradient_accumulation_dtype: The data type used for the gradient
           accumulation buffer. One of:
-            - `None`: Use an accumulator of the same type as the variable type.
-            - A `DType`: Use this type for all the accumulators.
-            - A callable that takes the variable and returns a `DType`: Allows
-              specifying the accumulator type on a per-variable basis.
+
+          - `None`: Use an accumulator of the same type as the variable type.
+          - A `DType`: Use this type for all the accumulators.
+          - A callable that takes the variable and returns a `DType`: Allows
+            specifying the accumulator type on a per-variable basis.
 
           The gradients passed to `Optimizer.apply_gradients` will have the
           dtype requested here. If that dtype is different from the variable
@@ -327,6 +328,37 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
       - sample_weight_mode
       - weighted_metrics
       - target_tensors
+
+    Note that loss weights can only be specified as a list.
+
+    Args:
+      optimizer: String (name of optimizer) or optimizer instance. See
+        `tf.keras.optimizers`. An instance of a subclass of
+        `tensorflow.python.training.optimizer` can also be used.
+      loss: String (name of objective function), objective function or
+        `tf.keras.losses.Loss` instance. See `tf.keras.losses`.
+        IPU-specific loss classes can also be used. See the documentation in
+        :py:mod:`tensorflow.python.ipu.keras.losses` for usage instructions.
+        An objective function is any callable with the signature
+        `scalar_loss = fn(y_true, y_pred)`. If the model has multiple outputs,
+        you can use a different loss on each output by passing a dictionary or
+        a list of losses. The loss value that will be minimized by the model
+        will then be the sum of all individual losses.
+      metrics: List of metrics to be evaluated by the model during training and
+        testing. Typically you will use `metrics=['accuracy']`. To specify
+        different metrics for different outputs of a multi-output model, you
+        could pass a dictionary, such as `metrics={'output_a': 'accuracy',
+        'output_b': ['accuracy', 'mse']}`, or a list (`len = len(outputs)`) of
+        lists of metrics such as
+        `metrics=[['accuracy'], ['accuracy', 'mse']]` or `metrics=['accuracy',
+        ['accuracy', 'mse']]`.
+      loss_weights: Optional list specifying scalar coefficients (Python floats)
+        to weight the loss contributions of different model outputs. The loss
+        value that will be minimized by the model will then be the weighted sum
+        of all individual losses, weighted by the loss_weights coefficients.
+        The list is expected to have a 1:1 mapping to the model's outputs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -457,43 +489,93 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     a small value for `steps_per_epoch` is supplied then not all samples will be
     used.
 
-    A shuffled Dataset should be supplied. Array (or list of arrays) inputs for
-    `x` and `y` will be accepted but will not be shuffled, and this may lead to
-    over-fitting.
+    A shuffled Dataset should be supplied. Non-dataset inputs (as described in
+    the parameters section below) for `x` and `y` will be accepted but will not
+    be shuffled, and this may lead to over-fitting.
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data.
+        It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      y: Target data. Like the input data `x`, it could be either Numpy array(s)
+        or TensorFlow tensor(s). It should be consistent with `x` (you cannot
+        have Numpy inputs and tensor targets, or tensor inputs and Numpy
+        targets). If `x` is a dataset then `y` must not be specified (since
+        targets will be obtained from `x`).
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      epochs: Integer. Number of epochs to train the model. The number of steps
+        performed per epoch is defined by the `steps_per_epoch` parameter, or
+        calculated according to the constraints described below.
+        Note that in conjunction with `initial_epoch`, `epochs` is to be
+        understood as "final epoch". The model is not trained for a number of
+        iterations given by `epochs`, but merely until the epoch of index
+        `epochs` is reached.
+      verbose: 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar,
+        2 = one line per epoch. Note that the progress bar is not particularly
+        useful when logged to a file, so verbose=2 is recommended when not
+        running interactively (for example, in a production environment).
+      callbacks: List of `keras.callbacks.Callback` instances. List of callbacks
+        to apply during training. See `tf.keras.callbacks` in the TensorFlow
+        documentation.
+      shuffle: **NOT SUPPORTED**. This will be supported in a future release.
+      initial_epoch: Integer. Epoch at which to start training (useful for
+        resuming a previous training run).
       steps_per_epoch: Integer or `None`. Specifies the total number of steps to
         be performed per epoch.
-        If `steps_per_run` is specified then the value for `steps_per_epoch`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps_per_epoch`
-        must be specified.
-        For a finite dataset if `steps_per_epoch` is specified then it must
-        contain at least mini-batch size * gradient accumulation count * `steps`
-        samples.
-        For a dataset of known finite length a value for `steps_per_epoch`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is
-        specified).
-        For array inputs a value for `steps_per_epoch` will be calculated
-        if no value is specified. If the number of samples provided is
-        not a multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps_per_epoch` and a warning will be logged.
+        The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps_per_epoch`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps_per_epoch`
+          must be specified.
+        - For a finite dataset if `steps_per_epoch` is specified then it must
+          contain at least mini-batch size * gradient accumulation count *
+          `steps` samples.
+        - For a dataset of known finite length a value for `steps_per_epoch`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is
+          specified).
+        - For array or tensor inputs a value for `steps_per_epoch` will be
+          calculated if no value is specified. If the number of samples provided
+          is not a multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps_per_epoch` and a warning will be logged.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps_per_epoch` (which will
         be calculated if not specified) divided by the replication factor.
         The value of 'steps_per_epoch' (if specified) must be evenly
         divisible by `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      A `History` object. Its `History.history` attribute is a record of
+      training loss values and metrics values at successive epochs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().fit(x,
                        y,
@@ -532,37 +614,77 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     mini-batch size multiplied by the gradient accumulation count multiplied by
     the replication factor.
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data. It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      y: Target data. Like the input data `x`, it could be either Numpy array(s)
+        or TensorFlow tensor(s). It should be consistent with `x` (you cannot
+        have Numpy inputs and tensor targets, or tensor inputs and Numpy
+        targets). If `x` is a dataset then `y` must not be specified (since
+        targets will be obtained from `x`).
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      verbose: 0 or 1. Verbosity mode. 0 = silent, 1 = progress bar. **HAS NO
+        EFFECT** - the progress bar is not displayed. This will be corrected in
+        a future release.
       steps: Integer or `None`. Specifies the total number of steps to be
-        performed.
-        If `steps_per_run` is specified then the value for `steps`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps`
-        must be specified.
-        For a finite dataset if `steps` is specified then it must contain at
-        least mini-batch size * gradient accumulation count * `steps` samples.
-        For a dataset of known finite length a value for `steps`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is specified).
-        For array inputs a value for `steps` will be calculated
-        if no value is specified. If the number of samples provided is not a
-        multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps` and a warning will be logged.
+        performed. The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps`
+          must be specified.
+        - For a finite dataset if `steps` is specified then it must contain at
+          least mini-batch size * gradient accumulation count * `steps` samples.
+          For a dataset of known finite length a value for `steps`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is specified).
+        - For array or tensor inputs a value for `steps` will be calculated
+          if no value is specified. If the number of samples provided is not a
+          multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps` and a warning will be logged.
+      callbacks: List of keras.callbacks.Callback instances. List of callbacks
+        to apply during evaluation. **KNOWN ISSUE**: `evaluate` currently
+        calls the callback functions applicable to `fit` rather than those
+        applicable to `evaluate`. This will be corrected in a future release.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps` (which will be calculated
         if not specified) divided by the replication factor.
-        The value of 'steps' (if specified) must be evenly divisible by
+        The value of `steps` (if specified) must be evenly divisible by
         `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      Scalar test loss (if the model has a single output and no metrics) or list
+      of scalars (if the model has multiple outputs and/or metrics). The
+      attribute model.metrics_names will give you the display labels for the
+      scalar outputs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().evaluate(x,
                             y,
@@ -602,37 +724,69 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     the same model will allow single mini-batches (using gradient accumulation
     count = 1).
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data. It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      verbose: Verbosity mode, 0 or 1. **HAS NO EFFECT**. This will be corrected
+        in a future release.
       steps: Integer or `None`. Specifies the total number of steps to be
         performed.
-        If `steps_per_run` is specified then the value for `steps`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps`
-        must be specified.
-        For a finite dataset if `steps` is specified then it must contain at
-        least mini-batch size * gradient accumulation count * `steps` samples.
-        For a dataset of known finite length a value for `steps`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is specified).
-        For array inputs a value for `steps` will be calculated
-        if no value is specified. If the number of samples provided is not a
-        multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps` and a warning will be logged.
+        The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps`
+          must be specified.
+        - For a finite dataset if `steps` is specified then it must contain at
+          least mini-batch size * gradient accumulation count * `steps` samples.
+          For a dataset of known finite length a value for `steps`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is specified).
+        - For array or tensor inputs a value for `steps` will be calculated
+          if no value is specified. If the number of samples provided is not a
+          multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps` and a warning will be logged.
+      callbacks: List of keras.callbacks.Callback instances. List of callbacks
+        to apply during evaluation. **KNOWN ISSUE**: `predict` currently
+        calls the callback functions applicable to `fit` rather than those
+        applicable to `predict`. This will be corrected in a future release.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps` (which will be calculated
         if not specified) divided by the replication factor.
-        The value of 'steps' (if specified) must be evenly divisible by
+        The value of `steps` (if specified) must be evenly divisible by
         `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      Numpy array(s) of predictions.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().predict(x,
                            batch_size=batch_size,
@@ -802,10 +956,11 @@ class PipelineModel(ipu_model.Model):
             the pipeline on each iteration.
         gradient_accumulation_dtype: The data type used for the gradient
           accumulation buffer. One of:
-            - `None`: Use an accumulator of the same type as the variable type.
-            - A `DType`: Use this type for all the accumulators.
-            - A callable that takes the variable and returns a `DType`: Allows
-              specifying the accumulator type on a per-variable basis.
+
+          - `None`: Use an accumulator of the same type as the variable type.
+          - A `DType`: Use this type for all the accumulators.
+          - A callable that takes the variable and returns a `DType`: Allows
+            specifying the accumulator type on a per-variable basis.
 
           The gradients passed to `Optimizer.apply_gradients` will have the
           dtype requested here. If that dtype is different from the variable
@@ -1180,6 +1335,37 @@ class PipelineModel(ipu_model.Model):
       - sample_weight_mode
       - weighted_metrics
       - target_tensors
+
+    Note that loss weights can only be specified as a list.
+
+    Args:
+      optimizer: String (name of optimizer) or optimizer instance. See
+        `tf.keras.optimizers`. An instance of a subclass of
+        `tensorflow.python.training.optimizer` can also be used.
+      loss: String (name of objective function), objective function or
+        `tf.keras.losses.Loss` instance. See `tf.keras.losses`.
+        IPU-specific loss classes can also be used. See the documentation in
+        :py:mod:`tensorflow.python.ipu.keras.losses` for usage instructions.
+        An objective function is any callable with the signature
+        `scalar_loss = fn(y_true, y_pred)`. If the model has multiple outputs,
+        you can use a different loss on each output by passing a dictionary or
+        a list of losses. The loss value that will be minimized by the model
+        will then be the sum of all individual losses.
+      metrics: List of metrics to be evaluated by the model during training and
+        testing. Typically you will use `metrics=['accuracy']`. To specify
+        different metrics for different outputs of a multi-output model, you
+        could pass a dictionary, such as `metrics={'output_a': 'accuracy',
+        'output_b': ['accuracy', 'mse']}`, or a list (`len = len(outputs)`) of
+        lists of metrics such as
+        `metrics=[['accuracy'], ['accuracy', 'mse']]` or `metrics=['accuracy',
+        ['accuracy', 'mse']]`.
+      loss_weights: Optional list specifying scalar coefficients (Python floats)
+        to weight the loss contributions of different model outputs. The loss
+        value that will be minimized by the model will then be the weighted sum
+        of all individual losses, weighted by the loss_weights coefficients.
+        The list is expected to have a 1:1 mapping to the model's outputs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
@@ -1220,43 +1406,93 @@ class PipelineModel(ipu_model.Model):
     a small value for `steps_per_epoch` is supplied then not all samples will be
     used.
 
-    A shuffled dataset should be supplied. Array (or list of arrays) inputs for
-    `x` and `y` will be accepted but will not be shuffled, and this may lead to
-    over-fitting.
+    A shuffled Dataset should be supplied. Non-dataset inputs (as described in
+    the parameters section below) for `x` and `y` will be accepted but will not
+    be shuffled, and this may lead to over-fitting.
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data.
+        It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      y: Target data. Like the input data `x`, it could be either Numpy array(s)
+        or TensorFlow tensor(s). It should be consistent with `x` (you cannot
+        have Numpy inputs and tensor targets, or tensor inputs and Numpy
+        targets). If `x` is a dataset then `y` must not be specified (since
+        targets will be obtained from `x`).
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      epochs: Integer. Number of epochs to train the model. The number of steps
+        performed per epoch is defined by the `steps_per_epoch` parameter, or
+        calculated according to the constraints described below.
+        Note that in conjunction with `initial_epoch`, `epochs` is to be
+        understood as "final epoch". The model is not trained for a number of
+        iterations given by `epochs`, but merely until the epoch of index
+        `epochs` is reached.
+      verbose: 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar,
+        2 = one line per epoch. Note that the progress bar is not particularly
+        useful when logged to a file, so verbose=2 is recommended when not
+        running interactively (for example, in a production environment).
+      callbacks: List of `keras.callbacks.Callback` instances. List of callbacks
+        to apply during training. See `tf.keras.callbacks` in the TensorFlow
+        documentation.
+      shuffle: **NOT SUPPORTED**. This will be supported in a future release.
+      initial_epoch: Integer. Epoch at which to start training (useful for
+        resuming a previous training run).
       steps_per_epoch: Integer or `None`. Specifies the total number of steps to
         be performed per epoch.
-        If `steps_per_run` is specified then the value for `steps_per_epoch`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps_per_epoch`
-        must be specified.
-        For a finite dataset if `steps_per_epoch` is specified then it must
-        contain at least mini-batch size * gradient accumulation count * `steps`
-        samples.
-        For a dataset of known finite length a value for `steps_per_epoch`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is
-        specified).
-        For array inputs a value for `steps_per_epoch` will be calculated
-        if no value is specified. If the number of samples provided is
-        not a multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps_per_epoch` and a warning will be logged.
+        The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps_per_epoch`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps_per_epoch`
+          must be specified.
+        - For a finite dataset if `steps_per_epoch` is specified then it must
+          contain at least mini-batch size * gradient accumulation count *
+          `steps` samples.
+        - For a dataset of known finite length a value for `steps_per_epoch`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is
+          specified).
+        - For array or tensor inputs a value for `steps_per_epoch` will be
+          calculated if no value is specified. If the number of samples provided
+          is not a multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps_per_epoch` and a warning will be logged.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps_per_epoch` (which will
         be calculated if not specified) divided by the replication factor.
         The value of 'steps_per_epoch' (if specified) must be evenly
         divisible by `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      A `History` object. Its `History.history` attribute is a record of
+      training loss values and metrics values at successive epochs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().fit(x,
                        y,
@@ -1295,37 +1531,77 @@ class PipelineModel(ipu_model.Model):
     mini-batch size multiplied by the gradient accumulation count multiplied by
     the replication factor.
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data. It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      y: Target data. Like the input data `x`, it could be either Numpy array(s)
+        or TensorFlow tensor(s). It should be consistent with `x` (you cannot
+        have Numpy inputs and tensor targets, or tensor inputs and Numpy
+        targets). If `x` is a dataset then `y` must not be specified (since
+        targets will be obtained from `x`).
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      verbose: 0 or 1. Verbosity mode. 0 = silent, 1 = progress bar. **HAS NO
+        EFFECT** - the progress bar is not displayed. This will be corrected in
+        a future release.
       steps: Integer or `None`. Specifies the total number of steps to be
-        performed.
-        If `steps_per_run` is specified then the value for `steps`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps`
-        must be specified.
-        For a finite dataset if `steps` is specified then it must contain at
-        least mini-batch size * gradient accumulation count * `steps` samples.
-        For a dataset of known finite length a value for `steps`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is specified).
-        For array inputs a value for `steps` will be calculated
-        if no value is specified. If the number of samples provided is not a
-        multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps` and a warning will be logged.
+        performed. The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps`
+          must be specified.
+        - For a finite dataset if `steps` is specified then it must contain at
+          least mini-batch size * gradient accumulation count * `steps` samples.
+          For a dataset of known finite length a value for `steps`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is specified).
+        - For array or tensor inputs a value for `steps` will be calculated
+          if no value is specified. If the number of samples provided is not a
+          multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps` and a warning will be logged.
+      callbacks: List of keras.callbacks.Callback instances. List of callbacks
+        to apply during evaluation. **KNOWN ISSUE**: `evaluate` currently
+        calls the callback functions applicable to `fit` rather than those
+        applicable to `evaluate`. This will be corrected in a future release.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps` (which will be calculated
         if not specified) divided by the replication factor.
-        The value of 'steps' (if specified) must be evenly divisible by
+        The value of `steps` (if specified) must be evenly divisible by
         `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      Scalar test loss (if the model has a single output and no metrics) or list
+      of scalars (if the model has multiple outputs and/or metrics). The
+      attribute model.metrics_names will give you the display labels for the
+      scalar outputs.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().evaluate(x,
                             y,
@@ -1364,37 +1640,69 @@ class PipelineModel(ipu_model.Model):
     the same model will allow single mini-batches (using gradient accumulation
     count = 1).
 
-    Array (or list of arrays) inputs will be converted into a Dataset internally
-    based on the `batch_size`, dropping any partial batch.
+    Input/Target data of the following types will be converted into a Dataset
+    internally based on the batch_size, dropping any partial batch: Numpy array
+    (or list of arrays), TensorFlow tensor (or list of tensors) or dict.
+
+    Only the parameters documented below are supported.
 
     Args:
+      x: Input data. It could be:
+
+        - A Numpy array (or array-like), or a list of arrays (in case the model
+          has multiple inputs).
+        - A TensorFlow tensor, or a list of tensors (in case the model has
+          multiple inputs).
+        - A dict mapping input names to the corresponding array/tensors, if the
+          model has named inputs.
+        - A `tf.data` dataset. This must return a tuple of `(inputs, targets)`.
+      batch_size: Integer or `None`. The mini-batch size to use for input data
+        supplied as Numpy array(s) or TensorFlow tensor(s). If `x` is a dataset
+        then `batch_size` must not be specified.
+      verbose: Verbosity mode, 0 or 1. **HAS NO EFFECT**. This will be corrected
+        in a future release.
       steps: Integer or `None`. Specifies the total number of steps to be
         performed.
-        If `steps_per_run` is specified then the value for `steps`
-        must be evenly divisible by `steps_per_run` multiplied by the
-        replication factor. Otherwise it must be divisible by the
-        replication factor.
-        For an infinitely repeating dataset a value for `steps`
-        must be specified.
-        For a finite dataset if `steps` is specified then it must contain at
-        least mini-batch size * gradient accumulation count * `steps` samples.
-        For a dataset of known finite length a value for `steps`
-        will be calculated if no value is specified. The number of
-        samples in the dataset must be a multiple of the mini-batch size
-        multiplied by the gradient accumulation count multiplied by the
-        replication factor (multiplied by `steps_per_run` if it is specified).
-        For array inputs a value for `steps` will be calculated
-        if no value is specified. If the number of samples provided is not a
-        multiple of the mini-batch size multiplied by the gradient
-        accumulation count multiplied by the replication factor (multiplied by
-        `steps_per_run` if it is specified) then samples will be dropped when
-        deriving a value for `steps` and a warning will be logged.
+        The following constraints apply:
+
+        - If `steps_per_run` is specified then the value for `steps`
+          must be evenly divisible by `steps_per_run` multiplied by the
+          replication factor. Otherwise it must be divisible by the
+          replication factor.
+        - For an infinitely repeating dataset a value for `steps`
+          must be specified.
+        - For a finite dataset if `steps` is specified then it must contain at
+          least mini-batch size * gradient accumulation count * `steps` samples.
+          For a dataset of known finite length a value for `steps`
+          will be calculated if no value is specified. The number of
+          samples in the dataset must be a multiple of the mini-batch size
+          multiplied by the gradient accumulation count multiplied by the
+          replication factor (multiplied by `steps_per_run` if it is specified).
+        - For array or tensor inputs a value for `steps` will be calculated
+          if no value is specified. If the number of samples provided is not a
+          multiple of the mini-batch size multiplied by the gradient
+          accumulation count multiplied by the replication factor (multiplied by
+          `steps_per_run` if it is specified) then samples will be dropped when
+          deriving a value for `steps` and a warning will be logged.
+      callbacks: List of keras.callbacks.Callback instances. List of callbacks
+        to apply during evaluation. **KNOWN ISSUE**: `predict` currently
+        calls the callback functions applicable to `fit` rather than those
+        applicable to `predict`. This will be corrected in a future release.
       steps_per_run: Integer or `None`. Specifies how many steps will be
         performed per replica on each hardware execution.
         If not specified this will be set to `steps` (which will be calculated
         if not specified) divided by the replication factor.
-        The value of 'steps' (if specified) must be evenly divisible by
+        The value of `steps` (if specified) must be evenly divisible by
         `steps_per_run` multiplied by the replication factor.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        that is created internally by this function. See the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
+        documentation.
+    Returns:
+      Numpy array(s) of predictions.
+    Raises:
+      ValueError: if there are invalid arguments.
     """
     return super().predict(x,
                            batch_size=batch_size,
