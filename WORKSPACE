@@ -149,7 +149,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 new_git_repository(
     name = "horovod_repo",
     remote = "https://github.com/horovod/horovod.git",
-    commit = "ed54730812f8a2a42532ed091dd21e148b1f5b31",
+    commit = "b52e4b3e6ce5b1b494b77052878a0aad05c2e3ce",
     build_file = "//third_party/ipus/horovod:horovod.BUILD",
 )
 
