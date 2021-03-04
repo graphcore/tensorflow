@@ -63,7 +63,6 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
     self.assertFalse(hvd.nccl_built())
     self.assertFalse(hvd.ddl_built())
-    self.assertFalse(hvd.mlsl_built())
     self.assertFalse(hvd.gloo_built())
     self.assertFalse(hvd.gloo_enabled())
 
