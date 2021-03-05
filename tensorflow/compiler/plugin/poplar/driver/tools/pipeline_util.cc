@@ -1108,9 +1108,17 @@ Status RemoveOutputsFromCall(HloInstruction* call,
     }
   }
 
-  // Create a new root and change the shapes.
-  HloInstruction* new_root = call_computation->AddInstruction(
-      HloInstruction::CreateTuple(new_outputs));
+  HloInstruction* new_root;
+  if (new_outputs.size() == 1 && new_outputs[0]->shape().IsTuple()) {
+    // If there's only one output and it is already a tuple.
+    new_root = new_outputs[0];
+  } else {
+    // Otherwise create a new tuple root.
+    new_root = call_computation->AddInstruction(
+        HloInstruction::CreateTuple(new_outputs));
+  }
+
+  // Change the computation shape
   std::vector<Shape>* mutable_call_tuple_shapes =
       call->mutable_shape()->mutable_tuple_shapes();
   *mutable_call_tuple_shapes = new_root->shape().tuple_shapes();
@@ -1125,19 +1133,29 @@ Status RemoveOutputsFromCall(HloInstruction* call,
         call_computation->RemoveInstructionAndUnusedOperands(root));
   }
 
+  // In the case we didn't create a tuple, replace all users of GTE with the
+  // call.
+  if (new_outputs.size() == 1 && new_outputs[0]->shape().IsTuple()) {
+    for (auto user : call->users()) {
+      CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+      TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(call));
+    }
+  }
+
   return Status::OK();
 }
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
     const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
     bool allow_communication_ops, bool allow_feeds, bool allow_recomputation,
-    bool allow_communication_optimizations)
+    bool allow_communication_optimizations, bool use_io_tiles)
     : pipeline_stages_(pipeline_stages),
       allow_duplicate_gte_edges_(allow_duplicate_gte_edges),
       allow_communication_ops_(allow_communication_ops),
       allow_feeds_(allow_feeds),
       allow_recomputation_(allow_recomputation),
-      allow_communication_optimizations_(allow_communication_optimizations) {
+      allow_communication_optimizations_(allow_communication_optimizations),
+      use_io_tiles_(use_io_tiles) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (size_t id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -1556,6 +1574,11 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       return !allow_communication_ops_;
     case HloOpcode::kParameter:
       return false;
+    case HloOpcode::kTuple:
+      // Needs to be lowered, if it isn't recombining output from an
+      // inter-tileset-copy.
+      return (inst->operand_count() == 0) ||
+             !IsPoplarInstruction(PoplarOp::InterTilesetCopy, inst->operand(0));
     case HloOpcode::kGetTupleElement: {
       // A GTE on the output from a PipelineStage needs to be lowered unless:
       // (1) It is used by the next pipeline stage.
@@ -1583,6 +1606,9 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         return false;
       } else if (allow_feeds_ && gte_input->opcode() == HloOpcode::kInfeed) {
         return false;
+      } else if (allow_feeds_ &&
+                 gte_input->operand(0)->opcode() == HloOpcode::kInfeed) {
+        return false;
       } else if (IsResourceUpdate(gte_input)) {
         for (const HloInstruction* gte_user : inst->users()) {
           // Expect that all users of the resource update are the root
@@ -1594,13 +1620,17 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
           }
         }
         return false;
+      } else if (IsPoplarInstruction(PoplarOp::InterTilesetCopy,
+                                     inst->users()[0])) {
+        return false;
       } else {
         // Any other GTE has to be lowered.
         return true;
       }
     }
     case HloOpcode::kCustomCall: {
-      if (IsGradientAccumulatorCreate(inst) || IsExecutionCounter(inst)) {
+      if (IsGradientAccumulatorCreate(inst) || IsExecutionCounter(inst) ||
+          IsPoplarInstruction(PoplarOp::InterTilesetCopy)(inst)) {
         return false;
       } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst)) {
         // The sink op combines the same gradient accumulation buffer being
@@ -1630,6 +1660,12 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         // Stage -> GTE -> InterIPUCopy -> NextStage
         const HloInstruction* gte = inst->operand(0);
         const HloInstruction* gte_input = gte->operand(0);
+
+        // Find a gte leaf with a non-gte user.
+        while (gte_input->opcode() == HloOpcode::kGetTupleElement) {
+          gte_input = gte_input->operand(0);
+        }
+
         if (gte->opcode() != HloOpcode::kGetTupleElement) {
           return FailedPrecondition(
               "Expected the input of an inter IPU copy to be a GTE "
@@ -1731,6 +1767,9 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
             // RecomputationStage.
             const HloInstruction* gte_input =
                 fifo_input->operand(0)->LatestNonGteAncestor();
+            if (IsPoplarInstruction(PoplarOp::InterTilesetCopy, gte_input)) {
+              gte_input = gte_input->operand(0)->LatestNonGteAncestor();
+            }
             if (gte_input->opcode() != HloOpcode::kInfeed) {
               TF_ASSIGN_OR_RETURN(StageID fifo_input_stage_id,
                                   GetStageID(gte_input));
@@ -1809,8 +1848,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
     }
     case HloOpcode::kAfterAll: {
       if (allow_feeds_) {
-        // Need to lower an after all if it doesn't have a single infeed/outfeed
-        // user or it has operands.
+        // Need to lower an after all if it doesn't have a single
+        // infeed/outfeed user or it has operands.
         auto user_is_feed = [](const HloInstruction* inst) {
           return inst->opcode() == HloOpcode::kInfeed ||
                  inst->opcode() == HloOpcode::kOutfeed;
@@ -1842,7 +1881,11 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         }
 
         // * or, when not recomputing, the GTE doesn't have a single user,
-        if (!allow_recomputation_ && user->user_count() != 1) {
+        auto isnt_gte = [](const HloInstruction* gte_user) -> bool {
+          return gte_user->opcode() != HloOpcode::kGetTupleElement;
+        };
+        if (!allow_recomputation_ &&
+            absl::c_count_if(user->users(), isnt_gte) > 1) {
           return true;
         }
 
@@ -1856,7 +1899,9 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         return !absl::c_all_of(user->users(), [&](const HloInstruction* u) {
           return IsAnyPipelineStageOp(u) ||
                  (allow_recomputation_ &&
-                  IsPoplarInstruction(PoplarOp::Fifo)(u));
+                  IsPoplarInstruction(PoplarOp::Fifo, u)) ||
+                 (use_io_tiles_ &&
+                  (u->opcode() == HloOpcode::kGetTupleElement));
         });
       } else {
         return true;
@@ -1913,15 +1958,14 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
 }
 
 StatusOr<std::unique_ptr<PipelineDataflowAnalysis>>
-PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
-                                      bool allow_duplicate_gte_edges,
-                                      bool allow_communication_ops,
-                                      bool allow_feeds,
-                                      bool allow_recomputation,
-                                      bool allow_communication_optimizations) {
+PipelineDataflowAnalysis::GetAnalysis(
+    const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
+    bool allow_communication_ops, bool allow_feeds, bool allow_recomputation,
+    bool allow_communication_optimizations, bool use_io_tiles) {
   auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
       pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops,
-      allow_feeds, allow_recomputation, allow_communication_optimizations);
+      allow_feeds, allow_recomputation, allow_communication_optimizations,
+      use_io_tiles);
   if (!allow_recomputation && analysis->pipeline_stages_.recomputation.size()) {
     return FailedPrecondition(
         "Detected PipelineStageRecomputation which are not allowed");

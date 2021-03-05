@@ -15,6 +15,7 @@ Targeting the IPU from TensorFlow 1
     compiling
 
     perf_training
+    ipu_io
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training

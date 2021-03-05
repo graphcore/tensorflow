@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor_creator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/repeat_loop_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"

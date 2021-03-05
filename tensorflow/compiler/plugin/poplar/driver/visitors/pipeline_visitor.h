@@ -103,8 +103,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual Status HandleFifo(HloInstruction* hlo);
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
   virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);
+  virtual Status HandleInterTilesetCopy(HloInstruction* hlo);
 
-  Status VerifyPipelineArguments(int64 iterations) const;
+  virtual Status VerifyPipelineArguments(int64 iterations) const;
 
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
       int64 iterations) const;
@@ -140,6 +141,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<poplar::program::Sequence> outfeed_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<poplar::program::Sequence> recomputation_sequences_;
+  std::vector<poplar::program::Sequence> inter_tileset_copy_in_sequences_;
+  std::vector<poplar::program::Sequence> inter_tileset_copy_out_sequences_;
   poplar::program::Sequence resource_update_;
 
   // Sequence which sets the initial values for all the execution counters.
@@ -160,12 +163,17 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
       fwd_stage_visitors_;
 
-  virtual poplar::program::Program GetPipelineRampUpSequence(
+  struct RepeatBlock {
+    poplar::program::Program program;
+    int64 iterations;
+  };
+
+  virtual RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const = 0;
-  virtual poplar::program::Program GetPipelineRampDownSequence(
+  virtual RepeatBlock GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int additional_iterations = 0) const = 0;
-  virtual poplar::program::Program GetPipelineRepeatBlockSequence(
+  virtual RepeatBlock GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int64 iterations) const = 0;
 
@@ -198,12 +206,12 @@ class ParallelPipelineVisitor : public PipelineVisitor {
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
-  poplar::program::Program GetPipelineRampUpSequence(
+  RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Program GetPipelineRampDownSequence(
+  RepeatBlock GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int additional_iterations = 0) const override;
-  poplar::program::Program GetPipelineRepeatBlockSequence(
+  RepeatBlock GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int64 iterations) const override;
 
@@ -223,23 +231,17 @@ class SequentialPipelineVisitor : public PipelineVisitor {
       const poplar::DebugNameAndId& debug_name_and_id);
 
  protected:
-  poplar::program::Program GetPipelineRampUpSequence(
+  RepeatBlock GetPipelineRampUpSequence(
       const poplar::DebugNameAndId& debug_name_and_id) const override;
-  poplar::program::Program GetPipelineRampDownSequence(
+  RepeatBlock GetPipelineRampDownSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int additional_iterations = 0) const override;
-  poplar::program::Program GetPipelineRepeatBlockSequence(
+  RepeatBlock GetPipelineRepeatBlockSequence(
       const poplar::DebugNameAndId& debug_name_and_id,
       int64 iterations) const override;
 
   bool StageOutputsRequireCopies() const override { return false; }
 };
-
-StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
-    const HloInstruction* pipeline, CompilerResources& res,
-    const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
-    const poplar::DebugNameAndId& debug_name_and_id);
 
 }  // namespace poplarplugin
 }  // namespace xla

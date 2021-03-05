@@ -65,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fix_root_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/function_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/function_optimizer.h"
@@ -1244,6 +1245,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
+    pipeline.AddPass<HloDCE>();
     // pass.AddPass<ConditionalSimplifier>();
     pipeline.AddPass<F16ConstantFolding>();
     pipeline.AddPass<HloConstantFolding>();
@@ -1369,6 +1371,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<InterIpuCopyInserter>();
     pipeline.AddPass<IoTilesPlacer>(poplar_executor->ShouldPlaceOpsOnIoTiles());
     pipeline.AddPass<InterTilesetCopyInserter>();
+    pipeline.AddPass<TupleSimplifier>(true);
+    pipeline.AddPass<FixRootInstructionsPass>();
+    pipeline.AddPass<HloDCE>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
     pipeline.AddPass<CopyInserter>();
     pipeline.AddPass<FunctionCombiner>();

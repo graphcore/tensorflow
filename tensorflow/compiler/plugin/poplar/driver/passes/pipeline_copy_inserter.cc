@@ -126,9 +126,6 @@ StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
             TF_ASSIGN_OR_RETURN(
                 bool added, AddCopyIfParameterModifiedInplace(stage, op_idx));
             changed |= added;
-          } else {
-            // Any other GTE input can only be an infeed.
-            CHECK_EQ(operand->operand(0)->opcode(), HloOpcode::kInfeed);
           }
         }
       }

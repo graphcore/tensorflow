@@ -202,6 +202,108 @@ ENTRY top {
       Match(gte0, m::GetTupleElement(m::GetTupleElement(m::Infeed(), 0), 0)));
 }
 
+TEST_F(InterTilesetCopyInserterTest, InsertCopyForGTE) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY top {
+  after-all = token[] after-all()
+  infeed = ((f16[], f16[]), token[]) infeed(after-all)
+  gte = (f16[], f16[]) get-tuple-element(infeed), index=0
+  gte0 = f16[] get-tuple-element(gte), index=0
+  gte1 = f16[] get-tuple-element(gte), index=1
+  ROOT mul = f16[] multiply(gte0, gte1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(IoTilesPlacer(true).Run(module).ValueOrDie());
+  EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
+
+  const auto* mul = module->entry_computation()->root_instruction();
+  CHECK_EQ(mul->opcode(), HloOpcode::kMultiply);
+
+  // All the operands need an inter-tileset-copy.
+  const auto* copy1 = mul->operand(0);
+  EXPECT_TRUE(IsPoplarInstruction(InterTilesetCopy)(copy1));
+
+  const auto* copy2 = mul->operand(1);
+  EXPECT_TRUE(IsPoplarInstruction(InterTilesetCopy)(copy2));
+
+  EXPECT_EQ(GetTileset(copy1).ValueOrDie(), TILESET_COMPUTE_TILES);
+  EXPECT_EQ(GetTileset(copy2).ValueOrDie(), TILESET_COMPUTE_TILES);
+
+  const auto* gte1 = copy1->operand(0);
+  EXPECT_EQ(GetTileset(gte1).ValueOrDie(), TILESET_IO_TILES);
+  EXPECT_TRUE(
+      Match(gte1, m::GetTupleElement(m::GetTupleElement(m::Infeed(), 0), 0)));
+
+  const auto* gte2 = copy2->operand(0);
+  EXPECT_EQ(GetTileset(gte2).ValueOrDie(), TILESET_IO_TILES);
+  EXPECT_TRUE(
+      Match(gte2, m::GetTupleElement(m::GetTupleElement(m::Infeed(), 0), 1)));
+}
+
+TEST_F(InterTilesetCopyInserterTest, InsertCopyForTuple) {
+  const auto hlo_string = R"(
+HloModule top
+
+dummy {
+  ROOT r = (f16[], f16[]) parameter(0)
+}
+
+ENTRY top {
+  after-all = token[] after-all()
+  infeed = ((f16[], f16[]), token[]) infeed(after-all)
+  gte = (f16[], f16[]) get-tuple-element(infeed), index=0
+  ROOT call = (f16[], f16[]) call(gte), to_apply=dummy
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(IoTilesPlacer(true).Run(module).ValueOrDie());
+  EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
+
+  const auto* call = module->entry_computation()->root_instruction();
+  CHECK_EQ(call->opcode(), HloOpcode::kCall);
+
+  const auto* tuple = call->operand(0);
+  CHECK_EQ(tuple->opcode(), HloOpcode::kTuple);
+  CHECK_EQ(tuple->operands().size(), 2);
+
+  const auto* copy1 = tuple->operand(0);
+  CHECK_EQ(copy1->opcode(), HloOpcode::kCustomCall);
+  EXPECT_TRUE(IsPoplarInstruction(InterTilesetCopy, copy1));
+
+  const auto* copy2 = tuple->operand(1);
+  CHECK_EQ(copy2->opcode(), HloOpcode::kCustomCall);
+  EXPECT_TRUE(IsPoplarInstruction(InterTilesetCopy, copy2));
+
+  const auto* gte1 = copy1->operand(0);
+  CHECK_EQ(gte1->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_TRUE(
+      Match(gte1, m::GetTupleElement(m::GetTupleElement(m::Infeed(), 0), 0)));
+
+  const auto* gte2 = copy2->operand(0);
+  CHECK_EQ(gte2->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_TRUE(
+      Match(gte2, m::GetTupleElement(m::GetTupleElement(m::Infeed(), 0), 1)));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

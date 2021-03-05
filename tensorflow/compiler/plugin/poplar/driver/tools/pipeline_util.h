@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
@@ -243,13 +244,14 @@ class PipelineDataflowAnalysis {
       bool allow_duplicate_gte_edges = false,
       bool allow_communication_ops = false, bool allow_feeds = false,
       bool allow_recomputation = false,
-      bool allow_communication_optimizations = false);
+      bool allow_communication_optimizations = false, bool use_io_tiles = true);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
                                     bool allow_duplicate_gte_edges,
                                     bool allow_communication_ops,
                                     bool allow_feeds, bool allow_recomputation,
-                                    bool allow_communication_optimizations);
+                                    bool allow_communication_optimizations,
+                                    bool use_io_tiles);
 
   // Returns whether the instruction needs to be lowered into a stage given the
   // current analysis.
@@ -343,6 +345,7 @@ class PipelineDataflowAnalysis {
   bool allow_feeds_;
   bool allow_recomputation_;
   bool allow_communication_optimizations_;
+  bool use_io_tiles_;
 };
 
 // A helper class used to represent a tensor being passed through pipeline
