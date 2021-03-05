@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_tileset_copy_inserter.h"
 
+#include <utility>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_tileset_copy.h"
@@ -42,12 +43,50 @@ Status InsertInterTilesetCopy(
     const std::vector<HloInstruction*>& destinations) {
   CHECK(!destinations.empty());
 
+  TF_ASSIGN_OR_RETURN(const auto src_tileset, GetTileset(source));
   TF_ASSIGN_OR_RETURN(const auto dst_tileset, GetTileset(destinations.front()));
 
   VLOG(3) << "Insert copy of " << source->ToShortString() << " to "
+          << destinations.front()->ToShortString() << " : "
           << Tileset_Name(dst_tileset);
 
-  auto* copy = comp->AddInstruction(CreateInterTilesetCopy(source));
+  HloInstruction* copy = nullptr;
+  if (source->shape().IsTuple()) {
+    std::vector<HloInstruction*> gtes;
+    gtes.reserve(source->shape().tuple_shapes_size());
+
+    for (int64 i = 0; i != source->shape().tuple_shapes_size(); ++i) {
+      // Add a GTE.
+      auto gte = HloInstruction::CreateGetTupleElement(
+          source->shape().tuple_shapes(i), source, i);
+
+      // Set the GTE to the source tileset.
+      TF_RETURN_IF_ERROR(SetTileset(gte.get(), src_tileset));
+      if (source->has_sharding()) {
+        gte->set_sharding(source->sharding());
+      }
+
+      // Add GTE to the computation.
+      gtes.push_back(comp->AddInstruction(std::move(gte)));
+    }
+
+    // Create a tuple to recreated the source original tuple.
+    copy = comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+
+    // Assign the created tuple to the destintion tileset
+    TF_RETURN_IF_ERROR(SetTileset(copy, dst_tileset));
+
+    for (auto gte : gtes) {
+      // Recursively add inter-tileset-copies between the gte and tuple.
+      TF_RETURN_IF_ERROR(InsertInterTilesetCopy(comp, gte, {copy}));
+    }
+  } else {
+    // No tuple, just add a inter-tileset-copy between the source and
+    // destination.
+    CHECK(source->shape().IsArray());
+    copy = comp->AddInstruction(CreateInterTilesetCopy(source));
+  }
+
   TF_RETURN_IF_ERROR(SetTileset(copy, dst_tileset));
   if (source->has_sharding()) {
     copy->set_sharding(source->sharding());

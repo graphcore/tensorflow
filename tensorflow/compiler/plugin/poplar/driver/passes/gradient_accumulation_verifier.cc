@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
@@ -190,6 +191,21 @@ StatusOr<int64> VerifyGradientAccumulationInsideComputation(
   CHECK_EQ(inner_user->opcode(), HloOpcode::kTuple);
   return output_index;
 }
+
+std::vector<const HloInstruction*> GetGTEUsers(const HloInstruction* root_gte) {
+  std::vector<const HloInstruction*> result;
+
+  for (auto user : root_gte->users()) {
+    if (user->opcode() == HloOpcode::kGetTupleElement) {
+      auto tmp_result = GetGTEUsers(user);
+      result.insert(result.end(), tmp_result.begin(), tmp_result.end());
+    } else {
+      result.push_back(user);
+    }
+  }
+
+  return result;
+}
 }  // namespace
 
 Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
@@ -356,21 +372,16 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           GetUniqueGTEUser(user, output_index));
 
-      // We expect the sink instruction to only be used by the resource
-      // update function.
-      if (gte->user_count() != 1) {
+      std::vector<const HloInstruction*> leafs = GetGTEUsers(gte);
+      auto itr =
+          std::find_if(leafs.begin(), leafs.end(),
+                       IsPoplarInstruction(PoplarOp::GradientAccumulatorSink));
+
+      if ((*itr)->user_count() != 1) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to only have a single "
             "user, but it has ",
-            gte->user_count(), " users.");
-      }
-
-      if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
-              gte->users()[0])) {
-        return InternalErrorStrCat(
-            "Expected the gradient accumulation buffer to be used by a "
-            "gradient accumulation sink, but it is used by ",
-            gte->users()[0]->ToString(), " instead.");
+            (*itr)->user_count(), " users.");
       }
     }
   } else {

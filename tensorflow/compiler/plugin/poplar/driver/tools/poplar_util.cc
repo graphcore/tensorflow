@@ -937,5 +937,9 @@ void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
                     std::to_string(num_runtime_replica));
 }
 
+bool HasIOTiles(CompilerResources& res) {
+  return res.io_graph || !res.shard_io_graphs.empty();
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
