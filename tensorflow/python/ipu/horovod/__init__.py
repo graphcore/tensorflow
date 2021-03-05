@@ -49,7 +49,6 @@ gloo_enabled = _basics.gloo_enabled
 gloo_built = _basics.gloo_built
 nccl_built = _basics.nccl_built
 ddl_built = _basics.ddl_built
-mlsl_built = _basics.mlsl_built
 is_homogeneous = _basics.is_homogeneous
 
 # Import the reduction op values.

@@ -197,11 +197,3 @@ class HorovodBasics:
       A boolean value indicating whether DDL support was compiled.
     """
     return bool(self.MPI_LIB_CTYPES.horovod_ddl_built())
-
-  def mlsl_built(self):
-    """Returns True if Horovod was compiled with MLSL support.
-
-    Returns:
-      A boolean value indicating whether MLSL support was compiled.
-    """
-    return bool(self.MPI_LIB_CTYPES.horovod_mlsl_built())
