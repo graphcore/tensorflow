@@ -15,6 +15,7 @@
 
 import os
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -41,9 +42,11 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
+class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
+                                         parameterized.TestCase):
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self):
+  def testPipelineCompare1(self, number_of_io_tiles):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -98,12 +101,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 14770, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        14770,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare2(self):
+  def testPipelineCompare2(self, number_of_io_tiles):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -199,12 +211,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 40549, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        40549,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare3(self):
+  def testPipelineCompare3(self, number_of_io_tiles):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -252,12 +273,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 13681, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3, stage4],
+        lambda: [], [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        13681,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare4(self):
+  def testPipelineCompare4(self, number_of_io_tiles):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -313,12 +343,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 20354, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        20354,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare5(self):
+  def testPipelineCompare5(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(128, shape=[1, 1, 1])
       dataset = dataset.batch(batch_size=1, drop_remainder=True)
@@ -330,8 +369,8 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    gradient_accumulation_count = 8
-    repeat_count = 2
+    gradient_accumulation_count = 16
+    repeat_count = 1
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
@@ -362,19 +401,28 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 13107, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        9174,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare6(self):
+  def testPipelineCompare6(self, number_of_io_tiles):
     # Stage2 has a stateful op whose state will be stored and the rest of the
     # stage should be recomputed.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[1, 10])
       return dataset.repeat().batch(4, drop_remainder=True)
 
-    gradient_accumulation_count = 6
+    gradient_accumulation_count = 12
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -416,10 +464,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         self,
         12609,
         True,
-        schedule=pipelining_ops.PipelineSchedule.Grouped)
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare7(self):
+  def testPipelineCompare7(self, number_of_io_tiles):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -464,12 +514,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 14502, True,
-        pipelining_ops.PipelineSchedule.Grouped)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        14502,
+        True,
+        pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights(self):
+  def testPipelineCompareSharedWeights(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -548,10 +607,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         schedule=pipelining_ops.PipelineSchedule.Grouped,
         recomputation_mode=pipelining_ops.RecomputationMode.
         RecomputeAndBackpropagateInterleaved,
-        device_mapping=[0, 1, 2, 0])
+        device_mapping=[0, 1, 2, 0],
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights2(self):
+  def testPipelineCompareSharedWeights2(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -614,10 +675,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         21458,
         recomp=True,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
-        device_mapping=[0, 1, 0, 2])
+        device_mapping=[0, 1, 0, 2],
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareRecomputeDropout(self):
+  def testPipelineCompareRecomputeDropout(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -673,10 +736,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         self,
         21458,
         recomp=True,
-        schedule=pipelining_ops.PipelineSchedule.Grouped)
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testUnmodifiedInput(self):
+  def testUnmodifiedInput(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(8, shape=[4, 4])
 
@@ -733,10 +798,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         self,
         10153,
         recomp=True,
-        schedule=pipelining_ops.PipelineSchedule.Grouped)
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only
-  def testPipelineRecomputationCheckpoint(self):
+  def testPipelineRecomputationCheckpoint(self, number_of_io_tiles):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -801,7 +868,8 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
         recomp=True,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
         recomputation_mode=pipelining_ops.RecomputationMode.
-        RecomputeAndBackpropagateInterleaved)
+        RecomputeAndBackpropagateInterleaved,
+        number_of_io_tiles=number_of_io_tiles)
 
 
 if __name__ == "__main__":

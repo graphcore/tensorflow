@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -40,6 +41,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+
 Status PipelineFixer::InsertStatefulNoopsIntoStages() {
   for (auto& stages : {stages_.forward, stages_.backward}) {
     for (HloInstruction* stage : stages) {

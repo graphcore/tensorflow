@@ -17,6 +17,7 @@ Targeting the IPU from TensorFlow 2
     examples_tf2
 
     perf_training
+    ipu_io
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training
