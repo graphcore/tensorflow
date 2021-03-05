@@ -246,6 +246,8 @@ void SetRuntimeReplicaOptions(poplar::OptionFlags* option_flags,
                               int64 process_index, int64 process_count,
                               int64 global_replication_factor);
 
+bool HasIOTiles(CompilerResources& res);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -18,24 +18,28 @@ limitations under the License.
 #include <stddef.h>
 #include <string.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
-#include <poplar/Engine.hpp>
-#include <poplar/GraphElements.hpp>
-#include <poplar/Tensor.hpp>
-#include <poplar/exceptions.hpp>
-#include <poputil/Util.hpp>
+#include <queue>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include <poplar/Engine.hpp>
+#include <poplar/GraphElements.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
+#include <poputil/Util.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_tileset_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -44,6 +48,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor_utils.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/layout_util.h"
@@ -60,95 +65,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+namespace util = ::xla::poplarplugin::pipelinevisitorutils;
+
 namespace {
-/**
- * Construct a unary predicate which checks if a given HloInstruction has the
- * same opcode as the one captured in the closure.
- *
- * @param opcode The opcode to capture and compare against.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
-  return [opcode](const HloInstruction* inst) -> bool {
-    return inst->opcode() == opcode;
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloFifoInstruction.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> IsFifoInstruction() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::Fifo)(inst);
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloIpuInterCopy.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloGradientAccumulatorCreate.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)>
-IsGradientAccumulatorCreateInstruction() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloGradientAccumulatorSink.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)>
-IsGradientAccumulatorSinkInstruction() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst);
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloCreateBuffer.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> IsCreateBuffer() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::CreateBuffer)(inst);
-  };
-}
-
-/**
- * Construct a unary predicate which checks if a given HloInstruction is an
- * HloExecutionCounter.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> IsExecutionCounter() {
-  return [](const HloInstruction* inst) -> bool {
-    return IsPoplarInstruction(PoplarOp::ExecutionCounter)(inst);
-  };
-}
-
 /**
  * Get the number of stages in a pipeline.
  *
@@ -233,8 +152,9 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   }
 
   // Partition out the stage calls instructions and skip them.
-  auto stages_end = std::stable_partition(
-      instructions.begin(), instructions.end(), HasHloOpcode(HloOpcode::kCall));
+  auto stages_end =
+      std::stable_partition(instructions.begin(), instructions.end(),
+                            util::HasHloOpcode(HloOpcode::kCall));
 
   // Comparison of HloInstructions with assigned stage index.
   const auto inst_comparison = [&](HloInstruction* a,
@@ -257,6 +177,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // Get the stage given the users. Requires all the users to already have a
   // stage.
   auto get_stage_from_users = [&](const HloInstruction* inst) {
+    CHECK_NE(inst->user_count(), 0);
     auto users = inst->users();
     return result.at(*absl::c_min_element(users, inst_comparison));
   };
@@ -264,58 +185,146 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // Get the stage given the operands. Requires all the operands to already have
   // a stage.
   auto get_stage_from_operands = [&](const HloInstruction* inst) {
+    CHECK_NE(inst->operand_count(), 0);
     auto operands = inst->operands();
     return result.at(*absl::c_max_element(operands, inst_comparison));
   };
 
+  auto inter_tileset_copy_in_end = std::stable_partition(
+      stages_end, instructions.end(), util::IsInterTilesetCopyInInstruction);
+  for (auto itr = stages_end; itr != inter_tileset_copy_in_end; ++itr) {
+    HloInstruction* inst = *itr;
+
+    CHECK_EQ(inst->user_count(), 1);
+    const HloInstruction* tuple = inst->users()[0];
+    CHECK_EQ(tuple->opcode(), HloOpcode::kTuple);
+    // Expect at least one user of GTE to be a forward stage.
+    auto fwd_stage_itr = absl::c_find_if(
+        tuple->users(),
+        [](const HloInstruction* inst) { return IsPipelineStage(inst); });
+    CHECK(fwd_stage_itr != tuple->users().end());
+    int64 stage = result.at(*fwd_stage_itr);
+    result[inst] = stage;
+    result[tuple] = stage;
+  }
+
   // Partition out infeeds.
-  auto infeeds_end = std::stable_partition(stages_end, instructions.end(),
-                                           HasHloOpcode(HloOpcode::kInfeed));
-  for (auto itr = stages_end; itr != infeeds_end; ++itr) {
+  auto infeeds_end =
+      std::stable_partition(inter_tileset_copy_in_end, instructions.end(),
+                            util::HasHloOpcode(HloOpcode::kInfeed));
+  for (auto itr = inter_tileset_copy_in_end; itr != infeeds_end; ++itr) {
     HloInstruction* inst = *itr;
     // For an infeed, assign the stages for the infeed, its gte user, and
     // the input token.
     const HloInstruction* token = inst->operand(0);
     CHECK_EQ(inst->user_count(), 1);
+    CHECK_EQ(token->opcode(), HloOpcode::kAfterAll);
     const HloInstruction* gte = inst->users()[0];
-    // Expect at least one user of GTE to be a forward stage.
-    auto fwd_stage_itr = absl::c_find_if(
-        gte->users(),
-        [](const HloInstruction* inst) { return IsPipelineStage(inst); });
+    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+
+    // Find a GTE with a non-GTE user.
+    while (gte->user_count() > 0 &&
+           gte->users()[0]->opcode() == HloOpcode::kGetTupleElement) {
+      gte = gte->users()[0];
+    }
+
+    // Expect at least one user of GTE to be a forward stage or inter-tilset
+    // copy.
+    auto fwd_stage_itr =
+        absl::c_find_if(gte->users(), [](const HloInstruction* inst) {
+          return IsPipelineStage(inst) ||
+                 util::IsInterTilesetCopyInInstruction(inst);
+        });
+    CHECK(fwd_stage_itr != gte->users().end());
     int64 stage = result.at(*fwd_stage_itr);
     result[inst] = stage;
     result[gte] = stage;
     result[token] = stage;
   }
 
+  auto inter_tileset_copy_out_end = std::stable_partition(
+      infeeds_end, instructions.end(), util::IsInterTilesetCopyOutInstruction);
+  for (auto itr = infeeds_end; itr != inter_tileset_copy_out_end; ++itr) {
+    HloInstruction* inst = *itr;
+
+    const HloInstruction* gte = inst->operand(0);
+    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+    // Find a GTE with a non-GTE user.
+    while (gte->operand(0)->opcode() == HloOpcode::kGetTupleElement) {
+      gte = gte->operand(0);
+    }
+
+    const HloInstruction* call = gte->operand(0);
+    CHECK_EQ(call->opcode(), HloOpcode::kCall);
+
+    int64 stage = result.at(call);
+    result[inst] = stage;
+    result[gte] = stage;
+  }
+
   // Partition out the outfeeds.
-  auto outfeeds_end = std::stable_partition(infeeds_end, instructions.end(),
-                                            HasHloOpcode(HloOpcode::kOutfeed));
+  auto outfeeds_end = std::stable_partition(
+      infeeds_end, instructions.end(), util::HasHloOpcode(HloOpcode::kOutfeed));
   for (auto itr = infeeds_end; itr != outfeeds_end; ++itr) {
     HloInstruction* inst = *itr;
     // For an outfeed, assign the stages for the outfeed, its gte operand, and
     // the input token.
     const HloInstruction* copy = inst->operand(0);
-    const HloInstruction* gte = copy->operand(0);
+    CHECK_EQ(copy->opcode(), HloOpcode::kCopy);
     const HloInstruction* token = inst->operand(1);
-    int64 stage = result.at(gte->operand(0));
-    result[inst] = stage;
-    result[gte] = stage;
-    result[token] = stage;
+    CHECK_EQ(token->opcode(), HloOpcode::kAfterAll);
+    const HloInstruction* gte = copy->operand(0);
+    if (result.contains(gte)) {
+      int64 stage = result.at(gte);
+      result[inst] = stage;
+      result[copy] = stage;
+      result[token] = stage;
+    } else if (gte->opcode() == HloOpcode::kTuple) {
+      const HloInstruction* gte2 = gte->operand(0);
+      CHECK(util::IsInterTilesetCopyOutInstruction(gte2));
+      int64 stage = result.at(gte2);
+      result[inst] = stage;
+      result[gte] = stage;
+      result[gte2] = stage;
+      result[token] = stage;
+    } else {
+      CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+      int64 stage = result.at(gte->operand(0));
+      result[inst] = stage;
+      result[gte] = stage;
+      result[token] = stage;
+    }
   }
 
   // Partition out the Inter IPU copies and also assign stage to their operands.
   auto inter_ipu_copies_end = std::stable_partition(
-      outfeeds_end, instructions.end(), IsIpuInterCopyInstruction());
+      outfeeds_end, instructions.end(), util::IsIpuInterCopyInstruction());
   for (auto itr = outfeeds_end; itr != inter_ipu_copies_end; ++itr) {
     HloInstruction* inst = *itr;
-    // Assign stages to the operands of the inter IPU copy.
-    for (HloInstruction* operand : inst->operands()) {
-      CHECK_EQ(operand->opcode(), HloOpcode::kGetTupleElement);
-      result[operand] = get_stage_from_operands(operand);
+    std::queue<HloInstruction*> operands;
+    std::vector<HloInstruction*> unassigned_insts;
+    operands.push(inst);
+    unassigned_insts.push_back(inst);
+
+    int64 stage = -1;
+    while (!operands.empty()) {
+      HloInstruction* x = operands.front();
+      operands.pop();
+
+      if (result.contains(x)) {
+        stage = std::max<int64>(result[x], stage);
+      } else {
+        unassigned_insts.push_back(x);
+        for (auto y : x->operands()) {
+          operands.push(y);
+        }
+      }
     }
-    // Then assign it to the copy.
-    result[inst] = get_stage_from_operands(inst);
+
+    CHECK_GT(stage, -1);
+    for (auto i : unassigned_insts) {
+      result[i] = stage;
+    }
   }
 
   // Partition out GTEs which have not been assigned a stage - these are
@@ -323,7 +332,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   auto gtes_end = std::stable_partition(
       inter_ipu_copies_end, instructions.end(),
       [&result](const HloInstruction* inst) {
-        return HasHloOpcode(HloOpcode::kGetTupleElement)(inst) &&
+        return util::HasHloOpcode(HloOpcode::kGetTupleElement)(inst) &&
                !result.contains(inst);
       });
   for (auto itr = inter_ipu_copies_end; itr != gtes_end; ++itr) {
@@ -333,7 +342,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
 
   // Partition out the copies.
   auto copies_end = std::stable_partition(gtes_end, instructions.end(),
-                                          HasHloOpcode(HloOpcode::kCopy));
+                                          util::HasHloOpcode(HloOpcode::kCopy));
   for (auto itr = gtes_end; itr != copies_end; ++itr) {
     HloInstruction* copy = *itr;
     if (copy->user_count() == 1 && IsResourceUpdate(copy->users()[0])) {
@@ -347,7 +356,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // then it is assigned to that stage, otherwise it it assigned to the same
   // stage as its input.
   auto fifos_end = std::stable_partition(copies_end, instructions.end(),
-                                         IsFifoInstruction());
+                                         util::IsFifoInstruction());
   for (auto itr = copies_end; itr != fifos_end; ++itr) {
     HloInstruction* inst = *itr;
     if (inst->user_count() == 1) {
@@ -365,8 +374,9 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
 
   // Partition out the gradient accumulation buffers - these are assigned to the
   // first stage in which they are used in.
-  auto gradient_accumulators_end = std::stable_partition(
-      fifos_end, instructions.end(), IsGradientAccumulatorCreateInstruction());
+  auto gradient_accumulators_end =
+      std::stable_partition(fifos_end, instructions.end(),
+                            util::IsGradientAccumulatorCreateInstruction());
   for (auto itr = fifos_end; itr != gradient_accumulators_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
@@ -376,7 +386,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // they are used in.
   auto parameters_end =
       std::stable_partition(gradient_accumulators_end, instructions.end(),
-                            HasHloOpcode(HloOpcode::kParameter));
+                            util::HasHloOpcode(HloOpcode::kParameter));
   for (auto itr = gradient_accumulators_end; itr != parameters_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
@@ -385,7 +395,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // Partition out execution counters - these are assigned to the first stage in
   // which they are used in.
   auto execution_counters_end = std::stable_partition(
-      parameters_end, instructions.end(), IsExecutionCounter());
+      parameters_end, instructions.end(), util::IsExecutionCounter());
   for (auto itr = parameters_end; itr != execution_counters_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
@@ -394,7 +404,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // Partition out buffers - these are assigned to the first stage in which
   // they are used in.
   auto buffers_end = std::stable_partition(
-      execution_counters_end, instructions.end(), IsCreateBuffer());
+      execution_counters_end, instructions.end(), util::IsCreateBuffer());
   for (auto itr = parameters_end; itr != buffers_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
@@ -462,555 +472,6 @@ int64 GetNumberOfBackwardPipelineStages(const HloInstruction* pipeline) {
   // constructor.
   auto stages = GetPipelineStages(pipeline_computation).ValueOrDie();
   return stages.backward.size();
-}
-
-/**
- * Find the indices of all possible non-overlapping circular unions.
- *
- * @param input The sequence of input elements.
- * @param predicate The user defined predicate function which compares members
- *                  of the input sequence for "equality".
- *
- * @returns a list of indices of valid rotations of the input that do not
- *          overlap.
- *
- *
- * Suppose our we have:
- *   ElementType = int,
- *   BinaryPredicateType = bool(int, int),
- *   input = [0, 1, 2, 0, 0, 2, 1, 0],
- *   predicate = [](int a, int b){ return a == b; }
- *
- * The result will be [0, 2].
- * We can see this is the case by drawing the rotated input
- *   rotate(input, 0) = [0, 1, 2, 0, 0, 2, 1, 0]
- *   rotate(input, 2) = [2, 0, 0, 2, 1, 0, 0, 1]
- *
- * It can also be seen that no other rotations would work
- *   rotate(input, 0) = [0, 1, 2, 0, 0, 2, 1, 0] Trivially a member of the set
- *   rotate(input, 1) = [0, 0, 1, 2, 0, 0, 2, 1] Overlaps at position 0
- *   rotate(input, 2) = [1, 0, 0, 1, 2, 0, 0, 2] Add to set
- *   rotate(input, 3) = [2, 1, 0, 0, 1, 2, 0, 0] Overlaps at position 1
- *   rotate(input, 4) = [0, 2, 1, 0, 0, 1, 2, 0] Overlaps at position 0
- *   rotate(input, 5) = [0, 0, 2, 1, 0, 0, 1, 2] Overlaps at position 0
- *   rotate(input, 6) = [2, 0, 0, 2, 1, 0, 0, 1] Overlaps at position 1
- *   rotate(input, 7) = [1, 2, 0, 0, 2, 1, 0, 0] Overlaps at position 3
- */
-template <typename ElementType,
-          typename BinaryPredicateType = std::equal_to<ElementType>>
-std::vector<int> CircularUnion(const std::vector<ElementType>& input,
-                               BinaryPredicateType predicate = {}) {
-  // The 0th rotation is always a valid result.
-  std::vector<int> result = {0};
-
-  // Create a temporary storage area the same size of the input.
-  std::vector<ElementType> temp_0(input.size());
-  std::vector<ElementType> temp_1(input.size());
-
-  // Invert the user predicate.
-  const auto not_predicate = [&predicate](const ElementType& a,
-                                          const ElementType& b) -> bool {
-    return !predicate(a, b);
-  };
-
-  // For each possible valid rotation, check if it is non-overlapping with the
-  // input rotations.
-  for (size_t i = 1; i < input.size(); ++i) {
-    // Take the ith rotated input.
-    std::rotate_copy(input.begin(), std::next(input.begin(), i), input.end(),
-                     temp_0.begin());
-
-    bool non_overlapping = true;
-
-    // Compare against all accept rotations of the input
-    for (size_t k = 0; k < result.size() && non_overlapping; ++k) {
-      std::rotate_copy(input.begin(), std::next(input.begin(), result[k]),
-                       input.end(), temp_1.begin());
-
-      // Map-reduce where the map is the negation of the user predicate and the
-      // reduction is logical and. This means we will accept rotations where the
-      // corresponding elements are not equal.
-      non_overlapping = std::inner_product(
-          temp_1.begin(), temp_1.end(), temp_0.begin(), non_overlapping,
-          std::logical_and<bool>{}, not_predicate);
-    }
-
-    // If the rotation is non-overlapping with all existing
-    if (non_overlapping) {
-      // Add this rotation index to the result.
-      result.push_back(i);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Find the indices of all possible circular unions, including overlaps.
- *
- * @param input The sequence of input elements.
- *
- * @returns a list of indices of valid rotations of the input that do not
- *          overlap.
- */
-template <typename ElementType>
-std::vector<int> AllUnion(const std::vector<ElementType>& input) {
-  std::vector<int> result(input.size());
-
-  // This is trivially just every offset.
-  absl::c_iota(result, 0);
-
-  return result;
-}
-
-/**
- * Create indices for the simple sharded case.
- *
- * @param input The sequence of input elements.
- *
- * @returns a "list" of indices {0}.
- */
-template <typename ElementType>
-std::vector<int> NoUnion(const std::vector<ElementType>& input) {
-  std::vector<int> result(1);
-
-  // This is trivially just a single offset.
-  absl::c_iota(result, 0);
-
-  return result;
-}
-
-template <typename ElementType>
-std::vector<int> ScheduleOffsets(
-    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
-    const std::vector<ElementType>& input) {
-  switch (schedule) {
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
-      return AllUnion(input);
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
-      return CircularUnion(input);
-    default:
-      return NoUnion(input);
-  }
-}
-
-/**
- * Construct a pipeline schedule given an offset and some schedulable
- * components.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- *
- * @returns A 2D array of pipeline schedule where each row represents the
- *          parallel sequence, and each column represents a single timestep
- *          where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructScheduleInternal(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
-  std::vector<std::vector<ElementType>> result(offsets.size(), input);
-
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    std::rotate(result[i].begin(),
-                std::next(result[i].begin(), result[i].size() - offsets[i]),
-                result[i].end());
-  }
-
-  return result;
-}
-
-template <typename ElementType>
-std::vector<std::vector<ElementType>> TransposeSchedule(
-    const std::vector<std::vector<ElementType>>& input) {
-  std::vector<std::vector<ElementType>> result(input[0].size());
-
-  for (size_t i = 0; i < input.size(); ++i) {
-    for (size_t k = 0; k < input[i].size(); ++k) {
-      result[k].push_back(input[i][k]);
-    }
-  }
-
-  return result;
-}
-
-template <typename ElementType>
-std::vector<std::vector<ElementType>> RotateSchedule(
-    const std::vector<std::vector<ElementType>>& input) {
-  std::vector<std::vector<ElementType>> result = input;
-
-  for (int i = 0; i < static_cast<int>(result.size()) - 1; ++i) {
-    std::rotate(result[i].begin(), std::next(result[i].begin(), i + 1),
-                result[i].end());
-  }
-
-  return result;
-}
-
-/**
- * Construct a pipeline schedule given an offset and some schedulable
- * components.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- *
- * @returns A 2D array of pipeline schedule where each row represents the
- *          parallel sequence, and each column represents a single timestep
- *          where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    bool interleave) {
-  auto result = ConstructScheduleInternal(offsets, input);
-
-  // Force the stages to be added to poplar in a consistent order.
-  if (!interleave) {
-    result = TransposeSchedule(result);
-    result = RotateSchedule(result);
-    result = TransposeSchedule(result);
-  }
-
-  return result;
-}
-
-/**
- * Construct a "ramp-up" pipeline schedule given an offset and some schedulable
- * components. Additionally, empty stages are inserted into the schedule where a
- * stage cannot be executed.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "empty
- *                      stages" of the schedule.
- *
- * @returns A 2D array of pipeline schedule where each row represents the
- *          parallel sequence, and each column represents a single timestep
- *          where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructRampUpSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    ElementType empty_element = {}) {
-  auto result = ConstructScheduleInternal(offsets, input);
-
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    std::fill(result[i].begin(), std::next(result[i].begin(), offsets[i]),
-              empty_element);
-  }
-
-  return result;
-}
-
-/**
- * Construct a "ramp-up" pipeline schedule for recomputation given an offset and
- * some schedulable components. Additionally, empty stages are inserted into the
- * schedule where a recomputation stage cannot be executed.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "empty
- *                      stages" of the schedule.
- *
- * @returns A 2D array of pipeline recomputation schedule where each row
- *          represents the parallel sequence, and each column represents a
- *          single timestep where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, ElementType empty_element = {}) {
-  // If there are no backward stages, there is no recomputation.
-  if (num_backward_stages == 0) {
-    return std::vector<std::vector<ElementType>>(
-        offsets.size(), std::vector<ElementType>(input.size(), empty_element));
-  }
-  CHECK_EQ(input.size() / num_backward_stages, 2);
-  CHECK_EQ(input.size() % num_backward_stages, 0);
-
-  // The pipelining implementation expects the recomputation for backward stage
-  // X at timestep 't2' to be done along with forward stage X at timestep `t1`
-  // such that `t1` < `t2`.
-
-  // Worked example:
-  // num_backward_stages = 4
-  // offsets = {0, 2, 4, 6}
-  // First construct the ramp up schedule given those parameters
-  // {-1,-1,-1,-1,-1,-1,-1, 0}
-  // {-1,-1,-1,-1,-1, 0, 1, 2}
-  // {-1,-1,-1, 0, 1, 2, 3, 4}
-  // {-1, 0, 1, 2, 3, 4, 5, 6}
-  // where each column represents a timestep, and each value represents a
-  // pipeline stage and -1 represents nothing being executed.
-  // Transpose it so that each row represents a timestep.
-  // t = 0 {-1,-1,-1,-1}
-  // t = 1 {-1,-1,-1, 0}
-  // t = 2 {-1,-1,-1, 1}
-  // t = 3 {-1,-1, 0, 2}
-  // t = 4 {-1,-1, 1, 3}
-  // t = 5 {-1, 0, 2, 4}
-  // t = 6 {-1, 1, 3, 5}
-  // t = 7 { 0, 2, 4, 6}
-  // Now a recomputation needs to be placed at timestep t1 for stage with id x,
-  // if there is a corresponding stage with id (2*num_backward_stages - 1 - x)
-  // in timestep t2, where t2 > t1 and there is no other t3 for between t1 and
-  // t2 in which x is executed.
-  // For example at t=2, stage 1 is executed, its backward stage is 6, which is
-  // executed in t=7. However between those stages, 1 is also executed at t=4
-  // and t=6, so recomputation only needs to be placed at time step 6.
-  // If the stage, for example stage 0, executed at t = 1, t = 3, t = 5 and
-  // t = 7, has no corresponding backward stage in the ramp up, then only the
-  // last execution of that stage in the ramp up needs to perform recomputation.
-
-  // Create an execution trace which shows which fwd/bwd stages are exected
-  // during ramp up - a value of -1 indicates no stage being executed.
-  std::vector<int64> stages(input.size());
-  absl::c_iota(stages, 0);
-  std::vector<std::vector<int64>> stage_schedule =
-      ConstructRampUpSchedule(offsets, stages, -1LL);
-  // Transpose so that each row represents a single timestep.
-  stage_schedule = TransposeSchedule(stage_schedule);
-  // Create a lookup for what stages are executed in each timestep.
-  std::vector<absl::flat_hash_set<int64>> stage_schedule_lookup(
-      stage_schedule.size());
-  absl::c_transform(
-      stage_schedule, stage_schedule_lookup.begin(),
-      [](const std::vector<int64>& timestep_schedule)
-          -> absl::flat_hash_set<int64> {
-        return {timestep_schedule.begin(), timestep_schedule.end()};
-      });
-
-  std::vector<std::vector<ElementType>> result =
-      ConstructScheduleInternal(offsets, input);
-  // Transpose so that each row represents a single timestep.
-  result = TransposeSchedule(result);
-
-  // Go through all the elements in the ramp up schedule, and insert empty
-  // elements as appropriate.
-  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
-    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
-      const int64 stage_id = stage_schedule[t1][j];
-      // Mask if the stage is not meant to be executed or it is a backward
-      // stage.
-      if (stage_id == -1 || stage_id >= num_backward_stages) {
-        result[t1][j] = empty_element;
-        continue;
-      }
-      // Given the current stage at the current timestep, we do not need to
-      // perform recomputation iff there is another stage in the future time
-      // steps with the same stage_id executed before the corresponding bwd
-      // stage.
-      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
-
-      bool replace_with_empty_element = false;
-      for (int64 t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
-        if (stage_schedule_lookup[t2].contains(bwd_stage_id)) {
-          // Found a corresponding bwd stage before another forward stage with
-          // the same id, need to recompute.
-          break;
-        }
-        if (stage_schedule_lookup[t2].contains(stage_id)) {
-          // Found another forward stage with the same id before a corresponding
-          // bwd stage, don't need to recompute.
-          replace_with_empty_element = true;
-          break;
-        }
-      }
-
-      if (replace_with_empty_element) {
-        result[t1][j] = empty_element;
-      }
-    }
-  }
-  // Transpose the schedule back to the expected format.
-  result = TransposeSchedule(result);
-  return result;
-}
-
-/**
- * Construct a "ramp-down" pipeline schedule given an offset and some
- * schedulable components. Additionally, empty stages are inserted into the
- * schedule where a stage cannot be executed.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "empty
- *                      stages" of the schedule.
- * @param additional_iterations The number of additional iterations that should
- *                              be executed to completely flush the pipeline.
- *
- * @returns A 2D array of pipeline schedule where each row represents the
- *          parallel sequence, and each column represents a single timestep
- *          where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    ElementType empty_element = {}, const int additional_iterations = 0) {
-  auto result = ConstructScheduleInternal(offsets, input);
-
-  for (size_t i = additional_iterations; i < offsets.size(); ++i) {
-    std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
-              empty_element);
-  }
-
-  return result;
-}
-
-/**
- * Construct a "ramp-down" pipeline schedule for recomputation given an offset
- * and some schedulable components. Additionally, empty stages are inserted into
- * the schedule where a recomputation stage cannot be executed.
- *
- * @param offsets The offsets of each parallel sequence of inputs.
- * @param input The input sequence to schedule.
- * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "empty
- *                      stages" of the schedule.
- *
- * @returns A 2D array of pipeline recomputation schedule where each row
- *          represents the parallel sequence, and each column represents a
- *          single timestep where a single step of the input is scheduled.
- */
-template <typename ElementType>
-std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    int64 num_backward_stages, ElementType empty_element = {},
-    const int additional_iterations = 0) {
-  // If there are no backward stages, there is no recomputation.
-  if (num_backward_stages == 0) {
-    return std::vector<std::vector<ElementType>>(
-        offsets.size(), std::vector<ElementType>(input.size(), empty_element));
-  }
-  CHECK_EQ(input.size() / num_backward_stages, 2);
-  CHECK_EQ(input.size() % num_backward_stages, 0);
-
-  // The pipelining implementation expects the recomputation for backward stage
-  // X at timestep 't2' to be done along with forward stage X at timestep `t1`
-  // such that `t1` < `t2`.
-
-  // Worked example:
-  // num_backward_stages = 4
-  // offsets = {0, 2, 4, 6}
-  // First construct the ramp down schedule given those parameters
-  // { 1, 2, 3, 4, 5, 6, 7,-1}
-  // { 3, 4, 5, 6, 7,-1,-1,-1}
-  // { 5, 6, 7,-1,-1,-1,-1,-1}
-  // { 7,-1,-1,-1,-1,-1,-1,-1}
-  // where each column represents a timestep, and each value represents a
-  // pipeline stage and -1 represents nothing being executed.
-  // Also construct a schedule without ramp down:
-  // { 1, 2, 3, 4, 5, 6, 7, 0}
-  // { 3, 4, 5, 6, 7, 0, 1, 2}
-  // { 5, 6, 7, 0, 1, 2, 3, 4}
-  // { 7, 0, 1, 2, 3, 4, 5, 6}
-  // This shows where a recomputation stage needs to be placed - as those are
-  // only placed in 'slots' with the forward stages.
-  // Transpose both of those:
-  // Ramp down schedule:     "Normal" schedule:
-  // t = 0 { 1, 3, 5, 7}     { 1, 3, 5, 7}
-  // t = 1 { 2, 4, 6,-1}     { 2, 4, 6, 0}
-  // t = 2 { 3, 5, 7,-1}     { 3, 5, 7, 1}
-  // t = 3 { 4, 6,-1,-1}     { 4, 6, 0, 2}
-  // t = 4 { 5, 7,-1,-1}     { 5, 7, 1, 3}
-  // t = 5 { 6,-1,-1,-1}     { 6, 0, 2, 4}
-  // t = 6 { 7,-1,-1,-1}     { 7, 1, 3, 5}
-  // t = 7 {-1,-1,-1,-1}     { 0, 2, 4, 6}
-  // Now a recomputation needs to be placed at timestep t1 for stage with id x,
-  // if there is a corresponding stage with id (2*num_backward_stages - 1 - x)
-  // in timestep t2, where t2 > t1.
-  // For example at t=1, stage 6 is executed, its recomputation stage is 1,
-  // which in the "normal" schedule is executed at t=0, so a recomputation stage
-  // needs to be placed there.
-
-  // Create an execution trace which shows which fwd/bwd stages are exected
-  // during ramp down.
-  std::vector<int64> stages(input.size());
-  absl::c_iota(stages, 0);
-  std::vector<std::vector<int64>> ramp_down_schedule =
-      ConstructRampDownSchedule(offsets, stages, -1LL, additional_iterations);
-  // Transpose so that each row represents a single timestep.
-  ramp_down_schedule = TransposeSchedule(ramp_down_schedule);
-  // Create a lookup for what stages are executed in each timestep.
-  std::vector<absl::flat_hash_set<int64>> ramp_down_schedule_lookup(
-      ramp_down_schedule.size());
-  absl::c_transform(
-      ramp_down_schedule, ramp_down_schedule_lookup.begin(),
-      [](const std::vector<int64>& timestep_schedule)
-          -> absl::flat_hash_set<int64> {
-        return {timestep_schedule.begin(), timestep_schedule.end()};
-      });
-
-  // Create an execution trace without ramp-down to show at what time slots the
-  // recomputation has to be performed in (it has to be performed in a time-slot
-  // for the corresponding forward stage).
-  std::vector<std::vector<int64>> stage_schedule =
-      ConstructScheduleInternal(offsets, stages);
-  // Transpose so that each row represents a single timestep.
-  stage_schedule = TransposeSchedule(stage_schedule);
-
-  std::vector<std::vector<ElementType>> result =
-      ConstructScheduleInternal(offsets, input);
-  // Transpose so that each row represents a single timestep.
-  result = TransposeSchedule(result);
-
-  // Go through all the elements in the ramp down schedule, and insert empty
-  // elements as appropriate.
-  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
-    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
-      const int64 stage_id = stage_schedule[t1][j];
-      // Mask if the stage is a backward stage.
-      if (stage_id >= num_backward_stages) {
-        result[t1][j] = empty_element;
-        continue;
-      }
-      // Given the current stage at the current timestep, we only need to
-      // perform recomputation if there is a corresponding bwd stage in a
-      // future time step being executed.
-      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
-
-      bool replace_with_empty_element = true;
-      for (int64 t2 = t1 + 1; t2 != ramp_down_schedule.size(); ++t2) {
-        const auto& timestep_schedule = ramp_down_schedule[t2];
-        if (ramp_down_schedule_lookup[t2].contains(bwd_stage_id)) {
-          // Found a corresponding bwd stage, need to recompute.
-          replace_with_empty_element = false;
-          break;
-        }
-      }
-
-      if (replace_with_empty_element) {
-        result[t1][j] = empty_element;
-      }
-    }
-  }
-  // Transpose the schedule back to the expected format.
-  result = TransposeSchedule(result);
-  return result;
-}
-
-/**
- * Given a schedule, like the ones produced by `ConstructSchedule`, flatten the
- * time axis to produce a single sequence.
- *
- * @param inputs The input parallel schedule.
- *
- * @returns The flattened schedule.
- */
-template <typename ElementType>
-std::vector<ElementType> FlattenSchedule(
-    const std::vector<std::vector<ElementType>>& inputs) {
-  std::vector<ElementType> result;
-
-  auto inputs_transpose = TransposeSchedule(inputs);
-
-  for (const auto inputs : inputs_transpose) {
-    result.insert(result.end(), inputs.begin(), inputs.end());
-  }
-
-  return result;
 }
 
 // Return the pipeline stage index for the given hlo instruction
@@ -1096,6 +557,10 @@ PipelineVisitor::PipelineVisitor(
       program_sequences_(stage_count, {{}, {debug_name_and_id, "programSeq"}}),
       recomputation_sequences_(stage_count,
                                {{}, {debug_name_and_id, "recomputationSeq"}}),
+      inter_tileset_copy_in_sequences_(
+          stage_count, {{}, {debug_name_and_id, "interTilesetCopyInSeq"}}),
+      inter_tileset_copy_out_sequences_(
+          stage_count, {{}, {debug_name_and_id, "interTilesetCopyOutSeq"}}),
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping),
       stages_with_recomputation_(stages_with_recomputation),
@@ -1120,7 +585,7 @@ PipelineVisitor::PipelineVisitor(
 
 Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   const int64 overlap_length =
-      ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
+      util::ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
 
   if (iterations % overlap_length) {
     // TODO(T11404)
@@ -1144,21 +609,20 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
   TF_RETURN_IF_ERROR(VerifyPipelineArguments(iterations));
 
   const int64 overlap_length =
-      ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
+      util::ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
 
-  poplar::program::Program ramp_up = GetPipelineRampUpSequence(dnai_);
-  poplar::program::Program repeat_block =
-      GetPipelineRepeatBlockSequence(dnai_, iterations);
-  poplar::program::Program ramp_down =
+  auto ramp_up = GetPipelineRampUpSequence(dnai_);
+  auto repeat_block = GetPipelineRepeatBlockSequence(dnai_, iterations);
+  auto ramp_down =
       GetPipelineRampDownSequence(dnai_, iterations % overlap_length);
 
   poplar::program::Sequence program({}, dnai_);
   program.add(pipeline_execution_counters_initialize_sequence_);
   program.add(pipeline_tensors_zeroing_sequence_);
   program.add(pipeline_write_undef_sequence_);
-  program.add(ramp_up);
-  program.add(repeat_block);
-  program.add(ramp_down);
+  program.add(ramp_up.program);
+  program.add(repeat_block.program);
+  program.add(ramp_down.program);
 
   // Add the resource update sequence.
   program.add(resource_update_);
@@ -1186,12 +650,10 @@ Status PipelineVisitor::AddSequenceForInstruction(
       const HloInstruction* gte_input = hlo->operand(0);
       if (IsResourceUpdate(gte_input)) {
         resource_update_.add(seq);
+      } else if (IsPipelineStageRecomputation(gte_input)) {
+        recomputation_sequences_[stage].add(seq);
       } else {
-        if (IsPipelineStageRecomputation(gte_input)) {
-          recomputation_sequences_[stage].add(seq);
-        } else {
-          program_sequences_[stage].add(seq);
-        }
+        program_sequences_[stage].add(seq);
       }
       return Status::OK();
     }
@@ -1204,12 +666,19 @@ Status PipelineVisitor::AddSequenceForInstruction(
       return Status::OK();
     }
     case HloOpcode::kTuple: {
-      CHECK_EQ(hlo->parent()->root_instruction(), hlo);
-      resource_update_.add(seq);
+      if (hlo->parent()->root_instruction() == hlo) {
+        resource_update_.add(seq);
+      } else if (util::IsInterTilesetCopyInInstruction(hlo->operand(0))) {
+        inter_tileset_copy_in_sequences_[stage].add(seq);
+      } else if (util::IsInterTilesetCopyOutInstruction(hlo->operand(0))) {
+        inter_tileset_copy_out_sequences_[stage].add(seq);
+      } else {
+        program_sequences_[stage].add(seq);
+      }
       return Status::OK();
     }
     case HloOpcode::kCustomCall: {
-      if (IsCreateBuffer()(hlo)) {
+      if (util::IsCreateBuffer()(hlo)) {
         pipeline_write_undef_sequence_.add(seq);
         return Status::OK();
       }
@@ -1513,14 +982,16 @@ Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
 }
 
 Status PipelineVisitor::HandleNonDeferredCustomCall(HloInstruction* hlo) {
-  if (IsExecutionCounter()(hlo)) {
+  if (util::IsExecutionCounter()(hlo)) {
     return HandleExecutionCounter(hlo);
-  } else if (IsFifoInstruction()(hlo)) {
+  } else if (util::IsFifoInstruction()(hlo)) {
     return HandleFifo(hlo);
-  } else if (IsIpuInterCopyInstruction()(hlo)) {
+  } else if (util::IsIpuInterCopyInstruction()(hlo)) {
     return HandleInterIpuCopy(hlo);
-  } else if (IsGradientAccumulatorSinkInstruction()(hlo)) {
+  } else if (util::IsGradientAccumulatorSinkInstruction()(hlo)) {
     return HandleGradientAccumulatorSink(hlo);
+  } else if (util::IsInterTilesetCopyInstruction()(hlo)) {
+    return HandleInterTilesetCopy(hlo);
   } else {
     return HandleNotImplemented(hlo);
   }
@@ -1577,6 +1048,27 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
   return Status::OK();
 }
 
+Status PipelineVisitor::HandleInterTilesetCopy(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->name();
+  if (!IsPoplibsHloCustomOp(hlo)) {
+    return HandleNotImplemented(hlo);
+  }
+
+  poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(hlo);
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateCustomCallOp(resources_, hlo, hlo->shape(),
+                                         tensor_map, debug_name_and_id));
+
+  if (util::IsInterTilesetCopyInInstruction(hlo)) {
+    inter_tileset_copy_in_sequences_[stage].add(prog);
+  } else {
+    inter_tileset_copy_out_sequences_[stage].add(prog);
+  }
+
+  return Status::OK();
+}
+
 Status PipelineVisitor::HandleGradientAccumulatorSink(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
   if (!IsPoplibsHloCustomOp(hlo)) {
@@ -1608,12 +1100,6 @@ Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
 }
 
 Status PipelineVisitor::HandleDeferredAllocationTuple(HloInstruction* hlo) {
-  if (hlo->parent()->root_instruction() != hlo) {
-    return FailedPrecondition(
-        "Hlo tuple instructions are only allowed in a pipeline when they are "
-        "the root instruction. Hlo instruction \"%s\" is not.",
-        hlo->name());
-  }
   return InplaceDeferredVisitor::HandleDeferredAllocationTuple(hlo);
 }
 
@@ -1683,29 +1169,40 @@ std::unique_ptr<PipelineVisitor> ParallelPipelineVisitor::Create(
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program ParallelPipelineVisitor::GetPipelineRampUpSequence(
+PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
     const poplar::DebugNameAndId& debug_name_and_id) const {
-  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
+  std::vector<int> offsets =
+      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
   const bool is_grouped =
       schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
-  auto infeed_sequences = ConstructRampUpSchedule(offsets, infeed_sequences_);
-  auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
-  auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
-  auto recomputation_sequences = ConstructRecomputationRampUpSchedule(
+  auto infeed_sequences =
+      util::ConstructRampUpSchedule(offsets, infeed_sequences_);
+  auto program_sequences =
+      util::ConstructRampUpSchedule(offsets, program_sequences_);
+  auto fifo_sequences = util::ConstructRampUpSchedule(offsets, fifo_sequences_);
+  auto recomputation_sequences = util::ConstructRecomputationRampUpSchedule(
       offsets, recomputation_sequences_, num_backward_stages_);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
-  auto outfeed_sequences = ConstructRampUpSchedule(offsets, outfeed_sequences_);
+      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+  auto inter_tileset_copy_in_sequences =
+      util::ConstructRampUpSchedule(offsets, inter_tileset_copy_in_sequences_);
+  auto inter_tileset_copy_out_sequences =
+      util::ConstructRampUpSchedule(offsets, inter_tileset_copy_out_sequences_);
+  auto outfeed_sequences =
+      util::ConstructRampUpSchedule(offsets, outfeed_sequences_);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
   // recomputation stages, outfeeds and then inter-ipu-copies.
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_in_sequences.begin(),
+                          inter_tileset_copy_in_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
@@ -1713,6 +1210,9 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampUpSequence(
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_out_sequences.begin(),
+                          inter_tileset_copy_out_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(),
@@ -1722,22 +1222,24 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampUpSequence(
                           outfeed_sequences.end());
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
+  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block({}, debug_name_and_id);
   for (const auto& seq : repeat_block_sequences) {
     repeat_block.add(seq);
   }
 
-  return repeat_block;
+  return {repeat_block, offsets.size() / 2};
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
+PipelineVisitor::RepeatBlock
+ParallelPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     int additional_iterations) const {
   // Find the set of non-overlapping program offsets.
-  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
+  std::vector<int> offsets =
+      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
 
   const bool is_grouped =
       schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
@@ -1745,25 +1247,32 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
-  auto infeed_sequences = ConstructRampDownSchedule(offsets, infeed_sequences_,
-                                                    {}, additional_iterations);
-  auto program_sequences = ConstructRampDownSchedule(
+  auto infeed_sequences = util::ConstructRampDownSchedule(
+      offsets, infeed_sequences_, {}, additional_iterations);
+  auto program_sequences = util::ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
   auto fifo_sequences =
-      ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
-  auto recomputation_sequences = ConstructRecomputationRampDownSchedule(
+      util::ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
+  auto recomputation_sequences = util::ConstructRecomputationRampDownSchedule(
       offsets, recomputation_sequences_, num_backward_stages_, {},
       additional_iterations);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
-  auto outfeed_sequences = ConstructRampDownSchedule(
+      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+  auto inter_tileset_copy_in_sequences = util::ConstructRampDownSchedule(
+      offsets, inter_tileset_copy_in_sequences_, {}, additional_iterations);
+  auto inter_tileset_copy_out_sequences = util::ConstructRampDownSchedule(
+      offsets, inter_tileset_copy_out_sequences_, {}, additional_iterations);
+  auto outfeed_sequences = util::ConstructRampDownSchedule(
       offsets, outfeed_sequences_, {}, additional_iterations);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
   // recomputation stages, outfeeds and then inter-ipu-copies.
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_in_sequences.begin(),
+                          inter_tileset_copy_in_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
@@ -1771,6 +1280,9 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_out_sequences.begin(),
+                          inter_tileset_copy_out_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(),
@@ -1780,26 +1292,27 @@ poplar::program::Program ParallelPipelineVisitor::GetPipelineRampDownSequence(
                           outfeed_sequences.end());
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
+  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block({}, debug_name_and_id);
   for (const auto& seq : repeat_block_sequences) {
     repeat_block.add(seq);
   }
 
-  return repeat_block;
+  return {repeat_block, offsets.size() / 2};
 }
 
 // Collect the pipeline stage programs and build the repeat block
-poplar::program::Program
+PipelineVisitor::RepeatBlock
 ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
   // Find the set of non-overlapping program offsets.
-  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
+  std::vector<int> offsets =
+      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
 
   const int64 num_repeats = ((iterations / offsets.size()) - 1);
   if (num_repeats < 1) {
-    return poplar::program::Sequence({}, debug_name_and_id);
+    return {poplar::program::Sequence({}, debug_name_and_id), 0};
   }
 
   const bool is_grouped =
@@ -1809,23 +1322,30 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
   auto fifo_sequences =
-      ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
   auto infeed_sequences =
-      ConstructSchedule(offsets, infeed_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, infeed_sequences_, !is_grouped);
   auto program_sequences =
-      ConstructSchedule(offsets, program_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, program_sequences_, !is_grouped);
   auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+  auto inter_tileset_copy_in_sequences = util::ConstructSchedule(
+      offsets, inter_tileset_copy_in_sequences_, !is_grouped);
+  auto inter_tileset_copy_out_sequences = util::ConstructSchedule(
+      offsets, inter_tileset_copy_out_sequences_, !is_grouped);
   auto outfeed_sequences =
-      ConstructSchedule(offsets, outfeed_sequences_, !is_grouped);
+      util::ConstructSchedule(offsets, outfeed_sequences_, !is_grouped);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
   // recomputation stages, outfeeds and then inter-ipu-copies.
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_in_sequences.begin(),
+                          inter_tileset_copy_in_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
@@ -1833,6 +1353,9 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_tileset_copy_out_sequences.begin(),
+                          inter_tileset_copy_out_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(),
@@ -1848,7 +1371,7 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
   }
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
+  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block({}, debug_name_and_id);
   for (const auto& seq : repeat_block_sequences) {
@@ -1860,8 +1383,9 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
                                            {debug_name_and_id});
   }
 
-  return poplar::program::Repeat(num_repeats, repeat_block,
-                                 {debug_name_and_id});
+  return {
+      poplar::program::Repeat(num_repeats, repeat_block, {debug_name_and_id}),
+      num_repeats * offsets.size()};
 }
 
 std::unique_ptr<PipelineVisitor> SequentialPipelineVisitor::Create(
@@ -1879,20 +1403,22 @@ Status SequentialPipelineVisitor::HandleFifo(HloInstruction* hlo) {
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program SequentialPipelineVisitor::GetPipelineRampUpSequence(
+PipelineVisitor::RepeatBlock
+SequentialPipelineVisitor::GetPipelineRampUpSequence(
     const poplar::DebugNameAndId& debug_name_and_id) const {
-  return poplar::program::Sequence({}, {debug_name_and_id, "RampUp"});
+  return {poplar::program::Sequence({}, {debug_name_and_id, "RampUp"}), 0};
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program SequentialPipelineVisitor::GetPipelineRampDownSequence(
+PipelineVisitor::RepeatBlock
+SequentialPipelineVisitor::GetPipelineRampDownSequence(
     const poplar::DebugNameAndId& debug_name_and_id,
     int additional_iterations) const {
-  return poplar::program::Sequence({}, {debug_name_and_id, "RampDown"});
+  return {poplar::program::Sequence({}, {debug_name_and_id, "RampDown"}), 0};
 }
 
 // Collect the pipeline stage programs and build the repeat block
-poplar::program::Program
+PipelineVisitor::RepeatBlock
 SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
   const int64 num_stages = stage_ipu_mapping_.size();
@@ -1909,37 +1435,22 @@ SequentialPipelineVisitor::GetPipelineRepeatBlockSequence(
   }
 
   poplar::program::Sequence repeat_block({}, debug_name_and_id);
-  for (int64 stage_id = 0; stage_id != num_stages; ++stage_id) {
+  for (int64 stage_id = 0; stage_id < num_stages; ++stage_id) {
     repeat_block.add(infeed_sequences_[stage_id]);
+    repeat_block.add(inter_tileset_copy_in_sequences_[stage_id]);
     if (recomp_stage_id[stage_id] > -1) {
       repeat_block.add(recomputation_sequences_.at(recomp_stage_id[stage_id]));
     }
     repeat_block.add(program_sequences_[stage_id]);
     repeat_block.add(copy_sequences_[stage_id]);
     repeat_block.add(inter_ipu_copy_sequences_[stage_id]);
+    repeat_block.add(inter_tileset_copy_out_sequences_[stage_id]);
     repeat_block.add(outfeed_sequences_[stage_id]);
   }
 
-  return poplar::program::Repeat(iterations, repeat_block, {debug_name_and_id});
-}
-
-StatusOr<std::unique_ptr<PipelineVisitor>> GetPipelineVisitor(
-    const HloInstruction* pipeline, CompilerResources& res,
-    const DeferredArgRBVectors& inputs,
-    const HloInstructionDescription& description,
-    const poplar::DebugNameAndId& debug_name_and_id) {
-  TF_ASSIGN_OR_RETURN(auto schedule, GetPipelineSchedule(pipeline));
-  switch (schedule) {
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
-      return ParallelPipelineVisitor::Create(pipeline, res, inputs, description,
-                                             debug_name_and_id);
-    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
-      return SequentialPipelineVisitor::Create(pipeline, res, inputs,
-                                               description, debug_name_and_id);
-    default:
-      return FailedPrecondition("Unknown pipeline schedule.");
-  }
+  return {
+      poplar::program::Repeat(iterations, repeat_block, {debug_name_and_id}),
+      iterations};
 }
 
 }  // namespace poplarplugin

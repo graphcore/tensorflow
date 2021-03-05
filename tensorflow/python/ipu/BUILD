@@ -1025,6 +1025,24 @@ tf_py_test(
     shard_count = 16,
 )
 
+tf_py_test(
+    name = "pipelining_grouped_overlap_test",
+    size = "large",
+    srcs = ["tests/pipelining_grouped_overlap_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 16,
+)
+
 cc_binary(
     name = "libpipelining_stateful_op.so",
     srcs = ["tests/pipelining_stateful_op.cc"],
@@ -1286,6 +1304,7 @@ test_suite(
         "pipelining_batch_serial_sequential_recomputation_test",
         "pipelining_batch_serial_sequential_test",
         "pipelining_conv_classify_test",
+        "pipelining_grouped_overlap_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
         "pipelining_recomputation_conv_classify_test",

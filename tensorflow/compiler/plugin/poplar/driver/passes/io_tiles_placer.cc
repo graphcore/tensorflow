@@ -54,11 +54,11 @@ Status AssignToIoTilesAndPropagateToGteUsers(HloInstruction* inst) {
   return Status::OK();
 }
 
-bool IsInParallelPipeline(const HloInstruction* inst,
-                          const CallGraph& call_graph) {
+bool IsInSerialPipeline(const HloInstruction* inst,
+                        const CallGraph& call_graph) {
   const auto callers = call_graph.GetNode(inst->parent()).caller_callsites();
   return callers.size() == 1 && IsPipelineOp(callers[0].instruction()) &&
-         !IsBatchSerializedPipelineOp(callers[0].instruction());
+         IsBatchSerializedPipelineOp(callers[0].instruction());
 }
 
 bool ShouldBeOnIoTiles(const HloInstruction* inst,
@@ -66,8 +66,8 @@ bool ShouldBeOnIoTiles(const HloInstruction* inst,
   switch (inst->opcode()) {
     case HloOpcode::kInfeed:
     case HloOpcode::kOutfeed:
-      // Currently incompatible with pipeline lowering.
-      return !IsInParallelPipeline(inst, call_graph);
+      // Currently incompatible with batch serial pipeline lowering.
+      return !IsInSerialPipeline(inst, call_graph);
     case HloOpcode::kCustomCall:
       return IsPoplarInstruction(RemoteParameterLoad)(inst) ||
              IsPoplarInstruction(RemoteParameterStore)(inst) ||
