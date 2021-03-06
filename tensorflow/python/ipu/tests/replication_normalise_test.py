@@ -26,6 +26,7 @@ from tensorflow.python.ops import variables
 
 
 class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testReplicationNormalise(self):
     with ops.device("/device:IPU:0"):
@@ -33,7 +34,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       y = gen_poputil_ops.ipu_replication_normalise(x)
 
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, replicated=True)
+      report = tu.ReportJSON(self, sess, replicated=True, use_hw=True)
       sess.run(variables.global_variables_initializer())
 
       report.reset()
@@ -43,14 +44,13 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       report.parse_log()
 
       ok = [
-          '__seed*',
+          '__seed',
           'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
-          'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
-          '/OnTileCopy',
-          'Copy_XLA_Args*OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
   def testReplicationNormaliseNotInplace(self):
     with ops.device("/device:IPU:0"):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -58,7 +58,7 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       b = a + x
 
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, replicated=True)
+      report = tu.ReportJSON(self, sess, replicated=True, use_hw=True)
       sess.run(variables.global_variables_initializer())
 
       report.reset()
@@ -70,10 +70,8 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       ok = [
           '__seed*',
           'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
-          'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
-          '/OnTileCopy',
-          'Copy_XLA_Args*OnTileCopy',
-          'add/add*/AddTo',
+          'add/add*/Add',
+          '[cC]opy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
 

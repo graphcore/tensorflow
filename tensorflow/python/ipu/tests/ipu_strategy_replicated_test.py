@@ -31,12 +31,9 @@ from tensorflow.python.platform import test
 
 
 class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_all_reduce(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     strategy = ipu_strategy.IPUStrategy()
 
     def make_all_reduce_function(reduce_op):
@@ -48,7 +45,7 @@ class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
 
       return all_reduce_function
 
-    report = tu.ReportJSON(self, eager_mode=True, replicated=True)
+    report = tu.ReportJSON(self, eager_mode=True, replicated=True, use_hw=True)
     report.reset()
 
     with strategy.scope():
@@ -60,15 +57,12 @@ class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
           make_all_reduce_function(reduce_util.ReduceOp.MEAN))
       self.assertEqual(0.5, mean.numpy())
 
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_optimizer(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     strategy = ipu_strategy.IPUStrategy()
 
-    report = tu.ReportJSON(self, eager_mode=True, replicated=True)
+    report = tu.ReportJSON(self, eager_mode=True, replicated=True, use_hw=True)
     report.reset()
 
     with strategy.scope():

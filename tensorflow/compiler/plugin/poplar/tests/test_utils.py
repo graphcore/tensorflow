@@ -22,6 +22,7 @@ import contextlib
 import fnmatch
 import json as js
 import re
+import os
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -209,7 +210,8 @@ class ReportJSON(object):
                use_stable_norm_statistics=False,
                set_opts_fn=None,
                triangular_solve_expander_block_size=0,
-               minimum_remote_tensor_size=128):
+               minimum_remote_tensor_size=128,
+               use_hw=False):
     self.report = None
     self.test = test
     self.sess = sess
@@ -258,6 +260,9 @@ class ReportJSON(object):
 
       opts = utils.set_norm_options(
           opts, use_stable_statistics=use_stable_norm_statistics)
+
+      if use_hw:
+        opts = add_hw_ci_connection_options(opts)
 
       if set_opts_fn:
         opts = set_opts_fn(opts)
@@ -691,3 +696,43 @@ def move_variable_initialization_to_cpu():
     op._set_attr('_XlaCompile', attr_value_pb2.AttrValue(b=False))
     op._set_attr('_XlaScope', attr_value_pb2.AttrValue(s=b''))
   # pylint: enable=protected-access
+
+
+def get_ci_num_ipus():
+  return int(os.getenv('TF_IPU_COUNT', 0))
+
+
+def add_hw_ci_connection_options(opts):
+  return utils.set_ipu_connection_type(opts,
+                                       utils.DeviceConnectionType.ON_DEMAND,
+                                       enable_remote_buffers=True)
+
+
+def test_uses_ipus(num_ipus=None, allow_ipu_model=False, func=None):
+  """Test decorator for indicating how many IPUs the test requires. Allows us
+  to skip tests which require too many IPUs.
+
+  Args:
+  * num_ipus: number of IPUs required by test
+  * allow_ipu_model: whether the test supports IPUModel so that it can be
+    executed without hardware
+  * func: the test function
+  """
+  def decorator(f):
+    def decorated(self, *args, **kwargs):
+      num_available_ipus = get_ci_num_ipus()
+      if num_available_ipus < num_ipus and not allow_ipu_model:
+        self.skipTest(f"Requested {num_ipus} IPUs, but only "
+                      f"{num_available_ipus} are available.")
+      if num_available_ipus >= num_ipus:
+        assert not ("use_ipu_model" in os.getenv(
+            'TF_POPLAR_FLAGS',
+            "")), "Do not set use_ipu_model when running HW tests."
+      return f(self, *args, **kwargs)
+
+    return decorated
+
+  if func is not None:
+    return decorator(func)
+
+  return decorator
