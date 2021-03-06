@@ -93,6 +93,20 @@ class HloSigmoidInstruction : public HloNonLinearityBase<PoplarOp::Sigmoid> {
 };
 std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand);
 
+// HardSigmoid
+class HloHardSigmoidInstruction
+    : public HloNonLinearityBase<PoplarOp::HardSigmoid> {
+ public:
+  using HloNonLinearityBase::HloNonLinearityBase;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+std::unique_ptr<HloInstruction> CreateHardSigmoid(
+    HloInstruction* const operand);
+
 template <PoplarOp Op>
 class HloNonLinearityGradBase : public HloPoplarInstruction {
  public:
@@ -163,6 +177,19 @@ class HloSigmoidGradInstruction
 std::unique_ptr<HloInstruction> CreateSigmoidGrad(HloInstruction* const out,
                                                   HloInstruction* const grad);
 
+// HardSigmoidGrad
+class HloHardSigmoidGradInstruction
+    : public HloNonLinearityGradBase<PoplarOp::HardSigmoidGrad> {
+ public:
+  using HloNonLinearityGradBase::HloNonLinearityGradBase;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+std::unique_ptr<HloInstruction> CreateHardSigmoidGrad(
+    HloInstruction* const out, HloInstruction* const grad);
 // TanhGrad
 class HloTanhGradInstruction
     : public HloNonLinearityGradBase<PoplarOp::TanhGrad> {

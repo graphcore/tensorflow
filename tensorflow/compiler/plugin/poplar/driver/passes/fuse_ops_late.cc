@@ -124,9 +124,9 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1})},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
-      {HloOpcode::kMultiply, NodeOperands({4, 3})},
+      {HloOpcode::kMultiply, NodeOperands({4, 3}), HasSingleUser},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
-      {HloOpcode::kRng, NodeOperands({5, 6}), IsRandomNormal},
+      {HloOpcode::kRng, NodeOperands({5, 6}), {IsRandomNormal, HasSingleUser}},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement}
     })),
@@ -141,10 +141,10 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kAdd, NodeOperands({3, 1})},
       {HloOpcode::kBroadcast, NodeOperands({2})},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
-      {HloOpcode::kMultiply, NodeOperands({6, 4})},
+      {HloOpcode::kMultiply, NodeOperands({6, 4}), HasSingleUser},
       {HloOpcode::kBroadcast, NodeOperands({5})},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
-      {HloOpcode::kRng, NodeOperands({7, 8}), IsRandomNormal},
+      {HloOpcode::kRng, NodeOperands({7, 8}), {IsRandomNormal, HasSingleUser}},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement},
       {HloOpcode::kConstant, NodeOperands({}), IsSingleElement}
     })),
@@ -158,9 +158,9 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1})},
       {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kMultiply, NodeOperands({4, 3})},
+      {HloOpcode::kMultiply, NodeOperands({4, 3}), HasSingleUser},
       {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kRng, NodeOperands({5, 6}), IsRandomUniform},
+      {HloOpcode::kRng, NodeOperands({5, 6}), {IsRandomUniform, HasSingleUser}},
       {HloOpcode::kConstant, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({})}
     })),
@@ -175,10 +175,10 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kAdd, NodeOperands({3, 1})},
       {HloOpcode::kBroadcast, NodeOperands({2})},
       {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kMultiply, NodeOperands({6, 4})},
+      {HloOpcode::kMultiply, NodeOperands({6, 4}), HasSingleUser},
       {HloOpcode::kBroadcast, NodeOperands({5})},
       {HloOpcode::kConstant, NodeOperands({})},
-      {HloOpcode::kRng, NodeOperands({7, 8}), IsRandomUniform},
+      {HloOpcode::kRng, NodeOperands({7, 8}), {IsRandomUniform, HasSingleUser}},
       {HloOpcode::kConstant, NodeOperands({})},
       {HloOpcode::kConstant, NodeOperands({})}
     })),

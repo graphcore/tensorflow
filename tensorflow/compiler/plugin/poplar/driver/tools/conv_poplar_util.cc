@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 
+#include <algorithm>
 #include <utility>
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
@@ -26,29 +27,52 @@ namespace {
 StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
     const HloInstruction* inst, const std::vector<size_t>& input_dims,
     const std::vector<size_t>& kernel_dims,
-    const std::vector<size_t>& output_dims, int64 n_g,
+    const std::vector<size_t>& output_dims, int64 f_g, int64 b_g,
     const xla::ConvolutionDimensionNumbers& dims, const Window& window,
     poplar::Type dtype) {
-  unsigned int n_b = input_dims[dims.input_batch_dimension()];
-  unsigned int n_i = input_dims[dims.input_feature_dimension()];
-  unsigned int n_j = kernel_dims[dims.kernel_input_feature_dimension()];
-  unsigned int n_o = output_dims[dims.output_feature_dimension()];
-  unsigned int n_p = kernel_dims[dims.kernel_output_feature_dimension()];
-
-  if ((n_i >= n_j) && (n_o >= n_p)) {
-    // Forward and backward passes
-    if (n_g != (n_i / n_j) * (n_o / n_p)) {
-      LOG(WARNING) << "Mismatch of the feature group for convolution "
-                   << inst->name();
-    }
-    n_i = n_i / n_g;
-    n_o = n_o / n_g;
-  } else {
-    // Weight update
-    n_g = (n_j / n_i) * (n_p / n_o);
-    n_b = n_b / n_g;
+  if (f_g > 1 && b_g > 1) {
+    return xla::FailedPrecondition(
+        "Poplar doesn't support grouping in batch and feature dimensions on ",
+        inst->name());
   }
 
+  unsigned int n_b = input_dims[dims.input_batch_dimension()];
+  unsigned int n_i = input_dims[dims.input_feature_dimension()];
+  unsigned int n_o = output_dims[dims.output_feature_dimension()];
+
+  // Convolution groups
+  //
+  // A grouped convolution is where there are G weight tensors, each one
+  // operating on one section of the input filters I.  Call i=I/G the input
+  // channels per group.  In the output, there are O channels, composed of a
+  // concatenation of G independent parts.  Call o=O/G, the output channels
+  // per group.
+  //
+  // You could store these G weight tensors independently, as G lots of
+  // [i, o] or packed into a larger tensor.  TF core packs the G weight
+  // tensors into this shape [i*G, o].  XLA uses this packing shape
+  // [i, o*G], while poplibs uses [G, o, i].
+  //
+  // In the code below, n_i and n_o start off being the size of the input
+  // and output tensor channels, but become the poplibs channels per group
+  // required by the convolution parameters structure.  Ie. they start off
+  // as I and O, but become i and o.
+  //
+  // Note the above shapes leave out the spatial dimensions for brevity.
+
+  // Grouped in the filter dimension.
+  if (f_g > 1) {
+    n_i = n_i / f_g;
+    n_o = n_o / f_g;
+  }
+
+  // Grouped in the batch dimension.
+  if (b_g > 1) {
+    n_b = n_b / b_g;
+    n_o = n_o / b_g;
+  }
+
+  // Create spatial dimension padding and striding.
   std::vector<std::size_t> n_s;
   std::vector<std::size_t> f_s;
   std::vector<unsigned int> w_s;
@@ -95,6 +119,8 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
     zeros.push_back(0);
   }
 
+  auto n_g = std::max(f_g, b_g);
+
   poplin::ConvParams params(dtype, dtype, n_b, n_s, f_s, n_i, n_o, n_g,
                             {t_l, t_u, d_i, p_l, p_u, flipInput},
                             {zeros, zeros, d_w, zeros, zeros, flipKernel},
@@ -117,11 +143,14 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
   std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
 
   const Window& window = GetConvolutionWindow(inst);
-  unsigned int n_g = GetFeatureGroupCount(inst);
   const auto& dims = GetConvolutionDims(inst);
 
+  unsigned int f_g = GetFeatureGroupCount(inst);
+  unsigned int b_g = GetBatchGroupCount(inst);
+
   return GetConvolutionParametersCore(inst, input_dims, kernel_dims,
-                                      output_dims, n_g, dims, window, dtype);
+                                      output_dims, f_g, b_g, dims, window,
+                                      dtype);
 }
 
 StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
@@ -135,10 +164,11 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
   std::vector<size_t> kernel_shape = PoplarShapeFromXlaShape(kernel);
 
   const auto& dims = GetConvolutionDims(inst);
-  unsigned int n_g = GetFeatureGroupCount(inst);
+  unsigned int f_g = GetFeatureGroupCount(inst);
+  unsigned int b_g = GetBatchGroupCount(inst);
 
   return GetConvolutionParametersCore(inst, conv_input_shape, kernel_shape,
-                                      conv_output_shape, n_g, dims, window,
+                                      conv_output_shape, f_g, b_g, dims, window,
                                       dtype);
 }
 
@@ -160,18 +190,24 @@ StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
 
     const auto& convolution_spec = convolution_specs[i];
     const Window& window = convolution_spec.window;
-    unsigned int n_g = convolution_spec.feature_group_count;
+    unsigned int f_g = convolution_spec.feature_group_count;
+    unsigned int b_g = convolution_spec.batch_group_count;
     const auto& dims = convolution_spec.dims;
 
-    TF_ASSIGN_OR_RETURN(params[i], GetConvolutionParametersCore(
-                                       inst, input_dims, kernel_dims,
-                                       output_dims, n_g, dims, window, dtype));
+    TF_ASSIGN_OR_RETURN(
+        params[i],
+        GetConvolutionParametersCore(inst, input_dims, kernel_dims, output_dims,
+                                     f_g, b_g, dims, window, dtype));
   }
   return params;
 }
 
+// Convert TF/XLA format tensor (with dims labelled by the sructure
+// ConvolutionDimensionNumbers), into a Poplar format tensor, always
+// Batch, Features, Y, X, ...
 poplar::Tensor ShuffleConvolutionInputToPoplar(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    const poplar::Tensor& tensor) {
   std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
   shuffle[0] = dims.input_batch_dimension();
   shuffle[1] = dims.input_feature_dimension();
@@ -179,15 +215,23 @@ poplar::Tensor ShuffleConvolutionInputToPoplar(
     shuffle[2 + i] = dims.input_spatial_dimensions(i);
   }
 
-  return tensor.dimShuffle(shuffle);
+  auto out = tensor.dimShuffle(shuffle);
+
+  // Move 'G' parts of the I to B (because B is the reducing dimension)
+  out = out.reshapePartial(0, 1, {group_count, out.dim(0) / group_count});
+  out = out.dimShufflePartial({0}, {1});
+  out = out.reshapePartial(1, 3, {out.dim(1) * out.dim(2)});
+  return out;
 }
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
                                                const poplar::Tensor& tensor) {
+  auto group_count = GetBatchGroupCount(inst);
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
-  return ShuffleConvolutionInputToPoplar(d, tensor);
+  return ShuffleConvolutionInputToPoplar(group_count, d, tensor);
 }
 
+// Do the inverse operation to ShuffleConvolutionInputToPoplar
 poplar::Tensor ShuffleConvolutionOutputToPoplar(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
   std::vector<unsigned int> shuffle(2 +
@@ -233,7 +277,14 @@ poplar::Tensor ShuffleConvolutionWeightsToPoplar(const HloInstruction* inst,
 }
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
-    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+    int64 group_count, const ConvolutionDimensionNumbers& dims,
+    const poplar::Tensor& tensor) {
+  // Move 'G' parts of the B back to I
+  const unsigned n_g = group_count;
+  poplar::Tensor out = tensor.reshapePartial(1, 2, {n_g, tensor.dim(1) / n_g});
+  out = out.dimShufflePartial({1}, {0});
+  out = out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
+
   std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
   shuffle[dims.input_batch_dimension()] = 0;
   shuffle[dims.input_feature_dimension()] = 1;
@@ -241,13 +292,14 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
     shuffle[dims.input_spatial_dimensions(i)] = i + 2;
   }
 
-  return tensor.dimShuffle(shuffle);
+  return out.dimShuffle(shuffle);
 }
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
+  int64 group_count = GetBatchGroupCount(inst);
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
-  return ShuffleConvolutionInputToTensorflow(d, tensor);
+  return ShuffleConvolutionInputToTensorflow(group_count, d, tensor);
 }
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(

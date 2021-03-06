@@ -111,6 +111,14 @@ int64 GetBatchGroupCount(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     auto cfg = inst->backend_config<PoplarBackendConfig>();
     return cfg.ValueOrDie().fusion_config().batch_group_count();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->batch_group_count();
+    } else {
+      LOG(FATAL) << "Trying to access batch_group_count on non "
+                    "HloWeightsTransposeChansFlipXYInstruction.";
+    }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
       LOG(FATAL) << "Trying to access convolution batch group count numbers on "

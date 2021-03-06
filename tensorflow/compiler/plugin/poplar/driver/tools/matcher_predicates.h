@@ -25,6 +25,7 @@ class HloInstruction;
 
 namespace poplarplugin {
 
+bool HasSingleUser(const HloInstruction*);
 bool IsRandomNormal(const HloInstruction*);
 bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);

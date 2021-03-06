@@ -236,7 +236,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/Convolve',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightTranspose',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -292,7 +292,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightTranspose',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
       ]
       # pylint: enable=line-too-long

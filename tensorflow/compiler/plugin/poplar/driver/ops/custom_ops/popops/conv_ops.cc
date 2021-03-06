@@ -98,16 +98,17 @@ class Conv2DOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
+    int64 group_count = GetBatchGroupCount(inst);
     const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, params, opts, conv_dims, debug_name_and_id](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
+    auto func = [&graph, &res, params, opts, group_count, conv_dims,
+                 debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                    poplar::program::Sequence& prog) {
       poplar::Tensor in_f = args[0];
       poplar::Tensor kernel_f = args[1];
 
-      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
+      in_f = ShuffleConvolutionInputToPoplar(group_count, conv_dims, in_f);
 
       kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, false);
 
@@ -172,7 +173,6 @@ class Conv2DOp : public PoplarOpDef {
 };
 
 REGISTER_HLO_OP(kConvolution, Conv2DOp);
-REGISTER_POPLAR_OP(Depthwise_conv, Conv2DOp);
 
 class Conv2DReverseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(
@@ -198,16 +198,17 @@ class Conv2DReverseOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
+    int64 group_count = GetBatchGroupCount(inst);
     const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, params, opts, conv_dims, debug_name_and_id](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
+    auto func = [&graph, &res, params, opts, group_count, conv_dims,
+                 debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                    poplar::program::Sequence& prog) {
       poplar::Tensor in_f = args[0];
       poplar::Tensor kernel_f = args[1];
 
-      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
+      in_f = ShuffleConvolutionInputToPoplar(group_count, conv_dims, in_f);
 
       kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, true);
 
@@ -242,99 +243,6 @@ class Conv2DReverseOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(Conv_with_reverse, Conv2DReverseOp);
-
-poplar::Tensor DepthwiseFilterShuffleInput(const poplin::ConvParams& params,
-                                           const poplar::Tensor& in) {
-  // Move 'G' parts of the I to B (because B is the reducing dimension)
-  const unsigned n_g = params.getNumConvGroups();
-  poplar::Tensor out = in.reshapePartial(0, 1, {n_g, in.dim(0) / n_g});
-  out = out.dimShufflePartial({0}, {1});
-  out = out.reshapePartial(1, 3, {out.dim(1) * out.dim(2)});
-  return out;
-}
-
-poplar::Tensor DepthwiseFilterShuffleOutput(const poplin::ConvParams& params,
-                                            const poplar::Tensor& in) {
-  // Move 'G' parts of the B back to I
-  const unsigned n_g = params.getNumConvGroups();
-  poplar::Tensor out = in.reshapePartial(1, 2, {n_g, in.dim(1) / n_g});
-  out = out.dimShufflePartial({1}, {0});
-  out = out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
-  return out;
-}
-
-class DepthwiseBackpropFilterOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "DepthwiseBackpropFilterOp");
-    poplar::program::Sequence seq({}, debug_info);
-
-    // Find the input tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq,
-                                             {debug_info}, false));
-
-    // Find the kernel tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor kernel,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq,
-                                             {debug_info}, false));
-
-    TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
-                        GetConvolutionParameters(inst, 0, 1));
-
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
-                        GetConvolutionOptionsForInst(inst, res));
-
-    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
-
-    poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, params, opts, conv_dims, debug_name_and_id](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor in_f = args[0];
-      poplar::Tensor kernel_f = args[1];
-
-      in_f = ShuffleConvolutionInputToPoplar(conv_dims, in_f);
-
-      in_f = DepthwiseFilterShuffleInput(params, in_f);
-
-      kernel_f = ShuffleConvolutionWeightsToPoplar(conv_dims, kernel_f, false);
-
-      kernel_f = AddGroupsDimensionToWeights(params, kernel_f, false);
-
-      poplar::Tensor out_f = poplin::convolution(
-          graph, in_f, kernel_f, params, false, prog, {debug_name_and_id}, opts,
-          &res.convolution_cache);
-
-      out_f = DepthwiseFilterShuffleOutput(params, out_f);
-
-      out_f = ShuffleConvolutionOutputToTensorflow(conv_dims, out_f);
-
-      args[2] = out_f;
-    };
-
-    poplar::Tensor out;
-    std::vector<poplar::Tensor> args = {in, kernel, out};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(in, "in"),
-        poputil::graphfn::input(kernel, "kernel"),
-        poputil::graphfn::created("out"),
-    };
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
-
-    out = args[2];
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-
-    return seq;
-  }
-};
-
-REGISTER_POPLAR_OP(Depthwise_filter, DepthwiseBackpropFilterOp);
 
 class ConvScaledInplaceOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(
@@ -376,17 +284,19 @@ class ConvScaledInplaceOp : public PoplarOpDef {
     const auto* root_inst = inst->fused_expression_root();
     auto op_type = root_inst->opcode();
 
+    int64 group_count = GetBatchGroupCount(inst);
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, params, opts, conv_dims, op_type, inst,
-                 debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
+    auto func = [&graph, &res, params, opts, group_count, conv_dims, op_type,
+                 inst, debug_name_and_id](std::vector<poplar::Tensor>& args,
+                                          poplar::program::Sequence& prog) {
       poplar::Tensor weights = args[0];
       poplar::Tensor in = args[1];
       poplar::Tensor deltas = args[2];
       poplar::Tensor scale = args[3];
 
       weights = ShuffleConvolutionOutputToPoplar(conv_dims, weights);
-      in = ShuffleConvolutionInputToPoplar(conv_dims, in);
+      in = ShuffleConvolutionInputToPoplar(group_count, conv_dims, in);
+
       deltas = ShuffleConvolutionWeightsToPoplar(conv_dims, deltas, false);
       deltas = AddGroupsDimensionToWeights(params, deltas, false);
 
@@ -475,13 +385,13 @@ class MultiConvOp : public PoplarOpDef {
     const poplar::OptionFlags multi_conv_options = GetMultiConvOptions(inst);
     poplar::Tensor out;
     switch (convolution_spec.type) {
-      case ConvType::Conv:
-      case ConvType::DepthwiseConv: {
+      case ConvType::Conv: {
         if (is_conv_input) {
           out = poplin::multiconv::createInput(
               graph, create_args, conv_index, multi_conv_options,
               &res.convolution_cache);  /// T32699 add missing debug info
-          out = ShuffleConvolutionInputToTensorflow(convolution_spec.dims, out);
+          out = ShuffleConvolutionInputToTensorflow(
+              convolution_spec.batch_group_count, convolution_spec.dims, out);
         } else {
           out = poplin::multiconv::createWeights(
               graph, create_args, conv_index, multi_conv_options,
@@ -543,10 +453,10 @@ class MultiConvOp : public PoplarOpDef {
 
         // Process the inputs, which is dependent on the convolution type.
         switch (convolution_spec.type) {
-          case ConvType::Conv:
-          case ConvType::DepthwiseConv: {
-            input =
-                ShuffleConvolutionInputToPoplar(convolution_spec.dims, input);
+          case ConvType::Conv: {
+            input = ShuffleConvolutionInputToPoplar(
+                convolution_spec.batch_group_count, convolution_spec.dims,
+                input);
 
             kernel = ShuffleConvolutionWeightsToPoplar(convolution_spec.dims,
                                                        kernel, false);
@@ -555,8 +465,9 @@ class MultiConvOp : public PoplarOpDef {
             break;
           }
           case ConvType::ConvWithReverse: {
-            input =
-                ShuffleConvolutionInputToPoplar(convolution_spec.dims, input);
+            input = ShuffleConvolutionInputToPoplar(
+                convolution_spec.batch_group_count, convolution_spec.dims,
+                input);
 
             kernel = ShuffleConvolutionWeightsToPoplar(convolution_spec.dims,
                                                        kernel, true);
@@ -576,17 +487,6 @@ class MultiConvOp : public PoplarOpDef {
             }
             break;
           }
-          case ConvType::DepthwiseFilter: {
-            input =
-                ShuffleConvolutionInputToPoplar(convolution_spec.dims, input);
-            input = DepthwiseFilterShuffleInput(create_args[i].params, input);
-
-            kernel = ShuffleConvolutionWeightsToPoplar(convolution_spec.dims,
-                                                       kernel, false);
-            kernel = AddGroupsDimensionToWeights(create_args[i].params, kernel,
-                                                 false);
-            break;
-          }
           default: { LOG(FATAL) << "Unknown convolution type."; }
         }
         conv_args[i] = {input, kernel, create_args[i].params,
@@ -603,15 +503,7 @@ class MultiConvOp : public PoplarOpDef {
         // Process the outputs, which is dependent on the convolution type.
         switch (convolution_spec.type) {
           case ConvType::Conv:
-          case ConvType::ConvWithReverse:
-          case ConvType::DepthwiseConv: {
-            output = ShuffleConvolutionOutputToTensorflow(convolution_spec.dims,
-                                                          output);
-            break;
-          }
-          case ConvType::DepthwiseFilter: {
-            output =
-                DepthwiseFilterShuffleOutput(create_args[i].params, output);
+          case ConvType::ConvWithReverse: {
             output = ShuffleConvolutionOutputToTensorflow(convolution_spec.dims,
                                                           output);
             break;

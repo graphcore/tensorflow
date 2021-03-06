@@ -128,6 +128,10 @@ bool CheckValidMultiSliceAttributes(const HloGatherInstruction* inst) {
 }
 }  // namespace
 
+bool HasSingleUser(const HloInstruction* inst) {
+  return inst->user_count() == 1;
+}
+
 bool IsRandomNormal(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kRng &&
          inst->random_distribution() == RandomDistribution::RNG_NORMAL;
@@ -280,9 +284,7 @@ bool IsF16ToF32Convert(const HloInstruction* inst) {
 }
 
 bool IsPopOpsConvolution(const HloInstruction* inst) {
-  if (IsPopOpsFusion(inst, "depthwise_conv")) return true;
   if (IsPopOpsFusion(inst, "conv_with_reverse")) return true;
-  if (IsPopOpsFusion(inst, "depthwise_filter")) return true;
   return false;
 }
 

@@ -35,6 +35,7 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
@@ -465,7 +466,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Transpose',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightTranspose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
       # pylint: enable=line-too-long
@@ -1258,11 +1259,41 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_3x3/',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightTranspose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
           'Mean/',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
+
+  def testUniformScaleAdd(self):
+    with self.session() as sess:
+
+      def fn():
+        random_number = random_ops.random_uniform([], maxval=100)
+        random_number_plus_10 = (random_number + 10.)
+        output = [random_number, random_number_plus_10]
+        return output
+
+      with ops.device("/device:IPU:0"):
+        op = fn()
+
+      res = sess.run(op)
+      self.assertAllClose(res[1] - res[0], 10)
+
+  def testNormalScaleAdd(self):
+    with self.session() as sess:
+
+      def fn():
+        random_number = random_ops.random_normal([])
+        random_number_plus_10 = (random_number + 10.)
+        output = [random_number, random_number_plus_10]
+        return output
+
+      with ops.device("/device:IPU:0"):
+        op = fn()
+
+      res = sess.run(op)
+      self.assertAllClose(res[1] - res[0], 10)
 
 
 if __name__ == "__main__":

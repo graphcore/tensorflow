@@ -193,9 +193,7 @@ StatusOr<bool> ConvBwdInputToFwdWeightsTranspose::Run(HloModule* module) {
       }
 
       if (ml_type == MLType::TRAINING_FWD &&
-          (inst->opcode() == HloOpcode::kConvolution ||
-           IsPopOpsFusion(inst, "depthwise_conv") ||
-           IsPopOpsFusion(inst, "depthwise_filter"))) {
+          inst->opcode() == HloOpcode::kConvolution) {
         fwd_conv.push_back(inst);
       }
     }

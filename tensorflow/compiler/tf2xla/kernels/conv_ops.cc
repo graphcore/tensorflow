@@ -161,9 +161,14 @@ class ConvBackpropFilterOp : public XlaOpKernel {
     xla::Shape filter_shape =
         TensorShapeToXLAShape(ctx->input_xla_type(0), filter_tensor_shape);
 
+    bool disable_batch_group_count = true;
+    if (ctx->compiler()->options().device_type == "XLA_IPU_JIT") {
+        disable_batch_group_count = false;
+    }
+
     xla::StatusOr<xla::XlaOp> filter_backprop = MakeXlaBackpropFilterConvOp(
         ctx->op_kernel().type_string(), ctx->Input(0), filter_shape,
-        ctx->Input(2), attrs_);
+        ctx->Input(2), attrs_, nullptr, disable_batch_group_count);
     OP_REQUIRES_OK(ctx, filter_backprop.status());
     ctx->SetOutput(0, filter_backprop.ValueOrDie());
   }
