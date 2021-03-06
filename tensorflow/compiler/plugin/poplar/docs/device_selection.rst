@@ -241,6 +241,14 @@ For a full list, refer to  :ref:`api-section`.
       when attached to a console, ``VLOG`` logging is disabled and compiling a
       graph which can take more than few seconds to compile. Defaults to
       ``auto``.
+  * - :samp:`--on_demand_device_poll_time={int}`
+    - When using 'ON_DEMAND' connection type, configure how often to poll for
+      the device (in milliseconds) when a device is not available - defaults to
+      1000ms. Minimum is 100ms.
+  * - :samp:`--on_demand_device_timeout={int}`
+    - When using 'ON_DEMAND' connection type, configure how long to wait (in
+      milliseconds) for a device before timing out - defaults to 3600000ms
+      (1 hour).
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
