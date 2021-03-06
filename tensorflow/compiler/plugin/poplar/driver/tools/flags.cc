@@ -117,6 +117,14 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"show_progress_bar",
        "Whether to show the compilation progress bar. Either \"true\", "
        "\"false\" or \"auto\". Defaults to \"auto\"."},
+      {"on_demand_device_poll_time",
+       "When using \"ON_DEMAND\" connection type, configure how often to poll "
+       "for the device (in miliseconds) when a device is not available - "
+       "defaults to 1000ms. Minimum is 100ms."},
+      {"on_demand_device_timeout",
+       "When using 'ON_DEMAND' connection type, configure how long to wait (in "
+       "milliseconds) for a device before timing out - defaults to 3600000ms "
+       "(1 hour)."},
       {"allow_nans", "will allow NaNs."}};
   return flag_usage;
 }
@@ -157,6 +165,8 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(null_data_feed)
     ADD_FLAG(dump_text_reports_to_stdio)
     ADD_FLAG(show_progress_bar)
+    ADD_FLAG(on_demand_device_poll_time)
+    ADD_FLAG(on_demand_device_timeout)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)
