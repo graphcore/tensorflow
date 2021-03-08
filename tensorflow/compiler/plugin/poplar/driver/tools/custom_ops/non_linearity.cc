@@ -25,196 +25,130 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-// Relu
-std::unique_ptr<HloInstruction> HloReluInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloReluInstruction>(new_operands[0]);
+namespace {
+template <class NonLinearityInstruction>
+std::unique_ptr<HloInstruction> CreateNonLinearity(
+    HloInstruction* const operand) {
+  return absl::make_unique<NonLinearityInstruction>(operand);
 }
 
+template <class NonLinearityGradInstruction>
+std::unique_ptr<HloInstruction> CreateNonLinearityGrad(
+    HloInstruction* const out, HloInstruction* const grad) {
+  return absl::make_unique<NonLinearityGradInstruction>(out, grad);
+}
+}  // namespace
+// Relu
 std::unique_ptr<HloInstruction> CreateRelu(HloInstruction* const operand) {
-  return absl::make_unique<HloReluInstruction>(operand);
+  return CreateNonLinearity<HloReluInstruction>(operand);
 }
 
 // Gelu
-std::unique_ptr<HloInstruction> HloGeluInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloGeluInstruction>(new_operands[0]);
-}
-
 std::unique_ptr<HloInstruction> CreateGelu(HloInstruction* const operand) {
-  return absl::make_unique<HloGeluInstruction>(operand);
+  return CreateNonLinearity<HloGeluInstruction>(operand);
 }
 
 // Sigmoid
-std::unique_ptr<HloInstruction> HloSigmoidInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloSigmoidInstruction>(new_operands[0]);
-}
-
 std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand) {
-  return absl::make_unique<HloSigmoidInstruction>(operand);
+  return CreateNonLinearity<HloSigmoidInstruction>(operand);
 }
 
 // HardSigmoid
-std::unique_ptr<HloInstruction>
-HloHardSigmoidInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloHardSigmoidInstruction>(new_operands[0]);
-}
-
 std::unique_ptr<HloInstruction> CreateHardSigmoid(
     HloInstruction* const operand) {
-  return absl::make_unique<HloHardSigmoidInstruction>(operand);
+  return CreateNonLinearity<HloHardSigmoidInstruction>(operand);
+}
+
+// Swish
+std::unique_ptr<HloInstruction> CreateSwish(HloInstruction* const operand) {
+  return CreateNonLinearity<HloSwishInstruction>(operand);
 }
 
 // ReluGrad
-std::unique_ptr<HloInstruction>
-HloReluGradInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloReluGradInstruction>(new_operands[0],
-                                                   new_operands[1]);
-}
-
 std::unique_ptr<HloInstruction> CreateReluGrad(HloInstruction* const out,
                                                HloInstruction* const grad) {
-  return absl::make_unique<HloReluGradInstruction>(out, grad);
+  return CreateNonLinearityGrad<HloReluGradInstruction>(out, grad);
 }
 
 // GeluGrad
-std::unique_ptr<HloInstruction>
-HloGeluGradInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloGeluGradInstruction>(new_operands[0],
-                                                   new_operands[1]);
-}
-
 std::unique_ptr<HloInstruction> CreateGeluGrad(HloInstruction* const out,
                                                HloInstruction* const grad) {
-  return absl::make_unique<HloGeluGradInstruction>(out, grad);
+  return CreateNonLinearityGrad<HloGeluGradInstruction>(out, grad);
 }
 
 // SigmoidGrad
-std::unique_ptr<HloInstruction>
-HloSigmoidGradInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloSigmoidGradInstruction>(new_operands[0],
-                                                      new_operands[1]);
-}
-
 std::unique_ptr<HloInstruction> CreateSigmoidGrad(HloInstruction* const out,
                                                   HloInstruction* const grad) {
-  return absl::make_unique<HloSigmoidGradInstruction>(out, grad);
+  return CreateNonLinearityGrad<HloSigmoidGradInstruction>(out, grad);
 }
 
 // HardSigmoidGrad
-std::unique_ptr<HloInstruction>
-HloHardSigmoidGradInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloHardSigmoidGradInstruction>(new_operands[0],
-                                                          new_operands[1]);
-}
-
 std::unique_ptr<HloInstruction> CreateHardSigmoidGrad(
     HloInstruction* const out, HloInstruction* const grad) {
-  return absl::make_unique<HloHardSigmoidGradInstruction>(out, grad);
+  return CreateNonLinearityGrad<HloHardSigmoidGradInstruction>(out, grad);
 }
 
 // TanhGrad
-std::unique_ptr<HloInstruction>
-HloTanhGradInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloTanhGradInstruction>(new_operands[0],
-                                                   new_operands[1]);
-}
-
 std::unique_ptr<HloInstruction> CreateTanhGrad(HloInstruction* const out,
                                                HloInstruction* const grad) {
-  return absl::make_unique<HloTanhGradInstruction>(out, grad);
+  return CreateNonLinearityGrad<HloTanhGradInstruction>(out, grad);
+}
+
+// SwishGrad
+std::unique_ptr<HloInstruction> CreateSwishGrad(HloInstruction* const out,
+                                                HloInstruction* const grad) {
+  return CreateNonLinearityGrad<HloSwishGradInstruction>(out, grad);
 }
 
 namespace {
 
-StatusOr<std::unique_ptr<HloInstruction>> HloReluInstructionFactoryFunc(
+template <class NonLinearityInstruction>
+StatusOr<std::unique_ptr<HloInstruction>> HloNonLinearityFactory(
     HloCustomCallInstruction* call) {
-  return CreateRelu(call->mutable_operand(0));
+  return CreateNonLinearity<NonLinearityInstruction>(call->mutable_operand(0));
 }
 
-static HloPoplarInstructionFactory relu_factory(PoplarOp::Relu,
-                                                HloReluInstructionFactoryFunc);
+static HloPoplarInstructionFactory relu_factory(
+    PoplarOp::Relu, HloNonLinearityFactory<HloReluInstruction>);
 
-StatusOr<std::unique_ptr<HloInstruction>> HloGeluInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateGelu(call->mutable_operand(0));
-}
-
-static HloPoplarInstructionFactory gelu_factory(PoplarOp::Gelu,
-                                                HloGeluInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateSigmoid(call->mutable_operand(0));
-}
+static HloPoplarInstructionFactory gelu_factory(
+    PoplarOp::Gelu, HloNonLinearityFactory<HloGeluInstruction>);
 
 static HloPoplarInstructionFactory sigmoid_factory(
-    PoplarOp::Sigmoid, HloSigmoidInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>> HloHardSigmoidInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateHardSigmoid(call->mutable_operand(0));
-}
+    PoplarOp::Sigmoid, HloNonLinearityFactory<HloSigmoidInstruction>);
 
 static HloPoplarInstructionFactory hard_sigmoid_factory(
-    PoplarOp::HardSigmoid, HloHardSigmoidInstructionFactoryFunc);
+    PoplarOp::HardSigmoid, HloNonLinearityFactory<HloHardSigmoidInstruction>);
 
-StatusOr<std::unique_ptr<HloInstruction>> HloReluGradInstructionFactoryFunc(
+static HloPoplarInstructionFactory swish_factory(
+    PoplarOp::Swish, HloNonLinearityFactory<HloSwishInstruction>);
+
+template <class NonLinearityGradInstruction>
+StatusOr<std::unique_ptr<HloInstruction>> HloNonLinearityGradFactory(
     HloCustomCallInstruction* call) {
-  return CreateReluGrad(call->mutable_operand(0), call->mutable_operand(1));
+  return CreateNonLinearityGrad<NonLinearityGradInstruction>(
+      call->mutable_operand(0), call->mutable_operand(1));
 }
 
 static HloPoplarInstructionFactory relu_grad_factory(
-    PoplarOp::ReluGrad, HloReluGradInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>> HloGeluGradInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateGeluGrad(call->mutable_operand(0), call->mutable_operand(1));
-}
+    PoplarOp::ReluGrad, HloNonLinearityGradFactory<HloReluGradInstruction>);
 
 static HloPoplarInstructionFactory gelu_grad_factory(
-    PoplarOp::GeluGrad, HloGeluGradInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidGradInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateSigmoidGrad(call->mutable_operand(0), call->mutable_operand(1));
-}
+    PoplarOp::GeluGrad, HloNonLinearityGradFactory<HloGeluGradInstruction>);
 
 static HloPoplarInstructionFactory sigmoid_grad_factory(
-    PoplarOp::SigmoidGrad, HloSigmoidGradInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>>
-HloHardSigmoidGradInstructionFactoryFunc(HloCustomCallInstruction* call) {
-  return CreateHardSigmoidGrad(call->mutable_operand(0),
-                               call->mutable_operand(1));
-}
+    PoplarOp::SigmoidGrad,
+    HloNonLinearityGradFactory<HloSigmoidGradInstruction>);
 
 static HloPoplarInstructionFactory hard_sigmoid_grad_factory(
-    PoplarOp::HardSigmoidGrad, HloHardSigmoidGradInstructionFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>> HloTanhGradInstructionFactoryFunc(
-    HloCustomCallInstruction* call) {
-  return CreateTanhGrad(call->mutable_operand(0), call->mutable_operand(1));
-}
+    PoplarOp::HardSigmoidGrad,
+    HloNonLinearityGradFactory<HloHardSigmoidGradInstruction>);
 
 static HloPoplarInstructionFactory tanh_grad_factory(
-    PoplarOp::TanhGrad, HloTanhGradInstructionFactoryFunc);
+    PoplarOp::TanhGrad, HloNonLinearityGradFactory<HloTanhGradInstruction>);
+
+static HloPoplarInstructionFactory swish_grad_factory(
+    PoplarOp::SwishGrad, HloNonLinearityGradFactory<HloSwishGradInstruction>);
 }  // namespace
 
 }  // namespace poplarplugin

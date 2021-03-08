@@ -95,7 +95,9 @@ enum PoplarOp {
   HardSigmoid = 91;
   HardSigmoidGrad = 92;
   Assert = 93;
-
+  Swish = 94;
+  SwishGrad = 95;
+  
   // Supported Fusions.
   Conv_biasadd = 200;
   Matmul_biasadd = 201;

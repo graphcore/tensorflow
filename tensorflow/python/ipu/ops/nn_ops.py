@@ -69,6 +69,19 @@ def hard_sigmoid(x, name=None):
   return gen_popnn_ops.ipu_hard_sigmoid(x, name=name)
 
 
+def swish(x, name=None):
+  """ IPU implementation of the swish activation function.
+
+    Args:
+    x: The input tensor.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor`. Has the same type the input tensor.
+  """
+  return gen_popnn_ops.ipu_swish(x, name=name)
+
+
 def multi_conv(func=None, options=None):
   """A function decorator for generating multi-convolution operations.
   Multi-convolutions allow for a set of data-independent convolutions to be

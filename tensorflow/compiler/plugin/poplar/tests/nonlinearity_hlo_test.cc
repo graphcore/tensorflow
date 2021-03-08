@@ -143,7 +143,7 @@ ROOT grad = f32[5,6] custom-call(dot.5, sigmoid), custom_call_target="SigmoidGra
 )"};
 
 static const TestParam hardSigmoid = {PoplarOp::HardSigmoid, R"(
-HloModule topj
+HloModule top
 
 ENTRY test {
 arg0.1 = f16[10,20] parameter(0), metadata={op_name="XLA_Args/_arg_Placeholder_0_0/_q1"}
@@ -163,12 +163,32 @@ ROOT grad = f32[5,6] custom-call(dot.5, hardSigmoid), custom_call_target="HardSi
 }
 )"};
 
-INSTANTIATE_TEST_SUITE_P(NonLinearityTest, NonLinearityHloTest,
-                         ::testing::Values(relu, gelu, sigmoid, hardSigmoid,
-                                           reluGrad, geluGrad, sigmoidGrad,
-                                           hardSigmoidGrad),
-                         std::bind(NonLinearityHloTest::ParamName,
-                                   std::placeholders::_1));
+static const TestParam swish = {PoplarOp::Swish, R"(
+HloModule top
+
+ENTRY test {
+arg0.1 = f16[10,20] parameter(0), metadata={op_name="XLA_Args/_arg_Placeholder_0_0/_q1"}
+ROOT swish = f16[10,20] custom-call(arg0.1), custom_call_target="Swish"
+}
+)"};
+
+static const TestParam swishGrad = {PoplarOp::SwishGrad, R"(
+HloModule top
+
+ENTRY test {
+arg0.1 = f32[5,10] parameter(0), metadata={op_name="XLA_Args/_arg_Placeholder_54_0_0/_1"}
+arg1.2 = f32[10,6] parameter(1), metadata={op_name="XLA_Args/_arg_Placeholder_55_0_1/_3"}
+dot.5 = f32[5,6] dot(arg0.1, arg1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+swish = f32[5,6] custom-call(dot.5), custom_call_target="Swish"
+ROOT grad = f32[5,6] custom-call(dot.5, swish), custom_call_target="SwishGrad"
+}
+)"};
+
+INSTANTIATE_TEST_SUITE_P(
+    NonLinearityTest, NonLinearityHloTest,
+    ::testing::Values(relu, gelu, sigmoid, hardSigmoid, swish, reluGrad,
+                      geluGrad, sigmoidGrad, hardSigmoidGrad, swishGrad),
+    std::bind(NonLinearityHloTest::ParamName, std::placeholders::_1));
 
 }  // namespace
 }  // namespace poplarplugin

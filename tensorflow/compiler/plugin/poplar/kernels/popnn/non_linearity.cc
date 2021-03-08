@@ -68,6 +68,7 @@ REGISTER_IPU_OP("Relu", NonLinearity<PoplarOp::Relu>);
 REGISTER_IPU_OP("Sigmoid", NonLinearity<PoplarOp::Sigmoid>);
 REGISTER_IPU_OP("IpuGelu", NonLinearity<PoplarOp::Gelu>);
 REGISTER_IPU_OP("IpuHardSigmoid", NonLinearity<PoplarOp::HardSigmoid>);
+REGISTER_IPU_OP("IpuSwish", NonLinearity<PoplarOp::Swish>);
 
 template <PoplarOp Op, bool SwapInputs>
 class NonLinearityGrad : public XlaOpKernel, IpuOpKernel {
@@ -109,5 +110,6 @@ REGISTER_IPU_OP("TanhGrad", (NonLinearityGrad<PoplarOp::TanhGrad, false>));
 REGISTER_IPU_OP("IpuGeluGrad", (NonLinearityGrad<PoplarOp::GeluGrad, true>));
 REGISTER_IPU_OP("IpuHardSigmoidGrad",
                 (NonLinearityGrad<PoplarOp::HardSigmoidGrad, true>));
+REGISTER_IPU_OP("IpuSwishGrad", (NonLinearityGrad<PoplarOp::SwishGrad, true>));
 
 }  // namespace tensorflow
