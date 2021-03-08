@@ -330,8 +330,14 @@ StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
                         MakeGetTupleElementHlo(inst, tuple_index));
     if (inst->has_sharding()) {
       // If there is any sharding, then forward it.
-      gtes[tuple_index]->set_sharding(inst->sharding().GetSubSharding(
-          inst->shape(), ShapeIndex{tuple_index}));
+      auto sharding = inst->sharding();
+
+      if (sharding.IsTuple()) {
+        gtes[tuple_index]->set_sharding(
+            sharding.GetSubSharding(inst->shape(), ShapeIndex{tuple_index}));
+      } else {
+        gtes[tuple_index]->set_sharding(sharding);
+      }
     }
   }
   // Create tuple.
