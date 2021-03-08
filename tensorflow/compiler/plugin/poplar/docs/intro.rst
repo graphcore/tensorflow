@@ -17,6 +17,9 @@ TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
 software stack, TensorFlow sits at the highest level of abstraction. Poplar
 and PopLibs provide a software interface to operations running on the IPU.
+XLA (Accelerated Linear Algebra) is a domain-specific compiler for linear
+algebra that can accelerate TensorFlow models.
+TensorFlow graphs are compiled into Poplar executables using our XLA backend.
 
 .. figure:: figures/Tensorflow_Poplar.png
     :width: 100%
@@ -46,14 +49,21 @@ out-of-memory (OOM) issues.
 
 These will be described in the appropriate sections of this document.
 
+.. note:: Many of the sections are shared with the TensorFlow 1 version of this
+          document. The function `ipu_compiler.compile()` is used within an IPU
+          device scope when using `tf.compat.v1.Session`. It is not required
+          when using the `IPUStrategy`.
+
 Document overview
 ~~~~~~~~~~~~~~~~~
 
-* This document starts with :any:`a tutorial overview <Tutorial>` of TensorFlow
-  for the IPU. This describes how to execute a graph on an IPU, how to select
-  the IPU hardware to run on, and a simple approach to using multiple IPUs.
-* The next section provides information about :any:`selecting specific IPU
+* The first section provides information about :any:`selecting specific IPU
   <device_selection>` hardware and configuring the code to run on it.
+* The next section describes executable caches and pre-compilation of
+  executables.
+* The `IPUStrategy` and IPU-specific versions of the Keras Model and Sequential
+  classes are described in the section on :any:`support for TensorFlow 2
+  <targetting_tf2>` with examples in the subsequent section.
 * The following sections provide information on various methods related to
   training a model on the IPU.
 * The next few sections provide information on IPU-specific features.
