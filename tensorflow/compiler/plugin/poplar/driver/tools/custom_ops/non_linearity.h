@@ -29,9 +29,9 @@ namespace xla {
 namespace poplarplugin {
 
 template <PoplarOp Op>
-class HloNonLinearityBase : public HloPoplarInstruction {
+class HloNonLinearity : public HloPoplarInstruction {
  public:
-  explicit HloNonLinearityBase(HloInstruction* const operand)
+  explicit HloNonLinearity(HloInstruction* const operand)
       : HloPoplarInstruction(operand->shape(), {operand}, Op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
@@ -55,62 +55,40 @@ class HloNonLinearityBase : public HloPoplarInstruction {
       const HloPrintOptions& options) const override {
     return {};
   }
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext*) const override {
+    return absl::make_unique<HloNonLinearity<Op>>(new_operands[0]);
+  }
 };
 
 // Relu
-class HloReluInstruction : public HloNonLinearityBase<PoplarOp::Relu> {
- public:
-  using HloNonLinearityBase::HloNonLinearityBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloReluInstruction = HloNonLinearity<PoplarOp::Relu>;
 std::unique_ptr<HloInstruction> CreateRelu(HloInstruction* const operand);
 
 // Gelu
-class HloGeluInstruction : public HloNonLinearityBase<PoplarOp::Gelu> {
- public:
-  using HloNonLinearityBase::HloNonLinearityBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloGeluInstruction = HloNonLinearity<PoplarOp::Gelu>;
 std::unique_ptr<HloInstruction> CreateGelu(HloInstruction* const operand);
 
 // Sigmoid
-class HloSigmoidInstruction : public HloNonLinearityBase<PoplarOp::Sigmoid> {
- public:
-  using HloNonLinearityBase::HloNonLinearityBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloSigmoidInstruction = HloNonLinearity<PoplarOp::Sigmoid>;
 std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand);
 
 // HardSigmoid
-class HloHardSigmoidInstruction
-    : public HloNonLinearityBase<PoplarOp::HardSigmoid> {
- public:
-  using HloNonLinearityBase::HloNonLinearityBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloHardSigmoidInstruction = HloNonLinearity<PoplarOp::HardSigmoid>;
 std::unique_ptr<HloInstruction> CreateHardSigmoid(
     HloInstruction* const operand);
 
+// Swish
+using HloSwishInstruction = HloNonLinearity<PoplarOp::Swish>;
+std::unique_ptr<HloInstruction> CreateSwish(HloInstruction* const operand);
+
 template <PoplarOp Op>
-class HloNonLinearityGradBase : public HloPoplarInstruction {
+class HloNonLinearityGrad : public HloPoplarInstruction {
  public:
-  HloNonLinearityGradBase(HloInstruction* const out, HloInstruction* const grad)
+  HloNonLinearityGrad(HloInstruction* const out, HloInstruction* const grad)
       : HloPoplarInstruction(out->shape(), {out, grad}, Op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
@@ -133,77 +111,46 @@ class HloNonLinearityGradBase : public HloPoplarInstruction {
       const HloPrintOptions& options) const override {
     return {};
   }
-};
-
-// ReluGrad
-class HloReluGradInstruction
-    : public HloNonLinearityGradBase<PoplarOp::ReluGrad> {
- public:
-  using HloNonLinearityGradBase::HloNonLinearityGradBase;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext*) const {
+    return absl::make_unique<HloNonLinearityGrad<Op>>(new_operands[0],
+                                                      new_operands[1]);
+  }
 };
+
+// ReluGrad
+using HloReluGradInstruction = HloNonLinearityGrad<PoplarOp::ReluGrad>;
 std::unique_ptr<HloInstruction> CreateReluGrad(HloInstruction* const out,
                                                HloInstruction* const grad);
 
 // GeluGrad
-class HloGeluGradInstruction
-    : public HloNonLinearityGradBase<PoplarOp::GeluGrad> {
- public:
-  using HloNonLinearityGradBase::HloNonLinearityGradBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloGeluGradInstruction = HloNonLinearityGrad<PoplarOp::GeluGrad>;
 std::unique_ptr<HloInstruction> CreateGeluGrad(HloInstruction* const out,
                                                HloInstruction* const grad);
 
 // SigmoidGrad
-class HloSigmoidGradInstruction
-    : public HloNonLinearityGradBase<PoplarOp::SigmoidGrad> {
- public:
-  using HloNonLinearityGradBase::HloNonLinearityGradBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloSigmoidGradInstruction = HloNonLinearityGrad<PoplarOp::SigmoidGrad>;
 std::unique_ptr<HloInstruction> CreateSigmoidGrad(HloInstruction* const out,
                                                   HloInstruction* const grad);
 
 // HardSigmoidGrad
-class HloHardSigmoidGradInstruction
-    : public HloNonLinearityGradBase<PoplarOp::HardSigmoidGrad> {
- public:
-  using HloNonLinearityGradBase::HloNonLinearityGradBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+using HloHardSigmoidGradInstruction =
+    HloNonLinearityGrad<PoplarOp::HardSigmoidGrad>;
 std::unique_ptr<HloInstruction> CreateHardSigmoidGrad(
     HloInstruction* const out, HloInstruction* const grad);
-// TanhGrad
-class HloTanhGradInstruction
-    : public HloNonLinearityGradBase<PoplarOp::TanhGrad> {
- public:
-  using HloNonLinearityGradBase::HloNonLinearityGradBase;
 
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
+// TanhGrad
+using HloTanhGradInstruction = HloNonLinearityGrad<PoplarOp::TanhGrad>;
 std::unique_ptr<HloInstruction> CreateTanhGrad(HloInstruction* const out,
                                                HloInstruction* const grad);
 
+// SwishGrad
+using HloSwishGradInstruction = HloNonLinearityGrad<PoplarOp::SwishGrad>;
+std::unique_ptr<HloInstruction> CreateSwishGrad(HloInstruction* const out,
+                                                HloInstruction* const grad);
 }  // namespace poplarplugin
 }  // namespace xla
 

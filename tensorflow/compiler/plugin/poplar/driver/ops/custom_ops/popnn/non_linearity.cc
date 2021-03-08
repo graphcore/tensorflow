@@ -72,6 +72,7 @@ REGISTER_POPLAR_OP(Gelu, NonLinearityOp<popnn::NonLinearityType::GELU>);
 REGISTER_POPLAR_OP(Sigmoid, NonLinearityOp<popnn::NonLinearityType::SIGMOID>);
 REGISTER_POPLAR_OP(HardSigmoid,
                    NonLinearityOp<popnn::NonLinearityType::HARD_SIGMOID>);
+REGISTER_POPLAR_OP(Swish, NonLinearityOp<popnn::NonLinearityType::SWISH>);
 
 template <popnn::NonLinearityType NLType>
 class NonLinearityGradOp : public PoplarOpDef {
@@ -105,6 +106,8 @@ REGISTER_POPLAR_OP(SigmoidGrad,
 REGISTER_POPLAR_OP(TanhGrad, NonLinearityGradOp<popnn::NonLinearityType::TANH>);
 REGISTER_POPLAR_OP(HardSigmoidGrad,
                    NonLinearityGradOp<popnn::NonLinearityType::HARD_SIGMOID>);
+REGISTER_POPLAR_OP(SwishGrad,
+                   NonLinearityGradOp<popnn::NonLinearityType::SWISH>);
 
 }  // namespace
 }  // namespace poplarplugin

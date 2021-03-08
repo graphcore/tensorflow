@@ -1040,6 +1040,7 @@ cc_library(
         "ops/popnn/hard_sigmoid.cc",
         "ops/popnn/lstm.cc",
         "ops/popnn/norm.cc",
+        "ops/popnn/swish.cc",
     ],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
