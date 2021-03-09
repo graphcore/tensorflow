@@ -155,8 +155,6 @@ Keras layers
   :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense
   :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense
 
-.. _keras-layers-api:
-
 Keras losses
 ^^^^^^^^^^^^
 
