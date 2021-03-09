@@ -65,12 +65,9 @@ class _SessionRunCounter(session_run_hook.SessionRunHook):
 
 class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
                                  parameterized.TestCase):
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testTrainReplicated(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_model_fn(features, labels, mode):  # pylint: disable=unused-argument
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
@@ -91,6 +88,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    num_replicas=4,
@@ -127,12 +125,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       {'use_gradient_accumulation': False},
       {'use_gradient_accumulation': True},
   )
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testTrainReplicatedOnRegressionDataset(self, use_gradient_accumulation):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     iterations_per_loop = 2
 
     def my_model_fn(features, labels, mode):
@@ -167,6 +162,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=iterations_per_loop,
@@ -199,12 +195,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testShardedAndReplicatedTraining(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_model_fn(features, labels, mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
@@ -235,6 +228,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    num_replicas=2,
@@ -267,12 +261,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testReplicatedEvaluation(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_input_fn():
       # IPU0 mean: 2, max: 3
       # IPU1 mean: 4, max: 5
@@ -300,6 +291,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -309,11 +301,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
     self.assertEqual(3., scores["feature_mean"])
     self.assertEqual(4., scores[model_fn_lib.LOSS_METRIC_KEY])
 
+  @tu.test_uses_ipus(num_ipus=4)
+  @test_util.deprecated_graph_mode_only
   def testReplicatedEvaluationOnHost(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_input_fn():
       features = [0, 0, 0, 1, 0, 0, 0, 1]
       labels = [0, 1, 0, 1, 0, 1, 0, 1]
@@ -356,12 +346,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
     self.assertEqual(0.5, scores["rmse"])
     self.assertEqual(1.5, scores[model_fn_lib.LOSS_METRIC_KEY])
 
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testReplicatedPrediction(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_input_fn():
       features = [
           [1.0],  # IPU0
@@ -391,6 +378,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -406,12 +394,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
                                 hooks=[hook])
     np.testing.assert_array_equal([3.0, 5.0, 7.0, 9.0], next(outputs))
 
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testTrainWithAutomaticSharding(self):
-    if ipu_utils.running_on_ipu_model():
-      self.skipTest("Replicated top level graphs are not supported on the "
-                    "IPU_MODEL target")
-
     def my_model_fn(features, labels, mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
@@ -435,6 +420,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -460,6 +446,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
   def testReplicatedTrainingWithoutCrossReplicaSumShouldThrow(self):
     def my_input_fn():
@@ -472,6 +459,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))

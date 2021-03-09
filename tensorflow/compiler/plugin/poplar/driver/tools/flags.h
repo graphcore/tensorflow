@@ -112,6 +112,16 @@ class PoplarXlaFlags {
   // Whether to show the compilation progress bar.
   std::string show_progress_bar = "auto";
 
+  // When using 'ON_DEMAND' connection type, configure how often to poll for the
+  // device (in milliseconds) when a device is not available - defaults to
+  // 1000ms. Minimum is 100ms.
+  int64 on_demand_device_poll_time = 1000;
+
+  // When using 'ON_DEMAND' connection type, configure how long to wait (in
+  // milliseconds) for a device before timing out - defaults to 3600000ms (1
+  // hour).
+  int64 on_demand_device_timeout = 3600000;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

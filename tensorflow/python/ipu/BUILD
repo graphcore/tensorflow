@@ -496,7 +496,8 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
-    shard_count = 2,
+    shard_count = 8,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -611,6 +612,7 @@ py_test(
     size = "medium",
     srcs = ["tests/replication_normalise_test.py"],
     srcs_version = "PY2AND3",
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1159,7 +1161,7 @@ test_suite(
 )
 
 test_suite(
-    name = "replicated_tests",
+    name = "hw_tests",
     tests = [
         "ipu_estimator_replicated_test",
         "replication_normalise_test",
@@ -1169,7 +1171,8 @@ test_suite(
 test_suite(
     name = "poplar_ci_test_suite",
     tests = [
+        ":all_tests",
+        ":hw_tests",
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
-        "//tensorflow/python/ipu:all_tests",
     ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
 )

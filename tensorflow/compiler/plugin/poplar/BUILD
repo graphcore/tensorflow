@@ -2167,6 +2167,7 @@ tf_xla_py_test(
     size = "small",
     srcs = ["tests/random_ops.py"],
     enabled_backends = ["poplar"],
+    tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -4117,24 +4118,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "replicated_stateful_gradient_accumulate_test",
-    size = "large",
-    srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 2,
-    deps = [
-        ":ipu_ops_py",
-        ":popops_ops_py",
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-    ],
-)
-
-tf_xla_py_test(
     name = "case_test",
     size = "small",
     srcs = ["tests/case_test.py"],
@@ -4461,62 +4444,9 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "replicated_graph_test",
-    size = "large",
-    srcs = ["tests/replicated_graph_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 2,
-    deps = [
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "sharded_inplace_test",
     size = "small",
     srcs = ["tests/sharded_inplace_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "sharded_and_replicated_test",
-    size = "large",
-    srcs = ["tests/sharded_and_replicated_test.py"],
-    enabled_backends = ["poplar"],
-    shard_count = 2,
-    deps = [
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
-    name = "dropout_hw_test",
-    size = "small",
-    srcs = ["tests/dropout_hw_test.py"],
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
@@ -4679,6 +4609,7 @@ py_test(
         "--replicas=2",
     ],
     main = "ipu_estimator_example.py",
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -5224,32 +5155,20 @@ test_suite(
 )
 
 test_suite(
+    name = "hardware_tests",
+    tests = [
+        "random_ops",
+    ],
+)
+
+test_suite(
     name = "poplar_ci_test_suite",
     tests = [
         ":doc_examples",
+        ":hardware_tests",
         ":poplar_test_suite",
         ":size_speed_tests",
         ":training_tests",
-    ],
-)
-
-test_suite(
-    name = "replicated_tests",
-    tests = [
-        "ipu_estimator_example_replicated",
-        "replicated_graph_test",
-        "replicated_stateful_gradient_accumulate_test",
-        "sharded_and_replicated_test",
-    ],
-)
-
-test_suite(
-    name = "hardware_tests",
-    tests = [
-        ":dropout_hw_test",
-        ":executable_cache_test",
-        ":random_ops",
-        ":replicated_tests",
     ],
 )
 

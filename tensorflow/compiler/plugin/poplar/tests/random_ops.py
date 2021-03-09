@@ -14,12 +14,14 @@
 # =============================================================================
 
 import numpy as np
+import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 
 from tensorflow.python.client import session
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gen_stateless_random_ops
@@ -32,7 +34,9 @@ from tensorflow.python import ipu
 
 
 class PoprandSameSeedTest(xla_test.XLATestCase):
-  def testUserOpMetadata(self):
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def testRandomNumbers(self):
     def my_net():
       x = variable_scope.get_variable(
           op.__name__ + 'x',
@@ -73,15 +77,16 @@ class PoprandSameSeedTest(xla_test.XLATestCase):
       return output
 
     ops = [
-        gen_stateless_random_ops.random.stateless_normal,
-        gen_stateless_random_ops.random.stateless_truncated_normal,
-        gen_stateless_random_ops.random.stateless_uniform
+        gen_stateless_random_ops.stateless_random_normal,
+        gen_stateless_random_ops.stateless_truncated_normal,
+        gen_stateless_random_ops.stateless_random_uniform
     ]
     for op in ops:
       with ipu.scopes.ipu_scope('/device:IPU:0'):
         model = ipu.ipu_compiler.compile(my_net)
 
       cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
       ipu.utils.configure_ipu_system(cfg)
 
       with session.Session() as sess:
