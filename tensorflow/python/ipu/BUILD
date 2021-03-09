@@ -1007,7 +1007,7 @@ tf_py_test(
     data = [
         ":libpipelining_stateful_op.so",
     ],
-    shard_count = 16,
+    shard_count = 25,
 )
 
 tf_py_test(
