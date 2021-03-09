@@ -194,7 +194,8 @@ class PipelineTester(object):
                       device_mapping=None,
                       batch_serialization_iterations=1,
                       recomputation_mode=None,
-                      number_of_io_tiles=0):
+                      number_of_io_tiles=0,
+                      return_report=False):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -261,6 +262,8 @@ class PipelineTester(object):
           ]
         report.assert_pipeline_stages_on_expected_ipu(device_mapping)
         report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.3)
+      if return_report:
+        return out, report
       return out
 
   @staticmethod
@@ -278,7 +281,8 @@ class PipelineTester(object):
                               device_mapping=None,
                               batch_serialization_iterations=1,
                               recomputation_mode=None,
-                              number_of_io_tiles=0):
+                              number_of_io_tiles=0,
+                              return_report=False):
 
     if batch_serialization_iterations > 1:
       assert device_mapping is None
@@ -302,7 +306,11 @@ class PipelineTester(object):
         device_mapping,
         batch_serialization_iterations,
         recomputation_mode,
-        number_of_io_tiles=number_of_io_tiles)
+        number_of_io_tiles=number_of_io_tiles,
+        return_report=return_report)
+
+    if return_report:
+      pipeline_losses, report = pipeline_losses
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
@@ -311,6 +319,9 @@ class PipelineTester(object):
         num_batches_to_accumulate, dataset_fn, optimizer)
 
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
+
+    if return_report:
+      return report
 
   @staticmethod
   def compare_pipeline_to_sharding(stages,

@@ -871,6 +871,99 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
         RecomputeAndBackpropagateInterleaved,
         number_of_io_tiles=number_of_io_tiles)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineRecomputationCheckpointInFinalStage(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        return img, img
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def get_weight(name):
+      return variable_scope.get_variable(
+          name,
+          shape=[2, 4, 4],
+          dtype=np.float32,
+          initializer=init_ops.ones_initializer())
+
+    def stage1(x, label):
+      return x, label
+
+    def stage2(x, label):
+      return x, label
+
+    def stage3(x, label):
+      # Create a chain of multiplies that we split in half with a checkpoint.
+      # We expect only the first half to be recomputed in the bwd stage.
+      with variable_scope.variable_scope("s3", use_resource=True):
+        w0 = get_weight("w0")
+        x = x * w0
+        w1 = get_weight("w1")
+        x = x * w1
+        x = pipelining_ops.recomputation_checkpoint(x)
+        w2 = get_weight("w2")
+        x = x * w2
+        w3 = get_weight("w3")
+        x = x * w3
+      return x + label
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    report = pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3],
+        inputs_fn, [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        10535,
+        recomp=True,
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        recomputation_mode=pipelining_ops.RecomputationMode.
+        RecomputeAndBackpropagateInterleaved,
+        return_report=True)
+
+    # With recomputation, we expect the following final forward stage
+    #
+    # inp0     inp1      inp2      ckpt      inp3      out
+    # ---> mul ---> mul1 ---> ckpt ---> mul2 ---> mul3 --->
+    #       ^        ^                   ^         ^
+    #       |        |                   |         |
+    #       w0       w1                  w2        w3
+    #
+    # to be split at the checkpoint, and only the first half to be recomputed in
+    # the backward stage.
+    # This is because:
+    # 1. There is no point recomputing the second half, since we're about to use
+    #    the computed activations in the backward pass immediately.
+    # 2. Therefore anything past the last checkpoint should not be recomputed.
+    # 3. We then don't need to store inp0 and inp1 in live memory while the
+    #    rest of the forward pass and the second half of backprop is calculated.
+    # Under normal recomputation (without the checkpoint), we'd expect to see
+    # three extra multiplies in the backward pass to recompute inp3, inp2 and
+    # inp1. With the checkpoint, we expect to not do the third multiply, mul2,
+    # to recompute inp3, since it's after the last checkpoint.
+    # The forward stage multiplies are called:
+    #  - s3/mul/multiply.*/Op/Multiply
+    #  - s3/mul_1/multiply.*/Op/Multiply
+    #  - s3/mul_2/multiply.*/Op/Multiply
+    #  - s3/mul_3/multiply.*/Op/Multiply
+    # When we recompute, the scopes are copied with a different ID, so we can
+    # make sure the multiply s3/mul_2/multiply.*/Op/Multiply isn't there twice.
+    report.assert_compute_sets_matches("s3/mul_2/multiply.*/Op/Multiply", 1)
+
 
 if __name__ == "__main__":
   googletest.main()

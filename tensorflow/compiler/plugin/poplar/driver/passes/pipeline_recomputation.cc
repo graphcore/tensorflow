@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <map>
 #include <memory>
+#include <queue>
 #include <stack>
 #include <utility>
 #include <vector>
@@ -94,6 +95,43 @@ StatusOr<OutputToInputInfo> GetForwardOutputsUsed(
   return info;
 }
 
+// Helper function to deal with recomputation in a last stage with checkpoints.
+// When we are recomputing the last stage because it contains checkpoints, we
+// do not want to recompute anything past the checkpoints closest to the end of
+// the stage, since their values are going to be used immediately by the bwd
+// stage anyway. This function finds those instructions that are "behind"
+// these terminal checkpoints (relative to 'initial') by looking back through
+// the operands - when a parent is marked as "behind", it propagates that to its
+// children and so on.
+absl::flat_hash_set<const HloInstruction*> GetInstructionsBehindLastCkpt(
+    const std::vector<HloInstruction*> initial) {
+  // Breadth first search with a queue for pre-order traversal.
+  std::queue<const HloInstruction*> worklist;
+  absl::flat_hash_set<const HloInstruction*> behind;
+  for (const HloInstruction* init : initial) {
+    worklist.push(init);
+  }
+
+  while (!worklist.empty()) {
+    const HloInstruction* inst = worklist.front();
+    worklist.pop();
+
+    // Recomputation checkpoints are "behind" a checkpoint.
+    if (IsRecomputationCheckpoint(inst)) {
+      behind.insert(inst);
+    }
+
+    for (const HloInstruction* operand : inst->operands()) {
+      // "behind" instructions propagate it to their operands.
+      if (behind.contains(inst)) {
+        behind.insert(operand);
+      }
+      worklist.push(operand);
+    }
+  }
+  return behind;
+}
+
 // Helper struct for storing the information about the cluster for
 // recomputation.
 struct ClusterInfo {
@@ -105,8 +143,9 @@ struct ClusterInfo {
   std::vector<HloInstruction*> instructions;
 };
 
-StatusOr<ClusterInfo> GetRecomputationCluster(
-    HloInstruction* stage, const OutputToInputInfo& oi_info) {
+StatusOr<ClusterInfo> GetRecomputationCluster(HloInstruction* stage,
+                                              const OutputToInputInfo& oi_info,
+                                              bool last_stage) {
   HloComputation* comp = stage->to_apply();
   HloInstruction* root = comp->root_instruction();
   CHECK_EQ(root->opcode(), HloOpcode::kTuple);
@@ -117,6 +156,18 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
   std::vector<HloInstruction*> inputs;
   std::vector<HloInstruction*> recomputation_checkpoints;
   std::vector<HloInstruction*> instructions;
+
+  // In the last stage, we don't want to recompute anything that's going to be
+  // immediately used by the backward pass anyway.
+  absl::flat_hash_set<const HloInstruction*> behind_last_ckpt;
+  if (last_stage) {
+    behind_last_ckpt = GetInstructionsBehindLastCkpt(oi_info.fwd_outputs);
+    // Exit early if nothing was behind a checkpoint (this may also mean that
+    // there was no checkpoint.
+    if (behind_last_ckpt.empty()) {
+      return ClusterInfo{};
+    }
+  }
 
   // Walk through the cluster to create a post order.
   std::stack<HloInstruction*> worklist;
@@ -154,23 +205,27 @@ StatusOr<ClusterInfo> GetRecomputationCluster(
     if (itr != visited.end()) {
       worklist.pop();
       if (itr->second == kVisiting) {
-        if (is_cluster_input(inst)) {
-          inputs.push_back(inst);
-        } else {
-          instructions.push_back(inst);
-        }
-
-        // Store which instructions are checkpoints.
-        if (IsRecomputationCheckpoint(inst)) {
-          const bool has_root_user = absl::c_count(inst->users(), root);
-          if (has_root_user) {
-            VLOG(2) << "Skipping checkpoint " << inst->ToString()
-                    << " as it is a stage output.";
-          } else if (inst->operand(0)->opcode() == HloOpcode::kParameter) {
-            VLOG(2) << "Skipping checkpoint " << inst->ToString()
-                    << " as it is a stage input.";
+        // If we're in the last stage ignore anything that isn't behind the last
+        // checkpoint since we don't want to recompute it.
+        if (!last_stage || behind_last_ckpt.contains(inst)) {
+          if (is_cluster_input(inst)) {
+            inputs.push_back(inst);
           } else {
-            recomputation_checkpoints.push_back(inst);
+            instructions.push_back(inst);
+          }
+
+          // Store which instructions are checkpoints.
+          if (IsRecomputationCheckpoint(inst)) {
+            const bool has_root_user = absl::c_count(inst->users(), root);
+            if (has_root_user) {
+              VLOG(2) << "Skipping checkpoint " << inst->ToString()
+                      << " as it is a stage output.";
+            } else if (inst->operand(0)->opcode() == HloOpcode::kParameter) {
+              VLOG(2) << "Skipping checkpoint " << inst->ToString()
+                      << " as it is a stage input.";
+            } else {
+              recomputation_checkpoints.push_back(inst);
+            }
           }
         }
 
@@ -325,6 +380,13 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
       continue;
     }
 
+    // Only replace if the output is actually part of the cluster (the output
+    // might not be part of the cluster if we're in the final fwd stage).
+    auto it = absl::c_find(cluster_info.instructions, output);
+    if (it == cluster_info.instructions.end()) {
+      continue;
+    }
+
     HloInstruction* new_output = context.GetInstruction(output);
     replacements.emplace(oi_info.bwd_input_idices.at(i), new_output);
   }
@@ -350,27 +412,31 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
   }
 
   bool changed = false;
-  // Go through all the forward stages (apart from the last one which does not
-  // need recomputation).
-  for (int64 stage_id = 0;
-       stage_id != static_cast<int64>(stages.forward.size()) - 1; ++stage_id) {
+  // Go through all the forward stages.
+  const int64 num_stages = static_cast<int64>(stages.forward.size());
+  for (int64 stage_id = 0; stage_id != num_stages; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
+    const bool last_stage = stage_id == num_stages - 1;
 
     // Find all the forward outputs used by the backward pass.
     TF_ASSIGN_OR_RETURN(OutputToInputInfo oi_info,
                         GetForwardOutputsUsed(fwd_stage, bwd_stage));
 
+    // Only recompute if the bwd stage needs something from the fwd stage.
     if (oi_info.fwd_output_idices.empty()) {
       continue;
     }
 
     // Find a cluster which can be recomputed.
-    TF_ASSIGN_OR_RETURN(ClusterInfo cluster_info,
-                        GetRecomputationCluster(fwd_stage, oi_info));
+    // In the last stage, make sure we don't recompute anything past the last
+    // checkpoint.
+    TF_ASSIGN_OR_RETURN(
+        ClusterInfo cluster_info,
+        GetRecomputationCluster(fwd_stage, oi_info, last_stage));
 
     if (cluster_info.instructions.empty()) {
-      LOG(INFO) << "Cannot recompute pipeline stage " << fwd_stage->ToString();
+      LOG(INFO) << "Cannot recompute pipline stage " << fwd_stage->ToString();
       continue;
     }
 
@@ -408,7 +474,7 @@ StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
   }
 
   VLOG(2) << "Before PipelineRecomputation:";
-  XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
+  XLA_VLOG_LINES(2, module->ToString());
 
   TF_ASSIGN_OR_RETURN(bool changed, RecomputePipeline(pipeline_ops[0]));
 
