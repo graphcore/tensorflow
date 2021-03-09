@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import os
 import numpy as np
 
@@ -26,6 +25,7 @@ from tensorflow.python import ipu
 
 
 class FifoTest(test_util.TensorFlowTestCase):
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testFifoCompleteLoop(self):
     def my_net(x):
@@ -36,11 +36,17 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
+    config = ipu.utils.create_ipu_config()
+    config = ipu.utils.auto_select_ipus(config, 1)
+    config = tu.add_hw_ci_connection_options(config)
+    ipu.utils.configure_ipu_system(config)
+
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       res = sess.run(run_loop, {x: np.ones([2])})
       self.assertAllClose(res, np.ones([1, 2]))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testFifo(self):
     def my_net(x):
@@ -51,10 +57,63 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
+    config = ipu.utils.create_ipu_config()
+    config = ipu.utils.auto_select_ipus(config, 1)
+    config = tu.add_hw_ci_connection_options(config)
+    ipu.utils.configure_ipu_system(config)
+
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       res = sess.run(run_loop, {x: np.ones([2])})
       self.assertAllClose(res, np.zeros([1, 2]))
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def testOffloaded(self):
+    def dataset_fn():
+      return tu.create_single_increasing_dataset(10, shape=[1])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset_fn(),
+                                                       feed_name="infeed")
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        feed_name="outfeed1")
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        feed_name="outfeed2")
+
+    def body(x):
+      x1 = ipu.internal_ops.fifo(x, 5, offload=True)
+      x2 = ipu.internal_ops.fifo(x, 1, offload=True)
+      outfeed1 = outfeed_queue1.enqueue(x1)
+      outfeed2 = outfeed_queue2.enqueue(x2)
+      return outfeed1, outfeed2
+
+    def my_net():
+      r = ipu.loops.repeat(10, body, [], infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      run_loop = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    dequeue_outfeed1 = outfeed_queue1.dequeue()
+    dequeue_outfeed2 = outfeed_queue2.dequeue()
+
+    # Configure the hardware
+    config = ipu.utils.create_ipu_config()
+    config = ipu.utils.auto_select_ipus(config, 1)
+    config = tu.add_hw_ci_connection_options(config)
+    ipu.utils.configure_ipu_system(config)
+
+    with tu.ipu_session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(run_loop)
+      result1 = sess.run(dequeue_outfeed1)
+      result2 = sess.run(dequeue_outfeed2)
+
+      self.assertEqual(len(result1), 10)
+      self.assertEqual(len(result2), 10)
+
+      self.assertAllClose(result1[5:], [[x] for x in range(5)])
+      self.assertAllClose(result2[1:], [[x] for x in range(9)])
 
 
 if __name__ == "__main__":

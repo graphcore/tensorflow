@@ -29,6 +29,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.compat.v1 import data as compat_v1_data
 
@@ -115,14 +116,20 @@ class PipelineTester(object):
                       test_wrapper,
                       recomp,
                       device_mapping,
-                      number_of_io_tiles=0):
+                      number_of_io_tiles=0,
+                      replication_factor=1,
+                      merge_remote_buffers=False,
+                      replicated_optimizer_state_sharding=False,
+                      minimum_remote_tensor_size=128):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+          dataset, next_feed_id(), replication_factor=replication_factor)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+          next_feed_id(), replication_factor=replication_factor)
 
       with variable_scope.variable_scope("ipu_sharded",
                                          use_resource=True,
@@ -135,13 +142,24 @@ class PipelineTester(object):
           for i, stage in zip(device_mapping, stages):
             with scopes.ipu_shard(i):
               outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
-          loss = outputs
-          enqueue_op = outfeed_queue.enqueue(loss)
-          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
-              optimizer, num_batches_to_accumulate)
+          enqueue_op = outfeed_queue.enqueue(outputs)
           outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
           outs.append(enqueue_op)
-          outs.append(opt.minimize(loss))
+          if optimizer:
+            if replication_factor > 1:
+              opt = \
+                gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
+                    optimizer,
+                    num_batches_to_accumulate,
+                    replicated_optimizer_state_sharding=replicated_optimizer_state_sharding) # pylint: disable=line-too-long
+            else:
+              opt = \
+                gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+                    optimizer,
+                    num_batches_to_accumulate,
+                    replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)# pylint: disable=line-too-long
+
+            outs.append(opt.minimize(outputs))
           return outs
 
         def my_net(*args):
@@ -166,9 +184,16 @@ class PipelineTester(object):
       if number_of_io_tiles > 0:
         cfg = utils.set_io_tile_options(cfg, number_of_io_tiles, True)
       num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
+      num_ipus = num_ipus * replication_factor
+      if tu.has_ci_ipus():
+        cfg = tu.add_hw_ci_connection_options(cfg)
       cfg = utils.auto_select_ipus(cfg, num_ipus)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
+      cfg = utils.set_optimization_options(
+          cfg,
+          merge_remote_buffers=merge_remote_buffers,
+          minimum_remote_tensor_size=minimum_remote_tensor_size)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
 
@@ -195,20 +220,33 @@ class PipelineTester(object):
                       batch_serialization_iterations=1,
                       recomputation_mode=None,
                       number_of_io_tiles=0,
-                      return_report=False):
+                      return_report=False,
+                      replication_factor=1,
+                      offload_activations=None,
+                      merge_remote_buffers=False,
+                      replicated_optimizer_state_sharding=False,
+                      minimum_remote_tensor_size=128):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+          dataset, next_feed_id(), replication_factor=replication_factor)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+          next_feed_id(), replication_factor=replication_factor)
 
       with variable_scope.variable_scope("ipu", use_resource=True,
                                          reuse=False):
 
-        def optimizer_function(loss):
-          return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+        def opt_fn(loss):
+          if replication_factor > 1:
+            opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
+          else:
+            opt = optimizer
+          return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+        optimizer_function = opt_fn if optimizer else None
 
         def my_net(*args):
           return pipelining_ops.pipeline(
@@ -222,7 +260,10 @@ class PipelineTester(object):
               outfeed_queue=outfeed_queue,
               pipeline_schedule=schedule,
               recomputation_mode=recomputation_mode,
-              device_mapping=device_mapping)
+              device_mapping=device_mapping,
+              offload_activations=offload_activations,
+              replicated_optimizer_state_sharding=
+              replicated_optimizer_state_sharding)
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
@@ -238,9 +279,16 @@ class PipelineTester(object):
       if number_of_io_tiles > 0:
         cfg = utils.set_io_tile_options(cfg, number_of_io_tiles, True)
       num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
+      num_ipus = num_ipus * replication_factor
       cfg = utils.auto_select_ipus(cfg, num_ipus)
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
+      cfg = utils.set_optimization_options(
+          cfg,
+          merge_remote_buffers=merge_remote_buffers,
+          minimum_remote_tensor_size=minimum_remote_tensor_size)
+      if tu.has_ci_ipus():
+        cfg = tu.add_hw_ci_connection_options(cfg)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
 
@@ -252,7 +300,7 @@ class PipelineTester(object):
       report.reset()
       session.run(compiled_model_pipeline,
                   feed_dict=dict(zip(inputs, input_values)))
-      out = session.run(outfeed_op)[0]
+      out = session.run(outfeed_op)
       if profiling:
         report.parse_log()
         if not device_mapping:
@@ -262,6 +310,7 @@ class PipelineTester(object):
           ]
         report.assert_pipeline_stages_on_expected_ipu(device_mapping)
         report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.3)
+      out = out[0] if optimizer else out
       if return_report:
         return out, report
       return out
@@ -338,7 +387,12 @@ class PipelineTester(object):
                                    device_mapping=None,
                                    batch_serialization_iterations=1,
                                    recomputation_mode=None,
-                                   number_of_io_tiles=0):
+                                   number_of_io_tiles=0,
+                                   offload_activations=None,
+                                   merge_remote_buffers=False,
+                                   replication_factor=1,
+                                   replicated_optimizer_state_sharding=False,
+                                   minimum_remote_tensor_size=128):
     if batch_serialization_iterations > 1:
       assert device_mapping is None
       device_mapping = [0] * len(stages)
@@ -347,12 +401,16 @@ class PipelineTester(object):
         stages, inputs_fn, input_values, repeat_count,
         gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
         expected_max_tile_memory, recomp, schedule, device_mapping,
-        batch_serialization_iterations, recomputation_mode, number_of_io_tiles)
+        batch_serialization_iterations, recomputation_mode, number_of_io_tiles,
+        False, replication_factor, offload_activations, merge_remote_buffers,
+        replicated_optimizer_state_sharding, minimum_remote_tensor_size)
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
     sharded_losses = PipelineTester._sharded_on_ipu(
         stages, inputs_fn, input_values, repeat_count,
         num_batches_to_accumulate, dataset_fn, optimizer, test_wrapper, recomp,
-        device_mapping, number_of_io_tiles)
+        device_mapping, number_of_io_tiles, replication_factor,
+        merge_remote_buffers, replicated_optimizer_state_sharding,
+        minimum_remote_tensor_size)
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)

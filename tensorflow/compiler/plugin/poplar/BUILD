@@ -4518,6 +4518,8 @@ tf_xla_py_test(
         ":libadd_incrementing_custom_with_metadata.so",
     ],
     enabled_backends = ["poplar"],
+    shard_count = 8,
+    tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -5085,6 +5087,7 @@ test_suite(
         "poplar_executable_runner_test",
         "post_serialize_gradient_accumulation_test",
         "pre_compile_test",
+        "random_ops",
         "recomputation_checkpoint_remover_test",
         "recomputation_input_remover_test",
         "recomputation_test",
@@ -5197,17 +5200,9 @@ test_suite(
 )
 
 test_suite(
-    name = "hardware_tests",
-    tests = [
-        "random_ops",
-    ],
-)
-
-test_suite(
     name = "poplar_ci_test_suite",
     tests = [
         ":doc_examples",
-        ":hardware_tests",
         ":poplar_test_suite",
         ":size_speed_tests",
         ":training_tests",

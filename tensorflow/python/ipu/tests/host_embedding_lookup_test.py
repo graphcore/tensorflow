@@ -31,6 +31,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
 class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testDIENShape(self):
     shape = [10000000, 20]  # 740MB at float32
@@ -60,7 +61,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    if tu.has_ci_ipus():
+      cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
@@ -81,8 +85,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
-      report.assert_max_tile_memory(772, tolerance=0.3)
+      if not tu.has_ci_ipus():
+        report.assert_max_tile_memory(772, tolerance=0.3)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testAGIShape(self):
     shape = [100000, 200]
@@ -111,7 +117,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    if tu.has_ci_ipus():
+      cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
@@ -131,8 +140,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
-      report.assert_max_tile_memory(5852, tolerance=0.3)
+      if not tu.has_ci_ipus():
+        report.assert_max_tile_memory(5852, tolerance=0.3)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testTrainNoExec(self):
     shape = [100000, 200]
@@ -155,9 +166,11 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True,
-                                      always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    if tu.has_ci_ipus():
+      cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
@@ -174,6 +187,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Check the lookup result, but we are really interested that it doesn't hang.
       self.assertAllClose(result[0][0], np.take(v, i_h, axis=0))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testNoLookup(self):
     shape = [100000, 200]
@@ -194,9 +208,11 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True,
-                                      always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    if tu.has_ci_ipus():
+      cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])

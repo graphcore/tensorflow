@@ -21,6 +21,7 @@ import os
 
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python import keras
@@ -75,6 +76,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
   def setUpClass(cls):
     cfg = ipu_utils.create_ipu_config()
     cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu_utils.configure_ipu_system(cfg)
 
     cls._num_workers = 2
@@ -125,6 +127,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
     return cpu_device, ipu_device
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_strategy_first_worker(self):
     strategy, _, _ = self._create_test_objects(task_type="worker", task_id=0)
     self.assertEqual(2, strategy.num_replicas_in_sync)
@@ -133,6 +136,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     self.assertEqual(True, strategy.extended.should_checkpoint)
     self.assertEqual(True, strategy.extended.should_save_summary)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_strategy_second_worker(self):
     strategy, _, _ = self._create_test_objects(task_type="worker", task_id=1)
     self.assertEqual(2, strategy.num_replicas_in_sync)
@@ -141,6 +145,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     self.assertEqual(False, strategy.extended.should_checkpoint)
     self.assertEqual(False, strategy.extended.should_save_summary)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_initializer_colocation(self):
     strategy, _, _ = self._create_test_objects(task_type="worker", task_id=0)
 
@@ -176,6 +181,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       per_replica_op = strategy.experimental_run_v2(per_replica_fn)
       self.assertEqual(ipu_device, per_replica_op.device)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_variables_on_host(self):
     self._run_between_graph_clients(self._test_variables_on_host,
                                     self._cluster_spec,
@@ -202,6 +208,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       per_replica_op = strategy.experimental_run_v2(per_replica_fn)
       self.assertEqual(ipu_device, per_replica_op.device)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_variables_on_ipu(self):
     self._run_between_graph_clients(self._test_variables_on_ipu,
                                     self._cluster_spec,
@@ -232,6 +239,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         out = sess.run(sum_y, feed_dict={inputs: task_id + 1})
         self.assertEqual(5.0, out)  # 1*1 + 2*2
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_all_reduce(self):
     self._run_between_graph_clients(self._test_all_reduce,
                                     self._cluster_spec,
@@ -267,6 +275,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual([1.0], sess.run(variables.global_variables()))
         self.assertEqual(2.0, sess.run(sum_ret))  # 1*1 + 1*1
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_mirrored_variable(self):
     self._run_between_graph_clients(self._test_mirrored_variable,
                                     self._cluster_spec,
@@ -305,6 +314,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         # mean(1 + 1, 1 + 2) = 2.5
         self.assertEqual([2.5], sess.run(variables.global_variables()))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_sync_on_read_variable(self):
     self._run_between_graph_clients(self._test_sync_on_read_variable,
                                     self._cluster_spec,
@@ -376,6 +386,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           self.assertEqual(num_replicas * reference_w * x, loss_val)
           reference_w -= learning_rate * num_replicas * x
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_train_split_device_host_fn(self):
     self._run_between_graph_clients(self._test_train_split_device_host_fn,
                                     self._cluster_spec,
@@ -429,6 +440,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           self.assertEqual(num_replicas * reference_w * x, loss_val)
           reference_w -= learning_rate * num_replicas * x
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_train_combined_device_host_fn(self):
     self._run_between_graph_clients(self._test_train_combined_device_host_fn,
                                     self._cluster_spec,
@@ -464,6 +476,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         _, loss_val = sess.run([train_op, total_loss], feed_dict={inputs: 1.0})
         self.assertEqual(2.0, loss_val)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_slot_variable_on_host(self):
     self._run_between_graph_clients(self._test_slot_variable_on_host,
                                     self._cluster_spec,
@@ -499,6 +512,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         _, loss_val = sess.run([train_op, total_loss], feed_dict={inputs: 1.0})
         self.assertEqual(2.0, loss_val)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_slot_variable_on_ipu(self):
     self._run_between_graph_clients(self._test_slot_variable_on_ipu,
                                     self._cluster_spec,
@@ -530,6 +544,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual(13.0, sess.run(sum_y))  # 2*2 + 3*3
         self.assertEqual(41.0, sess.run(sum_y))  # 4*4 + 5*5
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_distribute_dataset(self):
     self._run_between_graph_clients(self._test_distribute_dataset,
                                     self._cluster_spec,
@@ -555,6 +570,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         out = sess.run(sum_y, feed_dict={inputs: task_id + 1})
         self.assertEqual(6.0, out)  # 2*1 + 2*2
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_monitored_training_session(self):
     self._run_between_graph_clients(self._test_monitored_training_session,
                                     self._cluster_spec,
@@ -632,6 +648,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       reference_w -= learning_rate * reference_gradient
       self.assertEqual(reference_w, estimator.get_variable_value("w"))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_ipu_estimator_train_with_host_call(self):
     self._run_between_graph_clients(
         self._test_ipu_estimator_train_with_host_call,
@@ -689,6 +706,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         # mean(var(2, 0), var(4, 0)) = mean(1, 4) = 2.5
         self.assertAllEqual([2.5], sess.run(batch_norm.moving_variance))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_batch_normalization(self):
     self._run_between_graph_clients(self._test_batch_normalization,
                                     self._cluster_spec,
@@ -793,12 +811,14 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, 1)
+      config = tu.add_hw_ci_connection_options(config)
       ipu_utils.configure_ipu_system(config)
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         [out] = sess.run(compiled_fn, feed_dict={inputs: task_id + 1})
         self.assertEqual(out, 50.0)  # 2 * (1^2 + 2^2)^2
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_reduction_in_compiled_cluster(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_reduction_in_compiled_cluster,
@@ -828,6 +848,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=1)
+      config = tu.add_hw_ci_connection_options(config)
       ipu_utils.configure_ipu_system(config)
 
       [w] = variables.global_variables()
@@ -838,6 +859,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         expected_w = initial_w - learning_rate * np.sum(per_worker_x)
         self.assertEqual(expected_w, sess.run(w))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_optimizer_in_compiled_cluster(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_optimizer_in_compiled_cluster,
@@ -909,6 +931,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       train_op = strategy.experimental_run_v2(compiled_model, args=[])
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=2)
+      config = tu.add_hw_ci_connection_options(config)
       ipu_utils.configure_ipu_system(config)
 
       expected_w0 = initial_w0
@@ -964,6 +987,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       # There should be 1 XLA run on the IPU
       self.assertEqual(1, sum(1 for n in ipu_nodes if "xla_run" in n))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=4)
   def test_pipelining(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_pipelining, cluster_spec)
@@ -1034,6 +1058,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=2)
+      config = tu.add_hw_ci_connection_options(config)
       ipu_utils.configure_ipu_system(config)
       ipu_utils.move_variable_initialization_to_cpu()
 
@@ -1107,6 +1132,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                                    losses_distributed,
                                    decimal=6)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=4)
   def test_pipelining_example_with_keras_layers(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(
@@ -1170,6 +1196,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options,
                                              num_ipus=num_ipus_in_pipeline)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
 
     config = ipu_run_config.RunConfig(
         session_config=config_pb2.ConfigProto(allow_soft_placement=False),
@@ -1217,6 +1244,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       loss_outputs = _get_summary_values(estimator.model_dir, "loss")
       self.assertEqual(expected_losses, loss_outputs)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=4)
   def test_ipu_pipeline_estimator(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_ipu_pipeline_estimator,
@@ -1244,12 +1272,14 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=1)
+      config = tu.add_hw_ci_connection_options(config)
       ipu_utils.configure_ipu_system(config)
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
         self.assertEqual(task_id * 10.0, sess.run(res))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_dataset_infeed(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_dataset_infeed, cluster_spec)
@@ -1302,6 +1332,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=1)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
 
     config = ipu_run_config.RunConfig(
         session_config=config_pb2.ConfigProto(allow_soft_placement=False),
@@ -1344,6 +1375,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       loss_outputs = _get_summary_values(estimator.model_dir, "loss")
       self.assertEqual(expected_losses, loss_outputs)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=2)
   def test_ipu_estimator(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_ipu_estimator, cluster_spec)

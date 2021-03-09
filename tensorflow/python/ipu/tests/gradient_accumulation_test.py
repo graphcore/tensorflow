@@ -65,7 +65,9 @@ def _gradient_accumulation_loop(test_wrapper,
                                 num_batches_to_accumulate,
                                 dataset_fn,
                                 optimizer,
-                                num_iterations=None):
+                                num_iterations=None,
+                                replication_factor=1,
+                                minimum_remote_tensor_size=128):
   g = ops.Graph()
 
   if num_iterations is None:
@@ -74,16 +76,22 @@ def _gradient_accumulation_loop(test_wrapper,
   with g.as_default(), test_wrapper.test_session(graph=g) as session:
     dataset = dataset_fn()
     inputs = inputs_fn()
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+        dataset, next_feed_id(), replication_factor=replication_factor)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), replication_factor=replication_factor)
 
     with variable_scope.variable_scope("ipu", use_resource=True, reuse=False):
 
       def model(*args):
         loss = fwd_fn(*functional_ops._convert_to_list(args))  # pylint: disable=W0212
         enqueue_op = outfeed_queue.enqueue(loss)
-        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-            optimizer, num_batches_to_accumulate)
+        if replication_factor > 1:
+          opt = gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
+              optimizer, num_batches_to_accumulate)
+        else:
+          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+              optimizer, num_batches_to_accumulate)
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)
         outs.append(opt.minimize(loss))
@@ -107,7 +115,10 @@ def _gradient_accumulation_loop(test_wrapper,
     cfg = utils.set_ipu_model_options(cfg,
                                       compile_ipu_code=True,
                                       tiles_per_ipu=128)
-    cfg = utils.auto_select_ipus(cfg, 1)
+    cfg = utils.set_optimization_options(
+        cfg, minimum_remote_tensor_size=minimum_remote_tensor_size)
+    cfg = utils.auto_select_ipus(cfg, replication_factor)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
 
@@ -117,23 +128,39 @@ def _gradient_accumulation_loop(test_wrapper,
     return session.run(outfeed_op)
 
 
-def _compare_to_cpu(test_wrapper, fwd_fn, inputs_fn, input_values,
-                    repeat_count, num_batches_to_accumulate, dataset_fn,
-                    optimizer):
+def _compare_to_cpu(test_wrapper,
+                    fwd_fn,
+                    inputs_fn,
+                    input_values,
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    replication_factor=1,
+                    minimum_remote_tensor_size=128):
 
-  ga_losses = _gradient_accumulation_loop(test_wrapper, fwd_fn, inputs_fn,
-                                          input_values, repeat_count,
-                                          num_batches_to_accumulate,
-                                          dataset_fn, optimizer)
+  ga_losses = _gradient_accumulation_loop(
+      test_wrapper,
+      fwd_fn,
+      inputs_fn,
+      input_values,
+      repeat_count,
+      num_batches_to_accumulate,
+      dataset_fn,
+      optimizer,
+      replication_factor=replication_factor,
+      minimum_remote_tensor_size=minimum_remote_tensor_size)
 
   cpu_losses = pipelining_test_util.PipelineTester._cpu_with_grad_accum(  # pylint: disable=protected-access
       test_wrapper, [fwd_fn], inputs_fn, input_values, repeat_count,
-      num_batches_to_accumulate, dataset_fn, optimizer)
+      num_batches_to_accumulate * replication_factor, dataset_fn, optimizer)
 
+  cpu_losses = np.reshape(cpu_losses, np.shape(ga_losses))
   test_wrapper.assertAllClose(cpu_losses, ga_losses)
 
 
 class GradientAccumulationTest(test_util.TensorFlowTestCase):
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testIterationsNotMultiple(self):
     def dataset_parser(value):
@@ -168,6 +195,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
                                   dataset_fn,
                                   momentum.MomentumOptimizer(0.01, 0.9), 10)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testCompare1(self):
     def dataset_fn():
@@ -211,6 +239,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     _compare_to_cpu(self, fwd_fn, inputs_fn, [10.01], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testCompare2(self):
     # Resnet like network.
@@ -306,6 +335,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testCompare3(self):
     def dataset_fn():
@@ -342,6 +372,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testCompare4(self):
     def dataset_fn():
@@ -410,6 +441,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer)
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testCompare5(self):
     def dataset_fn():
@@ -501,25 +533,37 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
                                                       labels=label))
       return loss
 
-    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
-                    num_batches_to_accumulate, dataset_fn, optimizer)
+    _compare_to_cpu(self,
+                    fwd_fn,
+                    lambda: [], [],
+                    repeat_count,
+                    num_batches_to_accumulate,
+                    dataset_fn,
+                    optimizer,
+                    replication_factor=2,
+                    minimum_remote_tensor_size=0)
 
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testCompare6Momentum(self):
     self._compare6(momentum.MomentumOptimizer(0.01, 0.8))
 
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testCompare6SDG(self):
     self._compare6(gradient_descent.GradientDescentOptimizer(0.01))
 
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testCompare6Adam(self):
     self._compare6(adam.AdamOptimizer())
 
+  @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testCompare6RMS(self):
     self._compare6(rmsprop.RMSPropOptimizer(0.01))
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testGradientAccumulationDtype(self):
     gradient_accumulation_count = 8
@@ -590,6 +634,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
                                       compile_ipu_code=True,
                                       tiles_per_ipu=128)
     cfg = utils.auto_select_ipus(cfg, 1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     utils.configure_ipu_system(cfg)
     utils.move_variable_initialization_to_cpu()
 
