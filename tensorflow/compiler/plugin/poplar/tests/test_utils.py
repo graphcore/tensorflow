@@ -193,6 +193,7 @@ class ReportJSON(object):
                sess=None,
                profiling=True,
                compile_ipu_code=False,
+               tiles_per_ipu=None,
                device_count_override=None,
                execution_trace=True,
                sharded=False,
@@ -255,7 +256,7 @@ class ReportJSON(object):
         opts = utils.auto_select_ipus(opts, device_count)
 
       opts = utils.set_serialization_options(opts, serialization_folder)
-      opts = utils.set_ipu_model_options(opts, compile_ipu_code)
+      opts = utils.set_ipu_model_options(opts, compile_ipu_code, tiles_per_ipu)
       opts = utils.set_recomputation_options(opts,
                                              allow_recompute=allow_recompute)
       if num_io_tiles > 0:

@@ -128,34 +128,48 @@ class StatefulGradientAccumulateWithMomentum : public XlaOpKernel, IpuOpKernel {
 REGISTER_IPU_OP("IpuStatefulGradientAccumulateWithMomentum",
                 StatefulGradientAccumulateWithMomentum);
 
+template <bool from_input>
 class GradientAccumulatorCreate : public XlaOpKernel, IpuOpKernel {
  public:
   explicit GradientAccumulatorCreate(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx), IpuOpKernel() {}
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    if (!from_input) {
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("shape", &variable_shape_));
+    }
+  }
 
   void Compile(XlaOpKernelContext* ctx) override {
     const DataType dtype = output_type(0);
     xla::XlaBuilder* b = ctx->builder();
 
-    auto variable = ctx->Input(0);
-    auto variable_shape = ctx->InputShape(0);
+    std::vector<xla::XlaOp> operands;
+    if (from_input) {
+      auto variable = ctx->Input(0);
+      variable_shape_ = ctx->InputShape(0);
+      operands.push_back(variable);
+    }
 
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx,
-                   TensorShapeToXLAShape(dtype, variable_shape, &xla_shape));
+                   TensorShapeToXLAShape(dtype, variable_shape_, &xla_shape));
 
     xla::XlaOp output =
         xla::CustomCall(b, PoplarOp_Name(PoplarOp::GradientAccumulatorCreate),
-                        {variable}, xla_shape, attribute_map_.Serialise());
+                        operands, xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
 
  private:
+  TensorShape variable_shape_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorCreate);
 };
 
-REGISTER_IPU_OP("GradientAccumulatorCreate", GradientAccumulatorCreate);
+REGISTER_IPU_OP("GradientAccumulatorCreate", GradientAccumulatorCreate<true>);
+
+REGISTER_IPU_OP("GradientAccumulatorCreateFromShape",
+                GradientAccumulatorCreate<false>)
 
 class GradientAccumulatorAdd : public XlaOpKernel, IpuOpKernel {
  public:

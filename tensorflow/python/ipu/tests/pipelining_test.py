@@ -1191,7 +1191,251 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.ones(8), sess.run(outfed))
 
   @test_util.deprecated_graph_mode_only
-  def testOutfeedDict(self):
+  def testOutfeedLossAccumulated(self):
+    """ Tests accumulating the loss from the optimizer function. """
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          return w * x
+
+      def identity(x):
+        return x
+
+      def optimizer_function(x):
+        opt = gradient_descent.GradientDescentOptimizer(0.01)
+        loss = x + 1.0
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+      def my_net(x):
+        return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                       gradient_accumulation_count=8,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function,
+                                       outfeed_loss=True,
+                                       accumulate_outfeed=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
+
+      report = tu.ReportJSON(self,
+                             sess,
+                             pipelining=True,
+                             compile_ipu_code=True,
+                             tiles_per_ipu=128)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(pipeline)
+      # Loss of '1' is accumulated 8 times.
+      self.assertAllEqual([8], sess.run(outfed))
+      report.parse_log()
+      # There should be 2 GA-adds. One for the weight and one for the outfeed.
+      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+      report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedTraining(self):
+    """
+    Tests accumulating an output from the last computational stage when
+    training.
+    """
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          return w * x
+
+      def identity(x):
+        return x
+
+      def optimizer_function(x):
+        opt = gradient_descent.GradientDescentOptimizer(0.01)
+        loss = x + 1.0
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+      def my_net(x):
+        return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                       gradient_accumulation_count=8,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function,
+                                       accumulate_outfeed=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
+
+      report = tu.ReportJSON(self,
+                             sess,
+                             pipelining=True,
+                             compile_ipu_code=True,
+                             tiles_per_ipu=128)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(pipeline)
+      # '1' is accumulated 8 times.
+      self.assertAllEqual([[8]], sess.run(outfed))
+
+      report.parse_log()
+      # There should be 2 GA-adds. One for the weight and one for the outfeed.
+      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+      report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedTrainingMultipleOutputs(self):
+    """
+    Tests accumulating two outputs from the last computational stage when
+    training.
+    """
+    with tu.ipu_session() as sess:
+
+      def stage1(x, y):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          return w * x, y
+
+      def identity(x, y):
+        return x, y
+
+      def optimizer_function(x, y):
+        opt = gradient_descent.GradientDescentOptimizer(0.01)
+        loss = x + y + 1.0
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+      def my_net(x, y):
+        return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                       gradient_accumulation_count=8,
+                                       inputs=[x, y],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function,
+                                       accumulate_outfeed=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
+
+      report = tu.ReportJSON(self,
+                             sess,
+                             pipelining=True,
+                             compile_ipu_code=True,
+                             tiles_per_ipu=128)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(pipeline)
+      # '1' is accumulated 8 times, '2' is accumulated 8 times.
+      self.assertAllEqual([[8], [16]], sess.run(outfed))
+
+      report.parse_log()
+      # There should be 3 GA-adds. One for the weight and one for each output.
+      ok = [
+          'GradientAccumulatorAdd', 'GradientAccumulatorAdd_1',
+          'GradientAccumulatorAdd_2'
+      ]
+      report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedInference(self):
+    """ Tests accumulating an output from the last computational stage. """
+    with tu.ipu_session() as sess:
+
+      def identity(x):
+        return x
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+      def my_net(x):
+        return pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=8,
+            inputs=[x],
+            outfeed_queue=outfeed_queue,
+            accumulate_outfeed=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
+
+      report = tu.ReportJSON(self,
+                             sess,
+                             pipelining=True,
+                             compile_ipu_code=True,
+                             tiles_per_ipu=128)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(pipeline)
+      # '1' is accumulated 8 times.
+      self.assertAllEqual([[8]], sess.run(outfed))
+
+      report.parse_log()
+      # There should be 1 GA-add for the outfeed.
+      ok = ['GradientAccumulatorAdd']
+      report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedInferenceMultipleOutputs(self):
+    """ Tests accumulating 2 outputs from the last computational stage. """
+    with tu.ipu_session() as sess:
+
+      def identity(x, y):
+        return x, y
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+      def my_net(x, y):
+        return pipelining_ops.pipeline(
+            [identity, identity, identity, identity],
+            gradient_accumulation_count=8,
+            inputs=[x, y],
+            outfeed_queue=outfeed_queue,
+            accumulate_outfeed=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
+
+      report = tu.ReportJSON(self,
+                             sess,
+                             pipelining=True,
+                             compile_ipu_code=True,
+                             tiles_per_ipu=128)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      sess.run(pipeline)
+      # '1' is accumulated 8 times, '2' is accumulated 8 times.
+      self.assertAllEqual([[8], [16]], sess.run(outfed))
+
+      report.parse_log()
+      # There should be a GA-add for each output from the last stage.
+      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+      report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedDictInference(self):
 
     with tu.ipu_session() as sess:
 
@@ -1228,6 +1472,42 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       got = sess.run(outfed)
       self.assertIsInstance(got, dict)
       self.assertAllEqual(np.ones(8), got["x"])
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedTrainingRequiresOutfeedALL(self):
+    """
+    Tests that the pipeline op requires a user to give an outfeed of mode ALL
+    when accumulating the outfeed.
+    """
+    def stage1(x):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        w = variable_scope.get_variable(name="w", initializer=1.0)
+        return w * x
+
+    def identity(x):
+      return x
+
+    def optimizer_function(x):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      loss = x + 1.0
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+        "__feed13", outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+    def my_net(x):
+      return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                     gradient_accumulation_count=8,
+                                     inputs=[x],
+                                     outfeed_queue=outfeed_queue,
+                                     optimizer_function=optimizer_function,
+                                     accumulate_outfeed=True)
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          ValueError,
+          "To accumulate the outfeed, it must be in IPUOutfeedMode ALL."):
+        ipu_compiler.compile(my_net, inputs=[1.0])
 
   @test_util.deprecated_graph_mode_only
   def testGradientShapeInference(self):
