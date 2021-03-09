@@ -335,8 +335,10 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
     // by multiple stages.
     const bool expect_lowered_inplace = inst->user_count() > 1;
 
-    // We expect the gradient accumulation creators to only be used by
-    // backward pipeline stages residing on the same shard.
+    // We expect the gradient accumulation creators that take in parameters to
+    // only be used by backward pipeline stages residing on the same shard.
+    // Creators that don't take inputs can be used in forward stages too since
+    // they're not modifying any resource.
     for (HloInstruction* user : inst->users()) {
       const auto indices = user->OperandIndices(inst);
       if (indices.size() != 1) {
@@ -345,10 +347,10 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
             "operand once, but it is used ",
             indices.size(), " times.");
       }
-      if (!IsPipelineStageBackward(user)) {
+      if (inst->operand_count() && !IsPipelineStageBackward(user)) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to only be used by "
-            "backward pipeline stages, but detected ",
+            "backward pipeline stages since it takes an input, but detected ",
             user->ToString(), " as a user.");
       }
       if (*user->sharding_unique_device() != *inst->sharding_unique_device()) {

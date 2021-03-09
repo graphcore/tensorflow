@@ -35,6 +35,13 @@ REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
     .Attr("num_mini_batches: int")
     .SetShapeFn(shape_inference::UnchangedShape);
 
+REGISTER_OP("GradientAccumulatorCreateFromShape")
+    .Output("output: output_type")
+    .Attr("output_type: {float16, float32}")
+    .Attr("shape: shape")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::ExplicitShape);
+
 REGISTER_OP("GradientAccumulatorCreate")
     .Input("variable: input_type")
     .Output("output: output_type")

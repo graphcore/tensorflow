@@ -479,9 +479,13 @@ HloGradientAccumulatorCreateFactoryFunc(HloCustomCallInstruction* call) {
                         attribute_map.GetAttributeAsBool("is_remote"));
   }
 
-  CHECK_EQ(call->operand_count(), 1);
-  return HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
-      call->shape(), call->mutable_operand(0), is_remote);
+  CHECK_LE(call->operand_count(), 1);
+  if (call->operand_count() == 1) {
+    return HloGradientAccumulatorCreate::CreateFromShapeAndVariable(
+        call->shape(), call->mutable_operand(0), is_remote);
+  }
+  return HloGradientAccumulatorCreate::CreateFromShapeOnly(call->shape(),
+                                                           is_remote);
 }
 
 static HloPoplarInstructionFactory gradient_accumulator_creator_factory(

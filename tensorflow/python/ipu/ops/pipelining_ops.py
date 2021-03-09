@@ -217,6 +217,7 @@ def pipeline(computational_stages,
              offload_weights=None,
              continuous_weight_updates=False,
              outfeed_loss=False,
+             accumulate_outfeed=False,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -516,6 +517,12 @@ def pipeline(computational_stages,
     outfeed_loss: If True, the loss given by the `optimizer_function` will
       be enqueued on the outfeed, instead of the outputs from the last
       computational stage.
+    accumulate_outfeed: Data (loss or outputs) is normally enqueued immediately
+      after the last computational stage inside the pipeline. If this option is
+      True, the data will instead be accumulated and only enqueued once at the
+      end of pipeline execution. To use this option, the provided
+      `outfeed_queue` must be in the `IPUOutfeedMode` ALL mode
+      (see :class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedMode`).
     name: name of this pipeline.
 
   Returns:
@@ -689,28 +696,63 @@ def pipeline(computational_stages,
     raise ValueError(
         "An optimizer_function must be provided when outfeed_loss is True")
 
+  if accumulate_outfeed:
+    if not outfeed_queue:
+      raise ValueError(
+          "An outfeed_queue must be provided when accumulate_outfeed is True.")
+    feed_mode = outfeed_queue._outfeed_mode  # pylint: disable=protected-access
+    if feed_mode != ipu_outfeed_queue.IPUOutfeedMode.ALL:
+      raise ValueError(
+          "To accumulate the outfeed, it must be in IPUOutfeedMode ALL.")
+
   control_outputs = []
 
   def _pipeline(*args):
     outputs = args
+    training = optimizer_function is not None
+
+    outfeed_sinks = []
+
+    def _enqueue_or_accumulate(tensor_or_tensors):
+      # Enqueue the outfeed data now or create accumulators for it
+      # which will be enqueued later in the resource update.
+      if not accumulate_outfeed:
+        control_outputs.append(outfeed_queue.enqueue(tensor_or_tensors))
+      else:
+        tensors = functional_ops._convert_to_list(tensor_or_tensors)  # pylint: disable=protected-access
+        for tensor in tensors:
+          # Create a new tensor for the accumulator buffer.
+          acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
+              shape=tensor.shape, output_type=tensor.dtype)
+          acc = gen_poputil_ops.gradient_accumulator_add(acc, tensor)
+          sink = gen_poputil_ops.gradient_accumulator_sink(
+              acc, num_mini_batches=gradient_accumulation_count)
+          outfeed_sinks.append(sink)
+
+    # Build all of the forward stage computations.
     for stage_id, stage in enumerate(computational_stages):
+      stage_name = name + "_stage_" + str(stage_id)
+      final_stage = stage_id == len(computational_stages) - 1
       stage_infeed_queue = infeed_queue if stage_id == 0 else None
-      if stage_id == len(computational_stages) - 1 and not optimizer_function:
+
+      # Enqueue any tensor outputs from the final stage in inference, unless
+      # we're accumulating them.
+      if final_stage and not optimizer_function and not accumulate_outfeed:
         stage_outfeed_queue = outfeed_queue
       else:
         stage_outfeed_queue = None
 
-      stage_name = name + "_stage_" + str(stage_id)
+      # Build the stage computation.
       outputs = _pipeline_stage(stage,
                                 stage_id,
                                 device_mapping[stage_id],
                                 outputs,
-                                training=optimizer_function is not None,
+                                training=training,
                                 infeed_queue=stage_infeed_queue,
                                 outfeed_queue=stage_outfeed_queue,
                                 name=stage_name)
 
-    if optimizer_function:
+    if training:
       outputs = functional_ops._convert_to_list(outputs)  # pylint: disable=protected-access
 
       # Get the output from the optimizer function
@@ -723,14 +765,14 @@ def pipeline(computational_stages,
         if not outfeed_queue:
           raise ValueError(
               "An outfeed_queue must be provided when outfeed_loss is True")
-        control_outputs.append(outfeed_queue.enqueue(opt_fn.loss))
+        _enqueue_or_accumulate(loss)
       elif outputs:
         if not outfeed_queue:
           raise ValueError(
               "The last computational stage has tensor outputs: %s, but no"
               " outfeed_queue has been provided." %
               (', '.join(str(t) for t in outputs)))
-        control_outputs.append(outfeed_queue.enqueue(outputs))
+        _enqueue_or_accumulate(outputs)
 
       # Call the compute gradients function - this will be automatically put
       # into pipeline stages.
@@ -754,18 +796,32 @@ def pipeline(computational_stages,
                 accumulator, num_mini_batches=gradient_accumulation_count)
         # Use the accumulated gradients.
         accumulated_grads_and_vars.append((grad, var))
+    elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:
+      # In inference, we never expect tensor outputs from the final stage,
+      # because they would've been enqueued already inside the stage if we were
+      # given an outfeed, unless we're accumulating.
+      _enqueue_or_accumulate(outputs)
 
+    # Create a resource update if we need to.
+    if training or outfeed_sinks:
       # Create an explicit function call for the apply gradients - note that we
       # allow external caputres here.
-      apply_grad_ops = []
+      resource_update_ops = []
 
       def resource_update_():
-        apply_grads = opt.apply_gradients(accumulated_grads_and_vars)
-        apply_grad_ops.append(apply_grads)
+        if training:
+          apply_grads = opt.apply_gradients(accumulated_grads_and_vars)
+          resource_update_ops.append(apply_grads)
+
+        # Enqueue any accumulated outfeed data
+        if outfeed_sinks:
+          # Note: unpack if we're outfeeding loss.
+          to_enqueue = outfeed_sinks[0] if outfeed_loss else outfeed_sinks
+          resource_update_ops.append(outfeed_queue.enqueue(to_enqueue))
 
       with ops.name_scope(name + "/WU") as scope:
         func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
-            resource_update_, [], scope, apply_grad_ops, True)
+            resource_update_, [], scope, resource_update_ops, True)
 
       # Create the pipeline resource update stage and lower the function into XLA.
       with ops.control_dependencies(list(func_graph.control_captures)):
