@@ -126,6 +126,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_parameter_parallel_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/repeat_loop_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
@@ -1379,6 +1380,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<PipelineCopyInserter>();
+    pipeline.AddPass<RepeatLoopCopyInserter>();
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<ConvBwdInputToFwdWeightsTranspose>();
