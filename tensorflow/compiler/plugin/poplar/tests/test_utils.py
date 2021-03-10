@@ -211,7 +211,8 @@ class ReportJSON(object):
                set_opts_fn=None,
                triangular_solve_expander_block_size=0,
                minimum_remote_tensor_size=128,
-               use_hw=False):
+               use_hw=False,
+               num_io_tiles=0):
     self.report = None
     self.test = test
     self.sess = sess
@@ -257,6 +258,8 @@ class ReportJSON(object):
       opts = utils.set_ipu_model_options(opts, compile_ipu_code)
       opts = utils.set_recomputation_options(opts,
                                              allow_recompute=allow_recompute)
+      if num_io_tiles > 0:
+        opts = utils.set_io_tile_options(opts, num_io_tiles, True)
 
       opts = utils.set_norm_options(
           opts, use_stable_statistics=use_stable_norm_statistics)
