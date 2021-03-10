@@ -731,6 +731,24 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "utils_use_synthetic_data_for_test",
+    size = "medium",
+    srcs = ["tests/utils_use_synthetic_data_for_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+    # Shard count set equal to the number of tests as one process per test is
+    # required
+    shard_count = 7,
+)
+
+tf_py_test(
     name = "utils_get_config_test",
     size = "medium",
     srcs = ["tests/utils_get_config_test.py"],
@@ -1174,6 +1192,7 @@ test_suite(
         "user_ops_test",
         "utils_get_config_test",
         "utils_test",
+        "utils_use_synthetic_data_for_test",
     ],
 )
 

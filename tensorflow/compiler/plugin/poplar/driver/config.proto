@@ -43,6 +43,15 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
+enum SyntheticDataCategory {
+  Seed = 0;
+  Infeed = 1;
+  Outfeed = 2;
+  HostEmbedding = 3;
+  Parameters = 4;
+  Unknown = 5;
+}
+
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)

@@ -173,6 +173,7 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
+        ":config_protos_cc_impl",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         ":xla_backend_protos",
@@ -593,6 +594,7 @@ cc_library(
         "driver/tools/flags.h",
     ],
     deps = [
+        ":config_protos_cc_impl",
         ":hash",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/core:framework_headers_lib",
