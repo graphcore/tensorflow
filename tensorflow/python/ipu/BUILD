@@ -631,6 +631,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "infeed_outfeed_overlap_test",
+    size = "large",
+    srcs = ["tests/infeed_outfeed_overlap_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 10,
+)
+
+tf_py_test(
     name = "outfeed_ordinal_test",
     size = "medium",
     srcs = ["tests/outfeed_ordinal_test.py"],
@@ -1297,6 +1313,7 @@ test_suite(
         "group_conv_test",
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
+        "infeed_outfeed_overlap_test",
         "infeed_outfeed_test",
         "io_tiles_test",
         "ipu_compiler_test",

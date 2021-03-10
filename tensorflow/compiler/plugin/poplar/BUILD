@@ -250,6 +250,7 @@ cc_library(
         "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
+        "driver/passes/repeat_loop_copy_inserter.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/resource_update_copy_inserter.cc",
         "driver/passes/resource_update_elementwise_clustering.cc",
@@ -428,6 +429,7 @@ cc_library(
         "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
+        "driver/passes/repeat_loop_copy_inserter.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/resource_update_copy_inserter.h",
         "driver/passes/resource_update_elementwise_clustering.h",
@@ -710,6 +712,7 @@ cc_library(
         "driver/visitors/pipeline_stage_visitor.cc",
         "driver/visitors/pipeline_visitor.cc",
         "driver/visitors/pipeline_visitor_creator.cc",
+        "driver/visitors/repeat_loop_overlap_io_visitor.cc",
         "driver/visitors/repeat_loop_visitor.cc",
         "driver/visitors/visitor_arithmetic_expr.cc",
         "driver/visitors/visitor_base.cc",
@@ -762,6 +765,7 @@ cc_library(
         "driver/visitors/pipeline_visitor.h",
         "driver/visitors/pipeline_visitor_creator.h",
         "driver/visitors/pipeline_visitor_utils.h",
+        "driver/visitors/repeat_loop_overlap_io_visitor.h",
         "driver/visitors/repeat_loop_visitor.h",
         "driver/visitors/visitor_arithmetic_expr.h",
         "driver/visitors/visitor_base.h",
@@ -1682,6 +1686,18 @@ xla_test(
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "repeat_loop_copy_inserter_test",
+    srcs = ["tests/repeat_loop_copy_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
@@ -5200,6 +5216,7 @@ test_suite(
         "remote_parameter_parallel_combiner_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "repeat_loop_copy_inserter_test",
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",
