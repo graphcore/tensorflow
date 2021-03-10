@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor_creator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/repeat_loop_overlap_io_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/repeat_loop_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
@@ -364,6 +365,56 @@ StatusOr<poplar::program::Program> CreateRepeatOp(
   return seq;
 }
 
+namespace {
+bool SingleIPUComputation(const HloComputation* computation) {
+  absl::flat_hash_set<int> shard_indices;
+
+  for (auto inst : computation->instructions()) {
+    if (inst->has_sharding() && !inst->sharding().HasUniqueDevice()) {
+      return false;
+    }
+
+    if (inst->has_sharding()) {
+      shard_indices.insert(inst->sharding().GetUniqueDevice());
+    }
+  }
+
+  return shard_indices.size() < 2;
+}
+
+StatusOr<bool> ComputationHasIoTileInstructions(
+    const HloComputation* computation) {
+  for (auto inst : computation->instructions()) {
+    TF_ASSIGN_OR_RETURN(const auto tileset, GetTileset(inst));
+
+    if (tileset == TILESET_IO_TILES) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
+    CompilerResources& res, const HloInstruction* inst,
+    const DeferredArgRBVectors& inputs,
+    const HloInstructionDescription& description,
+    const ReallocateInputsInfo& reallocate_inputs_info,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  // If the repeat is only on a single IPU and has instructions on IO tiles,
+  // then create an overlapping repeat visitor.
+  TF_ASSIGN_OR_RETURN(bool has_io_tile_inst,
+                      ComputationHasIoTileInstructions(inst->to_apply()));
+  if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst) {
+    return {absl::make_unique<RepeatLoopOverlapIOVisitor>(
+        res, inputs, description, reallocate_inputs_info, debug_name_and_id)};
+  } else {
+    return absl::make_unique<RepeatLoopVisitor>(
+        res, inputs, description, reallocate_inputs_info, debug_name_and_id);
+  }
+}
+}  // namespace
+
 StatusOr<poplar::program::Program> CreateRepeatOp(
     CompilerResources& res, const HloInstruction* inst,
     DeferredArgRBVectors& inputs, const xla::Shape& output,
@@ -386,20 +437,21 @@ StatusOr<poplar::program::Program> CreateRepeatOp(
   auto order =
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
-  // Create the visitor.
-  RepeatLoopVisitor visitor(res, inputs, HloInstructionDescription(inst),
-                            reallocate_input_info, debug_name_and_id);
+  TF_ASSIGN_OR_RETURN(
+      std::unique_ptr<RepeatLoopVisitor> visitor,
+      CreateLoopVisitor(res, inst, inputs, HloInstructionDescription(inst),
+                        reallocate_input_info, debug_name_and_id));
 
   // Evaluate the loop body in a order.
-  TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
+  TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(visitor.get(), order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(
-      visitor.PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
+      visitor->PropagateDeferredAllocations(inst, inputs, debug_name_and_id));
 
-  const TensorOrRemoteBufferVector& loop_state = visitor.GetLoopState();
+  const TensorOrRemoteBufferVector& loop_state = visitor->GetLoopState();
 
-  poplar::program::Sequence seq = visitor.GetRepeatLoopSequence(inst);
+  poplar::program::Sequence seq = visitor->GetRepeatLoopSequence(inst);
 
   for (uint64 i = 0; i < loop_state.size(); i++) {
     TF_CHECK_OK(AddOutput(tensor_map, inst, i, loop_state[i]));

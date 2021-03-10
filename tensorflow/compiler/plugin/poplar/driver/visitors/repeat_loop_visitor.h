@@ -36,7 +36,8 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
 
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
 
-  poplar::program::Sequence GetRepeatLoopSequence(const HloInstruction* inst);
+  virtual poplar::program::Sequence GetRepeatLoopSequence(
+      const HloInstruction* inst);
 
   const TensorOrRemoteBufferVector& GetLoopState() const;
 
@@ -49,19 +50,19 @@ class RepeatLoopVisitor : public InplaceDeferredVisitor {
       const HloInstruction* inst,
       const poplar::program::Sequence& seq) override;
 
- private:
   // Sequence which is executed once before the loop starts executing.
   poplar::program::Sequence pre_loop_sequence_;
-
-  // The tensors representing the inputs/outputs of the loops (they have to
-  // alias).
-  TensorOrRemoteBufferVector loop_state_;
 
   // Information used for the resource update (if there is one).
   bool has_resource_update_ = false;
   int64 num_mini_batches_to_accumulate_ = -1;
   poplar::program::Sequence tensors_zeroing_sequence_;
   poplar::program::Sequence resource_update_sequence_;
+
+ private:
+  // The tensors representing the inputs/outputs of the loops (they have to
+  // alias).
+  TensorOrRemoteBufferVector loop_state_;
 };
 }  // namespace poplarplugin
 }  // namespace xla
