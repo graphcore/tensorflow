@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/core/platform/default/integral_types.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/command_line_flags.h"
@@ -28,15 +29,6 @@ using tensorflow::int64;
 
 namespace xla {
 namespace poplarplugin {
-
-enum class SyntheticDataCategory {
-  Seed,
-  Infeed,
-  Outfeed,
-  HostEmbedding,
-  Parameters,
-  Unknown
-};
 
 class PoplarXlaFlags {
  public:

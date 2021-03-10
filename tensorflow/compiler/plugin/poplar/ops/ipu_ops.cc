@@ -50,4 +50,11 @@ REGISTER_OP("IpuGetNumDevices")
     .Output("out: int64")
     .SetShapeFn(shape_inference::ScalarShape)
     .Doc("Return the number of IPUs for a specific device string.");
+
+REGISTER_OP("IpuUseSyntheticDataFor")
+    .Attr("synthetic_data_category: int")
+    .Output("out: bool")
+    .Doc(
+        "Return a bool indicating whether synthetic data is being used for "
+        "the specified category.");
 }  // namespace tensorflow

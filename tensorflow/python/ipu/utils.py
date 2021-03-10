@@ -24,6 +24,9 @@ import time
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+# Adds the enum SyntheticDataCategory into the scope so it can be imported from
+# this file. It is required for calling use_synthetic_data_for.
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import SyntheticDataCategory  # pylint: disable=W0611
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
@@ -1613,3 +1616,21 @@ def export_inputs_to_file(inputs, output_filename, feed_dict):
   with ops.device("cpu"), session_lib.Session() as sess:
     sess.run(dataset_extractor.export_variables(inputs, output_filename),
              feed_dict)
+
+
+def use_synthetic_data_for(synthetic_data_category):
+  """Get whether synthetic data is being used for the given category.
+
+  Args:
+    synthetic_data_category: A SyntheticDataCategory enum value.
+
+  Returns:
+    A bool indicating the result.
+  """
+
+  op = gen_ipu_ops.ipu_use_synthetic_data_for(
+      synthetic_data_category=synthetic_data_category)
+
+  if executing_eagerly():
+    return op.numpy()[0]
+  return session_lib.Session().run(op)[0]

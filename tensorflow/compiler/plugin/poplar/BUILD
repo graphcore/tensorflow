@@ -153,6 +153,7 @@ cc_library(
     ],
     deps = [
         ":backend_protos_cc",
+        ":config_protos_cc_impl",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -573,7 +574,10 @@ cc_library(
         "driver/tools/flags.h",
     ],
     deps = [
+        ":config_protos_cc_impl",
         ":hash",
+        ":option_flag_cc_impl",
+        ":threestate_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/core:framework_headers_lib",
         "//third_party/eigen3",

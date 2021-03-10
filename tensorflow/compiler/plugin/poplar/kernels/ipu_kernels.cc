@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op.h"
@@ -219,4 +220,36 @@ class IpuGetNumDevicesOp : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("IpuGetNumDevices").Device(DEVICE_CPU),
                         IpuGetNumDevicesOp);
+
+class IpuUseSyntheticDataForOp : public OpKernel {
+ public:
+  explicit IpuUseSyntheticDataForOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+    int category_int;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("synthetic_data_category", &category_int));
+
+    if (!xp::SyntheticDataCategory_IsValid(category_int)) {
+      ctx->CtxFailure(errors::InvalidArgument(
+          "Invalid synthetic data category: %d", category_int));
+      return;
+    }
+    category_ = static_cast<xp::SyntheticDataCategory>(category_int);
+  }
+
+  ~IpuUseSyntheticDataForOp() = default;
+
+  void Compute(OpKernelContext* ctx) override {
+    Tensor* output_tensor = nullptr;
+    OP_REQUIRES_OK(
+        ctx, ctx->allocate_output("out", TensorShape({1}), &output_tensor));
+    auto output_flat = output_tensor->flat<bool>();
+    output_flat(0) = xp::UseSyntheticDataFor(category_);
+  }
+
+ private:
+  xp::SyntheticDataCategory category_;
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuUseSyntheticDataForOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IpuUseSyntheticDataFor").Device(DEVICE_CPU),
+                        IpuUseSyntheticDataForOp);
 }  // namespace tensorflow
