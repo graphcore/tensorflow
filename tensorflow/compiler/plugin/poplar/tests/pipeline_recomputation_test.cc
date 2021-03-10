@@ -296,7 +296,7 @@ ENTRY e {
                                          m::Parameter()))));
 }
 
-TEST_F(PipelineRecomputationTest, TestRecomputationWithCheckpoints2) {
+TEST_F(PipelineRecomputationTest, TestRecomputationWithCheckpoints) {
   std::string hlo = R"(
 HloModule top
 
@@ -373,7 +373,7 @@ ENTRY e {
   EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
 
-  // Check that the root tuple of stage 0 has two extra outputs.
+  // Check that the root tuple of stage 0 has five extra outputs.
   auto stage0_fwd = stages.forward[0];
   auto stage0_fwd_root = stage0_fwd->to_apply()->root_instruction();
   ASSERT_EQ(stage0_fwd_root->operand_count(), 7);
@@ -406,6 +406,228 @@ ENTRY e {
       IsPoplarInstruction(PoplarOp::RecomputationInput, recomputation_input));
   EXPECT_TRUE(Match(recomputation_input,
                     m::CustomCall(m::Parameter(3), m::Parameter(4))));
+}
+
+TEST_F(PipelineRecomputationTest, TestRecomputationWithCheckpointsInFinal) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  after-all = token[] after-all()
+  infeed = (f32[2], token[]) infeed(after-all), infeed_config="4"
+  gte = f32[2] get-tuple-element(infeed), index=0
+  ROOT tuple = (f32[2]) tuple(gte)
+}
+
+stage_1_fwd {
+  var0 = f32[2] parameter(0)
+  var1 = f32[2] parameter(1)
+  x = f32[2] parameter(2)
+  checkpoint1 = f32[2] custom-call(x), custom_call_target="RecomputationCheckpoint"
+  add = f32[2] add(checkpoint1, var0)
+  checkpoint2 = f32[2] custom-call(add), custom_call_target="RecomputationCheckpoint"
+  add2 = f32[2] add(checkpoint2, var1)
+  ROOT tuple = (f32[2], f32[2], f32[2]) tuple(x, add, add2)
+}
+
+stage_1_bwd {
+  stage_1_x = f32[2] parameter(0)
+  stage_1_add = f32[2] parameter(1)
+  stage_1_add2 = f32[2] parameter(2)
+  var0 = f32[2] parameter(3)
+  var1 = f32[2] parameter(4)
+  var1g = f32[2] multiply(stage_1_add, stage_1_add2)
+  add1g = f32[2] multiply(var1, stage_1_add2)
+  var0g = f32[2] multiply(stage_1_x, add1g)
+  addg = f32[2] multiply(var0, add1g)
+  ROOT tuple = (f32[2], f32[2]) tuple(var0g, var1g)
+}
+
+stage_0_bwd {
+  ROOT tuple = () tuple()
+}
+
+resource_update {
+  var0g = f32[2] parameter(0)
+  var1g = f32[2] parameter(1)
+  var0 = f32[2] parameter(2)
+  var1 = f32[2] parameter(3)
+  var0new = f32[2] add(var0, var0g)
+  var1new = f32[2] add(var1, var1g)
+  ROOT t = (f32[2], f32[2]) tuple(var0new, var1new)
+}
+
+pipeline {
+  var0 = f32[2] parameter(0)
+  var1 = f32[2] parameter(1)
+  stage_0 = (f32[2]) call(), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0_0 = f32[2] get-tuple-element(stage_0), index=0
+  stage_1 = (f32[2], f32[2], f32[2]) call(var0, var1, stage_0_0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  stage_1_x = f32[2] get-tuple-element(stage_1), index=0
+  stage_1_add = f32[2] get-tuple-element(stage_1), index=1
+  stage_1_add2 = f32[2] get-tuple-element(stage_1), index=2
+  stage_1_bwd = (f32[2], f32[2]) call(stage_1_x, stage_1_add, stage_1_add2, var0, var1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  var0g = f32[2] get-tuple-element(stage_1_bwd), index=0
+  var1g = f32[2] get-tuple-element(stage_1_bwd), index=1
+  stage_0_bwd = () call(), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  call_ru = (f32[2], f32[2]) call(var0g, var1g, var0, var1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  var0new = f32[2] get-tuple-element(call_ru), index=0
+  var1new = f32[2] get-tuple-element(call_ru), index=1
+  ROOT tuple = (f32[2], f32[2]) tuple(var0new, var1new)
+}
+
+ENTRY e {
+  e.in0 = f32[2] parameter(0)
+  e.in1 = f32[2] parameter(1)
+  ROOT e.call = (f32[2],f32[2]) call(e.in0,e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":2}}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+
+  HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PipelineRecomputation(true).Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
+
+  // Root tuple of stage 1 contains:
+  // 1. its initial outputs x, add, add2
+  // 2. three additional outputs checkpoint1, var0 and x to recompute "add"
+  auto stage_1_fwd = stages.forward[1];
+  auto stage_1_fwd_root = stage_1_fwd->to_apply()->root_instruction();
+  ASSERT_EQ(stage_1_fwd_root->operand_count(), 6);
+
+  // Stage 1's bwd pass will take these 3 additional outputs from stage 1.
+  auto stage_1_bwd = stages.backward[1];
+  ASSERT_EQ(stage_1_bwd->operand_count(), 8);
+  for (int64 i = 5; i != 8; ++i) {
+    EXPECT_TRUE(Match(stage_1_bwd->operand(i),
+                      m::GetTupleElement(m::Op().Is(stage_1_fwd))));
+  }
+
+  // To compute var1g in the backward pass, we need stage_1_add, which should
+  // now be recomputed with the additional inputs passed.
+  // The second input to var1g (stage_2_add) should NOT be recomputed, since
+  // it's past the final checkpoint in the forward stage.
+  auto stage_1_bwd_root = stage_1_bwd->to_apply()->root_instruction();
+  HloInstruction* checkpoint;
+  HloInstruction* var0g;
+  EXPECT_TRUE(
+      Match(stage_1_bwd_root,
+            m::Tuple(
+                // output0: var0g
+                m::Op(&var0g),
+                // output1: var1g
+                m::Multiply(
+                    // Recomputation of forward stage add(ckpt, var0)
+                    m::Add(
+                        // Checkpointed add input
+                        m::Op(&checkpoint),
+                        // Forwarded var0 from forward stage will be deduped
+                        m::Parameter(6)),
+                    // stage_1_add2 NOT recomputed but passed in.
+                    m::Parameter(2)))));
+
+  // The checkpoint shouldn't be converted to a RecomputationInput since it's
+  // checkpointing a parameter so there's no pivoting to be done.
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::RecomputationCheckpoint, checkpoint));
+  EXPECT_TRUE(Match(checkpoint, m::CustomCall(m::Parameter(5))));
+
+  // The final checkpoint will become a recomputation input which we
+  // can pivot the operations around later to reduce liveness, but in this case
+  // nothing past the final checkpoint is needed in the backward stage since it
+  // feeds into the last op of the stage, so it has no users.
+}
+
+TEST_F(PipelineRecomputationTest, TestRecomputationNoCheckpointsInFinal) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  after-all = token[] after-all()
+  infeed = (f32[2], token[]) infeed(after-all), infeed_config="4"
+  gte = f32[2] get-tuple-element(infeed), index=0
+  ROOT tuple = (f32[2]) tuple(gte)
+}
+
+stage_1_fwd {
+  var0 = f32[2] parameter(0)
+  var1 = f32[2] parameter(1)
+  x = f32[2] parameter(2)
+  add = f32[2] add(x, var0)
+  add2 = f32[2] add(add, var1)
+  ROOT tuple = (f32[2], f32[2], f32[2]) tuple(x, add, add2)
+}
+
+stage_1_bwd {
+  stage_1_x = f32[2] parameter(0)
+  stage_1_add = f32[2] parameter(1)
+  stage_1_add2 = f32[2] parameter(2)
+  var0 = f32[2] parameter(3)
+  var1 = f32[2] parameter(4)
+  var1g = f32[2] multiply(stage_1_add, stage_1_add2)
+  add1g = f32[2] multiply(var1, stage_1_add2)
+  var0g = f32[2] multiply(stage_1_x, add1g)
+  addg = f32[2] multiply(var0, add1g)
+  ROOT tuple = (f32[2], f32[2]) tuple(var0g, var1g)
+}
+
+stage_0_bwd {
+  ROOT tuple = () tuple()
+}
+
+resource_update {
+  var0g = f32[2] parameter(0)
+  var1g = f32[2] parameter(1)
+  var0 = f32[2] parameter(2)
+  var1 = f32[2] parameter(3)
+  var0new = f32[2] add(var0, var0g)
+  var1new = f32[2] add(var1, var1g)
+  ROOT t = (f32[2], f32[2]) tuple(var0new, var1new)
+}
+
+pipeline {
+  var0 = f32[2] parameter(0)
+  var1 = f32[2] parameter(1)
+  stage_0 = (f32[2]) call(), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0_0 = f32[2] get-tuple-element(stage_0), index=0
+  stage_1 = (f32[2], f32[2], f32[2]) call(var0, var1, stage_0_0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  stage_1_x = f32[2] get-tuple-element(stage_1), index=0
+  stage_1_add = f32[2] get-tuple-element(stage_1), index=1
+  stage_1_add2 = f32[2] get-tuple-element(stage_1), index=2
+  stage_1_bwd = (f32[2], f32[2]) call(stage_1_x, stage_1_add, stage_1_add2, var0, var1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  var0g = f32[2] get-tuple-element(stage_1_bwd), index=0
+  var1g = f32[2] get-tuple-element(stage_1_bwd), index=1
+  stage_0_bwd = () call(), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  call_ru = (f32[2], f32[2]) call(var0g, var1g, var0, var1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  var0new = f32[2] get-tuple-element(call_ru), index=0
+  var1new = f32[2] get-tuple-element(call_ru), index=1
+  ROOT tuple = (f32[2], f32[2]) tuple(var0new, var1new)
+}
+
+ENTRY e {
+  e.in0 = f32[2] parameter(0)
+  e.in1 = f32[2] parameter(1)
+  ROOT e.call = (f32[2],f32[2]) call(e.in0,e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":2}}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(bool changed,
+                          PipelineRecomputation(true).Run(module.get()));
+
+  // Since there's no checkpoints in the final stage, it should not be
+  // recomputed.
+  EXPECT_FALSE(changed);
 }
 
 TEST_F(PipelineRecomputationTest,
