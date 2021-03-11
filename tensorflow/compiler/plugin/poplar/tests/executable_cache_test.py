@@ -22,7 +22,7 @@ import tempfile
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python import ops
@@ -43,11 +43,11 @@ offline_compilation_needed = "--use_ipu_model" in os.environ.get(
     "TF_POPLAR_FLAGS", "")
 
 
-def _use_offline_compilation_if_needed(opts):
+def _extra_ipu_config(opts):
   if offline_compilation_needed:
     return ipu.utils.set_ipu_connection_type(
         opts, ipu.utils.DeviceConnectionType.NEVER, 1)
-  return opts
+  return tu.add_hw_ci_connection_options(opts)
 
 
 @contextlib.contextmanager
@@ -114,6 +114,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
     self.assertEqual(p.exitcode, 0)
     return ret
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
     def build_and_run_model():
@@ -125,9 +126,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self,
-                            sess,
-                            set_opts_fn=_use_offline_compilation_if_needed)
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
@@ -145,6 +144,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
     def build_and_run_model():
@@ -168,9 +168,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         dequeued = outfeed_queue.dequeue()
 
       with session.Session() as sess:
-        report = ReportJSON(self,
-                            sess,
-                            set_opts_fn=_use_offline_compilation_if_needed)
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         sess.run(infeed_queue.initializer)
         try:
           res, deq = sess.run([result, dequeued], {v: 0.0})
@@ -193,11 +191,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
-    if offline_compilation_needed:
-      self.skipTest("Compilation only mode makes CPU op hang")
-
     def build_and_run_model():
       def my_net(x):
         return gen_sendrecv_ops.ipu_send_to_host(x,
@@ -218,7 +214,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             recv_device="/device:CPU:0")
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         _, received = sess.run([send_op, recv_op], feed_dict={v: 1.0})
         events = report.get_event_trace(sess)
         return received, events
@@ -231,6 +227,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
     def build_and_run_model():
@@ -242,9 +239,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self,
-                            sess,
-                            set_opts_fn=_use_offline_compilation_if_needed)
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
@@ -269,10 +264,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
   def test_ipu_estimator(self):
-    if offline_compilation_needed:
-      self.skipTest("Estimator doesn't support offline compilation")
-
     def my_model_fn(features, labels, mode):
       loss = features + labels
       # Make different graphs for train and eval
@@ -296,6 +290,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
 
     def build_and_run_model():
       ipu_options = ipu.utils.create_ipu_config(profiling=True)
+      ipu_options = _extra_ipu_config(ipu_options)
       ipu_options = ipu.utils.auto_select_ipus(ipu_options, 1)
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -332,11 +327,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
     with _temporary_executable_cache():
       self._run_in_new_process(build_and_run_model)
 
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_outside_compilation_scope(self):
-    if offline_compilation_needed:
-      self.skipTest("Compilation only mode makes outside compilation hang")
-
     def build_and_run_model():
       def my_net(x):
         y = x * x
@@ -349,7 +342,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         received = sess.run(result, feed_dict={v: 1.0})
         events = report.get_event_trace(sess)
         return received, events
@@ -362,11 +355,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(0, _count_ipu_compilations(events1))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
-    if offline_compilation_needed:
-      self.skipTest("Compilation only mode makes outside compilation hang")
-
     def build_and_run_model():
       cwd = os.getcwd()
       outputs = {
@@ -391,10 +382,15 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
-        sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
-        events = report.get_event_trace(sess)
-        return events
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
+        try:
+          sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
+        except errors.InvalidArgumentError as e:
+          if offline_compilation_needed and "compilation only" in e.message:
+            pass
+          else:
+            raise
+        return report.get_event_trace(sess)
 
     with _temporary_executable_cache():
       events0 = self._run_in_new_process(build_and_run_model)
@@ -403,11 +399,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(events0))
       self.assertEqual(1, _count_ipu_compilations(events1))
 
+  @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
-    if offline_compilation_needed:
-      self.skipTest("Compilation only mode makes outside compilation hang")
-
     def build_and_run_model():
       cwd = os.getcwd()
       outputs = {
@@ -432,10 +426,15 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
-        sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
-        events = report.get_event_trace(sess)
-        return events
+        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
+        try:
+          sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
+        except errors.InvalidArgumentError as e:
+          if offline_compilation_needed and "compilation only" in e.message:
+            pass
+          else:
+            raise
+        return report.get_event_trace(sess)
 
     with _temporary_executable_cache():
       events0 = self._run_in_new_process(build_and_run_model)

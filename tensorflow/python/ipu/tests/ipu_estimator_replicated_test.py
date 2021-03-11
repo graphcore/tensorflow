@@ -331,6 +331,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -392,7 +393,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=False,
                                 hooks=[hook])
-    np.testing.assert_array_equal([3.0, 5.0, 7.0, 9.0], next(outputs))
+    self.assertAllEqual([3.0, 5.0, 7.0, 9.0], next(outputs))
 
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
