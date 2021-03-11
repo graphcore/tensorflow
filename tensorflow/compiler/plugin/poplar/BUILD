@@ -173,6 +173,7 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
+        ":config_protos_cc_impl",
         ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         ":xla_backend_protos",
@@ -271,6 +272,7 @@ cc_library(
         "driver/passes/remote_parameter_parallel_combiner.cc",
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
+        "driver/passes/repeat_loop_copy_inserter.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/resource_update_copy_inserter.cc",
         "driver/passes/resource_update_elementwise_clustering.cc",
@@ -294,6 +296,7 @@ cc_library(
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
         "driver/tools/custom_ops/all_gather.cc",
+        "driver/tools/custom_ops/assert.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -448,6 +451,7 @@ cc_library(
         "driver/passes/remote_parameter_parallel_combiner.h",
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
+        "driver/passes/repeat_loop_copy_inserter.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/resource_update_copy_inserter.h",
         "driver/passes/resource_update_elementwise_clustering.h",
@@ -474,6 +478,7 @@ cc_library(
         "driver/tools/conv_util.h",
         "driver/tools/custom_ops/all_gather.h",
         "driver/tools/custom_ops/arg_min_max.h",
+        "driver/tools/custom_ops/assert.h",
         "driver/tools/custom_ops/candidate_sampler.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
@@ -589,6 +594,7 @@ cc_library(
         "driver/tools/flags.h",
     ],
     deps = [
+        ":config_protos_cc_impl",
         ":hash",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/core:framework_headers_lib",
@@ -668,6 +674,7 @@ cc_library(
         "driver/ops/custom_ops/poprand/candidate_sampler.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
+        "driver/ops/custom_ops/poputil/assert.cc",
         "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
         "driver/ops/custom_ops/poputil/copy_into.cc",
         "driver/ops/custom_ops/poputil/fifo.cc",
@@ -727,6 +734,7 @@ cc_library(
         "driver/visitors/pipeline_stage_visitor.cc",
         "driver/visitors/pipeline_visitor.cc",
         "driver/visitors/pipeline_visitor_creator.cc",
+        "driver/visitors/repeat_loop_overlap_io_visitor.cc",
         "driver/visitors/repeat_loop_visitor.cc",
         "driver/visitors/visitor_arithmetic_expr.cc",
         "driver/visitors/visitor_base.cc",
@@ -779,6 +787,7 @@ cc_library(
         "driver/visitors/pipeline_visitor.h",
         "driver/visitors/pipeline_visitor_creator.h",
         "driver/visitors/pipeline_visitor_utils.h",
+        "driver/visitors/repeat_loop_overlap_io_visitor.h",
         "driver/visitors/repeat_loop_visitor.h",
         "driver/visitors/visitor_arithmetic_expr.h",
         "driver/visitors/visitor_base.h",
@@ -934,6 +943,7 @@ cc_library(
         "kernels/poprand/categorical.cc",
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
+        "kernels/poputil/assert.cc",
         "kernels/poputil/codelet_expression.cc",
         "kernels/poputil/device_sync.cc",
         "kernels/poputil/execution_counter.cc",
@@ -1056,6 +1066,7 @@ cc_library(
         "ops/popnn/hard_sigmoid.cc",
         "ops/popnn/lstm.cc",
         "ops/popnn/norm.cc",
+        "ops/popnn/swish.cc",
     ],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
@@ -1668,6 +1679,18 @@ xla_test(
 xla_test(
     name = "recompute_suggestion_test",
     srcs = ["tests/recompute_suggestion_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "repeat_loop_copy_inserter_test",
+    srcs = ["tests/repeat_loop_copy_inserter_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3840,6 +3863,23 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "assert_test",
+    size = "small",
+    srcs = ["tests/assert_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "gather_simplifier_embedding_lookup_test",
     size = "medium",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
@@ -4921,6 +4961,7 @@ test_suite(
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
         "arithmetic_expr_test",
+        "assert_test",
         "auto_report_directory_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
@@ -5054,6 +5095,7 @@ test_suite(
         "remote_parameter_parallel_combiner_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "repeat_loop_copy_inserter_test",
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",

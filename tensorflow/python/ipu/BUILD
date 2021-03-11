@@ -423,6 +423,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "infeed_outfeed_overlap_test",
+    size = "large",
+    srcs = ["tests/infeed_outfeed_overlap_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 10,
+)
+
+tf_py_test(
     name = "outfeed_ordinal_test",
     size = "medium",
     srcs = ["tests/outfeed_ordinal_test.py"],
@@ -712,6 +728,24 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
+)
+
+tf_py_test(
+    name = "utils_use_synthetic_data_for_test",
+    size = "medium",
+    srcs = ["tests/utils_use_synthetic_data_for_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+    # Shard count set equal to the number of tests as one process per test is
+    # required
+    shard_count = 7,
 )
 
 tf_py_test(
@@ -1121,6 +1155,7 @@ test_suite(
         "group_conv_test",
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
+        "infeed_outfeed_overlap_test",
         "infeed_outfeed_test",
         "io_tiles_test",
         "ipu_compiler_test",
@@ -1157,6 +1192,7 @@ test_suite(
         "user_ops_test",
         "utils_get_config_test",
         "utils_test",
+        "utils_use_synthetic_data_for_test",
     ],
 )
 

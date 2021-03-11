@@ -94,6 +94,9 @@ enum PoplarOp {
   CTCLossWithLogits = 90;
   HardSigmoid = 91;
   HardSigmoidGrad = 92;
+  Assert = 93;
+  Swish = 94;
+  SwishGrad = 95;
   
   // Supported Fusions.
   Conv_biasadd = 200;

@@ -38,6 +38,7 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
+from tensorflow.keras.layers import GRU
 # pylint: enable=unused-import
 
 dataType = np.float32
@@ -63,29 +64,30 @@ def _createGRUInitialState(value, shape):
 
 
 class GRUTest(xla_test.XLATestCase):
-  def _GRULayerCPU(self, inputs, weights_value, seq_length, initial_state,
-                   training, name):
-    del training
+  def _GRULayerCPU(self, inputs, weights_value, seq_length, seq_val,
+                   initial_state, training, name):
+    #pylint: disable=unused-argument
     del name
     with ops.device("/device:CPU:0"):
-      gru_cell = rnn_cell.GRUCell(
-          num_channels,
-          name='gru_cell',
-          kernel_initializer=init_ops.constant_initializer(weights_value,
-                                                           dtype=dataType),
-          bias_initializer=init_ops.zeros_initializer(dtype=dataType),
-          reuse=variable_scope.AUTO_REUSE)
-
-      outputs, _ = rnn.dynamic_rnn(gru_cell,
-                                   inputs,
-                                   sequence_length=seq_length,
-                                   dtype=dataType,
-                                   initial_state=initial_state,
-                                   time_major=True)
+      gru = GRU(num_channels,
+                activation='tanh',
+                recurrent_activation='sigmoid',
+                kernel_initializer=init_ops.constant_initializer(
+                    weights_value, dataType),
+                recurrent_initializer=init_ops.constant_initializer(
+                    weights_value, dataType),
+                bias_initializer=init_ops.constant_initializer(0.0, dataType),
+                time_major=True,
+                return_sequences=True,
+                stateful=True,
+                reset_after=False)
+      outputs = gru(inputs, initial_state=initial_state, training=training)
+      outputs = outputs if seq_val is None else outputs[0:min(
+          seq_len, seq_val[0])]
       return outputs
 
-  def _GRULayer(self, inputs, weights_value, seq_length, initial_state,
-                training, name):
+  def _GRULayer(self, inputs, weights_value, seq_length, seq_val,
+                initial_state, training, name):
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("gru_layer", use_resource=True):
         kernel = _get_variable(
@@ -115,6 +117,8 @@ class GRUTest(xla_test.XLATestCase):
             initial_state=initial_state,
             is_training=training,
             name=name)
+      outputs = outputs if seq_val is None else outputs[0:min(
+          seq_len, seq_val[0])]
       return outputs
 
   def _RunGRULayerInference(self, name, input_value, weights_value, seq_val,
@@ -133,6 +137,7 @@ class GRUTest(xla_test.XLATestCase):
       gru_output_seq = gru_layer_function(inputs=pinputs,
                                           weights_value=weights_value,
                                           seq_length=pseq_len,
+                                          seq_val=seq_val,
                                           initial_state=pinitial_state,
                                           training=False,
                                           name=name)
@@ -241,6 +246,7 @@ class GRUTest(xla_test.XLATestCase):
         logits = gru_layer_function(inputs=pinputs,
                                     weights_value=weights_value,
                                     seq_length=pseq_len,
+                                    seq_val=seq_val,
                                     initial_state=initial_state,
                                     training=True,
                                     name=name)
@@ -340,6 +346,7 @@ class GRUTest(xla_test.XLATestCase):
           return self._GRULayer(inputs=inputs,
                                 weights_value=1.,
                                 seq_length=None,
+                                seq_val=None,
                                 initial_state=initial_state,
                                 training=True,
                                 name=name)
@@ -397,6 +404,7 @@ class GRUTest(xla_test.XLATestCase):
           return self._GRULayer(inputs=inputs,
                                 weights_value=1.,
                                 seq_length=None,
+                                seq_val=None,
                                 initial_state=initial_state,
                                 training=True,
                                 name=name)

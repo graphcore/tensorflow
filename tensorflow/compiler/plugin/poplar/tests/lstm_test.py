@@ -38,6 +38,7 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
+from tensorflow.keras.layers import LSTM
 # pylint: enable=unused-import
 
 dataType = np.float32
@@ -72,21 +73,22 @@ def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
 class LSTMTest(xla_test.XLATestCase):
   def _LSTMLayerCPU(self, inputs, weights_value, initial_state, forget_bias,
                     training, name):
-    del training
     del name
     with ops.device("/device:CPU:0"):
-      lstm_cell = rnn_cell.LSTMCell(num_channels,
-                                    name='basic_lstm_cell',
-                                    forget_bias=forget_bias,
-                                    initializer=init_ops.constant_initializer(
-                                        weights_value, dtype=dataType),
-                                    reuse=variable_scope.AUTO_REUSE)
-      state = rnn_cell.LSTMStateTuple(initial_state[1], initial_state[0])
-      outputs, _ = rnn.dynamic_rnn(lstm_cell,
-                                   inputs,
-                                   dtype=dataType,
-                                   initial_state=state,
-                                   time_major=True)
+      lstm = LSTM(num_channels,
+                  activation='tanh',
+                  recurrent_activation='sigmoid',
+                  kernel_initializer=init_ops.constant_initializer(
+                      weights_value, dataType),
+                  recurrent_initializer=init_ops.constant_initializer(
+                      weights_value, dataType),
+                  bias_initializer=init_ops.constant_initializer(
+                      0.0, dataType),
+                  time_major=True,
+                  return_sequences=True,
+                  stateful=True,
+                  unit_forget_bias=False)
+      outputs = lstm(inputs, initial_state=initial_state, training=training)
       return outputs
 
   def _LSTMLayer(self, inputs, weights_value, initial_state, forget_bias,

@@ -44,8 +44,8 @@ taking a significant proportion of the application's runtime and blocking
 computation.
 
 .. note::
-  This will only overlap the I/O with the computation for pipelined
-  applications using the grouped schedule. See
+  This will only overlap I/O with computation for a single IPU application or
+  a pipelined application using the grouped schedule. See
   :numref:`pipelined_training` for more detail.
 
 .. figure:: figures/short_begin.png
