@@ -205,27 +205,26 @@ int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
   return tensor_count + original_index;
 }
 
+template <typename F>
+static void WalkShape(const Shape& shape, const F& f) {
+  if (shape.IsTuple()) {
+    for (const auto& s : shape.tuple_shapes()) {
+      WalkShape(s, f);
+    }
+    return;
+  }
+  f(shape);
+}
+
 std::vector<Shape> FlattenedXlaShape(const Shape& shape) {
   std::vector<Shape> out;
-  if (shape.IsTuple()) {
-    for (int i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
-      std::vector<Shape> shapes =
-          FlattenedXlaShape(ShapeUtil::GetTupleElementShape(shape, i));
-      out.insert(out.end(), shapes.begin(), shapes.end());
-    }
-  } else {
-    out.push_back(shape);
-  }
-
+  WalkShape(shape, [&](const Shape& s) { out.push_back(s); });
   return out;
 }
 
 int64 GetByteSizeOfTotalShape(const Shape& shape) {
-  auto flat_shapes = FlattenedXlaShape(shape);
   int64 size = 0;
-  for (auto& s : flat_shapes) {
-    size += ShapeUtil::ByteSizeOf(s);
-  }
+  WalkShape(shape, [&](const Shape& s) { size += ShapeUtil::ByteSizeOf(s); });
   return size;
 }
 
