@@ -1564,6 +1564,22 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with self.assertRaisesRegex(ParamsReceived, "'batch_size': 3"):
       next(estimator.predict(mock_input_fn))
 
+  def testInvalidPrefetchDepth(self):
+    def my_model_fn(features, labels, mode):
+      del features, labels, mode
+
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([1.], [0.]))
+
+    estimator = ipu_estimator.IPUEstimator(
+        model_fn=my_model_fn,
+        config=ipu_run_config.RunConfig(
+            ipu_run_config=ipu_run_config.IPURunConfig(prefetch_depth=-1)))
+
+    with self.assertRaisesRegex(ValueError,
+                                "prefetch_depth must be greater than zero"):
+      estimator.train(my_input_fn, steps=1)
+
 
 if __name__ == "__main__":
   googletest.main()
