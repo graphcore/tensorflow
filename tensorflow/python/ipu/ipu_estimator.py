@@ -803,7 +803,8 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
         dataset,
         _FeedIdAllocator.alloc_infeed_id(mode),
-        replication_factor=replication_factor)
+        replication_factor=replication_factor,
+        prefetch_depth=config.ipu_run_config.prefetch_depth)
     hooks.append(_IPUInfeedLifecycleHook(infeed_queue))
 
     if not wrapper_class.need_outfeed(mode):
