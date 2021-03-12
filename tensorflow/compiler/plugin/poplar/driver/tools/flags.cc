@@ -125,6 +125,9 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
        "When using 'ON_DEMAND' connection type, configure how long to wait (in "
        "milliseconds) for a device before timing out - defaults to 3600000ms "
        "(1 hour)."},
+      {"sync_replica_start",
+       "Whether to synchronise the starting point of each replica's main "
+       "program."},
       {"allow_nans", "will allow NaNs."}};
   return flag_usage;
 }
@@ -167,6 +170,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(show_progress_bar)
     ADD_FLAG(on_demand_device_poll_time)
     ADD_FLAG(on_demand_device_timeout)
+    ADD_FLAG(sync_replica_start)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)
@@ -232,10 +236,11 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash = hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
-                             synthetic_data_initializer, use_ipu_model,
-                             while_loop_brute_force_max_trip_count,
-                             fallback_scheduler, allow_nans, log_cycle_count);
+  hlo_hash =
+      hash_util::hash(use_synthetic_data, raw_synthetic_data_categories,
+                      synthetic_data_initializer, use_ipu_model,
+                      while_loop_brute_force_max_trip_count, fallback_scheduler,
+                      allow_nans, log_cycle_count, sync_replica_start);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {
