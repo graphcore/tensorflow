@@ -249,6 +249,10 @@ For a full list, refer to  :ref:`api-section`.
     - When using 'ON_DEMAND' connection type, configure how long to wait (in
       milliseconds) for a device before timing out - defaults to 3600000ms
       (1 hour).
+  * - :samp:`--sync_replica_start`
+    - Add a global synchronisation point at the start of each replica's main
+      Poplar program. This can be used to force each replica to not execute
+      until all replicas have started.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``TF_POPLAR_FLAGS=--executable_cache_path=/tmp/cache --log_cycle_count=123``.
