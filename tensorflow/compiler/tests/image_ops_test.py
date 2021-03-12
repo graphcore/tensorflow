@@ -22,6 +22,7 @@ import colorsys
 import math
 import os
 
+import itertools
 from absl.testing import parameterized
 import numpy as np
 
@@ -41,6 +42,22 @@ def _generate_numpy_random_rgb(shape):
   # are RGB pixels. Some low-precision floating point types in this test can't
   # handle arbitrary precision floating points well.
   return np.random.randint(0, 256, shape) / 256.
+
+
+def PermuteTestCases(variable_map):
+  """Generate a cartesian product of test cases."""
+  names = variable_map.keys()
+  values = [variable_map[name] for name in names]
+
+  test_configs = []
+  for tup in itertools.product(*values):
+    config = dict()
+    for i, name in enumerate(names):
+      config['testcase_name'] = str(tup)
+      config[name] = tup[i]
+    test_configs.append(config)
+
+  return parameterized.named_parameters(*test_configs)
 
 
 class RGBToHSVTest(xla_test.XLATestCase):
@@ -404,7 +421,6 @@ class AdjustSaturationTest(xla_test.XLATestCase):
                                               scale).eval(feed_dict={x: x_np})
           self.assertAllClose(y_fused, y_baseline, rtol=2e-5, atol=1e-5)
 
-
 class ResizeNearestNeighborTest(xla_test.XLATestCase):
   # TODO(ilch): Wrap each test with `for dtype in self.float_types:`
   # Some work to understand how that should be done was presented here:
@@ -542,6 +558,123 @@ class ResizeNearestNeighborTest(xla_test.XLATestCase):
                            [7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9],
                            [7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9]],
                           dtype=np.uint8))
+
+
+class ResizeNearestNeighborHalfPixelCenterTest(parameterized.TestCase,
+                                               xla_test.XLATestCase):
+  """Tests nearest neighbour interpolation with half_pixel_centers = True"""
+
+  def __run_kernel(self, session, input_data, output_shape,
+                   half_pixel_centers, align_corners, run_grad):
+    """Run the resize kernel using the provided paramters and session"""
+    input_ = array_ops.placeholder(input_data.dtype)
+    if run_grad:
+      resized = gen_image_ops.resize_nearest_neighbor_grad(
+          input_, output_shape,
+          half_pixel_centers=half_pixel_centers,
+          align_corners=align_corners)
+    else:
+      grads = input_
+      input_shape = output_shape
+      resized = gen_image_ops.resize_nearest_neighbor(
+          grads, input_shape,
+          half_pixel_centers=half_pixel_centers,
+          align_corners=align_corners)
+
+    output_data = session.run(resized, {
+        input_: input_data.reshape((1, input_data.shape[0],
+                                    input_data.shape[1], 1))
+    })
+    return output_data
+
+  def __run_nonxla(self, input_data, output_shape,
+                   half_pixel_centers, align_corners, run_grad):
+    """Run the test on a non-XLA CPU target."""
+    with ops.device("/device:CPU:0"):
+      with self.session() as sess:
+        return self.__run_kernel(sess, input_data, output_shape,
+                                 half_pixel_centers, align_corners, run_grad)
+
+  def __run(self, input_data, output_shape,
+            half_pixel_centers, align_corners, run_grad):
+    """Run the test on an XLA target."""
+    with self.session() as sess, self.test_scope():
+      return self.__run_kernel(sess, input_data, output_shape,
+                               half_pixel_centers, align_corners, run_grad)
+
+  def __run_test(self, input_x_dim, input_y_dim, output_x_dim, output_y_dim,
+                 run_grad, half_pixel_centers):
+    """Run non-XLA and XLA versions of the given test and compare them for verification."""
+    align_corners = not half_pixel_centers
+
+    if run_grad:
+      input_data = np.arange(1, output_x_dim * output_y_dim + 1,
+                             dtype=np.float32)
+      input_data = input_data.reshape((output_y_dim, output_x_dim))
+      output_shape = (input_y_dim, input_x_dim)
+    else:
+      input_data = np.arange(1, input_x_dim * input_y_dim + 1,
+                             dtype=np.float32)
+      input_data = input_data.reshape((input_y_dim, input_x_dim))
+      output_shape = (output_y_dim, output_x_dim)
+
+    output_non_xla = self.__run_nonxla(input_data, output_shape,
+                                       half_pixel_centers=half_pixel_centers,
+                                       align_corners=align_corners,
+                                       run_grad=run_grad)
+    output_non_xla = output_non_xla.reshape(output_shape)
+
+    output_xla = self.__run(input_data, output_shape,
+                            half_pixel_centers=half_pixel_centers,
+                            align_corners=align_corners,
+                            run_grad=run_grad)
+    output_xla = output_xla.reshape(output_shape)
+
+    self.assertAllClose(output_non_xla, output_xla,
+                        msg=f'Failed test {self.id()}')
+
+  @PermuteTestCases({
+      'size': [
+          ("2x2To3x3", 2, 2, 3, 3),
+          ("3x3To2x2", 3, 3, 2, 2),
+          ("4x4To3x3", 4, 4, 3, 3),
+          ("3x3To9x9", 3, 3, 9, 9),
+          ("4x4To8x8", 4, 4, 8, 8),
+          ("8x8To16x16", 8, 8, 16, 16),
+          ("64x64To512x512", 64, 64, 512, 512),
+          ("80x80To512x512", 80, 80, 512, 512),
+          ("96x96To512x512", 96, 96, 512, 512),
+          ("112x112To512x512", 112, 112, 512, 512),
+          ("256x48To2048x384", 256, 48, 2048, 384),
+          ("320x60To2048x384", 320, 60, 2048, 384),
+          ("448x84To2048x384", 448, 84, 2048, 384),
+          ("69x69To545x545", 69, 69, 545, 545),
+          ("86x86To545x545", 86, 86, 545, 545),
+          ("103x103To545x545", 103, 103, 545, 545),
+          ("120x120To545x545", 120, 120, 545, 545),
+          ("57x57To456x456", 57, 57, 456, 456),
+          ("72x72To456x456", 72, 72, 456, 456),
+          ("86x86To456x456", 86, 86, 456, 456),
+          ("100x100To456x456", 100, 100, 456, 456),
+          ("64x64To224x224", 64, 64, 224, 224),
+          ("128x128To224x224", 128, 128, 224, 224),
+          ("256x256To224x224", 256, 256, 224, 224),
+          ("512x512To224x224", 512, 512, 224, 224),
+          ("64x64To299x299", 64, 64, 299, 299),
+          ("128x128To299x299", 128, 128, 299, 299),
+          ("256x256To299x299", 256, 256, 299, 299),
+          ("512x512To299x299", 512, 512, 299, 299),
+          ("224x224To224x224", 224, 224, 224, 224),
+      ],
+      'run_grad': [False, True],
+      'half_pixel_centers': [True],
+  })
+  def test(self, size, run_grad, half_pixel_centers):
+    """nearest-neighbour interpolation tests for half_pixel_centers set to True"""
+    _, input_x_dim, input_y_dim, output_x_dim, output_y_dim = size
+    self.__run_test(input_x_dim, input_y_dim,
+                    output_x_dim, output_y_dim,
+                    run_grad, half_pixel_centers)
 
 
 class ResizeBilinearTest(parameterized.TestCase, xla_test.XLATestCase):
