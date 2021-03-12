@@ -17,6 +17,9 @@ TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
 software stack, TensorFlow sits at the highest level of abstraction. Poplar
 and PopLibs provide a software interface to operations running on the IPU.
+`XLA <https://www.tensorflow.org/xla>`_ (Accelerated Linear Algebra) is a
+domain-specific compiler for linear algebra that can accelerate TensorFlow models.
+TensorFlow graphs are compiled into Poplar executables using our XLA backend.
 
 .. figure:: figures/Tensorflow_Poplar.png
     :width: 100%
@@ -49,7 +52,7 @@ These will be described in the appropriate sections of this document.
 Document overview
 ~~~~~~~~~~~~~~~~~
 
-* This document starts with :any:`a tutorial overview <Tutorial>` of TensorFlow
+* This document starts with :any:`a tutorial overview <tutorial>` of TensorFlow
   for the IPU. This describes how to execute a graph on an IPU, how to select
   the IPU hardware to run on, and a simple approach to using multiple IPUs.
 * The next section provides information about :any:`selecting specific IPU
