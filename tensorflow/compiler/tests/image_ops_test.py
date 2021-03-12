@@ -552,24 +552,45 @@ class ResizeNearestNeighborTest(xla_test.XLATestCase):
                           dtype=np.uint8))
 
 
-class ResizeNearestNeighborHalfPixelCenterTest(parameterized.TestCase,
+class ResizeHalfPixelCenterTest(parameterized.TestCase,
                                                xla_test.XLATestCase):
   """Tests nearest neighbour interpolation with half_pixel_centers = True"""
 
   def __run_kernel(self, session, input_data, output_shape,
-                   half_pixel_centers, align_corners, run_grad):
+                   half_pixel_centers, align_corners, run_grad,
+                   interpolation):
     """Run the resize kernel using the provided paramters and session"""
     input_ = array_ops.placeholder(input_data.dtype)
     if run_grad:
-      resized = gen_image_ops.resize_nearest_neighbor_grad(
-          input_, output_shape,
+      grads = input_
+      input_shape = output_shape
+
+      # For the backward pass, the nearest neighbour XLA operation expects
+      # the second parameter to be the shape of the input layer, while the
+      # bilinear XLA operation expects the second parameter to be the
+      # input layer and reads the shape from the layer (the values in the
+      # tensor themselves are ignored).
+      if interpolation == 'nearest':
+        fn = gen_image_ops.resize_nearest_neighbor_grad
+        input_param = input_shape
+      else:
+        fn = gen_image_ops.resize_bilinear_grad
+        input_param = np.zeros((1, output_shape[0],
+                                output_shape[1], 1), dtype=input_data.dtype)
+
+      resized = fn(
+          grads, input_param,
           half_pixel_centers=half_pixel_centers,
           align_corners=align_corners)
     else:
-      grads = input_
-      input_shape = output_shape
-      resized = gen_image_ops.resize_nearest_neighbor(
-          grads, input_shape,
+      if interpolation == 'nearest':
+        fn = gen_image_ops.resize_nearest_neighbor
+        output_param = output_shape
+      else:
+        fn = gen_image_ops.resize_bilinear
+        output_param = output_shape
+      resized = fn(
+          input_, output_param,
           half_pixel_centers=half_pixel_centers,
           align_corners=align_corners)
 
@@ -580,22 +601,26 @@ class ResizeNearestNeighborHalfPixelCenterTest(parameterized.TestCase,
     return output_data
 
   def __run_nonxla(self, input_data, output_shape,
-                   half_pixel_centers, align_corners, run_grad):
+                   half_pixel_centers, align_corners, run_grad,
+                   interpolation):
     """Run the test on a non-XLA CPU target."""
     with ops.device("/device:CPU:0"):
       with self.session() as sess:
         return self.__run_kernel(sess, input_data, output_shape,
-                                 half_pixel_centers, align_corners, run_grad)
+                                 half_pixel_centers, align_corners,
+                                 run_grad, interpolation)
 
   def __run(self, input_data, output_shape,
-            half_pixel_centers, align_corners, run_grad):
+            half_pixel_centers, align_corners, run_grad,
+            interpolation):
     """Run the test on an XLA target."""
     with self.session() as sess, self.test_scope():
       return self.__run_kernel(sess, input_data, output_shape,
-                               half_pixel_centers, align_corners, run_grad)
+                               half_pixel_centers, align_corners,
+                               run_grad, interpolation)
 
   def __run_test(self, input_x_dim, input_y_dim, output_x_dim, output_y_dim,
-                 run_grad, half_pixel_centers):
+                 run_grad, half_pixel_centers, interpolation):
     """Run non-XLA and XLA versions of the given test and compare them for verification."""
     align_corners = not half_pixel_centers
 
@@ -613,17 +638,21 @@ class ResizeNearestNeighborHalfPixelCenterTest(parameterized.TestCase,
     output_non_xla = self.__run_nonxla(input_data, output_shape,
                                        half_pixel_centers=half_pixel_centers,
                                        align_corners=align_corners,
-                                       run_grad=run_grad)
-    output_non_xla = output_non_xla.reshape(output_shape)
+                                       run_grad=run_grad,
+                                       interpolation=interpolation)
 
     output_xla = self.__run(input_data, output_shape,
                             half_pixel_centers=half_pixel_centers,
                             align_corners=align_corners,
-                            run_grad=run_grad)
+                            run_grad=run_grad,
+                            interpolation=interpolation)
+
+    output_non_xla = output_non_xla.reshape(output_shape)
     output_xla = output_xla.reshape(output_shape)
 
     self.assertAllClose(output_non_xla, output_xla,
-                        msg=f'Failed test {self.id()}')
+                        msg=f'Failed test {self.id()}',
+                        rtol=0.1, atol=0.01)
 
   @PermuteTestCases({
       'size': [
@@ -658,15 +687,27 @@ class ResizeNearestNeighborHalfPixelCenterTest(parameterized.TestCase,
           ("512x512To299x299", 512, 512, 299, 299),
           ("224x224To224x224", 224, 224, 224, 224),
       ],
-      'run_grad': [False, True],
-      'half_pixel_centers': [True],
+      'run_grad': [
+        False, 
+        True
+      ],
+      'half_pixel_centers': [
+        True,
+        # False,
+      ],
+      'interpolation': [
+        'nearest',
+        'bilinear',
+      ]
   })
-  def test(self, size, run_grad, half_pixel_centers):
+  def test(self, size, run_grad, half_pixel_centers, interpolation):
     """nearest-neighbour interpolation tests for half_pixel_centers set to True"""
     _, input_x_dim, input_y_dim, output_x_dim, output_y_dim = size
+
     self.__run_test(input_x_dim, input_y_dim,
                     output_x_dim, output_y_dim,
-                    run_grad, half_pixel_centers)
+                    run_grad, half_pixel_centers,
+                    interpolation)
 
 
 class ResizeBilinearTest(parameterized.TestCase, xla_test.XLATestCase):
