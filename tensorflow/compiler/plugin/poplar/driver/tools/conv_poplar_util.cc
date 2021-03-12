@@ -75,56 +75,58 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
   // Create spatial dimension padding and striding.
   std::vector<std::size_t> n_s;
   std::vector<std::size_t> f_s;
-  std::vector<unsigned int> w_s;
-  std::vector<unsigned int> p_l;
-  std::vector<unsigned int> p_u;
-  std::vector<unsigned int> t_l;
-  std::vector<unsigned int> t_u;
-  std::vector<unsigned int> d_i;
-  std::vector<unsigned int> d_w;
+  std::vector<unsigned int> out_s;
+  std::vector<unsigned int> in_p_l;
+  std::vector<unsigned int> in_p_u;
+  std::vector<unsigned int> in_t_l;
+  std::vector<unsigned int> in_t_u;
+  std::vector<unsigned int> in_d;
+  std::vector<unsigned int> w_d;
   std::vector<unsigned int> zeros;
   std::vector<bool> flipInput;
   std::vector<bool> flipKernel;
+  std::vector<unsigned int> out_t_l;
+  std::vector<unsigned int> out_t_u;
 
   for (int64 i = 0; i < window.dimensions().size(); i++) {
     n_s.push_back(input_dims[dims.input_spatial_dimensions(i)]);
     f_s.push_back(kernel_dims[dims.kernel_spatial_dimensions(i)]);
-    w_s.push_back(window.dimensions(i).stride());
+    out_s.push_back(window.dimensions(i).stride());
     flipInput.push_back(false);
     flipKernel.push_back(window.dimensions(i).window_reversal());
-    if (window.dimensions(i).padding_low() < 0) {
-      unsigned int p = -window.dimensions(i).padding_low();
-      unsigned int d = window.dimensions(i).base_dilation();
-      unsigned int trunc = (p + d - 1) / d;
-      unsigned int pad = p % d;
-      t_l.push_back(trunc);
-      p_l.push_back(pad);
+    if (int p = window.dimensions(i).padding_low(); p < 0) {
+      int t = -p;
+      p = 0;
+      in_p_l.push_back(p);
+      in_t_l.push_back(0);
+      out_t_l.push_back(t);
     } else {
-      p_l.push_back(window.dimensions(i).padding_low());
-      t_l.push_back(0);
+      in_p_l.push_back(window.dimensions(i).padding_low());
+      in_t_l.push_back(0);
+      out_t_l.push_back(0);
     }
-    if (window.dimensions(i).padding_high() < 0) {
-      unsigned int p = -window.dimensions(i).padding_high();
-      unsigned int d = window.dimensions(i).base_dilation();
-      unsigned int trunc = (p + d - 1) / d;
-      unsigned int pad = p % d;
-      t_u.push_back(trunc);
-      p_u.push_back(pad);
+    if (int p = window.dimensions(i).padding_high(); p < 0) {
+      int t = -p;
+      p = 0;
+      in_p_u.push_back(p);
+      in_t_u.push_back(0);
+      out_t_u.push_back(t);
     } else {
-      p_u.push_back(window.dimensions(i).padding_high());
-      t_u.push_back(0);
+      in_p_u.push_back(window.dimensions(i).padding_high());
+      in_t_u.push_back(0);
+      out_t_u.push_back(0);
     }
-    d_i.push_back(window.dimensions(i).base_dilation());
-    d_w.push_back(window.dimensions(i).window_dilation());
+    in_d.push_back(window.dimensions(i).base_dilation());
+    w_d.push_back(window.dimensions(i).window_dilation());
     zeros.push_back(0);
   }
 
   auto n_g = std::max(f_g, b_g);
 
   poplin::ConvParams params(dtype, dtype, n_b, n_s, f_s, n_i, n_o, n_g,
-                            {t_l, t_u, d_i, p_l, p_u, flipInput},
-                            {zeros, zeros, d_w, zeros, zeros, flipKernel},
-                            {zeros, zeros, w_s, zeros, zeros});
+                            {in_t_l, in_t_u, in_d, in_p_l, in_p_u, flipInput},
+                            {zeros, zeros, w_d, zeros, zeros, flipKernel},
+                            {out_t_l, out_t_u, out_s, zeros, zeros});
   return params.canonicalize();
 }
 
