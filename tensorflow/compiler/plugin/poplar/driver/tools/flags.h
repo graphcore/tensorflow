@@ -114,6 +114,9 @@ class PoplarXlaFlags {
   // hour).
   int64 on_demand_device_timeout = 3600000;
 
+  // Synchronise the starting point of each replica's main program.
+  bool sync_replica_start = false;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

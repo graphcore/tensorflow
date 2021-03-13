@@ -1569,6 +1569,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     poplar::program::Sequence main_program({}, {"MainProgram"});
 
+    // Decide whether to synchronise all the replica's starting points.
+    if (PoplarXlaFlags::Get().sync_replica_start && replication_factor > 1) {
+      main_program.add(poplar::program::Sync(poplar::SyncType::GLOBAL));
+    }
+
     // Set up the random seed.
     TF_ASSIGN_OR_RETURN(auto seed_setup,
                         InitializeSeed(main_graph, replication_factor));
