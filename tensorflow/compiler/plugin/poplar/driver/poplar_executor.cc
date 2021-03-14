@@ -871,7 +871,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
  private:
   InfeedQueue* queue_;
   const uint64 num_bytes_;
-  std::size_t look_ahead_;
+  alignas(64) std::atomic<std::size_t> look_ahead_;
 };
 
 class NullPrefetchCallback : public poplar::StreamCallback {
