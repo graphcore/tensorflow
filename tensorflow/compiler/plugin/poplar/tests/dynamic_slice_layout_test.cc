@@ -63,11 +63,13 @@ TEST(AddDynamicSliceTensorTest, Layout) {
     }
   }
 
-  engine.writeTensor("t-write", (void*)write_buffer);
+  engine.writeTensor("t-write", write_buffer,
+                     write_buffer + sizeof(write_buffer));
   engine.run();
 
   float read_buffer[Q * P * S];
-  engine.readTensor("t_layout-read", read_buffer);
+  engine.readTensor("t_layout-read", read_buffer,
+                    read_buffer + sizeof(read_buffer));
 
   const float expected_buffer[] = {0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11};
   EXPECT_TRUE(
