@@ -108,12 +108,16 @@ TEST(Sort, OneDimension) {
   engine.load(device);
 
   const auto input_buffer = random<float>(tensor_size);
-  engine.writeTensor("a-write", input_buffer.data());
+  const std::size_t input_buffer_size = input_buffer.size() * sizeof(float);
+  engine.writeTensor("a-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
 
   engine.run();
 
   std::vector<float> output_buffer = zeros<float>(tensor_size);
-  engine.readTensor("a-read", output_buffer.data());
+  const std::size_t output_buffer_size = output_buffer.size() * sizeof(float);
+  engine.readTensor("a-read", output_buffer.data(),
+                    output_buffer.data() + output_buffer_size);
 
   EXPECT_TRUE(std::is_sorted(output_buffer.begin(), output_buffer.end()));
   EXPECT_TRUE(std::is_permutation(output_buffer.begin(), output_buffer.end(),
@@ -140,12 +144,16 @@ TEST(SortInt, OneDimension) {
   engine.load(device);
 
   const auto input_buffer = random<int>(tensor_size);
-  engine.writeTensor("a-write", input_buffer.data());
+  const std::size_t input_buffer_size = input_buffer.size() * sizeof(float);
+  engine.writeTensor("a-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
 
   engine.run();
 
   auto output_buffer = zeros<int>(tensor_size);
-  engine.readTensor("a-read", output_buffer.data());
+  const std::size_t output_buffer_size = output_buffer.size() * sizeof(float);
+  engine.readTensor("a-read", output_buffer.data(),
+                    output_buffer.data() + output_buffer_size);
 
   EXPECT_TRUE(std::is_sorted(output_buffer.begin(), output_buffer.end()));
   EXPECT_TRUE(std::is_permutation(output_buffer.begin(), output_buffer.end(),
@@ -175,15 +183,20 @@ TEST(SortKV, OneDimension) {
   engine.load(device);
 
   auto input_buffer = iota<float>(tensor_size);
+  const std::size_t input_buffer_size = input_buffer.size() * sizeof(float);
   std::reverse(input_buffer.begin(), input_buffer.end());
-  engine.writeTensor("a-write", input_buffer.data());
+  engine.writeTensor("a-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
   std::reverse(input_buffer.begin(), input_buffer.end());
-  engine.writeTensor("b-write", input_buffer.data());
+  engine.writeTensor("b-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
 
   engine.run();
 
   std::vector<float> output_buffer = zeros<float>(tensor_size);
-  engine.readTensor("b-read", output_buffer.data());
+  const std::size_t output_buffer_size = output_buffer.size() * sizeof(float);
+  engine.readTensor("b-read", output_buffer.data(),
+                    output_buffer.data() + output_buffer_size);
 
   EXPECT_TRUE(std::is_sorted(output_buffer.rbegin(), output_buffer.rend()));
   EXPECT_TRUE(std::is_permutation(output_buffer.begin(), output_buffer.end(),
@@ -210,12 +223,16 @@ TEST(Sort, TwoDimension) {
   engine.load(device);
 
   const auto input_buffer = random<float>(tensor_size * tensor_size);
-  engine.writeTensor("a-write", input_buffer.data());
+  const std::size_t input_buffer_size = input_buffer.size() * sizeof(float);
+  engine.writeTensor("a-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
 
   engine.run();
 
   std::vector<float> output_buffer = zeros<float>(tensor_size * tensor_size);
-  engine.readTensor("a-read", output_buffer.data());
+  const std::size_t output_buffer_size = output_buffer.size() * sizeof(float);
+  engine.readTensor("a-read", output_buffer.data(),
+                    output_buffer.data() + output_buffer_size);
   for (int i = 0; i < tensor_size; ++i) {
     const auto begin_idx = i * tensor_size;
     const auto end_idx = begin_idx + tensor_size;
@@ -251,13 +268,17 @@ TEST(Sort, ThreeDimension) {
 
   const auto input_buffer =
       random<float>(tensor_size * tensor_size * tensor_size);
-  engine.writeTensor("a-write", input_buffer.data());
+  const std::size_t input_buffer_size = input_buffer.size() * sizeof(float);
+  engine.writeTensor("a-write", input_buffer.data(),
+                     input_buffer.data() + input_buffer_size);
 
   engine.run();
 
   std::vector<float> output_buffer =
       zeros<float>(tensor_size * tensor_size * tensor_size);
-  engine.readTensor("a-read", output_buffer.data());
+  const std::size_t output_buffer_size = output_buffer.size() * sizeof(float);
+  engine.readTensor("a-read", output_buffer.data(),
+                    output_buffer.data() + output_buffer_size);
   for (int i = 0; i < tensor_size; ++i) {
     for (int k = 0; k < tensor_size; ++k) {
       const auto begin_idx = i * tensor_size * tensor_size + k * tensor_size;
