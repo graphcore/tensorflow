@@ -145,6 +145,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
 
     with sl.Session() as sess:
@@ -168,6 +169,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
 
     with sl.Session() as sess:
@@ -233,6 +235,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
 
     outfeed_op = outfeed_queue.dequeue()
