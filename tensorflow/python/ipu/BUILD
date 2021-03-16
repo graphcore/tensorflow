@@ -185,6 +185,8 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
+    shard_count = 2,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -273,6 +275,7 @@ tf_py_test(
         "//tensorflow/python/keras:layers",
     ],
     shard_count = 5,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -314,7 +317,7 @@ py_test(
 
 tf_py_test(
     name = "fifo_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/fifo_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -327,6 +330,7 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -357,6 +361,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -540,11 +545,15 @@ tf_py_test(
     size = "large",
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
     shard_count = 4,
-    tags = ["isolated_poplar_tests"],
+    tags = [
+        "hw_poplar_test",
+        "isolated_poplar_tests",
+    ],
 )
 
 tf_py_test(
@@ -791,7 +800,8 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
-    shard_count = 17,
+    # Shard count needs to match the number of tests.
+    shard_count = 29,
 )
 
 tf_py_test(
@@ -1085,7 +1095,9 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
-    shard_count = 10,
+    # Shard count needs to match the number of tests.
+    shard_count = 11,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -1136,18 +1148,266 @@ tf_py_test(
     shard_count = 6,
 )
 
+tf_py_test(
+    name = "candidate_sampler_test",
+    size = "large",
+    srcs = ["tests/candidate_sampler_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 7,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "seed_control_test",
+    size = "large",
+    srcs = ["tests/seed_control_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "reductions_test",
+    size = "large",
+    srcs = ["tests/reductions_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "keras_rnn_hw_test",
+    size = "large",
+    srcs = ["tests/keras_rnn_hw_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "random_number_generation_test",
+    size = "large",
+    srcs = ["tests/random_number_generation_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 4,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replicated_graph_test",
+    size = "large",
+    srcs = ["tests/replicated_graph_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 4,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replicated_index_test",
+    size = "large",
+    srcs = ["tests/replicated_index_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replicated_reduce_scatter_test",
+    size = "large",
+    srcs = ["tests/replicated_reduce_scatter_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replicated_seed_control_test",
+    size = "large",
+    srcs = ["tests/replicated_seed_control_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replicated_stateful_gradient_accumulate_test",
+    size = "large",
+    srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 4,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "replication_all_to_all_test",
+    size = "large",
+    srcs = ["tests/replication_all_to_all_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 2,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "sharded_and_replicated_test",
+    size = "large",
+    srcs = ["tests/sharded_and_replicated_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 3,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "floating_point_control_bits_test",
+    size = "large",
+    srcs = ["tests/floating_point_control_bits_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 11,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "dropout_hw_test",
+    size = "large",
+    srcs = ["tests/dropout_hw_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 6,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "pipelining_batch_serial_sequential_hw_test",
+    size = "large",
+    srcs = ["tests/pipelining_batch_serial_sequential_hw_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 4,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
+    name = "pipelining_hw_test",
+    size = "large",
+    srcs = ["tests/pipelining_hw_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    # Shard count needs to match the number of tests.
+    shard_count = 8,
+    tags = ["hw_poplar_test"],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
         "augru_test",
         "autoshard_cnn_test",
+        "candidate_sampler_test",
         "dataset_benchmark_test",
         "dataset_ops_test",
+        "dropout_hw_test",
         "dropout_test",
         "embedding_lookup_test",
         "estimator_test",
         "expression_op_test",
         "fifo_test",
+        "floating_point_control_bits_test",
         "frontend_attributes_test",
         "functional_ops_test",
         "gcl_test",
@@ -1159,6 +1419,7 @@ test_suite(
         "infeed_outfeed_test",
         "io_tiles_test",
         "ipu_compiler_test",
+        "ipu_estimator_replicated_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
@@ -1167,18 +1428,21 @@ test_suite(
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
+        "keras_rnn_hw_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",
         "math_ops_test",
         "multi_conv_test",
         "nn_ops_test",
         "outfeed_ordinal_test",
+        "pipelining_batch_serial_sequential_hw_test",
         "pipelining_batch_serial_sequential_recomputation_test",
         "pipelining_batch_serial_sequential_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_overlap_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
+        "pipelining_hw_test",
         "pipelining_recomputation_conv_classify_test",
         "pipelining_recomputation_test",
         "pipelining_sequential_recomputation_test",
@@ -1188,7 +1452,18 @@ test_suite(
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
+        "random_number_generation_test",
         "recompute_suggestion_test",
+        "reductions_test",
+        "replicated_graph_test",
+        "replicated_index_test",
+        "replicated_reduce_scatter_test",
+        "replicated_seed_control_test",
+        "replicated_stateful_gradient_accumulate_test",
+        "replication_all_to_all_test",
+        "replication_normalise_test",
+        "seed_control_test",
+        "sharded_and_replicated_test",
         "user_ops_test",
         "utils_get_config_test",
         "utils_test",
@@ -1197,18 +1472,9 @@ test_suite(
 )
 
 test_suite(
-    name = "hw_tests",
-    tests = [
-        "ipu_estimator_replicated_test",
-        "replication_normalise_test",
-    ],
-)
-
-test_suite(
     name = "poplar_ci_test_suite",
     tests = [
         ":all_tests",
-        ":hw_tests",
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
     ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test_suite"]),
 )

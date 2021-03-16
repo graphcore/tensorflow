@@ -25,7 +25,8 @@ from tensorflow.python.util import deprecation
 class IPURunConfig(
     collections.namedtuple('IPURunConfig', [
         'iterations_per_loop', 'ipu_options', 'compile_summary',
-        'num_replicas', 'num_shards', 'autosharding', 'ordinal'
+        'num_replicas', 'num_shards', 'autosharding', 'ordinal',
+        'prefetch_depth'
     ])):
   """IPU related configuration required by `IPUEstimator`.
 
@@ -42,7 +43,8 @@ class IPURunConfig(
               num_replicas=1,
               num_shards=1,
               autosharding=False,
-              ordinal=0):
+              ordinal=0,
+              prefetch_depth=None):
     """ Creates an `IPURunConfig` instance.
 
     Args:
@@ -63,6 +65,9 @@ class IPURunConfig(
         graph across `num_shards` devices
       ordinal: The IPU device ordinal to use.  For instance `0` corresponds
         to `/device:IPU:0`.
+      prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
+        :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue` that is
+        created internally.
     """
 
     num_devices = num_replicas * num_shards
@@ -97,7 +102,8 @@ class IPURunConfig(
                               num_replicas=num_replicas,
                               num_shards=num_shards,
                               autosharding=autosharding,
-                              ordinal=ordinal)
+                              ordinal=ordinal,
+                              prefetch_depth=prefetch_depth)
 
 
 class RunConfig(run_config_lib.RunConfig):

@@ -16,6 +16,7 @@
 import numpy as np
 
 from tensorflow.python import ipu
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -61,6 +62,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       else:
         self.assertTrue(output_slice.any())
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testGather(self):
     def my_net(w, i):
@@ -75,8 +77,8 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = ipu.utils.create_ipu_config()
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
@@ -86,6 +88,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
       self.assertEqual(result[0].shape, (8, 200))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testAutoFlatten(self):
     with self.session() as sess:
@@ -106,6 +109,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1])
 
+      cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      ipu.utils.configure_ipu_system(cfg)
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -116,6 +122,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (3, 4, 2, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testWithResourceVariable(self):
     with self.session() as sess:
@@ -139,6 +146,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
+      cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      ipu.utils.configure_ipu_system(cfg)
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -148,6 +158,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (10, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testWithResourceVariableAutoFlatten(self):
     with self.session() as sess:
@@ -172,6 +183,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
+      cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      ipu.utils.configure_ipu_system(cfg)
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -184,6 +198,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (3, 4, 2, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testGradient(self):
     with self.session() as sess:
@@ -209,6 +224,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, grads, lr])
 
+      cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      ipu.utils.configure_ipu_system(cfg)
       sess.run(variables.global_variables_initializer())
       out, indices, gradient = sess.run(
           r, {
@@ -222,6 +240,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
           })
       self.validate_gradient_output(indices, gradient, out, 0.1)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def test4D(self):
     def my_net(w, i):
@@ -236,8 +255,8 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = ipu.utils.create_ipu_config()
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, 16).reshape([8, 2])
@@ -247,6 +266,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
       self.assertEqual(result[0].shape, (8, 2, 200, 4))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testEmbeddingUpdateWithMatMul(self):
     def my_net(i):
@@ -268,8 +288,8 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = ipu.utils.create_ipu_config()
+    cfg = tu.add_hw_ci_connection_options(cfg)
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
@@ -278,6 +298,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Just checking that graph construction succeeds and the program runs
       sess.run(r, {i: i_h})
 
+  @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testSerializedEmbeddingLookup(self):
     with sl.Session() as sess:
@@ -291,6 +312,10 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         table = array_ops.placeholder(np.float16, [2000, 4, 4, 8])
         indices = array_ops.placeholder(np.int32, [4, 4, 8])
 
+      cfg = ipu.utils.create_ipu_config()
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      ipu.utils.configure_ipu_system(cfg)
+
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(body, inputs=[table, indices])
 
@@ -300,6 +325,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {table: table_h, indices: indices_h})
       self.assertAllClose(result[0], np.take(table_h, indices_h, axis=0))
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testSerializedEmbeddingLookupDoesntDivide(self):
     with sl.Session():
