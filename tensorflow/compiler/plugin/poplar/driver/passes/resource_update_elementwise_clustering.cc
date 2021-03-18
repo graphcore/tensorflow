@@ -288,6 +288,12 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
       padding_config_dim->set_edge_padding_low(0);
       padding_config_dim->set_interior_padding(0);
 
+      const Shape flat_shape = ShapeUtil::MakeShape(
+          input->shape().element_type(), {cluster.GetClusterSize()});
+      if (!ShapeUtil::Compatible(input->shape(), flat_shape)) {
+        input = builder->AddInstruction(
+            HloInstruction::CreateReshape(flat_shape, input));
+      }
       input = builder->AddInstruction(
           HloInstruction::CreatePad(pad_shape, input, zero_f, padding_config));
       VLOG(2) << "pad: " << input->ToString();
@@ -305,12 +311,15 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
 
   if (lower_all_reduce) {
     HloInstruction* input = cluster_input->mutable_operand(0);
-    HloInstruction* input_reshaped = input_comp->AddInstruction(
-        HloInstruction::CreateReshape(flat_shape, input));
+    HloInstruction* parameter = builder->AddInstruction(
+        HloInstruction::CreateParameter(param_idx, cluster_input->shape(),
+                                        "parameter-reduce-" + input->name()));
 
-    HloInstruction* parameter =
-        builder->AddInstruction(HloInstruction::CreateParameter(
-            param_idx, flat_shape, "parameter-" + input->name()));
+    if (!ShapeUtil::Compatible(parameter->shape(), flat_shape)) {
+      parameter = builder->AddInstruction(
+          HloInstruction::CreateReshape(flat_shape, parameter));
+    }
+
     // Convert an all reduce input into an outlined reduce scatter sum for
     // partitined graphs.
     if (cluster.IsReplicaPartitioned()) {
@@ -320,24 +329,20 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
       HloInstruction* scatter = builder->AddInstruction(
           CreateReduceScatter({parameter}, in_comp_shape));
       context->MapInstruction(cluster_input, scatter);
-
     } else {
       // Lower the allreduce in.
       HloInstruction* all_reduce = builder->AddInstruction(
           cluster_input->CloneWithNewOperands(in_comp_shape, {parameter}));
       context->MapInstruction(cluster_input, all_reduce);
     }
-    return input_reshaped;
+    return input;
   }
 
   // All other inputs have to be sliced with dynamic-slice(input,
   // replication-index()).
-  HloInstruction* cluster_input_reshaped = input_comp->AddInstruction(
-      HloInstruction::CreateReshape(flat_shape, cluster_input));
-
-  HloInstruction* parameter =
-      builder->AddInstruction(HloInstruction::CreateParameter(
-          param_idx, flat_shape, "parameter-" + cluster_input->name()));
+  HloInstruction* parameter = builder->AddInstruction(
+      HloInstruction::CreateParameter(param_idx, cluster_input->shape(),
+                                      "parameter-" + cluster_input->name()));
 
   if (cluster.IsReplicaPartitioned()) {
     // Add any necessary padding before slicing.
@@ -372,9 +377,13 @@ StatusOr<HloInstruction*> AddClusterInput(int64 param_idx,
     context->MapInstruction(cluster_input, input_slice);
   } else {
     VLOG(2) << "Parameter: " << parameter->ToString();
+    if (!ShapeUtil::Compatible(parameter->shape(), flat_shape)) {
+      parameter = builder->AddInstruction(
+          HloInstruction::CreateReshape(flat_shape, parameter));
+    }
     context->MapInstruction(cluster_input, parameter);
   }
-  return cluster_input_reshaped;
+  return cluster_input;
 }
 
 // For each output of the cluster, check its users.
@@ -406,7 +415,7 @@ StatusOr<HloInstruction*> AddClusterOutput(
           builder->AddInstruction(HloInstruction::CreateReshape(
               store_input->shape(), in_cluster_output));
       // Override the inst_users to be the parameter store instruction.
-      inst_users = {UserPositions{store, {1}, false}};
+      inst_users = {UserPositions{store, {1}}};
       return reshape;
     }
   }
@@ -416,25 +425,32 @@ StatusOr<HloInstruction*> AddClusterOutput(
     auto inst_element_type = cluster_output->shape().element_type();
     const Shape all_gather_shape = ShapeUtil::MakeShape(
         inst_element_type, {replication_factor, cluster.GetShardSize()});
-    HloInstruction* all_gather = builder->AddInstruction(
+    HloInstruction* output = builder->AddInstruction(
         CreateAllGather({in_cluster_output}, all_gather_shape));
 
     const Shape flat_cluster_shape =
         ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
     const Shape aligned_cluster_shape = ShapeUtil::MakeShape(
         inst_element_type, {cluster.GetAlignedClusterSize()});
-    HloInstruction* output = builder->AddInstruction(
-        HloInstruction::CreateReshape(aligned_cluster_shape, all_gather));
 
     if (cluster.GetClusterSize() != cluster.GetAlignedClusterSize()) {
+      output = builder->AddInstruction(
+          HloInstruction::CreateReshape(aligned_cluster_shape, output));
       output = builder->AddInstruction(HloInstruction::CreateSlice(
           flat_cluster_shape, output, {0}, {cluster.GetClusterSize()}, {1}));
       VLOG(2) << "Slicing padding, slice: " << output->ToString();
     }
-    return output;
 
+    output = builder->AddInstruction(HloInstruction::CreateReshape(
+        cluster.GetClusterShape(inst_element_type), output));
+
+    return output;
   } else {
-    return in_cluster_output;
+    HloInstruction* output =
+        builder->AddInstruction(HloInstruction::CreateReshape(
+            cluster.GetClusterShape(in_cluster_output->shape().element_type()),
+            in_cluster_output));
+    return output;
   }
 }
 
@@ -496,6 +512,10 @@ StatusOr<bool> RewriteCall(
 ElementwiseCluster::ElementwiseCluster(HloInstruction* top) noexcept
     : top_(top), cluster_shape_(top->shape()) {
   Add(top);
+}
+
+Shape ElementwiseCluster::GetClusterShape(PrimitiveType type) const {
+  return ShapeUtil::MakeShape(type, GetClusterDimensions());
 }
 
 bool ElementwiseCluster::In(HloInstruction* inst) const {
@@ -633,7 +653,7 @@ bool ElementwiseCluster::Finalize(
       if (!ContainsKey(insts_, user)) {
         auto indices = user->OperandIndices(inst);
         outputs_to_users_[inst].push_back(
-            UserPositions{user, {indices.begin(), indices.end()}, true});
+            UserPositions{user, {indices.begin(), indices.end()}});
       }
     }
   };
@@ -1196,14 +1216,6 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
     HloInstruction* reshaped = nullptr;
     for (auto user : computation_output_users.at(cluster_output)) {
       HloInstruction* to_replace_with = gte;
-      if (user.reshape) {
-        if (!reshaped) {
-          reshaped = cluster_comp->AddInstruction(
-              HloInstruction::CreateReshape(cluster_output->shape(), gte));
-        }
-        to_replace_with = reshaped;
-      }
-
       VLOG(2) << "Replacing " << user.ToString();
       for (int64 index : user.indices) {
         TF_RETURN_IF_ERROR(

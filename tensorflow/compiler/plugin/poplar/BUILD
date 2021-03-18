@@ -264,6 +264,7 @@ cc_library(
         "driver/passes/variables_offload_and_partition.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
+        "driver/passes/recompute_casts.cc",
         "driver/passes/recompute_instructions.cc",
         "driver/passes/recomputation_checkpoint_remover.cc",
         "driver/passes/recomputation_input_remover.cc",
@@ -445,6 +446,7 @@ cc_library(
         "driver/passes/post_serialize_gradient_accumulation.h",
         "driver/passes/recomputation_checkpoint_remover.h",
         "driver/passes/recomputation_input_remover.h",
+        "driver/passes/recompute_casts.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/remote_buffer_canonicalizer.h",
         "driver/passes/remote_buffer_merger.h",
@@ -1673,6 +1675,19 @@ xla_test(
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "recompute_casts_test",
+    srcs = ["tests/recompute_casts_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -5092,6 +5107,7 @@ test_suite(
         "recomputation_checkpoint_remover_test",
         "recomputation_input_remover_test",
         "recomputation_test",
+        "recompute_casts_test",
         "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",

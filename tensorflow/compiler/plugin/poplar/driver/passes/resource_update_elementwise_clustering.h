@@ -32,11 +32,10 @@ namespace poplarplugin {
 struct UserPositions {
   HloInstruction* instruction;
   std::vector<int64> indices;
-  bool reshape;
 
   std::string ToString() const {
     return absl::StrCat("UserPositions: ", instruction->name(), ":",
-                        absl::StrJoin(indices, ","), ", reshape? ", reshape);
+                        absl::StrJoin(indices, ","));
   }
 };
 
@@ -82,6 +81,8 @@ class ElementwiseCluster {
   int64 GetShardSize() const;
   // Whether this cluster is replica partitioned.
   bool IsReplicaPartitioned() const;
+  // Returns original shape of the top-level instruction.
+  Shape GetClusterShape(PrimitiveType type) const;
 
  private:
   HloInstruction* top_;
