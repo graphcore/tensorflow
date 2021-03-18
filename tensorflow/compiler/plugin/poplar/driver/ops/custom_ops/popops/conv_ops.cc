@@ -22,12 +22,14 @@ limitations under the License.
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -172,7 +174,21 @@ class Conv2DOp : public PoplarOpDef {
   }
 };
 
-REGISTER_HLO_OP(kConvolution, Conv2DOp);
+void RegisterConvolutionExtensions(HloOpcode opcode) {
+  auto allocatingIndices = [](HloInstruction* inst) {
+    absl::flat_hash_set<int64> indices;
+    for (auto i = 0u; i < inst->operand_count(); ++i) {
+      indices.insert(i);
+    }
+
+    return indices;
+  };
+
+  RegisterHloInstructionExtension<AllocatingIndicesExtension>(
+      opcode, allocatingIndices);
+}
+REGISTER_HLO_OP_WITH_EXTENSIONS(kConvolution, Conv2DOp,
+                                RegisterConvolutionExtensions);
 
 class Conv2DReverseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(

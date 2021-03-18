@@ -17,8 +17,10 @@ limitations under the License.
 #include <popops/Gather.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
@@ -120,7 +122,16 @@ class GatherOp : public PoplarOpDef {
     return prog;
   }
 };
-REGISTER_HLO_OP(kGather, GatherOp);
+
+void RegisterGatherExtensions(HloOpcode opcode) {
+  auto allocatingIndices = [](HloInstruction*) {
+    return absl::flat_hash_set<int64>{0, 1};
+  };
+  RegisterHloInstructionExtension<AllocatingIndicesExtension>(
+      opcode, allocatingIndices);
+}
+REGISTER_HLO_OP_WITH_EXTENSIONS(kGather, GatherOp, RegisterGatherExtensions);
+
 }  // anonymous namespace
 }  // namespace poplarplugin
 }  // namespace xla
