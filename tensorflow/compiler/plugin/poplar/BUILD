@@ -4079,6 +4079,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/outside_compilation_scope_test.py"],
     enabled_backends = ["poplar"],
+    tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",

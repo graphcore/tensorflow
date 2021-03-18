@@ -334,6 +334,7 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
     ],
     shard_count = 10,
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
@@ -349,6 +350,7 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
     ],
     shard_count = 8,
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
@@ -407,6 +409,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
