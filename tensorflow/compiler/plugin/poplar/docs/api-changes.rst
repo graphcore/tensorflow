@@ -1,11 +1,36 @@
 API changes
 -----------
 
+Release 2.1
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.1.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+We have removed several items that have been deprecated for at least one
+release.
+
+Non-breaking changes
+____________________
+
+These changes are recommended.
+
+
+Release 2.0
+~~~~~~~~~~~
+
 The following changes have been made to the TensorFlow API in the Poplar SDK version 2.0.
 This may require you to change your code.
 
 Breaking changes
-~~~~~~~~~~~~~~~~
+________________
 
 .. warning::
 
@@ -94,7 +119,7 @@ The following deprecated namespace has been removed:
 
 
 Non-breaking changes
-~~~~~~~~~~~~~~~~~~~~
+____________________
 
 These changes are recommended.
 
