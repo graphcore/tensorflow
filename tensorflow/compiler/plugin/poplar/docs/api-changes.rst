@@ -22,6 +22,11 @@ ____________________
 
 These changes are recommended.
 
+Recompute suggestions deprecated
+''''''''''''''''''''''''''''''''
+
+The ``recompute`` and ``block_recompute`` utility ops have been deprecated and will be removed
+in release 2.2. Automatic recomputation of casts will remain.
 
 Release 2.0
 ~~~~~~~~~~~

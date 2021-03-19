@@ -23,6 +23,10 @@ namespace xla {
 
 namespace poplarplugin {
 
+// Return whether or not the given un-preprocessed Hlo module contains
+// any SuggestsRecompute instruction.
+bool UsesRecomputationSuggestions(const HloModule* module);
+
 /**
  * Where possible, apply the suggestions for recomputation by cloning the input
  * of all suggestion ops.

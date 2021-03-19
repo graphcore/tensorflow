@@ -159,6 +159,8 @@ def print_tensor(input, name=""):
   return gen_poputil_ops.ipu_print_tensor(input, tensor_name=name)
 
 
+@deprecation.deprecated(
+    None, "SuggestRecompute operation will be removed in release 2.2")
 def recompute(x, name=None):
   """Suggest to the IPU backend to recompute the given tensor.
 
@@ -173,6 +175,8 @@ def recompute(x, name=None):
   return gen_poputil_ops.ipu_suggest_recompute(x, name=name)
 
 
+@deprecation.deprecated(
+    None, "BlockRecompute operation will be removed in release 2.2")
 def block_recompute(x, name=None):
   """Block the recomputation of the given tensor.
 

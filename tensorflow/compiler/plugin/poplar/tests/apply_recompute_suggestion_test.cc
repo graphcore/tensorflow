@@ -175,6 +175,48 @@ ENTRY main {
   auto root = module->entry_computation()->root_instruction();
   EXPECT_TRUE(Match(root, h));
 }
+
+struct RecomputationSuggestionsTest : HloTestBase {
+  std::unique_ptr<VerifiedHloModule> MakeModule(const std::string& hlo) {
+    auto moduleResult = ParseAndReturnVerifiedModule(hlo);
+    return moduleResult.ConsumeValueOrDie();
+  }
+};
+
+const char* computation_with_recompute_suggestion =
+    R"(
+HloModule main
+
+ENTRY main {
+  a = f32[] parameter(0)
+  b = f32[] parameter(1)
+  c = f32[] parameter(2)
+  d = f32[] add(a, b)
+  e = f32[] custom-call(f32[] d), custom_call_target="SuggestRecompute", backend_config="{}"
+  ROOT f = f32[] add(e, c)
+}
+)";
+const char* computation_without_recompute_suggestion = R"(
+HloModule main
+
+ENTRY main {
+  a = f32[] parameter(0)
+  b = f32[] parameter(1)
+  c = f32[] parameter(2)
+  d = f32[] add(a, b)
+  ROOT f = f32[] add(d, c)
+}
+)";
+TEST_F(RecomputationSuggestionsTest, DetectsRecomputationInstruction) {
+  auto module_with_recomputation =
+      MakeModule(computation_with_recompute_suggestion);
+  ASSERT_TRUE(UsesRecomputationSuggestions(module_with_recomputation.get()));
+
+  auto module_without_recomputation =
+      MakeModule(computation_without_recompute_suggestion);
+  ASSERT_FALSE(
+      UsesRecomputationSuggestions(module_without_recomputation.get()));
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
