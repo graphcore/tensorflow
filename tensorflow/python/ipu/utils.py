@@ -1,0 +1,1636 @@
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# =============================================================================
+"""
+General utilities
+~~~~~~~~~~~~~~~~~
+"""
+
+import collections
+from enum import Enum
+import os
+import time
+import numpy as np
+
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+# Adds the enum SyntheticDataCategory into the scope so it can be imported from
+# this file. It is required for calling use_synthetic_data_for.
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import SyntheticDataCategory  # pylint: disable=W0611
+from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.driver import config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+# pylint: disable=unused-import
+# These imports are only here to make it easier for the Tensorflow Wheel users
+# to use these functions:
+# ```
+# from tensorflow.python import ipu
+# ...
+# ipu.utils.export_variables_from_live_session(...)
+# ```
+from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import (
+    export_variables_from_live_session, export_variables_from_live_model,
+    import_data_in_live_session, import_data_in_live_model)
+# pylint: enable=unused-import
+from tensorflow.compat.v1 import executing_eagerly
+from tensorflow.core.framework import attr_value_pb2
+from tensorflow.python.client import session as session_lib
+from tensorflow.python.distribute import values
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.util import deprecation
+from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import dataset_extractor
+
+
+class SelectionOrder(Enum):
+  """Depending on the communication pattern of the model, the order in
+  which the IPUs are selected and mapped to shards can impact the performance.
+
+  For example, given a model which executes on multiple IPUs:
+
+  .. code-block:: python
+
+    def sharded_graph(pa, pb, pc, pd):
+      with ipu.scopes.ipu_shard(0):
+        o1 = pa + pb
+      with ipu.scopes.ipu_shard(1):
+        o2 = o1 + pc
+      with ipu.scopes.ipu_shard(2):
+        o3 = o2 + pd
+        return o3
+
+  and a typical machine with 8 Graphcore C2 cards:
+
+  .. code-block:: none
+
+     _______               _______
+    |       |             |       |
+    |  14   |=============|  15   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  12   |=============|  13   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  10   |=============|  11   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   8   |=============|   9   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   6   |=============|   7   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   4   |=============|   5   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   2   |=============|   3   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   0   |=============|   1   |
+    |_______|             |_______|
+
+  (where each numbered square represents an IPU with the given device ID and the
+  == and || connections represent IPUs being directly connected via IPU-Links)
+
+  we can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
+  and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 2 in that order, then the
+  communication between shards 1 and 2 would not have a direct connection via an
+  IPU-Link and would have to perform a "hop" via an IPU.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 3 in that order, then the
+  communication between shards 1 and 2 would have a direct connection via an
+  IPU-Link which will reduce the communication cost.
+
+  This Enum class is used to control the order in which the IPUs are selected.
+  Currently, the following IPU selection orderings are supported:
+
+  * `AUTO`: automatically try and select the best selection given the network.
+  * `ZIGZAG`: follow the natural ordering of IPUs. In the above example, the
+    IPUs would be selected in the following order:
+    `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`.
+  * `SNAKE`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after. In the above example,
+    the IPUs would be selected in the following order:
+    `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
+  * `HOOF`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after and the last and first
+    shard are on the same C2 cards. In the above example, the IPUs would be
+    selected in the following order:
+    `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
+
+  The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
+  pipelined models.
+  """
+  AUTO = config_pb2.IpuSelectionOrder.Value("AUTO")
+  ZIGZAG = config_pb2.IpuSelectionOrder.Value("ZIGZAG")
+  SNAKE = config_pb2.IpuSelectionOrder.Value("SNAKE")
+  HOOF = config_pb2.IpuSelectionOrder.Value("HOOF")
+
+
+class ExecutionProfileType(Enum):
+  """The execution profile type indicates the desired information in the
+  execution profile.
+
+  * `NO_PROFILE` indicates that there should be no execution profiling.
+  * `DEVICE_PROFILE` indicates that the execution profile should contain only
+    device wide events.
+  * `IPU_PROFILE` indicates that the profile should contain IPU level
+    execution events.
+  * `TILE_PROFILE` indicates that the profile should contain Tile level
+    execution events.
+  """
+  NO_PROFILE = config_pb2.IpuExecutionProfileType.Value("NO_PROFILE")
+  DEVICE_PROFILE = config_pb2.IpuExecutionProfileType.Value("DEVICE_PROFILE")
+  IPU_PROFILE = config_pb2.IpuExecutionProfileType.Value("IPU_PROFILE")
+  TILE_PROFILE = config_pb2.IpuExecutionProfileType.Value("TILE_PROFILE")
+
+
+class DeviceConnectionType(Enum):
+  """Enumeration to describe the mechanism used to attach to the Poplar
+  device.
+
+  * `ALWAYS` indicates that the system will attach when configuring the
+    device.
+  * `ON_DEMAND` will defer connection to when the IPU is needed.
+  * `PRE_COMPILE` will never try to attach to a device and anything which is
+    meant to be executed on the device will return all zeros. Used to
+    pre-compile Poplar programs on machines without IPUs.
+  * `NEVER` will never try to attach to a device.
+  """
+  ALWAYS = config_pb2.IpuDeviceConnectionType.ALWAYS
+  ON_DEMAND = config_pb2.IpuDeviceConnectionType.ON_DEMAND
+  PRE_COMPILE = config_pb2.IpuDeviceConnectionType.PRE_COMPILE
+  NEVER = config_pb2.IpuDeviceConnectionType.NEVER
+
+
+def configure_ipu_system(config, device="cpu"):
+  """Configure an IPU system.  Passing an IpuOptions protobuf created by the
+  ``create_ipu_config`` function.
+
+  Args:
+    config: An IpuOptions configuration protobuf
+    device: The CPU device which is local to the IPU hardware
+
+  Returns:
+    None
+  """
+  if not isinstance(config, config_pb2.IpuOptions):
+    raise Exception("`config` must be an IpuOptions instance")
+
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(device):
+      cfg_op = gen_ipu_ops.ipu_configure_hardware(config.SerializeToString())
+
+  with session_lib.Session(graph=g) as sess:
+    sess.run(cfg_op)
+
+
+def get_ipu_config(session=None):
+  """Get the configuration of an IPU system.
+
+  Args:
+    session: An optional session on which to execute.
+
+  Returns:
+    A list of IpuOption instances, one for each PoplarExecutor.
+  """
+  configurations = None
+
+  # Get the serialized output.
+  if executing_eagerly():
+    assert not session, "No session is required for eager execution."
+    configurations = gen_ipu_ops.ipu_get_configuration().numpy()
+  else:
+    s = session if session else session_lib.Session()
+    configurations = s.run(gen_ipu_ops.ipu_get_configuration())
+
+  # Deserialize and determine if a valid config exists,
+  # i.e. user has succesfully called ipu_configure_hardware.
+  deserialized = []
+  valid = False
+  for conf in configurations:
+    # Deserialize.
+    opt = IpuOptions()
+    opt.ParseFromString(conf)
+    deserialized.append(opt)
+
+    valid |= len(opt.device_config) > 0
+
+  if not valid:
+    raise RuntimeError("No IPU devices configured.")
+
+  return deserialized
+
+
+def get_num_of_ipus_in_device(ipu_device, device="cpu"):
+  """Get the number of physical IPUs
+
+  Args:
+    ipu_device: The IPU device for which to get the number of devices for.
+    device: The CPU device which is local to the IPU hardware.
+
+  Returns:
+    A number of physical IPUs configured for a particular TF device.
+  """
+
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(device):
+      cfg_op = gen_ipu_ops.ipu_get_num_devices(ipu_device)
+
+  with session_lib.Session(graph=g) as sess:
+    return sess.run(cfg_op)
+
+
+def running_on_ipu_model():
+  """ Check if XLA is configured to run on the ipu model.
+
+  Returns:
+    True if XLA is configured to run on the ipu model.
+    False if XLA is configured to run on real hardware.
+  """
+  return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
+
+
+@deprecation.deprecated_args(
+    None,
+    "disable_graph_convolution_caching is deprecated and it has no effect. "
+    "Use disable_graph_outlining instead.",
+    "disable_graph_convolution_caching")
+def create_ipu_config(profiling=False,
+                      enable_ipu_events=False,
+                      use_poplar_text_report=False,
+                      use_poplar_cbor_report=False,
+                      profile_execution=None,
+                      enable_poplar_serialized_graph=False,
+                      report_every_nth_execution=0,
+                      max_report_size=0x10000000,
+                      report_directory="",
+                      scheduler_selection="",
+                      always_rearrange_copies_on_the_host=False,
+                      merge_infeed_io_copies=False,
+                      disable_graph_convolution_caching=False,
+                      disable_graph_outlining=False,
+                      max_scheduler_lookahead_depth=5,
+                      max_scheduler_search_space_size=64,
+                      prefetch_data_streams=True,
+                      selection_order=None,
+                      enable_experimental_remote_buffer_embedding=False):
+  """Create an empty IPU session configuration structure.
+
+  Args:
+    profiling: Enable compilation reports, and IPU trace events.
+    enable_ipu_events: Enable IPU trace events without Poplar reports.
+    use_poplar_text_report: Enable the Poplar textual report summary.
+    use_poplar_cbor_report: Enable the Poplar CBOR reports.
+    profile_execution: Include Poplar execution profiles in the execution
+      events. Can only be enabled if `profiling` is also enabled. If set, can be
+      `True`, 'False`, or a member of the `ExecutionProfileType` enumeration.
+      A `True` value indicates `ExecutionProfileType.DEVICE_PROFILE`.
+    enable_poplar_serialized_graph: Create the Poplar serialized graph and
+      include in the IPU compilation trace events.
+    report_every_nth_execution: Only produce an execution report on every Nth
+      execution.  0 = One report only.
+    max_report_size: The maximum size of Poplar profiles to include in the
+      profile events.
+    report_directory: When set, reports will be written to files in this
+      directory, instead of being written into the events.  The events will
+      contain the full paths of the report files.
+    scheduler_selection: When set, this forces the compiler to use a specific
+      scheduler when ordering the instructions.  See the documentation for a
+      list of valid schedulers.
+    always_rearrange_copies_on_the_host: *** Experimental Flag ***
+      The data which is streamed to/from the device might be stored in different
+      layouts on the device and on the host. If that is the case the
+      rearrangement is performed on the device by default. By enabling this
+      option the rearrangement will be performed on the host at the expense of
+      latency.
+    merge_infeed_io_copies: When true, this flag will merge the streamed
+      host->device input copies into one larger copy.  This may reduce the time
+      to copy data from the host, at the expense of increasing the live tensor
+      memory on the device.
+    disable_graph_outlining: By default, some operations, such as matrix
+      multiplications, which occur in the graph multiple times but with
+      different input tensors might be optimised to reduce the total code size
+      of the graph at the expense of the execution time. Setting this flag will
+      disable these optimisations.
+    max_scheduler_lookahead_depth: The maximum distance to look into the future
+      when considering valid schedules.
+    max_scheduler_search_space_size: The maximum number of nodes to consider
+      when building the tree of future schedules.
+    prefetch_data_streams: When set to true, the prefetching of data for data
+      streams on the host will be overlapped with execution on the IPU.
+    selection_order: the order in which IPUs are selected and mapped to physical
+      IPU devices when using a multi-IPU devices (see `SelectionOrder`). When
+      not specified, then automatic selection order is used, otherwise an
+      instance of `SelectionOrder`.
+    enable_experimental_remote_buffer_embedding: When set to true,
+      `HostEmbedding` will make use of Poplar remote buffers.
+
+  Returns:
+    An IpuOptions configuration protobuf, suitable for passing to
+    ``configure_ipu_system``
+  """
+  if profiling and enable_ipu_events:
+    raise Exception(
+        "`profiling` and `enable_ipu_events` are mutually exclusive")
+
+  selection_order = selection_order if selection_order else SelectionOrder.AUTO
+  profile_execution = profile_execution if profile_execution \
+                                        else ExecutionProfileType.NO_PROFILE
+
+  if isinstance(profile_execution, (np.bool_, bool)):
+    if profile_execution:
+      profile_execution = ExecutionProfileType.DEVICE_PROFILE
+    else:
+      profile_execution = ExecutionProfileType.NO_PROFILE
+
+  if (profile_execution != ExecutionProfileType.NO_PROFILE and not profiling):
+    raise Exception("`profiling` is required when `profile_execution` is set")
+
+  if not isinstance(profile_execution, ExecutionProfileType):
+    raise Exception("`profile_execution` must be True, False, or an "
+                    "ExecutionProfileType instance")
+
+  opts = config_pb2.IpuOptions()
+
+  # Default initialize IpuOptions() attributes here.
+  opts.creator_id = config_pb2.IpuOptionsCreator.IPU_UTILS
+  opts.ipu_model_config.compile_ipu_code = True
+  opts.ipu_model_config.ipu_model_version = "ipu2"
+  opts.enable_multi_slice_combiner = False
+  opts.enable_matmul_combiner = False
+  opts.disable_gather_simplifier = False
+  opts.device_connection_type = DeviceConnectionType.ALWAYS.value
+  opts.speed_size_config.allow_recompute = False
+  opts.remote_buffer_merging_mode = threestate_pb2.THREESTATE_OFF
+
+  # Configure IpuOptions according to the passed arguments.
+  opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
+  opts.profiling.enable_compilation_trace = profiling
+  opts.profiling.enable_io_trace = profiling
+  opts.profiling.execution_trace_type = profile_execution.value
+  opts.profiling.enable_poplar_reports_text = use_poplar_text_report
+  opts.profiling.enable_poplar_reports_cbor = use_poplar_cbor_report
+  opts.profiling.enable_poplar_graph = enable_poplar_serialized_graph
+  opts.profiling.report_every_nth_execution = report_every_nth_execution
+  opts.profiling.max_report_size = max_report_size
+  opts.profiling.report_directory = report_directory
+
+  opts.speed_size_config.always_rearrange_copies_on_the_host = \
+      always_rearrange_copies_on_the_host
+  opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
+  opts.speed_size_config.disable_graph_outlining = \
+      disable_graph_outlining
+  opts.speed_size_config.scheduler_selection = scheduler_selection
+
+  opts.minimum_remote_tensor_size = 128
+
+  opts.max_scheduler_lookahead_depth = max_scheduler_lookahead_depth
+  opts.max_scheduler_search_space_size = max_scheduler_search_space_size
+
+  opts.prefetch_data_streams = prefetch_data_streams
+  opts.selection_order = selection_order.value
+
+  opts.verified_transfers.enabled = False
+  opts = set_verification_options(opts, VerificationOptions())
+
+  opts.enable_experimental_remote_buffer_embedding = \
+      enable_experimental_remote_buffer_embedding
+
+  return opts
+
+
+def set_serialization_options(opts, output_folder=""):
+  """ Enable / disable the serialization to disk of the compiled executables.
+
+  .. code-block:: python
+
+      # Create a device that will save to disk all the compiled executables.
+      opts = create_ipu_config()
+      opts = set_serialization_options(opts,
+                                      output_folder="/tmp/my_network")
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    output_folder: Where to save the compiled executables.
+                   Set to "" to disable serialization.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.serialization_folder = output_folder
+  return opts
+
+
+def set_optimization_options(opts,
+                             combine_embedding_lookups=False,
+                             combine_matmuls=False,
+                             max_cross_replica_sum_buffer_size=0,
+                             max_reduce_scatter_buffer_size=0,
+                             max_inter_ipu_copies_buffer_size=0,
+                             max_send_recv_cluster_size=0,
+                             minimum_remote_tensor_size=128,
+                             merge_remote_buffers=False,
+                             gather_simplifier=True,
+                             triangular_solve_expander_block_size=0,
+                             cholesky_block_size=0,
+                             enable_fast_math=False):
+  """Set the IPU options related to performance / optimizations.
+
+  .. code-block:: python
+
+      # Create a device with fusion for multiSlices sharing the same input
+      # enabled.
+      opts = create_ipu_config()
+      opts = set_optimization_options(opts,
+                                      combine_embedding_lookups=True)
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    combine_embedding_lookups: Fuse embedding lookups on the same tensor. This
+      might improve performance but increase memory usage.
+    combine_matmuls: Fuse matmul operations if they share the same weights or
+      the same input.
+    max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
+      waiting before a cross replica sum op is scheduled.
+    max_reduce_scatter_buffer_size: The maximum number of bytes that can be
+      waiting before a reduce scatter op is scheduled.
+    max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
+      waiting before a inter IPU copy between IPUs is scheduled.
+    max_send_recv_cluster_size: The maximum number of bytes that can be waiting
+      before a cluster of send/recv instructions to/from the host is scheduled.
+      These are lowered to stream copies that can be merged by Poplar.
+    minimum_remote_tensor_size: The minimum size (in bytes) a tensor has to be
+      in order to be consider for being stored in remote memory.
+    merge_remote_buffers: Whether to merge compatible remote buffers. Merging
+      of remote buffers can allow for more code re-use if the only difference
+      between computations are the remote buffers being accessed. One of:
+        - False: Do not attempt to merge any remote buffers.
+        - True: Attempt to merge all compatible remote buffers.
+        - None: Merge remote buffers only when it is considered beneficial
+          according to a simple heuristic predicting its possibility to enable
+          code re-use (the default).
+
+    gather_simplifier: Will enable more aggressive optimisations for embedding
+      lookups.
+    triangular_solve_expander_block_size: Defines size for triangular solver
+      expander blocks. The processing within each block is performed on a
+      single tile. The control code for performing computations over blocks
+      are unrolled on the device. For a matrix of rank ``N`` and block size
+      ``B``, there are ``log2(N/B)`` iterations of the control code. The choice
+      of this parameter therefore has to balance between the amount of data in
+      a tile (lower value is better, gives better parallelism) and the amount
+      of control code (larger value is better, less control code). A value of 0
+      selects an implementation defined default.
+    cholesky_block_size: Defines the block size for the Cholesky factoriser.
+      The processing within each block is performed on a single tile. The
+      control code for performing computations over blocks are unrolled on the
+      device. For a matrix of rank ``N`` and block size ``B``, there are
+      ``N/B`` iterations of the control code. The choice of this parameter
+      therefore has to balance between the amount of data in a tile (lower
+      value is better, gives better parallelism) and the amount of control code
+      (larger value is better, less control code). A value of 0 selects an
+      implementation defined default.
+    enable_fast_math: Enables optimizations which allow arbitrary reassociations
+      and transformations of mathematical operations with no accuracy
+      guarantees. Enabling this option can result in incorrect output for
+      programs that depend on an exact implementation of IEEE for math
+      functions. It may, however, yield faster code for programs that do not
+      require the guarantees of these specifications.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  def bool_to_three_state(value):
+    if value is None:
+      return threestate_pb2.THREESTATE_UNDEFINED
+    elif value:
+      return threestate_pb2.THREESTATE_ON
+    return threestate_pb2.THREESTATE_OFF
+
+  # Internally embedding lookups are implemented using multiSlice operations.
+  opts.enable_multi_slice_combiner = combine_embedding_lookups
+  opts.enable_matmul_combiner = combine_matmuls
+  opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
+  opts.max_reduce_scatter_buffer_size = max_reduce_scatter_buffer_size
+  opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  opts.max_send_recv_cluster_size = max_send_recv_cluster_size
+  opts.minimum_remote_tensor_size = minimum_remote_tensor_size
+  opts.remote_buffer_merging_mode = bool_to_three_state(merge_remote_buffers)
+  opts.disable_gather_simplifier = not gather_simplifier
+  opts.triangular_solve_expander_block_size = \
+    triangular_solve_expander_block_size
+  opts.cholesky_block_size = cholesky_block_size
+  opts.enable_fast_math = enable_fast_math
+
+  return opts
+
+
+def set_norm_options(opts, use_stable_statistics=False):
+  """Set the IPU options related to norms.
+
+  Args:
+    use_stable_statistics: If True, computes the mean first and subtracts
+      the activations by it before computing the variance. The
+      implementation with this flag set to True is slower than when set
+      to False.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.use_stable_norm_statistics = use_stable_statistics
+
+  return opts
+
+
+def set_transfer_options(opts, use_verified_transfers=False):
+  """Set the IPU options related to Poplar data transfers.
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    use_verified_transfers: If True, use Poplar's verified transfers.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.verified_transfers.enabled = use_verified_transfers
+
+  return opts
+
+
+class KeyId:
+  def __init__(self, key=0, start_id=-1):
+    self.key = key
+    self.start_id = start_id
+
+
+class VerificationOptions:
+  """Store pairs of key / id to use for each type of data used in the graph.
+  Does nothing unless verified transfers have been enabled by calling
+  `set_transfer_options(opts, use_verified_transfers=True)`
+  and an instance of this class has been set by calling
+  `set_verification_options`:
+
+  .. code-block:: python
+
+    o = VerificationOptions()
+    o.inputs.key = 1
+    o.infeeds["infeed"].key = 3
+    set_verification_options(opts, o)
+
+  """
+  def __init__(self):
+    self.inputs = KeyId()
+    self.input_parameters = KeyId()
+    self.outputs = KeyId()
+    self.output_parameters = KeyId()
+    self.infeeds = collections.defaultdict(KeyId)
+    self.outfeeds = collections.defaultdict(KeyId)
+    self.checkpoint_in = KeyId(0, 0)
+    self.checkpoint_out = KeyId(0, 0)
+
+
+def set_verification_options(opts, verification_options):
+  """Set the pairs or key / id to use for each type of data used in the graph
+     when verified transfers are enabled.
+
+  .. code-block:: python
+
+      # Create a device which will use verified transfers with different keys.
+      opts = create_ipu_config()
+      opts = set_transfer_options(opts, use_verified_transfers=True)
+      o = VerificationOptions()
+      o.input_parameters = KeyId(1)
+      o.infeeds["training_feed"] = KeyId(2)
+      opts = set_verification_options(opts, o)
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    verification_options: a VerificationOptions object that contains
+      the keys / ids to use.
+  """
+  if not isinstance(verification_options, VerificationOptions):
+    raise Exception(
+        "`verification_options` must be of type VerificationOptions")
+
+  def _cp_key_and_id(src, dst):
+    dst.key = src.key
+    dst.start_id = src.start_id
+
+  for attr in [
+      "inputs", "input_parameters", "outputs", "output_parameters",
+      "checkpoint_in", "checkpoint_out"
+  ]:
+    _cp_key_and_id(getattr(verification_options, attr),
+                   getattr(opts.verified_transfers, attr))
+
+  for name, options in verification_options.infeeds.items():
+    _cp_key_and_id(options, opts.verified_transfers.infeeds[name])
+
+  for name, options in verification_options.outfeeds.items():
+    _cp_key_and_id(options, opts.verified_transfers.outfeeds[name])
+
+  return opts
+
+
+def set_compilation_options(opts, compilation_options=None):
+  """Set the IPU compilation options for the session.
+
+  .. code-block:: python
+
+      # Create a device with debug execution profile flag set to "compute_sets"
+      opts = create_ipu_config()
+      opts = set_compilation_options(opts,
+          compilation_options={"debug.instrument": "true",
+                               "debug.allowOutOfMemory": "true"})
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    compilation_options: A dictionary of Poplar compilation option flags to be
+      sent to the executor.
+
+  Returns:
+    The IpuOptions configuration protobuf, with engine compilation options set.
+  """
+  if compilation_options:
+    if not isinstance(compilation_options, dict):
+      raise Exception("`compilation_options` must be a dictionary")
+
+    for (option_name, value) in compilation_options.items():
+      compilation_option = opts.compilation_options.add()
+      compilation_option.option = option_name
+      compilation_option.value = value
+
+  return opts
+
+
+def set_convolution_options(opts, convolution_options=None):
+  """Set the IPU convolution options for the session.
+
+  .. code-block:: python
+
+      # Set "availableMemoryProportion" flag to "0.1"
+      opts = create_ipu_config()
+      opts = set_convolution_options(opts,
+          convolution_options={"availableMemoryProportion": "0.1"})
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    convolution_options: A dictionary of Poplar option flags for
+      convolutions. The "availableMemoryProportion" flag indicates the
+      proportion of tile memory to be made available as
+      temporary memory for convolutions (float between 0 and 1.0).
+      Less temporary memory will generally result in a convolution that
+      takes more cycles to complete. However, because always live memory
+      (such as control code and vertex state) is not tracked when planning it,
+      a convolution using less temporary memory may use more memory overall,
+      due to an increase of always live memory.
+
+  Returns:
+    The IpuOptions configuration protobuf, with convolution options set.
+  """
+  if convolution_options:
+    if not isinstance(convolution_options, dict):
+      raise Exception("`convolution_options` must be a dictionary")
+
+    for (option_name, value) in convolution_options.items():
+      opt = opts.convolution_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  return opts
+
+
+def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
+  """Set the IPU matrix multiplication options for the session.
+
+  .. code-block:: python
+
+      # Set "availableMemoryProportion" flag to "0.5"
+      opts = create_ipu_config()
+      opts = set_matmul_options(opts,
+          matmul_options={"availableMemoryProportion": "0.5"})
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    matmul_options: A dictionary containing the Poplar option flag
+      "availableMemoryProportion" for the matrix multiplication operations.
+      It indicates the proportion of tile memory to be made available as
+      temporary memory for the matrix multiplications (float between 0 and 1.0).
+      Less temporary memory will generally result in a multiplication that
+      takes more cycles to complete. However, because always live memory
+      (like code and vertex state) is not tracked when planning it,
+      a multiplication using less temporary memory may use more memory overall,
+      due to an increase of always live memory.
+    clear_pass_type: When set to True, the Pass type will not
+      be set in the options passed to the Poplar operation.
+
+  Returns:
+    The IpuOptions configuration protobuf, with matmul options set.
+  """
+  if matmul_options:
+    if not isinstance(matmul_options, dict):
+      raise Exception("`matmul_options` must be a dictionary")
+
+    for (option_name, value) in matmul_options.items():
+      opt = opts.matmul_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  opts.clear_matmul_pass_type = clear_pass_type
+
+  return opts
+
+
+def set_pooling_options(opts, pooling_options=None):
+  """Set the IPU pooling compilation options for the session.
+
+  .. code-block:: python
+
+      # Set "poolUseIntrospectiveMapping" flag to "false"
+      opts = create_ipu_config()
+      opts = set_pooling_options(opts,
+          pooling_options={"poolUseIntrospectiveMapping": "false"})
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    pooling_options: A dictionary of Poplar option flags for the pooling
+      operation.
+
+  Returns:
+    The IpuOptions configuration protobuf, with pooling options set.
+  """
+  if pooling_options:
+    if not isinstance(pooling_options, dict):
+      raise Exception("`pooling_options` must be a dictionary")
+
+    for (option_name, value) in pooling_options.items():
+      opt = opts.pooling_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  return opts
+
+
+def set_report_options(opts, graph_options=None, execution_options=None):
+  """Set the options used to influence Poplar graph and execution reports
+     generation.
+
+
+  .. code-block:: python
+
+      opts = create_ipu_config()
+      opts = set_report_options(opts,
+          graph_options={"graphOptions": "false"},
+          execution_options={"executionOptions": "false"})
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    graph_options: A dictionary of Poplar option flags for the graph report
+      generation.
+    execution_options: A dictionary of Poplar option flags for the execution
+      report generation.
+
+  Returns:
+    The IpuOptions configuration protobuf, with convolution options set.
+  """
+
+  if graph_options:
+    if not isinstance(graph_options, dict):
+      raise Exception("`graph_options` must be a dictionary")
+
+    for (option_name, value) in graph_options.items():
+      opt = opts.profiling.graph_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  if execution_options:
+    if not isinstance(execution_options, dict):
+      raise Exception("`execution_options` must be a dictionary")
+
+    for (option_name, value) in execution_options.items():
+      opt = opts.profiling.execution_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  return opts
+
+
+def set_ipu_model_options(opts,
+                          compile_ipu_code=True,
+                          tiles_per_ipu=None,
+                          ipu_model_version=None):
+  """Set the IPU Model options.
+
+  Args:
+    compile_ipu_code: Whether or not to actually compile real IPU code for
+      modelling.
+    tiles_per_ipu: The number of tiles per IPU Model device.
+    ipu_module_version: Specify the ipu version to be used by the IPU Model.
+      Options are "ipu1" or "ipu2", `None` defaults to "ipu2".
+
+  Returns:
+    The IpuOptions configuration protobuf, with IPU model options set.
+  """
+  opts.ipu_model_config.compile_ipu_code = compile_ipu_code
+  if tiles_per_ipu:
+    opts.ipu_model_config.tiles_per_ipu = tiles_per_ipu
+  if ipu_model_version is None:
+    ipu_model_version = "ipu2"
+  opts.ipu_model_config.ipu_model_version = ipu_model_version
+
+  return opts
+
+
+def set_recomputation_options(opts, allow_recompute=True):  # pylint: disable=unused-argument
+  """Set re-computation options.
+
+  Args:
+    allow_recompute: Whether or not to re-compute instructions during training.
+      If this is enabled then we will attempt to pattern match
+      instructions/pipeline stages in the forward pass and recompute them in the
+      backward pass to avoid having to preserve activations which increase the
+      maximum memory liveness. Enabling this option can reduce memory usage at
+      the expense of extra computation. Any stateful operations cannot be
+      recomputed.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+
+  opts.speed_size_config.allow_recompute = allow_recompute
+
+  return opts
+
+
+def set_floating_point_behaviour_options(opts,
+                                         inv=True,
+                                         div0=True,
+                                         oflo=True,
+                                         esr=True,
+                                         nanoo=True):
+  """Set the IPU floating point control behaviour bits
+
+  See the Poplar API documentation for poplar::FloatingPointBehaviour.
+
+  Args:
+    inv: If true a floating point invalid operation (defined by IEEE 754)
+      will cause an exception.
+    div0: If true a floating point divide by zero operation will cause an
+      exception.
+    oflo: If true a floating point overflow will cause an exception.
+    esr: Enable stochastic rounding.
+    nanoo: Enable Not-a-Number on overflow mode.
+  """
+  opts.floating_point_behaviour.flags_set = True
+  opts.floating_point_behaviour.inv = inv
+  opts.floating_point_behaviour.div0 = div0
+  opts.floating_point_behaviour.oflo = oflo
+  opts.floating_point_behaviour.esr = esr
+  opts.floating_point_behaviour.nanoo = nanoo
+
+  return opts
+
+
+def set_io_tile_options(opts, num_io_tiles, place_ops_on_io_tiles=None):
+  """Set the number of tiles reserved for I/O per IPU.
+
+  Args:
+    num_io_tiles: Number of tiles to reserve I/O.
+    place_ops_on_io_tiles: Whether to place TensorFlow I/O operations on the
+      I/O tiles. The value `None` leaves the current value unchanged.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.num_io_tiles = num_io_tiles
+
+  if place_ops_on_io_tiles is not None:
+    if place_ops_on_io_tiles and num_io_tiles == 0:
+      raise ValueError("Cannot place ops on I/O tiles when num_io_tiles == 0")
+    opts.place_ops_on_io_tiles = place_ops_on_io_tiles
+
+  return opts
+
+
+def set_gcl_options(opts, gcl_options=None):
+  """Set the IPU options for the Graphcore Communication Library.
+
+  Args:
+    gcl_options: A dictionary with options for configuring the GCL collective
+      operations.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+
+  if gcl_options:
+    if not isinstance(gcl_options, dict):
+      raise TypeError("`gcl_options` must be a dictionary")
+
+    for (option_name, value) in gcl_options.items():
+      opt = opts.gcl_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  return opts
+
+
+def auto_select_ipus(opts, num_ipus):
+  """Configure the IPUs to be used by the session.
+
+  The configuration describes a system consisting of multiple TensorFlow
+  devices, each with control of one of more IPUs. The devices will be labeled
+  ``/device:IPU:0``, ``/device:IPU:1`` and so on.
+
+  Each device can control a specific number of IPUs, given by the ``num_ipus``
+  parameter. The system will automatically select IPU configurations from the
+  available IPUs, where they match the desired number of IPUs.
+
+  Examples:
+
+
+  .. code-block:: python
+
+    # Create a single device, with one IPU
+    opts = create_ipu_config()
+    opts = auto_select_ipus(opts, num_ipus=1)
+    ipu.utils.configure_ipu_system(opts)
+    with tf.Session() as s:
+      ...
+
+  .. code-block:: python
+
+    # Create two devices, with 2 IPUs per device.
+    opts = create_ipu_config()
+    opts = auto_select_ipus(opts, num_ipus=[2,2])
+    ipu.utils.configure_ipu_system(opts)
+    with tf.Session() as s:
+      ...
+
+  .. code-block:: python
+
+    # Create two devices, with 1 IPU in the first device and 2 IPUs
+    # in the second device.
+    opts = create_ipu_config()
+    opts = auto_select_ipus(opts, num_ipus=[1,2])
+    ipu.utils.configure_ipu_system(opts)
+    with tf.Session() as s:
+      ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    num_ipus: List of IPUs per TensorFlow device
+
+  Returns:
+    The IpuOptions configuration protobuf, configured for auto-selecting a set
+    of IPU devices.
+  """
+  if opts.device_config:
+    raise Exception("IPU devices have already been configured.")
+
+  if not isinstance(num_ipus, (int, list, tuple)):
+    raise Exception("`num_ipus` must be an integer, list or tuple.")
+
+  if isinstance(num_ipus, int):
+    dev = opts.device_config.add()
+    dev.auto_count = num_ipus
+  else:
+    for n in num_ipus:
+      dev = opts.device_config.add()
+      dev.auto_count = n
+
+  return opts
+
+
+def select_ipus(opts, indices):
+  """Configure the IPUs to be used by the session.
+
+  The configuration describes a system consisting of multiple TensorFlow
+  devices, each with control of one of more IPUs. The TensorFlow devices will be
+  labeled ``/device:IPU:0``, ``/device:IPU:1`` and so on.
+
+  Each TensorFlow device uses a specific configuration consisting of one or more
+  IPUs from the list of devices.  These can be found by running the Graphcore
+  utility ``gc-info -l``.  For instance, the following listing shows the device
+  configurations available on a system with 16 IPUs.
+
+  .. code-block:: shell
+
+      user@host:~$ gc-info -l
+      Graphcore device listing:
+
+      -+- Id:  [0], type:      [PCIe], PCI Domain: [0000:1a:00.0]
+      -+- Id:  [1], type:      [PCIe], PCI Domain: [0000:1b:00.0]
+      -+- Id:  [2], type:      [PCIe], PCI Domain: [0000:23:00.0]
+      -+- Id:  [3], type:      [PCIe], PCI Domain: [0000:24:00.0]
+      -+- Id:  [4], type:      [PCIe], PCI Domain: [0000:3d:00.0]
+      -+- Id:  [5], type:      [PCIe], PCI Domain: [0000:3e:00.0]
+      -+- Id:  [6], type:      [PCIe], PCI Domain: [0000:43:00.0]
+      -+- Id:  [7], type:      [PCIe], PCI Domain: [0000:44:00.0]
+      -+- Id:  [8], type:      [PCIe], PCI Domain: [0000:8b:00.0]
+      -+- Id:  [9], type:      [PCIe], PCI Domain: [0000:8c:00.0]
+      -+- Id: [10], type:      [PCIe], PCI Domain: [0000:8e:00.0]
+      -+- Id: [11], type:      [PCIe], PCI Domain: [0000:8f:00.0]
+      -+- Id: [12], type:      [PCIe], PCI Domain: [0000:b8:00.0]
+      -+- Id: [13], type:      [PCIe], PCI Domain: [0000:b9:00.0]
+      -+- Id: [14], type:      [PCIe], PCI Domain: [0000:ba:00.0]
+      -+- Id: [15], type:      [PCIe], PCI Domain: [0000:bb:00.0]
+      -+- Id: [16], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      -+- Id: [17], type: [Multi IPU]
+      |--- PCIe Id:  [4], DNC Id: [0], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:43:00.0]
+      -+- Id: [18], type: [Multi IPU]
+      |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+      -+- Id: [19], type: [Multi IPU]
+      |--- PCIe Id:  [2], DNC Id: [0], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [1], PCI Domain: [0000:1a:00.0]
+      -+- Id: [20], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      -+- Id: [21], type: [Multi IPU]
+      |--- PCIe Id: [12], DNC Id: [0], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [1], PCI Domain: [0000:ba:00.0]
+      -+- Id: [22], type: [Multi IPU]
+      |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+      -+- Id: [23], type: [Multi IPU]
+      |--- PCIe Id: [10], DNC Id: [0], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [1], PCI Domain: [0000:8b:00.0]
+      -+- Id: [24], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      -+- Id: [25], type: [Multi IPU]
+      |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [2], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [3], PCI Domain: [0000:1a:00.0]
+      -+- Id: [26], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+      -+- Id: [27], type: [Multi IPU]
+      |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [2], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [3], PCI Domain: [0000:8b:00.0]
+      -+- Id: [28], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+      -+- Id: [29], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+      |--- PCIe Id:  [9], DNC Id: [4], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [5], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [6], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [7], PCI Domain: [0000:8b:00.0]
+      -+- Id: [30], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+      |--- PCIe Id: [13], DNC Id: [8], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [9], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [10], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [11], PCI Domain: [0000:ba:00.0]
+      |--- PCIe Id:  [9], DNC Id: [12], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [13], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [14], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [15], PCI Domain: [0000:8b:00.0]
+
+  Examples based on the listing above:
+
+  .. code-block:: python
+
+      # Create a single device with 1 IPU at PCI address 0000:1a:00.0 by using
+      # IPU configuration index 0
+      opts = create_ipu_config()
+      opts = select_ipus(opts, indices=[0])
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  .. code-block:: python
+
+      # Create a single device with 1 IPU at PCI address 0000:8b:00.0 by using
+      # IPU configuration index 8
+      opts = create_ipu_config()
+      opts = select_ipus(opts, indices=[8])
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  .. code-block:: python
+
+      # Create two TensorFlow devices, with one IPU each, being devices at
+      # indices 0 and 1
+      opts = create_ipu_config()
+      opts = select_ipus(opts, indices=[0, 1])
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  .. code-block:: python
+
+      # Create two TensorFlow devices, with four IPUs each. The device
+      # configurations at indices 24 (0000:3e:00.0, 0000:44:00.0, 0000:3d:00.0,
+      # 000:43:00.0) and 25 (0000:24:00.0, 0000:1b:00.0, 0000:23:00.0,
+      # 00:1a:00.0)
+      opts = create_ipu_config()
+      opts = select_ipus(opts, indices=[24, 25])
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  .. code-block:: python
+
+      # Create four TensorFlow devices each with one IPU, at addresses
+      # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
+      opts = create_ipu_config()
+      opts = select_ipus(opts, indices=[0, 1, 2, 3])
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    indices: List of IPU configuration indices.
+  Returns:
+    The IpuOptions configuration protobuf, with a number of devices selected by
+    IPU configuration index.
+  """
+
+  if opts.device_config:
+    raise Exception("IPU devices have already been configured.")
+
+  if not isinstance(indices, (list, tuple)):
+    raise Exception("`indices` must be a list or tuple.")
+
+  if len(set(indices)) != len(indices):
+    raise Exception("All device indices in `indices` must be unique.")
+
+  for i in indices:
+    dev = opts.device_config.add()
+    dev.cfg_index = i
+
+  return opts
+
+
+def set_ipu_connection_type(opts,
+                            connection_type=None,
+                            ipu_version=None,
+                            enable_remote_buffers=False):
+  """ Configure when to attach to the device. For example, you can use
+      this to compile and cache a program without attaching to an IPU,
+      and then later run on a real IPU device without recompiling.
+      Setting the connection type doesn't impact the ability to profile
+      a model.
+
+  .. code-block:: python
+
+      # Compile without attaching to the device.
+      opts = create_ipu_config()
+      opts = set_ipu_connection_type(opts,
+                                     DeviceConnectionType.ON_DEMAND))
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    connection_type: One of `DeviceConnectionType`.
+                     Defaults to `DeviceConnectionType.ALWAYS` if None.
+    ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
+                 and 2 for Mk2. Required if the `connection_type`
+                 provided is `DeviceConnectionType.PRE_COMPILE` or
+                 `DeviceConnectionType.NEVER`.
+    enable_remote_buffers: When `connection_type` is
+      `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
+      `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate
+      whether remote buffers are enabled and supported in the system which will
+      eventually be used to execute the compiled programs.
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  connection_type = connection_type if connection_type \
+                                    else DeviceConnectionType.ALWAYS
+
+  if connection_type == DeviceConnectionType.NEVER and ipu_version is None:
+    raise Exception("`ipu_version` must be set when `connection_type` is set "
+                    "to `DeviceConnectionType.NEVER`")
+
+  if (connection_type == DeviceConnectionType.PRE_COMPILE
+      and ipu_version is None):
+    raise Exception("`ipu_version` must be set when `connection_type` is set "
+                    "to `DeviceConnectionType.PRE_COMPILE`")
+
+  opts.device_connection_type = connection_type.value
+
+  if ipu_version is not None:
+    opts.ipu_version = ipu_version
+    opts.has_ipu_version = True
+
+  opts.enable_remote_buffers_without_device = enable_remote_buffers
+
+  return opts
+
+
+def set_experimental_multi_replica_distribution_options(
+    opts, process_count, process_index):
+  """This will use the Poplar runtime replica subset feature to let multiple
+  processes collaborate on executing the same Poplar program by executing a
+  subset of the global replicas each.
+
+  The total global replication factor will be equal to the local replication
+  factor multiplied by the `process_count`.
+
+  WARNING: This API is experimental and subject to change.
+
+  Args:
+    process_count: The total number of processes.
+    process_index: The index of the current process.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+
+  if not 0 <= process_index < process_count:
+    raise ValueError("0 <= process_index < process_count")
+
+  opts.multi_replica_process_count = process_count
+  opts.multi_replica_process_index = process_index
+
+  return opts
+
+
+def reset_ipu_seed(seed, device="/device:IPU:0", cpu_device="cpu"):
+  """Reset the seed used to generate stateful random numbers and perform
+  stochastic rounding.
+
+  Args:
+    seed: The new random number generator seed.
+    device: The device to which the seed will be applied.
+    cpu_device: The CPU device which is on the same hardware to the IPU device.
+
+  Returns:
+    None
+  """
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(cpu_device):
+      cfg_op = gen_ipu_ops.ipu_reset_seed(device, seed)
+
+  with session_lib.Session(graph=g) as sess:
+    sess.run(cfg_op)
+
+
+def extract_all_strings_from_event_trace(events):
+  """Extract a concatenation of all data strings from an IPU event trace.
+
+  Args:
+    events: An array of IPU events as returned from the ``ipu_compile_summary``
+      operation.
+
+  Returns:
+    A string containing the concatenation of all of the data fields of the
+    events.
+
+  """
+  result = ""
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+
+    result = result + ("-" * 70) + "\n=> @ " + \
+             time.strftime('%F %T %z', time.localtime(evt.timestamp)) + ": "
+
+    if evt.type == IpuTraceEvent.COMPILE_BEGIN:
+      evt_str = "Compile begin: " + \
+                evt.compile_begin.module_name.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.COMPILE_END:
+      evt_str = "Compile end: " + \
+                evt.compile_end.module_name.decode('utf-8') + "\n" + \
+                "Duration: " + str(evt.compile_end.duration) + " us\n" + \
+                evt.compile_end.compilation_report.decode('utf-8')
+    elif evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
+      evt_str = "Host->Device\n" + \
+                evt.data_transfer.data_transfer.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
+      evt_str = "Device->Host\n" + \
+                evt.data_transfer.data_transfer.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.LOAD_ENGINE:
+      evt_str = "Load engine: " + \
+                evt.load_engine.module_name.decode('utf-8') + "\n"
+    elif evt.type == IpuTraceEvent.EXECUTE:
+      evt_str = "Execute: " + \
+                evt.execute.module_name.decode('utf-8') + "\n" + \
+                evt.execute.execution_report.decode('utf-8')
+    else:
+      evt_str = "Unknown event"
+
+    result = result + evt_str + '\n'
+
+  return result
+
+
+def extract_all_types_from_event_trace(events):
+  """Return a list of the types of each event in an event trace tensor
+
+  Args:
+    events: A tensor containing a list of IPU events as protobuf strings
+
+  Returns:
+    A list containing the type of each event
+  """
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    result += [evt.type]
+  return result
+
+
+def extract_all_events(events):
+  """Extract a list containing each event as an event object
+
+  Args:
+    events: A tensor containing a list of IPU events as protobuf strings
+
+  Returns:
+    A list containing IpuTraceEvent objects
+  """
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    result += [evt]
+  return result
+
+
+def extract_compile_reports(events):
+  """Get a list of all compiler reports in the event list.
+
+  Args:
+    events: A list of trace event serialized protobufs.
+
+  Returns:
+    A list of tuples containing the module name and report."""
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    if evt.type == IpuTraceEvent.COMPILE_END:
+      try:
+        module = evt.compile_end.module_name.decode('utf-8')
+        rep = evt.compile_end.compilation_report.decode('utf-8')
+        if rep:
+          result += [(module, rep)]
+      except UnicodeDecodeError:
+        pass
+  return result
+
+
+def extract_poplar_serialized_graphs(events):
+  """Get a list of all Poplar serialized graphs in the event list.
+
+  Args:
+    events: A list of trace event serialized protobufs.
+
+  Returns:
+    A list of tuples containing the module name and report."""
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    if evt.type == IpuTraceEvent.COMPILE_END:
+      try:
+        rep = evt.compile_end.poplar_graph.decode('utf-8')
+      except UnicodeDecodeError:
+        rep = evt.compile_end.poplar_graph
+
+      module = evt.compile_end.module_name.decode('utf-8')
+      if rep:
+        result += [(module, rep)]
+  return result
+
+
+def extract_execute_reports(events):
+  """Get a list of all compiler reports in the event list.
+
+  Args:
+    events: A list of trace event serialized protobufs.
+
+  Returns:
+    A list of tuples containing the module name and report."""
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    if evt.type == IpuTraceEvent.EXECUTE:
+      try:
+        module = evt.execute.module_name.decode('utf-8')
+        rep = evt.execute.execution_report.decode('utf-8')
+        if rep:
+          result += [(module, rep)]
+      except UnicodeDecodeError:
+        pass
+  return result
+
+
+def move_variable_initialization_to_cpu(graph=None):
+  """For all variables in the VARIABLES collection, move any initialization
+  ops onto the CPU.
+
+  Args:
+    graph: Operations are moved around on this graph.  The default graph will be
+           used if not specified.
+
+  Returns:
+    None
+  """
+  if not graph:
+    graph = ops.get_default_graph()
+
+  with ops.device("/device:CPU:0"):
+    control_flow_ops.no_op(name="cpu")
+  variables = []
+  for v in graph.get_collection('variables'):
+    # We assume a distribution strategy knows better how to
+    # initialize its own variables, so skip those.
+    if not isinstance(v, values.DistributedVariable):
+      variables.append(v)
+
+  def _uses_resource(op):
+    """ Helper to determine if an op uses a resource """
+    return any(input_tensor.dtype == 'resource' for input_tensor in op.inputs)
+
+  init_ops = []
+  dep_ops = [v.initializer.inputs[1].op for v in variables]
+  visited = set()
+
+  # Depth-first search up the graph starting from all variables in VARIABLES
+  # Place all touched ops on the CPU, but do not touch or search ops that use
+  # resource tensors, otherwise device colocation could be violated.
+  while dep_ops:
+    op = dep_ops.pop()
+    if op not in visited and not _uses_resource(op):
+      visited.add(op)
+      init_ops += [op]
+      dep_ops += [x.op for x in op.inputs]
+
+  # pylint: disable=protected-access
+  for op in init_ops:
+    op._set_device('/device:CPU:0')
+    op._set_attr(
+        '_class',
+        attr_value_pb2.AttrValue(list=attr_value_pb2.AttrValue.ListValue(
+            s=[b'loc:@cpu'])))
+    op._set_attr('_XlaCompile', attr_value_pb2.AttrValue(b=False))
+    op._set_attr('_XlaScope', attr_value_pb2.AttrValue(s=b''))
+  # pylint: enable=protected-access
+
+  return
+
+
+def export_dataset_to_file(dataset_or_infeed,
+                           output_filename,
+                           num_elements,
+                           feed_name="",
+                           apply_options=True):
+  """Export as binary `num_elements` from the given `infeed` to the specified
+  `output_filename`.
+
+  If the infeed elements are tuples then one file per tuple element will be
+  created.
+  For example, if `dataset` looks like
+
+  .. code-block:: python
+
+    [{ "a": A_0, "b": B_0}, { "a": A_1, "b": B_1}, ...]
+
+  then `export_dataset_to_file(dataset, "my_dataset.bin", 100)` will generate:
+
+  .. code-block:: python
+
+    my_dataset.0.bin   # Contains tensors [ A_0, A_1, ..., A_99]
+    my_dataset.1.bin   # Contains tensors [ B_0, B_1, ..., B_99]
+
+  Args:
+    dataset_or_infeed: An unary dataset with the same input and output
+      structure or an `IPUInfeedQueue`.
+    output_filename: Where to export the tensors to.
+    num_elements: Number of elements to export from the dataset.
+    feed_name: Specify the feed name.
+    apply_options: Whether to apply optimization options which can improve the
+      dataset performance.
+  """
+  assert isinstance(dataset_or_infeed,
+                    (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))
+  if isinstance(dataset_or_infeed, ipu_infeed_queue.IPUInfeedQueue):
+    dataset = dataset_or_infeed._dataset  # pylint: disable=protected-access
+    feed_name = feed_name or dataset_or_infeed._id  # pylint: disable=protected-access
+  else:
+    dataset = dataset_or_infeed
+  if apply_options:
+    dataset = dataset._apply_options()  # pylint: disable=protected-access
+
+  extractor = dataset_extractor.dataset_extractor(dataset, num_elements,
+                                                  output_filename, feed_name)
+  with ops.device("cpu"), session_lib.Session() as sess:
+    sess.run(extractor)
+
+
+def export_inputs_to_file(inputs, output_filename, feed_dict):
+  """Export as binary the list of `inputs` provided to the specified
+  `output_filename`.
+
+  Args:
+    inputs: List of graph inputs to export.
+    output_filename: Where to export the tensors to.
+    feed_dict: Feed dictionary containing the inputs' values.
+  """
+
+  with ops.device("cpu"), session_lib.Session() as sess:
+    sess.run(dataset_extractor.export_variables(inputs, output_filename),
+             feed_dict)
+
+
+def use_synthetic_data_for(synthetic_data_category):
+  """Get whether synthetic data is being used for the given category.
+
+  Args:
+    synthetic_data_category: A SyntheticDataCategory enum value.
+
+  Returns:
+    A bool indicating the result.
+  """
+
+  op = gen_ipu_ops.ipu_use_synthetic_data_for(
+      synthetic_data_category=synthetic_data_category)
+
+  if executing_eagerly():
+    return op.numpy()[0]
+  return session_lib.Session().run(op)[0]

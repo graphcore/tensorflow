@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+// Structure for setting an individual Poplar OptionFlag for OptionFlags
+message PoplarOptionFlag {
+  string option = 1;
+  string value = 2;
+};
+
+// Structure for holding multiple Poplar OptionFlags
+message PoplarOptionFlags {
+  repeated PoplarOptionFlag flags = 1;
+};

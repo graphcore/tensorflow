@@ -46,6 +46,12 @@ namespace xla {
 // Analysis which identifies all HLO values and their uses in an HLO module.
 class HloDataflowAnalysis {
  public:
+  static std::unique_ptr<HloDataflowAnalysis> NewEmptyAnalysis(
+      const HloModule* module) {
+    return std::unique_ptr<HloDataflowAnalysis>(
+        new HloDataflowAnalysis(*module, false));
+  }
+
   // Infrastructure for passing may-alias hints: HLO passes can populate the
   // may-alias table. If an empty optional is returned, default rules are used.
   //

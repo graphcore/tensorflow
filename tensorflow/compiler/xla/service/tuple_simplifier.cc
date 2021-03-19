@@ -63,55 +63,65 @@ StatusOr<bool> TupleSimplifier::RemoveWholeTuple(HloInstruction* tuple) {
   return changed;
 }
 
-StatusOr<bool> TupleSimplifier::Run(HloModule* module) {
+StatusOr<bool> TupleSimplifier::RunOnComputation(HloComputation* computation) {
   // Initially add all GTE and Tuple instructions to the worklist.
   bool changed = false;
-  for (auto* computation : module->computations()) {
+
+  for (auto* instruction : computation->MakeInstructionPostOrder()) {
+    if (instruction->opcode() == HloOpcode::kTuple) {
+      TF_ASSIGN_OR_RETURN(changed, RemoveWholeTuple(instruction));
+    } else {
+      auto ancestor = instruction->LatestNonGteAncestorAndIndex();
+      if (ancestor.first == instruction) {
+        continue;
+      }
+      // If possible replace a chain of GTE with the operation which produces
+      // the element. For example, replace uses of GTE with below with just
+      // 'Op' (assuming 'Op' is at the index of the GTE instruction):
+      //
+      //     ...  Op ...
+      //       \  |   /
+      //        Tuple
+      //          |
+      //         GTE
+      //         ...
+      //          |
+      //         GTE
+      //          |
+      //         GTE
+      //
+      // Note that this deletes the Tuple instruction altogether. In addition,
+      // if only a subset of tuple's elements are used, this transform
+      // optimizes them one at a time, and after the last use is optimized,
+      // the Tuple will also be deleted.
+      if (ShapeUtil::Compatible(ancestor.first->shape(),
+                                instruction->shape())) {
+        changed = true;
+        TF_RETURN_IF_ERROR(
+            computation->ReplaceInstruction(instruction, ancestor.first));
+      } else if (ancestor.first->opcode() == HloOpcode::kTuple) {
+        changed = true;
+        TF_RETURN_IF_ERROR(computation->ReplaceInstruction(
+            instruction,
+            ancestor.first->mutable_operand(ancestor.second[0])));
+      }
+    }
+  }
+  return changed;
+}
+
+StatusOr<bool> TupleSimplifier::Run(HloModule* module) {
+  bool changed = false;
+  for (auto* computation : module->MakeComputationPostOrder()) {
     if (exclude_entry_computation_ &&
         computation == module->entry_computation()) {
       continue;
     }
-    for (auto* instruction : computation->MakeInstructionPostOrder()) {
-      if (instruction->opcode() == HloOpcode::kTuple) {
-        TF_ASSIGN_OR_RETURN(changed, RemoveWholeTuple(instruction));
-      } else {
-        auto ancestor = instruction->LatestNonGteAncestorAndIndex();
-        if (ancestor.first == instruction) {
-          continue;
-        }
-        // If possible replace a chain of GTE with the operation which produces
-        // the element. For example, replace uses of GTE with below with just
-        // 'Op' (assuming 'Op' is at the index of the GTE instruction):
-        //
-        //     ...  Op ...
-        //       \  |   /
-        //        Tuple
-        //          |
-        //         GTE
-        //         ...
-        //          |
-        //         GTE
-        //          |
-        //         GTE
-        //
-        // Note that this deletes the Tuple instruction altogether. In addition,
-        // if only a subset of tuple's elements are used, this transform
-        // optimizes them one at a time, and after the last use is optimized,
-        // the Tuple will also be deleted.
-        if (ShapeUtil::Compatible(ancestor.first->shape(),
-                                  instruction->shape())) {
-          changed = true;
-          TF_RETURN_IF_ERROR(
-              computation->ReplaceInstruction(instruction, ancestor.first));
-        } else if (ancestor.first->opcode() == HloOpcode::kTuple) {
-          changed = true;
-          TF_RETURN_IF_ERROR(computation->ReplaceInstruction(
-              instruction,
-              ancestor.first->mutable_operand(ancestor.second[0])));
-        }
-      }
-    }
+    TF_ASSIGN_OR_RETURN(bool computation_changed,
+                        RunOnComputation(computation));
+    changed |= computation_changed;
   }
+
   return changed;
 }
 

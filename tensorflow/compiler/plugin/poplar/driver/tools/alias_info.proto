@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+// Protobufs used for storing buffer and aliasing information.
+
+enum BufferUseKind {
+  // A use of an HloPoplarBuffer which reads a buffer, but it is not aliased by
+  // any outputs.
+  USE_NO_ALIAS = 0;
+  // A use of an HloPoplarBuffer which reads a buffer and outputs alias that
+  // buffer without modifying the values in it.
+  USE_ALIAS_READ_ONLY = 1;
+  // A use of an HloPoplarBuffer which reads a buffer, modifies the values and
+  // outputs alias that buffer.
+  USE_ALIAS_READ_WRITE = 2;
+};
+
+// Used to describe how an input buffer from an operand for an instruction is
+// used in the output of that instruction.
+message PoplarUseDescription {
+  int64 operand_number = 1;
+  repeated int64 operand_index = 2;
+  repeated int64 output_index = 3;
+  BufferUseKind kind = 4;
+};

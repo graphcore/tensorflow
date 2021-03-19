@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+import "tensorflow/compiler/xla/xla_data.proto";
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+import "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.proto";
+
+// Configuration for one of the infeed/outfeed streams
+message FeedConfig {
+  string stream_prefix = 1;
+  PoplarFeedConfig config = 2;
+  ShapeProto shape = 3;
+}
+
+message SendRecvConfig {
+  string stream_handle = 1;
+  string rendezvous_key = 2;
+  ShapeProto shape = 3;
+}
+
+message HostEmbeddingConfig {
+  string stream_handle = 1;
+  string embedding_id = 2;
+  ShapeProto indices_shape = 3;
+  ShapeProto activations_shape = 4;
+}
+
+message RemoteParameterConfig {
+  int64 parameter_number = 1;
+  bool is_replica_partitioned = 2;
+  string buffer_name = 3;
+  int64 buffer_offset = 4;
+  int64 num_merged = 5;
+}
+
+message KeyIdMapping {
+  string handle = 1;
+  int64 key = 2;
+  int64 start_id = 3;
+}
+
+message PoplarExecutableProto {
+
+  // The number of replicas
+  int32 replication_factor = 1;
+
+  // Names of the infeed instructions
+  repeated FeedConfig infeeds = 2;
+
+  // Names of the outfeed instructions
+  repeated FeedConfig outfeeds = 3;
+
+  // The OptionFlags which were used during engine compilation
+  repeated PoplarOptionFlag option_flags = 4;
+
+  repeated SendRecvConfig sends = 5;
+  repeated SendRecvConfig recvs = 6;
+
+  repeated HostEmbeddingConfig lookups = 7;
+  repeated HostEmbeddingConfig updates = 8;
+  repeated HostEmbeddingConfig notifications = 9;
+
+  repeated RemoteParameterConfig remote_parameters = 10;
+
+  repeated KeyIdMapping key_id_mappings = 11;
+
+  repeated string checkpoint_feeds_order = 12;
+
+  bool logging_cycle_count = 13;
+};

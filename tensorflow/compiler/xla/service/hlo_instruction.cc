@@ -1460,11 +1460,11 @@ void HloInstruction::set_single_sharding(const HloSharding& sharding) {
 
 void HloInstruction::SetupDerivedInstruction(
     HloInstruction* derived_instruction) const {
-  if (sharding_ != nullptr && ShapeUtil::CompatibleIgnoringElementType(
-                                  shape_, derived_instruction->shape())) {
-    // Only copy sharding if the shape of the two instruction is compatible
-    // because copying it between differently shaped instructions can produce
-    // invalid shardings.
+  if (sharding_ != nullptr &&
+      ShapeUtil::CompatibleKind(shape_, derived_instruction->shape())) {
+    // Only copy sharding if the tuple tree shape of the two instruction is
+    // compatible because copying it between differently shaped instructions
+    // can produce invalid shardings.
     derived_instruction->set_sharding(*sharding_);
   } else {
     derived_instruction->clear_sharding();
@@ -1961,7 +1961,9 @@ bool HloInstruction::IdenticalInternal(
         eq_operands,
     const std::function<bool(const HloComputation*, const HloComputation*)>&
         eq_computations,
-    bool layout_sensitive, bool ignore_channel_id_values) const {
+    bool layout_sensitive, bool ignore_channel_id_values,
+    const std::function<bool(const std::string&, const std::string&)>&
+        eq_backend_config) const {
   // An instruction is always identical to itself.
   if (this == &other) {
     return true;
@@ -2001,6 +2003,10 @@ bool HloInstruction::IdenticalInternal(
       return channel_inst->IdenticalSlowPathIgnoringChannelIdValues(
           other, eq_computations);
     }
+  }
+
+  if (!eq_backend_config(backend_config_, other.backend_config_)) {
+    return false;
   }
   return IdenticalSlowPath(other, eq_computations);
 }

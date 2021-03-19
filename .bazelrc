@@ -561,6 +561,9 @@ build:elinux_armhf --config=elinux
 build:elinux_armhf --cpu=armhf
 # END TF REMOTE BUILD EXECUTION OPTIONS
 
+# IPU specific options.
+build:ipu_horovod --action_env TF_NEED_IPU_HOROVOD=1
+
 # Default options should come above this line
 
 # Options from ./configure

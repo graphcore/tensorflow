@@ -48,6 +48,8 @@ load(
     "if_ngraph",
 )
 
+load("@local_config_poplar//poplar:build_defs.bzl", "if_poplar")
+
 # TODO(mdan): Break into per-directory files.
 
 visibility = [
@@ -91,7 +93,9 @@ py_library(
         ":no_contrib",
         "//tensorflow/python/estimator:estimator_py",
         "//tensorflow/python/tpu:tpu_estimator",
-    ],
+    ] + if_poplar(["//tensorflow/python/ipu:ipu_lib"],
+                ["//tensorflow/python/ipu:dataset_extractor"]
+               ),
 )
 
 py_library(

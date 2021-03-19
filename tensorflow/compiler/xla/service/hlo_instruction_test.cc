@@ -749,6 +749,65 @@ TEST_F(HloInstructionTest, PreserveTupleShapeThroughClone) {
   EXPECT_TRUE(ShapeUtil::Equal(tuple_clone->shape(), tuple->shape()));
 }
 
+TEST_F(HloInstructionTest, PreserveShardingThroughCompatibleClone) {
+
+  HloSharding sharding = HloSharding::AssignDevice(5);
+  HloComputation::Builder builder(TestName());
+  auto* constant = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR2<float>({
+          {1, 2},
+          {3, 4},
+      })));
+  auto* tuple =
+      builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
+  tuple->set_sharding(sharding);
+  // Compatible with original shape as tuple tree structure and leaf ranks are
+  // identical
+  auto clone_shape = ShapeUtil::MakeShape(F32, {3, 3});
+  clone_shape = ShapeUtil::MakeTupleShape({clone_shape, clone_shape});
+  auto tuple_clone = tuple->CloneWithNewOperands(clone_shape, {});
+  EXPECT_EQ(tuple_clone->sharding(), sharding);
+}
+
+TEST_F(HloInstructionTest, DoNotPreserveShardingThroughTupleTreeIncompatibleClone) {
+
+  HloSharding sharding = HloSharding::AssignDevice(5);
+  HloComputation::Builder builder(TestName());
+  auto* constant = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR2<float>({
+          {1, 2},
+          {3, 4},
+      })));
+  auto* tuple =
+      builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
+  tuple->set_sharding(sharding);
+  // Incompatible with original shape as tuple tree structure is different
+  auto clone_shape = ShapeUtil::MakeShape(F32, {2, 2});
+  clone_shape = ShapeUtil::MakeTupleShape({clone_shape, clone_shape,
+                                           clone_shape});
+  auto tuple_clone = tuple->CloneWithNewOperands(clone_shape, {});
+  EXPECT_FALSE(tuple_clone->has_sharding());
+}
+
+TEST_F(HloInstructionTest, DoNotPreserveShardingThroughLeafRankIncompatibleClone) {
+
+  HloSharding sharding = HloSharding::AssignDevice(5);
+  HloComputation::Builder builder(TestName());
+  auto* constant = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR2<float>({
+          {1, 2},
+          {3, 4},
+      })));
+  auto* tuple =
+      builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
+  tuple->set_sharding(sharding);
+  // Incompatible with original shape as tuple tree structure is different
+  auto clone_shape = ShapeUtil::MakeShape(F32, {1, 2, 3});
+  clone_shape = ShapeUtil::MakeTupleShape({clone_shape, clone_shape});
+  auto tuple_clone = tuple->CloneWithNewOperands(clone_shape, {});
+  EXPECT_FALSE(tuple_clone->has_sharding());
+}
+
 TEST_F(HloInstructionTest, FusionOpWithCalledComputations) {
   // Create a fusion instruction containing a single unary operation.
   const Shape scalar_shape = ShapeUtil::MakeShape(F32, {});
@@ -844,6 +903,41 @@ static bool Identical(const HloInstruction& instruction1,
   return is_equal;
 }
 
+// Convenience function for comparing two HloInstructions.
+static bool IdenticalNoBackendConfig(
+  const HloInstruction& instruction1,
+  const HloInstruction& instruction2) {
+
+  auto eq_operand_shapes = [](const HloInstruction* a,
+                              const HloInstruction* b) {
+    return ShapeUtil::Equal(a->shape(), b->shape());
+  };
+  auto eq_computations = [](const HloComputation* a, const HloComputation* b) {
+    return *a == *b;
+  };
+  auto eq_backend_config = [](const std::string& a, const std::string& b) {
+    return true;
+  };
+
+  // Verify Identical is reflexive for both instructions.
+  EXPECT_TRUE(instruction1.Identical(
+    instruction1, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+  EXPECT_TRUE(instruction2.Identical(
+    instruction2, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+
+  bool is_equal = instruction1.Identical(
+    instruction2, eq_operand_shapes, eq_computations, false,
+    eq_backend_config);
+
+  // Verify Identical is symmetric.
+  EXPECT_EQ(is_equal, instruction2.Identical(
+    instruction1, eq_operand_shapes, eq_computations, false,
+    eq_backend_config));
+  return is_equal;
+}
+
 // Convenience function for comparing two HloInstructions for structural
 // equality.
 static bool StructuralEqual(const HloInstruction& instruction1,
@@ -925,6 +1019,13 @@ TEST_F(HloInstructionTest, IdenticalInstructions) {
   EXPECT_FALSE(Identical(
       *HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2),
       *HloInstruction::CreateBinary(shape, HloOpcode::kDivide, op1, op2)));
+
+  auto i1 = HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2);
+  auto i2 = HloInstruction::CreateBinary(shape, HloOpcode::kAdd, op1, op2);
+  i1->set_raw_backend_config_string("config1");
+  i1->set_raw_backend_config_string("config2");
+  EXPECT_FALSE(Identical(*i1, *i2));
+  EXPECT_TRUE(IdenticalNoBackendConfig(*i1, *i2));
 }
 
 TEST_F(HloInstructionTest, IdenticalCallInstructions) {

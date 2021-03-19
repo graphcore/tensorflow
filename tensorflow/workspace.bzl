@@ -1,6 +1,8 @@
 # TensorFlow external dependencies that can be loaded in WORKSPACE files.
 
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
+load("//third_party/ipus:poplar_configure.bzl", "poplar_configure")
+load("//third_party/ipus/horovod:horovod_configure.bzl", "ipu_horovod_configure")
 load("//third_party/gpus:rocm_configure.bzl", "rocm_configure")
 load("//third_party/tensorrt:tensorrt_configure.bzl", "tensorrt_configure")
 load("//third_party/nccl:nccl_configure.bzl", "nccl_configure")
@@ -91,6 +93,8 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
     initialize_rbe_configs()
 
     # Note that we check the minimum bazel version in WORKSPACE.
+    poplar_configure(name="local_config_poplar")
+    ipu_horovod_configure(name="local_config_ipu_horovod")
     clang6_configure(name = "local_config_clang6")
     cc_download_clang_toolchain(name = "local_config_download_clang")
     cuda_configure(name = "local_config_cuda")
@@ -1174,6 +1178,17 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
         urls = [
             "http://mirror.tensorflow.org/github.com/tensorflow/toolchains/archive/v0.0.2.tar.gz",
             "https://github.com/tensorflow/toolchains/archive/v0.0.2.tar.gz",
+        ],
+    )
+
+    tf_http_archive(
+        name = "horovod_boost",
+        build_file = clean_dep("//third_party/ipus/horovod:boost.BUILD"),
+        sha256 = "da3411ea45622579d419bfda66f45cd0f8c32a181d84adfa936f5688388995cf",
+        strip_prefix = "boost_1_68_0",
+        urls = [
+            "https://storage.googleapis.com/mirror.tensorflow.org/dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
+            "https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.gz",
         ],
     )
 

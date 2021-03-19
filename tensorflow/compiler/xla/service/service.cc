@@ -165,7 +165,7 @@ Service::Service(const ServiceOptions& options,
       CHECK_GE(execute_backend_->device_count(), options_.number_of_replicas())
           << "Requested more replicas than there are devices.";
     }
-    LOG(INFO) << StrFormat(
+    VLOG(1) << StrFormat(
         "XLA service %p initialized for platform %s (this does not guarantee "
         "that XLA will be used). Devices:",
         this, execute_backend_->platform()->Name());
@@ -173,9 +173,9 @@ Service::Service(const ServiceOptions& options,
     for (int i = 0; i < execute_backend_->device_count(); ++i) {
       se::StreamExecutor* executor = stream_executors.at(i);
       const auto& description = executor->GetDeviceDescription();
-      LOG(INFO) << StrFormat("  StreamExecutor device (%d): %s, %s", i,
-                             description.name(),
-                             description.platform_version());
+      VLOG(1) << StrFormat("  StreamExecutor device (%d): %s %s", i,
+                           description.name(),
+                           description.platform_version());
     }
   } else {
     VLOG(1) << "XLA compile-only service constructed";
@@ -320,6 +320,20 @@ StatusOr<std::unique_ptr<HloModuleConfig>> Service::CreateModuleConfig(
     config->set_seed(execution_options->seed());
     config->set_launch_id(execution_options->launch_id());
     config->set_debug_options(execution_options->debug_options());
+    config->set_argument_count(execution_options->argument_count());
+    config->set_resource_input_count(execution_options->resource_input_count());
+    const auto& proto_input_mapping =
+        execution_options->input_mapping();
+    std::vector<int> input_mapping(
+        proto_input_mapping.begin(),
+        proto_input_mapping.end());
+    config->set_input_mapping(input_mapping);
+    const auto& proto_resource_update_to_input_index =
+        execution_options->resource_update_to_input_index();
+    std::vector<int> resource_update_to_input_index(
+        proto_resource_update_to_input_index.begin(),
+        proto_resource_update_to_input_index.end());
+    config->set_resource_update_to_input_index(resource_update_to_input_index);
   } else {
     config->set_replica_count(options_.number_of_replicas());
     config->set_debug_options(GetDebugOptionsFromFlags());

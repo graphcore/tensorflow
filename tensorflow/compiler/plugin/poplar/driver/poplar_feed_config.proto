@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package xla.poplarplugin;
+
+import "tensorflow/core/framework/types.proto";
+
+// Message which is stored as the config field for an HloInstruction for an
+// HloInfeedInstruction/HloOutfeedInstruction instruction.
+message PoplarFeedConfig {
+	// The replication factor of this feed.
+	int64 replication_factor = 1;
+
+	// The unique name of this feed.
+	string feed_id = 2;
+
+	enum Mode {
+		GetAll = 0;
+		GetLast = 1;
+	}
+	// Optional mode.
+	Mode mode = 3;
+
+	// We store the TF DataType for each shape as it is not safe to convert from
+	// XLA PrimitveType to TF DataType.
+	repeated tensorflow.DataType tf_data_types = 4;
+
+	// The amount of data we should batch each time we sync with the host.
+	int64 io_batch_size = 5;
+
+	// How many elements to prefetch.
+	int64 prefetch_depth = 6;
+
+	// Whether the feed sequence is reusable because this feed id has multiple
+	// uses.
+	bool reusable = 7;
+};

@@ -1,0 +1,69 @@
+syntax = "proto2";
+
+message FPConfig {
+  required bool enable_nanoo = 1;
+
+  enum RoundMode {
+    INVALID = 1;
+    RZ = 2;
+    RA = 3;
+    RN = 4;
+    RD = 5;
+    RU = 6;
+    SR = 7;
+  }
+  required RoundMode round_mode = 2;
+}
+
+message GFConfig {
+  enum GfloatFormat {
+    Invalid = 1;
+    ieeeFp16 = 2;
+    quantisedFp32 = 3;
+    quantisedFp16 = 4;
+    minNormAlignGf8 = 5;
+    oneFiveTwoGf8 = 6;
+    maxNormAlignGf8 = 7;
+    bfloat16 = 8;
+    noDenormGf16 = 9;
+    enDenormGf16 = 10;
+  }
+  required GfloatFormat gfloat_format = 1;
+}
+
+message SRConfig {
+  enum Density {
+    Invalid = 1;
+    Uniform = 2;
+    Normal = 3;
+    TruncatedNormal = 4;
+    Laplace = 5;
+    TruncatedLaplace = 6;
+    Logistic = 7;
+    TruncatedLogistic = 8;
+    LogitNormal = 9;
+    TruncatedLogitNormal = 10;
+    Bernoulli = 11;
+  }
+  required Density sr_density = 1;
+
+  required int32 sr_bits = 2;
+
+  required float sr_norm_offset = 3;
+
+  required float sr_norm_scale = 4;
+
+  required float sr_norm_min = 5;
+
+  required float sr_norm_max = 6;
+
+  required float sr_bernoulli_prob = 7;
+}
+
+message PopfloatCastConfig{
+  required FPConfig fp_config = 1;
+
+  required GFConfig gf_config = 2;
+
+  required SRConfig sr_config = 3;
+}
