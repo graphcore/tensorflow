@@ -43,6 +43,24 @@ bool IsBlockRecomputeInstruction(const HloInstruction* inst) {
 }
 }  // namespace
 
+bool UsesRecomputationSuggestions(const HloModule* module) {
+  // Cant use IsRecomputeInstruction since we're expecting this function
+  // to be used on Hlo before its had CustomOpReplacer called on it, which
+  // would replace the custom call with a recompute instruction.
+  const auto is_recomputation_instr = [](const HloInstruction* inst) {
+    return (inst->opcode() == HloOpcode::kCustomCall &&
+            inst->custom_call_target() == "SuggestRecompute");
+  };
+
+  for (auto comp : module->computations()) {
+    if (absl::c_any_of(comp->instructions(), is_recomputation_instr)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 StatusOr<bool> ApplyRecomputeSuggestion::Run(HloModule* module) {
   std::vector<HloCustomCallInstruction*> custom_calls;
 
