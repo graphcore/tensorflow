@@ -280,6 +280,14 @@ tf_py_build_info_genrule(
     out = "platform/build_info.py",
 )
 
+cc_binary(
+    name = "_cpu_feature_guard.so",
+    deps = [
+        "//tensorflow/core/platform:cpu_feature_guard",
+    ],
+    linkshared = True,
+)
+
 py_library(
     name = "platform_build_info",
     srcs = ["platform/build_info.py"],
@@ -298,6 +306,10 @@ py_library(
             "**/device_context.py",  # In platform_device_context.
         ],
     ) + ["platform/build_info.py"],
+    data = select({
+        "//tensorflow:windows": [],
+        "//conditions:default": [":_cpu_feature_guard.so"],
+    }),
     srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [
