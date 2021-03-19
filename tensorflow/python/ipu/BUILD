@@ -476,6 +476,24 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "keras_synthetic_data_test",
+    size = "large",
+    srcs = ["tests/keras/keras_synthetic_data_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+    # Shard count set equal to the number of tests as one process per test is
+    # required
+    shard_count = 3,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
     name = "math_ops_test",
     size = "large",
     srcs = ["tests/math_ops_test.py"],
@@ -1730,6 +1748,7 @@ test_suite(
         "keras_sequential_pipeline_save_restore_test",
         "keras_sequential_pipeline_test",
         "keras_sequential_replication_test",
+        "keras_synthetic_data_test",
         "map_gradient_optimizer_test",
         "math_layers_test",
         "math_ops_test",

@@ -21,6 +21,7 @@ from functools import partial
 import copy
 import inspect
 import math
+import numpy as np
 import weakref
 
 from tensorflow.python.data.experimental.ops import cardinality
@@ -665,27 +666,36 @@ class _IpuModelBase(KerasModel):
           self.infeed.initializer  # pylint: disable=pointless-statement
 
         # Fetch the outfeed for the history
-        results = self.outfeed.dequeue()
+        if utils.use_synthetic_data_for(utils.SyntheticDataCategory.Outfeed):
+          self.outfeed.dequeue()
+          results = []
+          for shape, dtype in \
+              zip(self.outfeed._flat_shapes, self.outfeed._flat_types):  # pylint: disable=protected-access
+            shape = list(shape)
+            shape.insert(0, mini_batches_per_epoch)
+            dtype = dtype.as_numpy_dtype()
+            results.append(np.full(shape, np.nan, dtype=dtype))
+        else:
+          results = self.outfeed.dequeue()
 
-        # For fit() and evaluate() the shape of results is
-        #   (1+num_metrics, steps_per_epoch X GA)
-        # or with replication:
-        #   (1+num_metrics, steps_per_epoch x GA / RF, RF)
-        #
-        # For predict() the shape of results is
-        #   (num_outputs, steps_per_epoch x GA, batch_size, output_shape)
-        # or with replication:
-        #   (num_outputs, RF, steps_per_epoch x GA/RF, batch_size, output_shape)
-        #
-        # where steps_per_epoch is the value passed to this function (or derived)
-        #       GA is gradient accumulation count
-        #       RF is replication factor
-        #       output_shape may have multiple dimensions
+          # For fit() and evaluate() the shape of results is
+          #   (1+num_metrics, steps_per_epoch X GA)
+          # or with replication:
+          #   (1+num_metrics, steps_per_epoch x GA / RF, RF)
+          #
+          # For predict() the shape of results is
+          #   (num_outputs, steps_per_epoch x GA, batch_size, output_shape)
+          # or with replication:
+          #   (num_outputs, RF, steps_per_epoch x GA/RF, batch_size, output_shape)
+          #
+          # where steps_per_epoch is the value passed to this function (or derived)
+          #       GA is gradient accumulation count
+          #       RF is replication factor
+          #       output_shape may have multiple dimensions
+          results = [
+              map(lambda x: x.numpy(), r) for r in nest.flatten(results)
+          ]
 
-        # Note that to match the upstream Keras behaviour, all the outputs are
-        # flattened, however we do not put them back into the original
-        # structure.
-        results = [map(lambda x: x.numpy(), r) for r in nest.flatten(results)]
         results = zip(*results)
 
         if self.replication_factor > 1:
@@ -699,6 +709,7 @@ class _IpuModelBase(KerasModel):
 
         # Get the final loss and metrics
         r = next(results)
+
         aggregator.create(r)
         aggregator.aggregate(r)
 
