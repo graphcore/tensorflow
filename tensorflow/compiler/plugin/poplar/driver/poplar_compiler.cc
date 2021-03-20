@@ -120,6 +120,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_checkpoint_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recomputation_input_remover.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_casts.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_canonicalizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remote_buffer_merger.h"
@@ -1351,20 +1352,29 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<RecomputationInputRemover>();
     pipeline.AddPass<RecomputeInstructions>(
         poplar_executor->RecomputationEnabled());
-    if (poplar_executor->RecomputationEnabled()) {
-      pipeline.AddPass<SuggestRecompute>();
-      pipeline.AddPass<AddBlockRecompute>();
-      {
-        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-            "resolve-recompute-suggestions");
 
-        pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
-        pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
-        pass.AddPass<ApplyRecomputeSuggestion>();
+    if (poplar_executor->RecomputationEnabled()) {
+      if (UsesRecomputationSuggestions(module.get())) {
+        LOG(INFO) << "Detected SuggestRecompute operation - this will be "
+                     "removed in release 2.2";
+
+        pipeline.AddPass<SuggestRecompute>();
+        pipeline.AddPass<AddBlockRecompute>();
+        {
+          auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+              "resolve-recompute-suggestions");
+
+          pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+          pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
+          pass.AddPass<ApplyRecomputeSuggestion>();
+        }
+        pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+        pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
+      } else {
+        pipeline.AddPass<RecomputeCasts>();
       }
     }
-    pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
-    pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
+
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<HostComputeBarrierInserter>();
     pipeline.AddPass<ShardingPass>();

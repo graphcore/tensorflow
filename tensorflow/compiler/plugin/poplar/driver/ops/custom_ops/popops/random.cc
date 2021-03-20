@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -185,7 +186,12 @@ class RngOp : public PoplarOpDef {
   }
 };
 
-REGISTER_HLO_OP(kRng, RngOp);
+void RegisterRngExtensions(HloOpcode opcode) {
+  auto allocatingOutput = [](HloInstruction*) { return true; };
+  RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
+                                                             allocatingOutput);
+}
+REGISTER_HLO_OP_WITH_EXTENSIONS(kRng, RngOp, RegisterRngExtensions);
 
 }  // namespace
 }  // namespace poplarplugin
