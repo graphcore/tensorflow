@@ -710,6 +710,42 @@ class IPUSequentialPipelineTest(test.TestCase):
       self.assertEqual(type(history.history['accuracy'][1]), np.float32)
 
   @test_util.run_v2_only
+  def testFitAndEvaluateAccumulateOutfeed(self):
+    # Accumulating the outfeeds shouldn't make a difference to the outputs.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                       gradient_accumulation_count=24)
+      m_acc = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
+                                           gradient_accumulation_count=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+      m_acc.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Call fit without accumulate_outfeed and check not accumulated
+      history = m.fit(test_dataset(), steps_per_epoch=10, epochs=10)
+
+      # Call fit with accumulate_outfeed and check accumulated
+      history_acc = m_acc.fit(test_dataset(),
+                              steps_per_epoch=10,
+                              epochs=10,
+                              accumulate_outfeed=True)
+      self.assertAllClose(history.history, history_acc.history)
+
+      # Call evaluate without accumulate_outfeed and check not accumulated
+      history = m.evaluate(test_dataset(length=96))
+
+      # Call evaluate with accumulate_outfeed and check accumulated
+      history_acc = m_acc.evaluate(test_dataset(length=96),
+                                   accumulate_outfeed=True)
+      self.assertAllClose(history, history_acc)
+
+  @test_util.run_v2_only
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():

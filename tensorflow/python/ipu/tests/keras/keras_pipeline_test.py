@@ -858,6 +858,48 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(type(history.history['accuracy'][1]), np.float32)
 
   @test_util.run_v2_only
+  def testFitAndEvaluateAccumulateOutfeed(self):
+    # Accumulating the outfeeds shouldn't make a difference to the outputs.
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      input_layer_acc = keras.layers.Input(shape=(32))
+      x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
+      x_acc = simple_pipeline(input_layer_acc, [32, 2], [0, 1], w=0.2)
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=24)
+      m_acc = ipu.keras.PipelineModel(inputs=input_layer_acc,
+                                      outputs=x_acc,
+                                      gradient_accumulation_count=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+      m_acc.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Call fit without accumulate_outfeed and check not accumulated
+      history = m.fit(test_dataset(), steps_per_epoch=10, epochs=10)
+
+      # Call fit with accumulate_outfeed and check accumulated
+      history_acc = m_acc.fit(test_dataset(),
+                              steps_per_epoch=10,
+                              epochs=10,
+                              accumulate_outfeed=True)
+      self.assertAllClose(history.history, history_acc.history)
+
+      # Call evaluate without accumulate_outfeed and check not accumulated
+      history = m.evaluate(test_dataset(length=96))
+
+      # Call evaluate with accumulate_outfeed and check accumulated
+      history_acc = m_acc.evaluate(test_dataset(length=96),
+                                   accumulate_outfeed=True)
+      self.assertAllClose(history, history_acc)
+
+  @test_util.run_v2_only
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
