@@ -426,7 +426,7 @@ StatusOr<HloInstruction*> AddClusterOutput(
     const Shape all_gather_shape = ShapeUtil::MakeShape(
         inst_element_type, {replication_factor, cluster.GetShardSize()});
     HloInstruction* output = builder->AddInstruction(
-        CreateAllGather({in_cluster_output}, all_gather_shape));
+        CreatePoplarAllGather({in_cluster_output}, all_gather_shape));
 
     const Shape flat_cluster_shape =
         ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});

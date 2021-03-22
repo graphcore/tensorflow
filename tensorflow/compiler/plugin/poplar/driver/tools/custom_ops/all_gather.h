@@ -25,10 +25,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-class HloAllGatherInstruction : public HloPoplarInstruction {
+class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
  public:
-  explicit HloAllGatherInstruction(std::vector<HloInstruction*> inputs,
-                                   const Shape& output_shape);
+  explicit HloPoplarAllGatherInstruction(std::vector<HloInstruction*> inputs,
+                                         const Shape& output_shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -50,7 +50,7 @@ class HloAllGatherInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateAllGather(
+std::unique_ptr<HloInstruction> CreatePoplarAllGather(
     std::vector<HloInstruction*> inputs, const Shape& output_shape);
 
 }  // namespace poplarplugin
