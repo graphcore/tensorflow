@@ -29,6 +29,7 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import momentum
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu.tests import pipelining_test_util
+from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 
 
 class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
@@ -65,8 +66,8 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
                         np.mgrid[0:size, 0:2][0])
 
   @parameterized.parameters(
-      {'merge_remote_buffers': False},
-      {'merge_remote_buffers': True},
+      {'merge_remote_buffers': MergeRemoteBuffersBehaviour.NO_MERGING},
+      {'merge_remote_buffers': MergeRemoteBuffersBehaviour.MERGE},
   )
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only

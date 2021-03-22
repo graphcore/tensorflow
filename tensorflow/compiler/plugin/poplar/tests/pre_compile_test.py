@@ -45,7 +45,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 def _options_function(opts):
   return ipu.utils.set_ipu_connection_type(
-      opts, ipu.utils.DeviceConnectionType.PRE_COMPILE, 1)
+      opts, ipu.utils.DeviceConnectionType.PRE_COMPILE, "ipu1")
 
 
 @contextlib.contextmanager

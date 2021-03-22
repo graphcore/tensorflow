@@ -401,6 +401,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.floating_point_behaviour();
   }
 
+  bool FloatingPointBehaviourFlagsSet() const {
+    const IpuOptions::FloatingPointBehaviour& flags = FloatingPointBehaviour();
+    return flags.inv() || flags.div0() || flags.oflo() || flags.esr() ||
+           flags.nanoo();
+  }
+
   const IpuOptions::VerifiedTransfers& VerifiedTransfers() const {
     return current_config_.verified_transfers();
   }
@@ -414,7 +420,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         .always_rearrange_copies_on_the_host();
   }
 
-  std::string GetSchedulerSelection() const {
+  IpuSchedulingAlgorithm GetSchedulerSelection() const {
     return current_config_.speed_size_config().scheduler_selection();
   }
 

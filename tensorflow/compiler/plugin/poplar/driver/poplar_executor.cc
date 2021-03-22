@@ -198,7 +198,6 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   // and then loading the executable onto a hardware device, given that it has
   // the same target configuration as the offline compilation target.
   hashable_config.clear_ipu_version();
-  hashable_config.clear_has_ipu_version();
   hashable_config.clear_enable_remote_buffers_without_device();
 
   std::string config_proto_str;
@@ -241,11 +240,6 @@ bool HasIpuHardware() {
     }
   }
   return false;
-}
-
-poplar::Target CreateIpuTarget(uint num_ipus, int64 ipu_version) {
-  return poplar::Target::createIPUTarget(num_ipus,
-                                         "ipu" + std::to_string(ipu_version));
 }
 
 // Create a new target based on `target`, but with a total number of IPUs
@@ -1696,15 +1690,15 @@ Status PoplarExecutor::CreatePoplarTarget() {
       CHECK(num_devices);
 
       // If there is an IPU version configured then use that.
-      if (current_config_.has_ipu_version()) {
+      if (!current_config_.ipu_version().empty()) {
         int64 num_target_devices = *num_devices;
         if (HasMultiReplicaDistributionOptions()) {
           const int64 process_count = GetMultiReplicaProcessCount();
           CHECK_GT(process_count, 0);
           num_target_devices *= process_count;
         }
-        ipu_.SetTarget(
-            CreateIpuTarget(num_target_devices, current_config_.ipu_version()));
+        ipu_.SetTarget(poplar::Target::createIPUTarget(
+            num_target_devices, current_config_.ipu_version()));
       } else {
         // Deduce the IPU target given the configuration.
         switch (ConnectionType()) {
@@ -1769,14 +1763,11 @@ Status PoplarExecutor::CreatePoplarTarget() {
           "Multi-replica distribution is not supported with the IPU model");
     }
 
-    const absl::flat_hash_set<std::string> valid_model_versions = {"ipu1",
-                                                                   "ipu2"};
     std::string user_model_version =
         current_config_.ipu_model_config().ipu_model_version();
-
-    if (!valid_model_versions.contains(user_model_version)) {
-      LOG(WARNING) << "Unknown IPU Model version '" << user_model_version
-                   << "'. Defaulting to 'ipu2'";
+    if (user_model_version.empty()) {
+      LOG(WARNING) << "A version was not supplied when using the IPU Model."
+                   << " Defaulting to 'ipu2'.";
       user_model_version = "ipu2";
     }
 

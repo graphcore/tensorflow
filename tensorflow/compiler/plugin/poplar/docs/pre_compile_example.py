@@ -15,7 +15,7 @@ cfg = ipu.utils.auto_select_ipus(cfg, 1)
 cfg = ipu.utils.set_ipu_connection_type(
     cfg,
     connection_type=ipu.utils.DeviceConnectionType.PRE_COMPILE,
-    ipu_version=2,
+    ipu_version="ipu2",
     enable_remote_buffers=True)
 
 ipu.utils.configure_ipu_system(cfg)
