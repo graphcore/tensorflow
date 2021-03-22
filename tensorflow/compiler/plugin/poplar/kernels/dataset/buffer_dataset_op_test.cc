@@ -1,8 +1,11 @@
 /* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -12,6 +15,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/dataset/buffer_dataset_op.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "tensorflow/core/kernels/data/dataset_test_base.h"
@@ -22,547 +27,181 @@ namespace {
 
 constexpr char kNodeName[] = "buffer_dataset";
 
-class BufferDatasetOpTest : public DatasetOpsTestBase {
- protected:
-  // Creates `TensorSliceDataset` variant tensor from the input vector of
-  // tensors.
-  Status CreateTensorSliceDatasetTensor(
-      std::vector<Tensor>* const tensor_vector, Tensor* dataset_tensor) {
-    DatasetBase* tensor_slice_dataset;
-    TF_RETURN_IF_ERROR(CreateTensorSliceDataset(
-        "tensor_slice_node", tensor_vector, &tensor_slice_dataset));
-    TF_RETURN_IF_ERROR(
-        StoreDatasetInVariantTensor(tensor_slice_dataset, dataset_tensor));
+class BufferDatasetOpTest : public DatasetOpsTestBase {};
+
+class BufferDatasetParams : public DatasetParams {
+ public:
+  template <typename T>
+  BufferDatasetParams(T input_dataset_params, int64 buffer_size,
+                      DataTypeVector output_dtypes,
+                      std::vector<PartialTensorShape> output_shapes,
+                      string node_name)
+      : DatasetParams(std::move(output_dtypes), std::move(output_shapes),
+                      std::move(node_name)),
+        buffer_size_(buffer_size) {
+    input_dataset_params_.push_back(absl::make_unique<T>(input_dataset_params));
+    iterator_prefix_ =
+        name_utils::IteratorPrefix(input_dataset_params.dataset_type(),
+                                   input_dataset_params.iterator_prefix());
+  }
+
+  std::vector<Tensor> GetInputTensors() const override {
+    return {CreateTensor<int64>(TensorShape({}), {buffer_size_})};
+  }
+
+  Status GetInputNames(std::vector<string>* input_names) const override {
+    input_names->clear();
+    input_names->emplace_back(BufferDatasetOp::kInputDataset);
+    input_names->emplace_back(BufferDatasetOp::kBufferSize);
     return Status::OK();
   }
 
-  // Create a new `BufferDataset` op kernel.
-  Status CreateBufferDatasetKernel(
-      const DataTypeVector& output_types,
-      const std::vector<PartialTensorShape>& output_shapes,
-      std::unique_ptr<OpKernel>* op_kernel) {
-    NodeDef node_def = test::function::NDef(
-        kNodeName, name_utils::OpName(BufferDatasetOp::kDatasetType),
-        {BufferDatasetOp::kInputDataset, BufferDatasetOp::kBufferSize},
-        {{BufferDatasetOp::kOutputTypes, output_types},
-         {BufferDatasetOp::kOutputShapes, output_shapes}});
-    TF_RETURN_IF_ERROR(CreateOpKernel(node_def, op_kernel));
+  Status GetAttributes(AttributeVector* attr_vector) const override {
+    attr_vector->clear();
+    attr_vector->emplace_back(BufferDatasetOp::kOutputTypes, output_dtypes_);
+    attr_vector->emplace_back(BufferDatasetOp::kOutputShapes, output_shapes_);
     return Status::OK();
   }
 
-  // Create a new `BufferDataset` op kernel context.
-  Status CreateBufferDatasetContext(
-      OpKernel* op_kernel, gtl::InlinedVector<TensorValue, 4>* const inputs,
-      std::unique_ptr<OpKernelContext>* context) {
-    TF_RETURN_IF_ERROR(CheckOpKernelInput(*op_kernel, *inputs));
-    TF_RETURN_IF_ERROR(CreateOpKernelContext(op_kernel, inputs, context));
-    return Status::OK();
-  }
+  string dataset_type() const override { return BufferDatasetOp::kDatasetType; }
+
+ private:
+  const int64 buffer_size_;
 };
 
-struct TestCase {
-  std::vector<Tensor> input_tensors;
-  int64 buffer_size;
-  std::vector<Tensor> expected_outputs;
-  DataTypeVector expected_output_dtypes;
-  std::vector<PartialTensorShape> expected_output_shapes;
-  int64 expected_cardinality;
-  std::vector<int> breakpoints;
-};
+// Test case 1: buffer size divides the input size.
+BufferDatasetParams BufferSizeDividesSizeParams() {
+  auto tensor_slice_dataset_params = TensorSliceDatasetParams(
+      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
+                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*node_name=*/"tensor_slice");
+  return BufferDatasetParams(
+      /*input_dataset_params=*/tensor_slice_dataset_params,
+      /*buffer_size=*/5,
+      /*output_dtypes=*/{DT_INT64},
+      /*output_shapes=*/{PartialTensorShape({1})},
+      /*node_name=*/kNodeName);
+}
 
-TestCase BufferSizeDividesSizeTestCase() {
+// Test case 2: buffer size doesn't divide the input size.
+BufferDatasetParams BufferSizeDoesntDividesSizeParams() {
+  auto tensor_slice_dataset_params = TensorSliceDatasetParams(
+      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
+                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*node_name=*/"tensor_slice");
+  return BufferDatasetParams(
+      /*input_dataset_params=*/tensor_slice_dataset_params,
+      /*buffer_size=*/3,
+      /*output_dtypes=*/{DT_INT64},
+      /*output_shapes=*/{PartialTensorShape({1})},
+      /*node_name=*/kNodeName);
+}
+
+std::vector<GetNextTestCase<BufferDatasetParams>> GetNextTestCases() {
   return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*buffer_size*/ 5,
-      /*expected_outputs*/
-      {CreateTensor<int64>(TensorShape{1}, {0}),
-       CreateTensor<int64>(TensorShape{1}, {1}),
-       CreateTensor<int64>(TensorShape{1}, {2}),
-       CreateTensor<int64>(TensorShape{1}, {3}),
-       CreateTensor<int64>(TensorShape{1}, {4}),
-       CreateTensor<int64>(TensorShape{1}, {5}),
-       CreateTensor<int64>(TensorShape{1}, {6}),
-       CreateTensor<int64>(TensorShape{1}, {7}),
-       CreateTensor<int64>(TensorShape{1}, {8}),
-       CreateTensor<int64>(TensorShape{1}, {9})},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 10,
-      /*breakpoints*/ {0, 4, 11}};
+      {/*dataset_params=*/BufferSizeDividesSizeParams(),
+       /*expected_outputs=*/
+       CreateTensors<int64>(
+           TensorShape{1}, {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}})},
+      {/*dataset_params=*/BufferSizeDoesntDividesSizeParams(),
+       /*expected_outputs=*/
+       CreateTensors<int64>(TensorShape{1},
+                            {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
 }
 
-TestCase BufferSizeDoesntDividesSizeTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*buffer_size*/ 3,
-      /*expected_outputs*/
-      {CreateTensor<int64>(TensorShape{1}, {0}),
-       CreateTensor<int64>(TensorShape{1}, {1}),
-       CreateTensor<int64>(TensorShape{1}, {2}),
-       CreateTensor<int64>(TensorShape{1}, {3}),
-       CreateTensor<int64>(TensorShape{1}, {4}),
-       CreateTensor<int64>(TensorShape{1}, {5}),
-       CreateTensor<int64>(TensorShape{1}, {6}),
-       CreateTensor<int64>(TensorShape{1}, {7}),
-       CreateTensor<int64>(TensorShape{1}, {8})},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 9,
-      /*breakpoints*/ {0, 4, 11}};
-}
-
-TestCase InvalidBufferSizeTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*buffer_size*/ -2,
-      /*expected_outputs*/ {},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 0,
-      /*breakpoints*/ {0, 4, 11}};
-}
-
-class ParameterizedBufferDatasetOpTest
-    : public BufferDatasetOpTest,
-      public ::testing::WithParamInterface<TestCase> {};
-
-TEST_P(ParameterizedBufferDatasetOpTest, GetNext) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = GetParam();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  std::unique_ptr<IteratorContext> iterator_ctx;
-  TF_ASSERT_OK(
-      CreateIteratorContext(buffer_dataset_context.get(), &iterator_ctx));
-  std::unique_ptr<IteratorBase> iterator;
-  TF_ASSERT_OK(
-      buffer_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
-
-  auto expected_outputs_it = test_case.expected_outputs.begin();
-  bool end_of_sequence = false;
-  std::vector<Tensor> out_tensors;
-  while (!end_of_sequence) {
-    TF_EXPECT_OK(
-        iterator->GetNext(iterator_ctx.get(), &out_tensors, &end_of_sequence));
-    if (!end_of_sequence) {
-      for (const auto& tensor : out_tensors) {
-        EXPECT_NE(expected_outputs_it, test_case.expected_outputs.end());
-        TF_EXPECT_OK(ExpectEqual(tensor, *expected_outputs_it));
-        expected_outputs_it++;
-      }
-    }
-  }
-  EXPECT_EQ(expected_outputs_it, test_case.expected_outputs.end());
-}
-
-TEST_F(BufferDatasetOpTest, InvalidBufferSize) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = InvalidBufferSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  EXPECT_EQ(CreateDataset(buffer_dataset_kernel.get(),
-                          buffer_dataset_context.get(), &buffer_dataset)
-                .code(),
-            tensorflow::error::INVALID_ARGUMENT);
-}
+ITERATOR_GET_NEXT_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
+                         GetNextTestCases())
 
 TEST_F(BufferDatasetOpTest, DatasetNodeName) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  EXPECT_EQ(buffer_dataset->node_name(), kNodeName);
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckDatasetNodeName(dataset_params.node_name()));
 }
 
 TEST_F(BufferDatasetOpTest, DatasetTypeString) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  EXPECT_EQ(buffer_dataset->type_string(),
-            name_utils::OpName(BufferDatasetOp::kDatasetType));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckDatasetTypeString(
+      name_utils::OpName(BufferDatasetOp::kDatasetType)));
 }
 
 TEST_F(BufferDatasetOpTest, DatasetOutputDtypes) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  TF_EXPECT_OK(VerifyTypesMatch(buffer_dataset->output_dtypes(),
-                                test_case.expected_output_dtypes));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckDatasetOutputDtypes({DT_INT64}));
 }
 
 TEST_F(BufferDatasetOpTest, DatasetOutputShapes) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  TF_EXPECT_OK(VerifyShapesCompatible(buffer_dataset->output_shapes(),
-                                      test_case.expected_output_shapes));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckDatasetOutputShapes(dataset_params.output_shapes()));
 }
 
-TEST_P(ParameterizedBufferDatasetOpTest, Cardinality) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  EXPECT_EQ(buffer_dataset->Cardinality(), test_case.expected_cardinality);
+std::vector<CardinalityTestCase<BufferDatasetParams>> CardinalityTestCases() {
+  return {{/*dataset_params=*/BufferSizeDividesSizeParams(),
+           /*expected_cardinality=*/10},
+          {/*dataset_params=*/BufferSizeDoesntDividesSizeParams(),
+           /*expected_cardinality=*/9}};
 }
+
+DATASET_CARDINALITY_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
+                           CardinalityTestCases())
 
 TEST_F(BufferDatasetOpTest, IteratorOutputDtypes) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  std::unique_ptr<IteratorContext> iterator_ctx;
-  TF_ASSERT_OK(
-      CreateIteratorContext(buffer_dataset_context.get(), &iterator_ctx));
-  std::unique_ptr<IteratorBase> iterator;
-  TF_ASSERT_OK(
-      buffer_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
-
-  TF_EXPECT_OK(VerifyTypesMatch(iterator->output_dtypes(),
-                                test_case.expected_output_dtypes));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckIteratorOutputDtypes({DT_INT64}));
 }
 
 TEST_F(BufferDatasetOpTest, IteratorOutputShapes) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  std::unique_ptr<IteratorContext> iterator_ctx;
-  TF_ASSERT_OK(
-      CreateIteratorContext(buffer_dataset_context.get(), &iterator_ctx));
-  std::unique_ptr<IteratorBase> iterator;
-  TF_ASSERT_OK(
-      buffer_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
-
-  TF_EXPECT_OK(VerifyShapesCompatible(iterator->output_shapes(),
-                                      test_case.expected_output_shapes));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckIteratorOutputShapes(dataset_params.output_shapes()));
 }
 
 TEST_F(BufferDatasetOpTest, IteratorOutputPrefix) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  std::unique_ptr<IteratorContext> iterator_ctx;
-  TF_ASSERT_OK(
-      CreateIteratorContext(buffer_dataset_context.get(), &iterator_ctx));
-  std::unique_ptr<IteratorBase> iterator;
-  TF_ASSERT_OK(
-      buffer_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
-
-  EXPECT_EQ(iterator->prefix(), name_utils::IteratorPrefix(
-                                    BufferDatasetOp::kDatasetType, "Iterator"));
+  auto dataset_params = BufferSizeDividesSizeParams();
+  TF_ASSERT_OK(Initialize(dataset_params));
+  TF_ASSERT_OK(CheckIteratorPrefix(name_utils::IteratorPrefix(
+      BufferDatasetOp::kDatasetType, dataset_params.iterator_prefix())));
 }
 
-TEST_P(ParameterizedBufferDatasetOpTest, Roundtrip) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-
-  const TestCase& test_case = BufferSizeDividesSizeTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor buffer_size =
-      CreateTensor<int64>(TensorShape{}, {test_case.buffer_size});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_buffer_dataset(
-      {TensorValue(&tensor_slice_dataset_tensor), TensorValue(&buffer_size)});
-
-  std::unique_ptr<OpKernel> buffer_dataset_kernel;
-  TF_ASSERT_OK(CreateBufferDatasetKernel(test_case.expected_output_dtypes,
-                                         test_case.expected_output_shapes,
-                                         &buffer_dataset_kernel));
-  std::unique_ptr<OpKernelContext> buffer_dataset_context;
-  TF_ASSERT_OK(CreateBufferDatasetContext(buffer_dataset_kernel.get(),
-                                          &inputs_for_buffer_dataset,
-                                          &buffer_dataset_context));
-  DatasetBase* buffer_dataset;
-  TF_ASSERT_OK(CreateDataset(buffer_dataset_kernel.get(),
-                             buffer_dataset_context.get(), &buffer_dataset));
-  core::ScopedUnref scoped_unref(buffer_dataset);
-
-  std::unique_ptr<IteratorContext> iterator_ctx;
-  TF_ASSERT_OK(
-      CreateIteratorContext(buffer_dataset_context.get(), &iterator_ctx));
-  std::unique_ptr<IteratorBase> iterator;
-  TF_ASSERT_OK(
-      buffer_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
-
-  std::unique_ptr<SerializationContext> serialization_ctx;
-  TF_ASSERT_OK(CreateSerializationContext(&serialization_ctx));
-  bool end_of_sequence = false;
-  std::vector<Tensor> out_tensors;
-  int cur_iteration = 0;
-  auto expected_outputs_it = test_case.expected_outputs.begin();
-  const std::vector<int>& breakpoints = test_case.breakpoints;
-  for (int breakpoint : breakpoints) {
-    VariantTensorData data;
-    VariantTensorDataWriter writer(&data);
-    TF_EXPECT_OK(iterator->Save(serialization_ctx.get(), &writer));
-    TF_EXPECT_OK(writer.Flush());
-    VariantTensorDataReader reader(&data);
-    TF_EXPECT_OK(RestoreIterator(iterator_ctx.get(), &reader, "Iterator",
-                                 *buffer_dataset, &iterator));
-
-    while (cur_iteration <= breakpoint) {
-      TF_EXPECT_OK(iterator->GetNext(iterator_ctx.get(), &out_tensors,
-                                     &end_of_sequence));
-      if (!end_of_sequence) {
-        for (auto& tensor : out_tensors) {
-          EXPECT_NE(expected_outputs_it, test_case.expected_outputs.end());
-          TF_EXPECT_OK(ExpectEqual(tensor, *expected_outputs_it));
-          expected_outputs_it++;
-        }
-      }
-      cur_iteration++;
-    }
-
-    if (breakpoint >= test_case.expected_outputs.size()) {
-      EXPECT_TRUE(end_of_sequence);
-      EXPECT_EQ(expected_outputs_it, test_case.expected_outputs.end());
-    } else {
-      EXPECT_FALSE(end_of_sequence);
-    }
-  }
+std::vector<IteratorSaveAndRestoreTestCase<BufferDatasetParams>>
+IteratorSaveAndRestoreTestCases() {
+  return {
+      {/*dataset_params=*/BufferSizeDividesSizeParams(),
+       /*breakpoints=*/{0, 4, 11},
+       /*expected_outputs=*/
+       CreateTensors<int64>(
+           TensorShape{1}, {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}})},
+      {/*dataset_params=*/BufferSizeDoesntDividesSizeParams(),
+       /*breakpoints=*/{0, 4, 11},
+       /*expected_outputs=*/
+       CreateTensors<int64>(TensorShape{1},
+                            {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}})}};
 }
 
-INSTANTIATE_TEST_SUITE_P(BufferDatasetOpTest, ParameterizedBufferDatasetOpTest,
-                         ::testing::ValuesIn(std::vector<TestCase>(
-                             {BufferSizeDividesSizeTestCase(),
-                              BufferSizeDoesntDividesSizeTestCase()})));
+ITERATOR_SAVE_AND_RESTORE_TEST_P(BufferDatasetOpTest, BufferDatasetParams,
+                                 IteratorSaveAndRestoreTestCases())
+
+// Test case: buffer size is invalid.
+BufferDatasetParams InvalidBufferSizeParams() {
+  auto tensor_slice_dataset_params = TensorSliceDatasetParams(
+      /*components=*/{CreateTensor<int64>(TensorShape{10, 1},
+                                          {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+      /*node_name=*/"tensor_slice");
+  return BufferDatasetParams(
+      /*input_dataset_params=*/tensor_slice_dataset_params,
+      /*buffer_size=*/-2,
+      /*output_dtypes=*/{DT_INT64},
+      /*output_shapes=*/{PartialTensorShape({1})},
+      /*node_name=*/kNodeName);
+}
+
+TEST_F(BufferDatasetOpTest, InvalidBufferSizeParams) {
+  auto dataset_params = InvalidBufferSizeParams();
+  EXPECT_EQ(Initialize(dataset_params).code(), error::INVALID_ARGUMENT);
+}
 
 }  // namespace
 }  // namespace data

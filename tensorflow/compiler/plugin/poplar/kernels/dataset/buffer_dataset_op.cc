@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/blocking_counter.h"
 #include "tensorflow/core/lib/gtl/cleanup.h"
 #include "tensorflow/core/platform/macros.h"
+#include "tensorflow/core/platform/stringprintf.h"
 #include "tensorflow/core/util/batch_util.h"
 
 namespace tensorflow {
@@ -118,12 +119,7 @@ class BufferDatasetOp::Dataset : public DatasetBase {
       buffer_size_ = dataset()->buffer_size_;
       buffer_position_ = buffer_size_;
       buffer_.resize(buffer_size_);
-      return dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_);
-    }
-
-    string BuildTraceMeName() override {
-      return strings::StrCat(prefix(), "#buffer_size=", dataset()->buffer_size_,
-                             "#");
+      return dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_);
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -170,12 +166,13 @@ class BufferDatasetOp::Dataset : public DatasetBase {
       return model::MakeKnownRatioNode(std::move(args), buffer_size_);
     }
 
-    Status SaveInternal(IteratorStateWriter* writer) override {
+    Status SaveInternal(SerializationContext* ctx,
+                        IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       if (!input_impl_) {
         TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kInputImplEmpty), ""));
       } else {
-        TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
+        TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
         // Save all the remaining buffers.
         TF_RETURN_IF_ERROR(
             writer->WriteScalar(full_name(kBufferSize), buffer_size_));
@@ -241,6 +238,14 @@ class BufferDatasetOp::Dataset : public DatasetBase {
         input_impl_.reset();
       }
       return Status::OK();
+    }
+
+    data::TraceMeMetadata GetTraceMeMetadata() const override {
+      data::TraceMeMetadata result;
+      result.push_back(std::make_pair(
+          "buffer_size",
+          strings::Printf("%lld", static_cast<size_t>(buffer_size_))));
+      return result;
     }
 
    private:
