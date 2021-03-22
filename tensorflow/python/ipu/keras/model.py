@@ -345,13 +345,24 @@ class _IpuModelBase(KerasModel):
     self.total_loss = self._prepare_total_loss(masks)
     return [self.total_loss] + metrics
 
-  def _get_internal_run_loop(self, mode):
-    raise NotImplementedError(
-        "_IpuModelBase should not be used directly.  Use PipelinedModel or "
-        "Model instead.")
+  def _get_internal_run_loop(self, mode, run_loop_kwargs):
+    # Cache the built run_loops w.r.t the mode and run kwargs.
+    key = (mode, tuple(sorted(run_loop_kwargs.items())))
+    if key not in self._per_mode_loop_fns:
+      fn = partial(
+          self.__class__._internal_run_loop,  # pylint: disable=protected-access
+          self,
+          run_loop_kwargs=run_loop_kwargs)
+      self._per_mode_loop_fns[key] = def_function.function(
+          fn, autograph=False, experimental_compile=True)
+    return self._per_mode_loop_fns[key]
 
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
-                         mode):
+  def _internal_run_loop(self,
+                         infeed_queue,
+                         outfeed_queue,
+                         repeat_count,
+                         mode,
+                         run_loop_kwargs=None):
     raise NotImplementedError(
         "_IpuModelBase should not be used directly.  Use PipelinedModel or "
         "Model instead.")
@@ -377,7 +388,7 @@ class _IpuModelBase(KerasModel):
   def _do_internal(self, mode, ds, size, epochs, verbose, callbacks,
                    initial_epoch, steps_per_epoch, steps_per_run,
                    prefetch_depth, **kwargs):
-
+    run_loop_kwargs = kwargs.pop("run_loop_kwargs", {})
     self.args = kwargs
 
     # Figure out if we need to recreate the iterator after each epoch.
@@ -600,7 +611,9 @@ class _IpuModelBase(KerasModel):
           replication_factor=self.replication_factor,
           prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-          "outfeed", replication_factor=self.replication_factor)
+          "outfeed",
+          replication_factor=self.replication_factor,
+          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -642,7 +655,9 @@ class _IpuModelBase(KerasModel):
 
           # Create and run the core graph.
           strategy = distribution_strategy_context.get_strategy()
-          func = self._get_internal_run_loop(mode)
+          # Pass the run_loop_kwargs through to allow children to pass kwargs
+          # from their fit/evaluate/predict calls to their _internal_run_loop.
+          func = self._get_internal_run_loop(mode, run_loop_kwargs)
           strategy.experimental_run_v2(
               func, args=[self.infeed, self.outfeed, steps_per_run, mode])
 
@@ -1016,15 +1031,12 @@ class IPUSequential(_IpuModelBase):
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
-  def _get_internal_run_loop(self, mode):
-    if not mode in self._per_mode_loop_fns:
-      fn = partial(IPUSequential._internal_run_loop, self)
-      self._per_mode_loop_fns[mode] = def_function.function(
-          fn, autograph=False, experimental_compile=True)
-    return self._per_mode_loop_fns[mode]
-
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
-                         mode):
+  def _internal_run_loop(self,
+                         infeed_queue,
+                         outfeed_queue,
+                         repeat_count,
+                         mode,
+                         run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
 
     def main_body(inputs):
@@ -1812,8 +1824,12 @@ class IPUModel(_IpuModelBase):
     losses_and_metrics = [self.total_loss] + output_losses + metrics
     return losses_and_metrics
 
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
-                         mode):
+  def _internal_run_loop(self,
+                         infeed_queue,
+                         outfeed_queue,
+                         repeat_count,
+                         mode,
+                         run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
 
     def main_body(inputs):
@@ -1888,13 +1904,6 @@ class IPUModel(_IpuModelBase):
                           infeed_queue=infeed_queue)
 
     return result.outputs
-
-  def _get_internal_run_loop(self, mode):
-    if not mode in self._per_mode_loop_fns:
-      fn = partial(IPUModel._internal_run_loop, self)
-      self._per_mode_loop_fns[mode] = def_function.function(
-          fn, autograph=False, experimental_compile=True)
-    return self._per_mode_loop_fns[mode]
 
   def build(self, input_shape):
     """Builds the model based on input shapes received.

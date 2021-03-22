@@ -362,16 +362,15 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     """
     return super().compile(optimizer, loss, metrics, loss_weights, **kwargs)
 
-  def _get_internal_run_loop(self, mode):
-    if not mode in self._per_mode_loop_fns:
-      fn = partial(PipelineSequential._internal_run_loop, self)
-      self._per_mode_loop_fns[mode] = def_function.function(
-          fn, autograph=False, experimental_compile=True)
-    return self._per_mode_loop_fns[mode]
-
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
-                         mode):
+  def _internal_run_loop(self,
+                         infeed_queue,
+                         outfeed_queue,
+                         repeat_count,
+                         mode,
+                         run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
+    accumulate_outfeed = (run_loop_kwargs or {}).get("accumulate_outfeed",
+                                                     False)
 
     # Plain functions to build a stage
     def call_inference_stage(stage_id, inputs):
@@ -381,11 +380,11 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
 
       x = inputs
       for l in self.stages[stage_id]:
-        kwargs = {}
+        stage_kwargs = {}
         argspec = tf_inspect.getfullargspec(l.call).args
         if 'training' in argspec:
-          kwargs['training'] = training
-        x = l(x, **kwargs)
+          stage_kwargs['training'] = training
+        x = l(x, **stage_kwargs)
 
       return x
 
@@ -397,7 +396,12 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
       # then create the losses and metrics
       if stage_id == len(self.stages) - 1:
         self._set_output_attrs(x)
-        return self._add_loss(targets)
+        losses_and_metrics = self._add_loss(targets)
+        # Normalize metrics by accumulation count if we're accumulating
+        if accumulate_outfeed and len(losses_and_metrics) > 1:
+          for i in range(1, len(losses_and_metrics)):
+            losses_and_metrics[i] /= self.gradient_accumulation_count
+        return losses_and_metrics
 
       return x, targets
 
@@ -448,6 +452,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         offload_gradient_accumulation_buffers,
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
+        accumulate_outfeed=accumulate_outfeed,
         name=self.name)
 
     return pipeline.outputs
@@ -466,6 +471,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
           steps_per_epoch=None,
           steps_per_run=None,
           prefetch_depth=None,
+          accumulate_outfeed=False,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Sequential `fit` method.
@@ -571,12 +577,20 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         that is created internally by this function. See the
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
         documentation.
+      accumulate_outfeed: The loss and metrics from the final pipeline
+        stage are normally enqueued as soon as they're available. If this
+        option is True, the data will instead be accumulated when they're
+        available and enqueued at the end of pipeline execution, reducing
+        the amount of host <-> device communication. The accumulated metrics are
+        normalised by the `gradient_accumulation_count`.
     Returns:
       A `History` object. Its `History.history` attribute is a record of
       training loss values and metrics values at successive epochs.
     Raises:
       ValueError: if there are invalid arguments.
     """
+    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().fit(x,
                        y,
                        batch_size=batch_size,
@@ -600,6 +614,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
                callbacks=None,
                steps_per_run=None,
                prefetch_depth=None,
+               accumulate_outfeed=False,
                **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
     This provides equivalent functionality to the Keras Sequential `evaluate`
@@ -678,6 +693,12 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         that is created internally by this function. See the
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
         documentation.
+      accumulate_outfeed: The loss and metrics from the final pipeline
+        stage are normally enqueued as soon as they're available. If this
+        option is True, the data will instead be accumulated when they're
+        available and enqueued at the end of pipeline execution, reducing
+        the amount of host <-> device communication. The accumulated metrics are
+        normalised by the `gradient_accumulation_count`.
     Returns:
       Scalar test loss (if the model has a single output and no metrics) or list
       of scalars (if the model has multiple outputs and/or metrics). The
@@ -686,6 +707,8 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     Raises:
       ValueError: if there are invalid arguments.
     """
+    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().evaluate(x,
                             y,
                             batch_size=batch_size,
@@ -1207,9 +1230,15 @@ class PipelineModel(ipu_model.Model):
 
     return stage_node_ids
 
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
-                         mode):
+  def _internal_run_loop(self,
+                         infeed_queue,
+                         outfeed_queue,
+                         repeat_count,
+                         mode,
+                         run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
+    accumulate_outfeed = (run_loop_kwargs or {}).get("accumulate_outfeed",
+                                                     False)
 
     # Dictionary mapping reference tensors to computed tensors.
     tensor_dict = OrderedDict()
@@ -1262,7 +1291,12 @@ class PipelineModel(ipu_model.Model):
     def training_body(stage_id, *args):
       outputs, targets = main_body(stage_id, *args)
       if stage_id == self.stages[-1]:
-        return self._add_loss(nest.flatten(outputs), targets)
+        losses_and_metrics = self._add_loss(nest.flatten(outputs), targets)
+        # Normalize metrics by accumulation count if we're accumulating
+        if accumulate_outfeed and len(losses_and_metrics) > 1:
+          for i in range(1, len(losses_and_metrics)):
+            losses_and_metrics[i] /= self.gradient_accumulation_count
+        return losses_and_metrics
       return outputs + targets
 
     def optimizer_function(total_loss, *_):
@@ -1309,16 +1343,10 @@ class PipelineModel(ipu_model.Model):
         offload_gradient_accumulation_buffers,
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
+        accumulate_outfeed=accumulate_outfeed,
         name=self.name)
 
     return pipeline.outputs
-
-  def _get_internal_run_loop(self, mode):
-    if not mode in self._per_mode_loop_fns:
-      fn = partial(PipelineModel._internal_run_loop, self)
-      self._per_mode_loop_fns[mode] = def_function.function(
-          fn, autograph=False, experimental_compile=True)
-    return self._per_mode_loop_fns[mode]
 
   @trackable.no_automatic_dependency_tracking
   def compile(self,
@@ -1383,6 +1411,7 @@ class PipelineModel(ipu_model.Model):
           steps_per_epoch=None,
           steps_per_run=None,
           prefetch_depth=None,
+          accumulate_outfeed=False,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Model `fit` method.
@@ -1488,12 +1517,20 @@ class PipelineModel(ipu_model.Model):
         that is created internally by this function. See the
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
         documentation.
+      accumulate_outfeed: The loss and metrics from the final pipeline
+        stage are normally enqueued as soon as they're available. If this
+        option is True, the data will instead be accumulated when they're
+        available and enqueued at the end of pipeline execution, reducing
+        the amount of host <-> device communication. The accumulated metrics are
+        normalised by the `gradient_accumulation_count`.
     Returns:
       A `History` object. Its `History.history` attribute is a record of
       training loss values and metrics values at successive epochs.
     Raises:
       ValueError: if there are invalid arguments.
     """
+    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().fit(x,
                        y,
                        batch_size=batch_size,
@@ -1517,6 +1554,7 @@ class PipelineModel(ipu_model.Model):
                callbacks=None,
                steps_per_run=None,
                prefetch_depth=None,
+               accumulate_outfeed=False,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Model `evaluate`
@@ -1595,6 +1633,12 @@ class PipelineModel(ipu_model.Model):
         that is created internally by this function. See the
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`
         documentation.
+      accumulate_outfeed: The loss and metrics from the final pipeline
+        stage are normally enqueued as soon as they're available. If this
+        option is True, the data will instead be accumulated when they're
+        available and enqueued at the end of pipeline execution, reducing
+        the amount of host <-> device communication. The accumulated metrics are
+        normalised by the `gradient_accumulation_count`.
     Returns:
       Scalar test loss (if the model has a single output and no metrics) or list
       of scalars (if the model has multiple outputs and/or metrics). The
@@ -1603,6 +1647,8 @@ class PipelineModel(ipu_model.Model):
     Raises:
       ValueError: if there are invalid arguments.
     """
+    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().evaluate(x,
                             y,
                             batch_size=batch_size,
