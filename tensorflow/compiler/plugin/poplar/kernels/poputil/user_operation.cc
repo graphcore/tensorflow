@@ -69,45 +69,25 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
   }
 }
 
-// Helper structure to wrap the parameters/returned values of the LoadLibrary
-// call.
-struct LibraryLoadInfo {
-  // System abstract handle to the library handle returned by system dynamic
-  // library open call.
-  void* handle;
-
-  // Pointer to the list of operations contained within the .so.
-  const void* buffer;
-
-  // Size of the above buffer.
-  size_t size;
-};
-
-xla::StatusOr<void*> GetSymbolAddress(const LibraryLoadInfo& library,
+xla::StatusOr<void*> GetSymbolAddress(void* handle,
                                       const std::string& sym_name) {
   void* ptr = nullptr;
-  TF_RETURN_IF_ERROR(Env::Default()->GetSymbolFromLibrary(
-      library.handle, sym_name.c_str(), &ptr));
+  TF_RETURN_IF_ERROR(
+      Env::Default()->GetSymbolFromLibrary(handle, sym_name.c_str(), &ptr));
   return ptr;
 }
 
-xla::StatusOr<uint64> GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
+xla::StatusOr<uint64> GetSymbolAddressAsInt64(void* handle,
                                               const std::string& sym_name) {
   // Extract the function from the library. We expect (and require) the user
   // function to be an undecorated 'C' type symbol
   // Convert the pointer to a uint64 (attribute map/json doesn't store
   // pointers).
-  TF_ASSIGN_OR_RETURN(void* addr, GetSymbolAddress(library, sym_name));
+  TF_ASSIGN_OR_RETURN(void* addr, GetSymbolAddress(handle, sym_name));
   return reinterpret_cast<uint64>(addr);
 }
 
 }  // namespace
-
-// This is not the public facing library API but we need to call this one
-// because we need access to the OpDef information returned by the last two
-// arguments.
-Status LoadLibrary(const char* library_filename, void** result,
-                   const void** buf, size_t* len);
 
 class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
  public:
@@ -130,12 +110,12 @@ class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
 
   virtual void Compile(XlaOpKernelContext* context) override {}
 
-  Status LoadLibrary(LibraryLoadInfo& library, XlaOpKernelContext* context) {
-    TF_RETURN_IF_ERROR(::tensorflow::LoadLibrary(
-        library_path.c_str(), &library.handle, &library.buffer, &library.size));
+  Status LoadLibrary(void** handle, XlaOpKernelContext* context) {
+    TF_RETURN_IF_ERROR(
+        Env::Default()->LoadLibrary(library_path.c_str(), handle));
 
     TF_ASSIGN_OR_DEFAULT(const void* api_level_ptr,
-                         GetSymbolAddress(library, "custom_op_api_level"),
+                         GetSymbolAddress(*handle, "custom_op_api_level"),
                          nullptr);
 
     int32 api_level =
@@ -151,7 +131,7 @@ class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
 
     // Initialize the symbols which are common to all types of user op.
     TF_ASSIGN_OR_RETURN(int64 fn_ptr,
-                        GetSymbolAddressAsInt64(library, op_name));
+                        GetSymbolAddressAsInt64(*handle, op_name));
 
     attribute_map_.AddAttribute("operation_fn", fn_ptr);
     return Status::OK();
@@ -224,17 +204,16 @@ class PoputilUserOp : public PoputilUserOpBase {
 
  private:
   Status LoadSymbols(XlaOpKernelContext* context) {
-    // Load the shared library.
-    LibraryLoadInfo library;
-    TF_RETURN_IF_ERROR(LoadLibrary(library, context));
+    void* handle;
+    TF_RETURN_IF_ERROR(LoadLibrary(&handle, context));
 
     // Handle the metadata specific to this type of user op.
-    TF_ASSIGN_OR_DEFAULT(
-        int64 metadata_fn_ptr,
-        GetSymbolAddressAsInt64(library, op_name + "_metadata"), 0l);
+    TF_ASSIGN_OR_DEFAULT(int64 metadata_fn_ptr,
+                         GetSymbolAddressAsInt64(handle, op_name + "_metadata"),
+                         0l);
     TF_ASSIGN_OR_DEFAULT(
         int64 allocator_fn_ptr,
-        GetSymbolAddressAsInt64(library, op_name + "_allocator"), 0l);
+        GetSymbolAddressAsInt64(handle, op_name + "_allocator"), 0l);
 
     attribute_map_.AddAttribute("metadata_function", metadata_fn_ptr);
     attribute_map_.AddAttribute("allocator_function", allocator_fn_ptr);
@@ -255,9 +234,8 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
       : PoputilUserOpBase(context) {}
 
   void Compile(XlaOpKernelContext* context) final {
-    // Load the shared library.
-    LibraryLoadInfo library;
-    OP_REQUIRES_OK(context, LoadLibrary(library, context));
+    void* handle;
+    OP_REQUIRES_OK(context, LoadLibrary(&handle, context));
 
     attribute_map_.AddAttribute("metadata_function", static_cast<int64>(0));
     attribute_map_.AddAttribute("allocator_function", static_cast<int64>(0));
@@ -276,14 +254,7 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
   std::string gp_path;
 };
 
-REGISTER_XLA_OP(Name("IpuUserOp")
-                    .Device(DEVICE_IPU_XLA_JIT)
-                    .CompileTimeConstantInput("library_path"),
-                PoputilUserOp);
-
-REGISTER_XLA_OP(Name("IpuUserReadWriteOp")
-                    .Device(DEVICE_IPU_XLA_JIT)
-                    .CompileTimeConstantInput("library_path"),
-                PoputilUserReadWriteOp);
+REGISTER_IPU_OP("IpuUserOp", PoputilUserOp);
+REGISTER_IPU_OP("IpuUserReadWriteOp", PoputilUserReadWriteOp);
 
 }  // namespace tensorflow
