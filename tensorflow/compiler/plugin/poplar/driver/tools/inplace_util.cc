@@ -380,6 +380,7 @@ HloInstructionDescription::HloInstructionDescription(
     // Inplace read/write ops.
     // Unary Elementwise ops - inplace on operand 0.
     case HloOpcode::kAbs:
+    case HloOpcode::kCbrt:
     case HloOpcode::kCeil:
     case HloOpcode::kClz:
     case HloOpcode::kCos:

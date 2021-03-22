@@ -32,6 +32,7 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     // Unary
     case HloOpcode::kAbs:
     case HloOpcode::kRoundNearestAfz:
+    case HloOpcode::kCbrt:
     case HloOpcode::kCeil:
     case HloOpcode::kClz:
     case HloOpcode::kConvert:

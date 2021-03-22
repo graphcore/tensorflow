@@ -67,6 +67,7 @@ class UnaryElementwiseOp : public PoplarOpDef {
 
 REGISTER_HLO_OP(kAbs, UnaryElementwiseOp);
 REGISTER_HLO_OP(kRoundNearestAfz, UnaryElementwiseOp);
+REGISTER_HLO_OP(kCbrt, UnaryElementwiseOp);
 REGISTER_HLO_OP(kCeil, UnaryElementwiseOp);
 REGISTER_HLO_OP(kClz, UnaryElementwiseOp);
 REGISTER_HLO_OP(kConvert, UnaryElementwiseOp);

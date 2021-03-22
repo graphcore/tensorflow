@@ -63,6 +63,8 @@ StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction* inst) {
   switch (opcode) {
     case HloOpcode::kAbs:
       return popops::expr::UnaryOpType::ABSOLUTE;
+    case HloOpcode::kCbrt:
+      return popops::expr::UnaryOpType::CBRT;
     case HloOpcode::kCeil:
       return popops::expr::UnaryOpType::CEIL;
     case HloOpcode::kClz:
