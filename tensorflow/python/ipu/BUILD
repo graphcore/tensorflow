@@ -564,7 +564,7 @@ tf_py_test(
 
 tf_py_test(
     name = "iteration_counter_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/iteration_counter_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -608,7 +608,7 @@ tf_py_test(
 
 tf_py_test(
     name = "random_constant_matmul_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/random_constant_matmul_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -625,7 +625,7 @@ tf_py_test(
 
 tf_py_test(
     name = "recompute_suggestion_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/recompute_suggestion_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -704,7 +704,7 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_compiler_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/ipu_compiler_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
@@ -785,7 +785,7 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_session_run_hooks_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/ipu_session_run_hooks_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -825,7 +825,7 @@ tf_py_test(
 
 py_test(
     name = "pop_datastream_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/pop_datastream_test.py"],
     srcs_version = "PY2AND3",
     deps = [
@@ -952,7 +952,7 @@ cc_binary(
 
 tf_py_test(
     name = "user_ops_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/user_ops_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

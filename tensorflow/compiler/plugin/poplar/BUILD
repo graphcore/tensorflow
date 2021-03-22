@@ -3440,7 +3440,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "ml_type_classify_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/ml_type_classify_test.py"],
     enabled_backends = ["poplar"],
     shard_count = 2,
@@ -3477,7 +3477,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "topk_onehot_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/topk_onehot_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3493,7 +3493,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "topk_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/topk_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3509,7 +3509,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "infeed_prefetch_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/infeed_prefetch_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3526,7 +3526,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "simple_network_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/simple_network_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3543,7 +3543,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "invalid_scheduler_selection",
-    size = "small",
+    size = "large",
     srcs = ["tests/invalid_scheduler_selection.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3561,7 +3561,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "matmul_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/matmul_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3579,7 +3579,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "matmul_option_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/matmul_option_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3667,7 +3667,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "triangular_solve_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/triangular_solve_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3684,7 +3684,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "cholesky_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/cholesky_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3716,7 +3716,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "variable_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/variable_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3738,7 +3738,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "synthetic_data_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/synthetic_data_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3760,7 +3760,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "synthetic_data_with_outfeeds_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/synthetic_data_with_outfeeds_test.py"],
     enabled_backends = ["poplar"],
     shard_count = 3,
@@ -3806,7 +3806,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "multi_run_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/multi_run_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3820,7 +3820,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "reduce_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/reduce_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3832,7 +3832,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "f16_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/f16_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3846,7 +3846,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "64_bit_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/64_bit_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3860,7 +3860,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "batch_norm_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/batch_norm_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -3990,7 +3990,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "assert_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/assert_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4026,7 +4026,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "tensor_array_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/tensor_array_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4044,7 +4044,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "monitored_session_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/monitored_session_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4288,7 +4288,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "case_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/case_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4302,7 +4302,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "while_loop_perf_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/while_loop_perf_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4320,7 +4320,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "mapping_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/mapping_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4339,7 +4339,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "remapping_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/remapping_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4357,7 +4357,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "dump_poplar_info",
-    size = "small",
+    size = "large",
     srcs = ["tests/dump_poplar_info.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4375,7 +4375,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "candidate_sampler_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4390,7 +4390,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "conditional_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/conditional_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4614,7 +4614,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "sharded_inplace_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/sharded_inplace_test.py"],
     enabled_backends = ["poplar"],
     deps = [
