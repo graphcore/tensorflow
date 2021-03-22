@@ -31,6 +31,7 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
 
 
@@ -120,21 +121,22 @@ class PipelineTester(object):
                                                dataset_fn, optimizer)
 
   @staticmethod
-  def _sharded_on_ipu(stages,
-                      inputs_fn,
-                      input_values,
-                      repeat_count,
-                      num_batches_to_accumulate,
-                      dataset_fn,
-                      optimizer,
-                      test_wrapper,
-                      recomp,
-                      device_mapping,
-                      number_of_io_tiles=0,
-                      replication_factor=1,
-                      merge_remote_buffers=False,
-                      replicated_optimizer_state_sharding=False,
-                      minimum_remote_tensor_size=128):
+  def _sharded_on_ipu(
+      stages,
+      inputs_fn,
+      input_values,
+      repeat_count,
+      num_batches_to_accumulate,
+      dataset_fn,
+      optimizer,
+      test_wrapper,
+      recomp,
+      device_mapping,
+      number_of_io_tiles=0,
+      replication_factor=1,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      replicated_optimizer_state_sharding=False,
+      minimum_remote_tensor_size=128):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -219,27 +221,28 @@ class PipelineTester(object):
       return session.run(outfeed_op)
 
   @staticmethod
-  def pipeline_on_ipu(stages,
-                      inputs_fn,
-                      input_values,
-                      repeat_count,
-                      gradient_accumulation_count,
-                      dataset_fn,
-                      optimizer,
-                      test_wrapper,
-                      expected_max_tile_memory,
-                      recomp,
-                      schedule,
-                      device_mapping=None,
-                      batch_serialization_iterations=1,
-                      recomputation_mode=None,
-                      number_of_io_tiles=0,
-                      return_report=False,
-                      replication_factor=1,
-                      offload_activations=None,
-                      merge_remote_buffers=False,
-                      replicated_optimizer_state_sharding=False,
-                      minimum_remote_tensor_size=128):
+  def pipeline_on_ipu(
+      stages,
+      inputs_fn,
+      input_values,
+      repeat_count,
+      gradient_accumulation_count,
+      dataset_fn,
+      optimizer,
+      test_wrapper,
+      expected_max_tile_memory,
+      recomp,
+      schedule,
+      device_mapping=None,
+      batch_serialization_iterations=1,
+      recomputation_mode=None,
+      number_of_io_tiles=0,
+      return_report=False,
+      replication_factor=1,
+      offload_activations=None,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      replicated_optimizer_state_sharding=False,
+      minimum_remote_tensor_size=128):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -387,26 +390,27 @@ class PipelineTester(object):
       return report
 
   @staticmethod
-  def compare_pipeline_to_sharding(stages,
-                                   inputs_fn,
-                                   input_values,
-                                   repeat_count,
-                                   gradient_accumulation_count,
-                                   dataset_fn,
-                                   optimizer,
-                                   test_wrapper,
-                                   expected_max_tile_memory,
-                                   recomp=False,
-                                   schedule=None,
-                                   device_mapping=None,
-                                   batch_serialization_iterations=1,
-                                   recomputation_mode=None,
-                                   number_of_io_tiles=0,
-                                   offload_activations=None,
-                                   merge_remote_buffers=False,
-                                   replication_factor=1,
-                                   replicated_optimizer_state_sharding=False,
-                                   minimum_remote_tensor_size=128):
+  def compare_pipeline_to_sharding(
+      stages,
+      inputs_fn,
+      input_values,
+      repeat_count,
+      gradient_accumulation_count,
+      dataset_fn,
+      optimizer,
+      test_wrapper,
+      expected_max_tile_memory,
+      recomp=False,
+      schedule=None,
+      device_mapping=None,
+      batch_serialization_iterations=1,
+      recomputation_mode=None,
+      number_of_io_tiles=0,
+      offload_activations=None,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      replication_factor=1,
+      replicated_optimizer_state_sharding=False,
+      minimum_remote_tensor_size=128):
     if batch_serialization_iterations > 1:
       assert device_mapping is None
       device_mapping = [0] * len(stages)

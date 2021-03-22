@@ -810,26 +810,26 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
 StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
     CompilerResources& res) {
   std::vector<IpuSchedulerAlgorithm> schedulers;
-  bool all = res.scheduler_selection.empty();
-  if (all || res.scheduler_selection == "Clustering") {
+  bool all = res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
     schedulers.push_back(CreateClusteringMemoryScheduler(res.information));
   }
-  if (all || res.scheduler_selection == "PostOrder") {
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.push_back(
         MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
   }
-  if (res.scheduler_selection == "LookAhead") {
+  if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
     schedulers.push_back(
         CreateLivenessLookAheadMemoryScheduler(res.information));
   }
-  if (res.scheduler_selection == "ShortestPath") {
+  if (res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
     schedulers.push_back(CreateShortestPathScheduler(res.information));
   }
 
-  if (schedulers.size() == 0) {
+  if (!schedulers.size()) {
     return xla::InvalidArgument(
-        "Invalid scheduler specified. Options are 'LookAhead', "
-        "'PostOrder' and 'Clustering'");
+        "Invalid scheduler specified. Options are 'LOOK_AHEAD',"
+        " 'POST_ORDER', 'CLUSTERING' and 'SHORTEST_PATH'.");
   }
   return schedulers;
 }
@@ -1633,8 +1633,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     main_program.add(seed_setup);
 
     // Set up the floating point control register if required
-    const auto& fp_control = poplar_executor->FloatingPointBehaviour();
-    if (fp_control.flags_set()) {
+    if (poplar_executor->FloatingPointBehaviourFlagsSet()) {
+      const auto& fp_control = poplar_executor->FloatingPointBehaviour();
       setFpBehaviour(main_graph, fp_control, main_program);
     }
 

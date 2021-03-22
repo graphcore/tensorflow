@@ -70,7 +70,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
   def _configureIPU(self, serialization_folder, verification_options=None):
     opts = utils.create_ipu_config()
     opts = utils.set_ipu_connection_type(opts,
-                                         utils.DeviceConnectionType.NEVER, 1)
+                                         utils.DeviceConnectionType.NEVER,
+                                         "ipu1")
     opts = utils.set_serialization_options(opts, serialization_folder)
     if verification_options:
       opts = utils.set_transfer_options(opts, True)

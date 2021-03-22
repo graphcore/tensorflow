@@ -3551,24 +3551,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "invalid_scheduler_selection",
-    size = "large",
-    srcs = ["tests/invalid_scheduler_selection.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:nn",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:variables",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "matmul_test",
     size = "large",
     srcs = ["tests/matmul_test.py"],
@@ -5212,7 +5194,6 @@ test_suite(
         "instruction_extensions_test",
         "inter_ipu_copy_inserter_test",
         "inter_tileset_copy_inserter_test",
-        "invalid_scheduler_selection",
         "io_tiles_placer_test",
         "ipu_model_device_test",
         "layout_strip_test",

@@ -36,6 +36,47 @@ The ``ctc_loss`` and ``ctc_loss_with_logits`` ops from ``ipu.ops.nn_ops`` have b
 will be removed in release 2.2. They have been superseeded by ``ctc_loss_v2`` and
 ``ctc_loss_with_log_probs``.
 
+Changes to configuration API
+''''''''''''''''''''''''''''
+
+``tensorflow.python.ipu.create_ipu_config``
+
+  - The ``scheduler_selection`` argument has been changed from taking a string
+    value to a value from the new
+    ``tensorflow.python.ipu.utils.SchedulingAlgorithm`` enumeration. Strings can
+    still be passed and an attempt will be made to convert them to the new
+    enumeration. The mapping is as follows:
+      - "": ``SchedulingAlgorithm.CHOOSE_BEST``
+      - "Clustering": ``SchedulingAlgorithm.CLUSTERING``
+      - "PostOrder": ``SchedulingAlgorithm.POST_ORDER``
+      - "LookAhead": ``SchedulingAlgorithm.LOOK_AHEAD``
+      - "ShortestPath": ``SchedulingAlgorithm.SHORTEST_PATH``
+
+``tensorflow.python.ipu.set_ipu_connection_type``
+
+  - The ``ipu_version`` argument has been changed from taking an integer to
+    taking a string, in line with the ``ipu_model_version`` argument in
+    ``tensorflow.python.ipu.utils.set_ipu_model_options``. Integers can still
+    be passed and an attempt will be made to convert them to strings. The
+    mapping is as follows:
+      - 1: "ipu1"
+      - 2: "ipu2"
+
+``tensorflow.python.ipu.set_optimization_options``
+
+  - The ``merge_remote_buffers`` argument has been changed from taking a boolean
+    or ``None`` value to a value from the new
+    ``tensorflow.python.ipu.utils.MergeRemoteBuffersBehaviour`` enumeration.
+    Booleans or ``None`` can still be passed and an attempt will be made to
+    convert them to the new enumeration. The mapping is as follows:
+      - ``True``: ``MergeRemoteBuffersBehaviour.MERGE``
+      - ``False``: ``MergeRemoteBuffersBehaviour.NO_MERGING``
+      - ``None``: ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``
+    Note that the default value has not changed - the old value of ``False``
+    maps to the new value of ``MergeRemoteBuffersBehaviour.NO_MERGING``, however
+    the docstring now correctly identifies the default value.
+
+
 Release 2.0
 ~~~~~~~~~~~
 
