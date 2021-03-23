@@ -39,6 +39,7 @@ comp_0 {
   c0_param_0 = f32[] parameter(0)
   c0_param_1 = f32[] parameter(1)
   c0_param_2 = f32[] parameter(2)
+  c0_param_3 = f32[] parameter(3)
   c0_add = f32[] add(c0_param_2, c0_param_1)
   c0_subtract = f32[] subtract(c0_param_2, c0_param_1)
   ROOT c0_t = (f32[], f32[], f32[]) tuple(c0_param_0, c0_add, c0_subtract)
@@ -48,6 +49,7 @@ comp_1 {
   c1_param_0 = f32[] parameter(0)
   c1_param_1 = f32[] parameter(1)
   c1_param_2 = f32[] parameter(2)
+  c1_param_3 = f32[] parameter(3)
   c1_add = f32[] add(c1_param_2, c1_param_1)
   c1_subtract = f32[] subtract(c1_param_2, c1_param_1)
   ROOT c1_t = (f32[], f32[], f32[]) tuple(c1_param_0, c1_add, c1_subtract)
@@ -60,11 +62,14 @@ ENTRY main {
   param_3 = f32[] parameter(3)
   param_4 = f32[] parameter(4)
   param_5 = f32[] parameter(5)
+  param_6 = f32[] parameter(6)
+  param_7 = f32[] parameter(7)
 
   load_0 = f32[] custom-call(param_0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
   load_1 = f32[] custom-call(param_1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load_2 = f32[] custom-call(param_2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
 
-  c0 = (f32[], f32[], f32[]) call(param_4, load_0, load_1), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c0 = (f32[], f32[], f32[]) call(param_6, load_0, load_1, load_2), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
   c0_gte0 = f32[] get-tuple-element(c0), index=0
   c0_gte1 = f32[] get-tuple-element(c0), index=1
   c0_gte2 = f32[] get-tuple-element(c0), index=2
@@ -72,18 +77,19 @@ ENTRY main {
   new_param_0 = f32[] custom-call(param_0, c0_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
   new_param_1 = f32[] custom-call(param_1, c0_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
 
-  load_2 = f32[] custom-call(param_2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
   load_3 = f32[] custom-call(param_3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load_4 = f32[] custom-call(param_4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load_5 = f32[] custom-call(param_5), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
 
-  c1 = (f32[], f32[], f32[]) call(param_5, load_2, load_3), to_apply=comp_1, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1 = (f32[], f32[], f32[]) call(param_7, load_3, load_4, load_5), to_apply=comp_1, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
   c1_gte0 = f32[] get-tuple-element(c1), index=0
   c1_gte1 = f32[] get-tuple-element(c1), index=1
   c1_gte2 = f32[] get-tuple-element(c1), index=2
 
-  new_param_2 = f32[] custom-call(param_2, c1_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
-  new_param_3 = f32[] custom-call(param_3, c1_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  new_param_3 = f32[] custom-call(param_3, c1_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  new_param_4 = f32[] custom-call(param_4, c1_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
 
-  ROOT t = (f32[], f32[], f32[], f32[], f32[], f32[]) tuple(new_param_0, new_param_1, new_param_2, new_param_3, c0_gte0, c1_gte0)
+  ROOT t = (f32[], f32[], f32[], f32[], f32[], f32[]) tuple(new_param_0, new_param_1, new_param_3, new_param_4, c0_gte0, c1_gte0)
 }
 )";
   return hlo;
@@ -162,11 +168,11 @@ TEST_F(OutlineRemoteBuffersTest, TestGetFunctions) {
   auto function = *std::begin(functions);
   RemoteBufferInputsOutputsInfos rbioi(function);
   EXPECT_EQ(rbioi.GetNumModifiedLoadStores(), 2);
-  EXPECT_EQ(rbioi.GetNumUnmodifiedLoads(), 0);
+  EXPECT_EQ(rbioi.GetNumUnmodifiedLoads(), 1);
   EXPECT_THAT(rbioi.GetInputsOldToNewPermutation(),
-              ::testing::ElementsAre(2, 0, 1));
+              ::testing::ElementsAre(3, 0, 1, 2));
   EXPECT_THAT(rbioi.GetInputsNewToOldPermutation(),
-              ::testing::ElementsAre(1, 2, 0));
+              ::testing::ElementsAre(1, 2, 3, 0));
 
   EXPECT_THAT(rbioi.GetOutputsOldToNewPermutation(),
               ::testing::ElementsAre(2, 0, 1));
@@ -305,6 +311,8 @@ TEST_F(OutlineRemoteBuffersTest, TestOutline) {
   HloInstruction* param_3 = FindInstruction(module.get(), "param_3");
   HloInstruction* param_4 = FindInstruction(module.get(), "param_4");
   HloInstruction* param_5 = FindInstruction(module.get(), "param_5");
+  HloInstruction* param_6 = FindInstruction(module.get(), "param_6");
+  HloInstruction* param_7 = FindInstruction(module.get(), "param_7");
   HloInstruction* c0_outlined = FindInstruction(module.get(), "c0_outlined");
   HloInstruction* c1_outlined = FindInstruction(module.get(), "c1_outlined");
   HloInstruction* t = FindInstruction(module.get(), "t");
@@ -323,9 +331,9 @@ TEST_F(OutlineRemoteBuffersTest, TestOutline) {
 
   // Check the inputs are re-ordered.
   EXPECT_THAT(c0_outlined->operands(),
-              ::testing::ElementsAre(param_0, param_1, param_4));
+              ::testing::ElementsAre(param_0, param_1, param_2, param_6));
   EXPECT_THAT(c1_outlined->operands(),
-              ::testing::ElementsAre(param_2, param_3, param_5));
+              ::testing::ElementsAre(param_3, param_4, param_5, param_7));
 
   // Check that the outputs have been correctly connected.
   EXPECT_THAT(t->operands(),
@@ -335,7 +343,7 @@ TEST_F(OutlineRemoteBuffersTest, TestOutline) {
     HloInstruction* root = call->to_apply()->root_instruction();
     HloInstruction *store0, *store1;
     EXPECT_TRUE(
-        Match(root, m::Tuple(m::Op(&store0), m::Op(&store1), m::Parameter(2))));
+        Match(root, m::Tuple(m::Op(&store0), m::Op(&store1), m::Parameter(3))));
     EXPECT_TRUE(IsPoplarInstruction(RemoteParameterStore, store0));
     EXPECT_TRUE(IsPoplarInstruction(RemoteParameterStore, store1));
 
