@@ -314,8 +314,9 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
       auto operands = Permute(get_operands(old_inst),
                               rbioi.GetOutputsOldToNewPermutation());
 
+      CHECK_LE(rbioi.GetNumModifiedLoadStores(), operands.size());
       // Add store instructions for the remote buffer outputs.
-      for (int64 i = 0; i != rbioi.GetNumLoadInputs(); ++i) {
+      for (int64 i = 0; i != rbioi.GetNumModifiedLoadStores(); ++i) {
         RemoteBufferParameter& remote_buffer = remote_buffer_parameters.at(i);
 
         // Store the value into the remote buffer.
