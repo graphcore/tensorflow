@@ -21,6 +21,7 @@ from tensorflow.python.ipu import rand_ops
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
+from tensorflow.python.framework import smart_cond
 from tensorflow.python.ops import array_ops
 
 
@@ -87,8 +88,8 @@ class Dropout(Layer):
                               noise_shape=self.noise_shape,
                               name=self.name)
 
-    output = tf_utils.smart_cond(training, dropped_inputs,
-                                 lambda: array_ops.identity(inputs))
+    output = smart_cond.smart_cond(training, dropped_inputs,
+                                   lambda: array_ops.identity(inputs))
 
     return output
 

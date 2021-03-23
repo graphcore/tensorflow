@@ -17,7 +17,7 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops

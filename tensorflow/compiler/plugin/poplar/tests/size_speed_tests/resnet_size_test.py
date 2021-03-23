@@ -20,7 +20,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ops import array_ops
@@ -238,7 +238,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(43512363)
+      report.assert_total_tile_memory(41786063)
 
   def testTrainingMomentumInLoop(self):
     with self.session() as sess:
@@ -273,7 +273,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(44411577)
+      report.assert_total_tile_memory(42585513)
 
   def testTrainingInLoopWithGradientAccumulation(self):
     with self.session() as sess:
@@ -290,7 +290,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
             loss = math_ops.reduce_mean(
                 nn_ops.softmax_cross_entropy_with_logits_v2(
                     logits=logits, labels=array_ops.stop_gradient(y_)))
-            opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+            opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
                 gradient_descent.GradientDescentOptimizer(0.01), 5)
             return x, label, opt.minimize(loss)
 
@@ -310,7 +310,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(46421937)
+      report.assert_total_tile_memory(42654793)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     with self.session() as sess:
@@ -326,7 +326,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
             loss = math_ops.reduce_mean(
                 nn_ops.softmax_cross_entropy_with_logits_v2(
                     logits=logits, labels=array_ops.stop_gradient(label)))
-            opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+            opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
                 momentum.MomentumOptimizer(0.01, 0.9), 10)
             return x, label, opt.minimize(loss)
 
@@ -346,7 +346,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(46303457)
+      report.assert_total_tile_memory(43167837)
 
 
 if __name__ == "__main__":

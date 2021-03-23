@@ -96,7 +96,7 @@ std::string GetTemplateHloString() {
     %custom-call.2 = $DT[$R,$E] custom-call($DT[$R,$E] %arg1, s32[$BS,1] %broadcast.indices, $DT[$BS,$E] %broadcast.update, $DT[] %const.scale), custom_call_target="MultiUpdateAdd", metadata={op_type="IpuMultiUpdateAdd" op_name="gradients/embedding_lookup_grad/IpuMultiUpdateAdd"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1,\"serialization_factor\":1}"
     %custom-call.3 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.1, $DT[$R,$E] %custom-call.2), custom_call_target="GradientAccumulatorAdd", metadata={op_type="GradientAccumulatorAdd" op_name="GradientAccumulatorAdd"}, backend_config="{}"
     %custom-call.4 = $AT[$R,$E] custom-call($AT[$R,$E] %custom-call.3), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
+    ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main (arg0: $DT[$R,$E], arg1: $DT[$R,$E]) -> $DT[$R,$E] {
@@ -147,18 +147,18 @@ std::string GetPipelineTemplateHloString() {
     %arg2 = $DT[$E] parameter(2)
 
     %custom-call.1 = $AT[$R,$E] custom-call($DT[$R,$E] %arg0), custom_call_target="GradientAccumulatorCreate", custom_call_has_side_effect=true, metadata={op_type="GradientAccumulatorCreate" op_name="GradientAccumulatorCreate"}, backend_config="{}"
-    %call.1 = ($AT[$R,$E], $DT[$E]) call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.1, arg2), to_apply=%PipelineStage, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, metadata={op_type="PipelineStageBackward" op_name="gradients/pipeline_stage_1/PipelineStage_grad/PipelineStageBackward"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+    %call.1 = ($AT[$R,$E], $DT[$E]) call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.1, arg2), to_apply=%PipelineStage, frontend_attributes={CALL_CONFIG_TYPE="PipelineStageBackward"}, metadata={op_type="PipelineStageBackward" op_name="gradients/pipeline_stage_1/PipelineStage_grad/PipelineStageBackward"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
     %get-tuple-element.1 = $AT[$R,$E] get-tuple-element(%call.1), index=0
     %get-tuple-element.2 = $DT[$E] get-tuple-element(%call.1), index=1
     %custom-call.2 = $AT[$R,$E] custom-call($AT[$R,$E] %get-tuple-element.1), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
-    ROOT %call.2 = $DT[$R,$E] call(%arg0, %arg1, %custom-call.2, %get-tuple-element.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
+    ROOT %call.2 = $DT[$R,$E] call(%arg0, %arg1, %custom-call.2, %get-tuple-element.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
     ENTRY %main (arg0: $DT[$R,$E], arg1: $DT[$R,$E], arg2: $DT[$E]) -> $DT[$R,$E] {
     %arg0 = $DT[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $DT[$E]    parameter(2), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
-    ROOT %call.1 = $DT[$R,$E] call(%arg0, %arg1, %arg2), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"batchSerializationIterations\":\"$BI\",\"schedule\":\"Interleaved\"}}}"
+    ROOT %call.1 = $DT[$R,$E] call(%arg0, %arg1, %arg2), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"batchSerializationIterations\":\"$BI\",\"schedule\":\"Interleaved\"}}}"
     }
     )";
 }

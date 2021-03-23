@@ -20,10 +20,10 @@ from functools import reduce
 import operator
 
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import smart_cond
 from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
-from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -185,8 +185,8 @@ class GroupNormalization(ipu_layer.IPULayer):
           strided_channel_grouping=self.strided_channel_grouping)
       return outputs
 
-    outputs = tf_utils.smart_cond(training, group_norm_training,
-                                  group_norm_inference)
+    outputs = smart_cond.smart_cond(training, group_norm_training,
+                                    group_norm_inference)
 
     return outputs
 

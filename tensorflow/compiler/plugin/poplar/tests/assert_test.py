@@ -36,19 +36,21 @@ class AssertTest(xla_test.XLATestCase):
   def run_assert(self, value):
     with self.session() as sess:
       with sess.as_default():
-        with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [])
+
+        def model(x):
           zero = array_ops.constant(0, np.float32)
-          pa = array_ops.placeholder(np.float32, [])
-          c = assert_none_equal(pa, zero, [pa])
+          c = assert_none_equal(x, zero, [x])
           with ops.control_dependencies([c]):
-            graph = array_ops.identity(pa)
+            return array_ops.identity(x)
 
-          compiled_graph = ipu.ipu_compiler.compile(lambda: graph)
+        with ops.device("/device:IPU:0"):
+          compiled_graph = ipu.ipu_compiler.compile(model, [pa])
 
-          cfg = ipu.utils.create_ipu_config()
-          ipu.utils.configure_ipu_system(cfg)
+        cfg = ipu.utils.create_ipu_config()
+        ipu.utils.configure_ipu_system(cfg)
 
-          return sess.run(compiled_graph, {pa: value})
+        return sess.run(compiled_graph, {pa: value})
 
   def testFalse(self):
     try:

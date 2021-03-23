@@ -98,7 +98,7 @@ pipeline {
   pipeline_stage_1_bwd = () call(), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   pipeline_stage_0_bwd = () call(), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
 
-  call_ru = (f16[128]) call(pipeline_p0), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f16[128]) call(pipeline_p0), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   pipeline_p0_updated = f16[128] get-tuple-element(call_ru), index=0
   ROOT pipeline_tuple = (f16[128]) tuple(pipeline_p0_updated)
 }

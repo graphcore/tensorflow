@@ -1,7 +1,7 @@
 import argparse
 import tensorflow as tf
 
-from tensorflow.python import dtypes
+from tensorflow.python.framework import dtypes
 
 from tensorflow.python import ipu
 

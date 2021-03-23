@@ -31,6 +31,7 @@ ExcessivePaddingTest.testAsFunctionInput # No registered OpKernel
 ExcessivePaddingTest.testAsFunctionOutput # No registered OpKernel
 FFTTest # No support for FFT
 GatherTest.testHigherRank # Bad
+IgammaTest.testGradLargeValues # Too slow
 InverseOpTest # matrix inversing
 ListDiffTest.testEmptyY # no int64 iota
 ListDiffTest.testNonOverlapping # no int64 iota
@@ -48,12 +49,15 @@ Pooling3DTest.testMaxPoolGradSamePadding2_2_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradSamePadding3_1_3d  # 3D grad_grad
 QrOpTest # No QR support
 QuantizedOpsTest # No bfloat16
+DequantizedOpsTest # No (U)Int8 support
 RandomOpsTest.testParameterizedTruncatedNormalIsInRange # Too slow
+RandomOpsTest.testParameterizedTruncatedNormalBroadcasting # Too slow
 RandomOpsTest.testRandomNormalIsNotConstant # disable until poplar CPU random works
 RandomOpsTest.testRandomUniformIsNotConstant # disable until poplar CPU random works
 RandomOpsTest.testShuffle1d # Need to implement 'sort'
 RandomOpsTest.testTruncatedNormalIsNotConstant # disable until poplar CPU random works
-RandomOpsTest.testTruncatedNormalIsInRange  # Too slow
+RandomOpsTest.testTruncatedNormalIsInRange  # Non-constant range
+RandomOpsTest.testRandomUniformIsInRange  # Non-constant range
 ReduceOpsTest.testReduceMeanC64           # No support for C64
 ReduceOpsTest.testReduceProdC64           # No support for C64
 ReduceOpsTest.testReduceSumC64            # No support for C64
@@ -88,6 +92,7 @@ SegmentReductionOpsTest.testUnsortedSegmentSum1DIndices1DDataNegativeIndices # T
 SelfAdjointEigOpTest # seg fault
 StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
 StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
+StatelessRandomOpsTest.testDistributionOfStatelessRandomUniform # Unsupported non-constant range
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
 SvdOpTest # Seg fault
 UnaryOpsTest.testAllTypeOps # Need bitwise reductions
@@ -102,5 +107,8 @@ XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testInTopKLarge
 MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
+MatrixDiagPartTest.testBatch # need popops::reduce(OR, int)
+MatrixDiagPartTest.testPadding # need popops::reduce(OR, int)
+MatrixDiagPartTest.testSingleMatrix # need popops::reduce(OR, int)
 SLogDetOpTest # Need to register LogMatrixDeterminant op
 TridiagonalSolveOpsTest # need to register TridiagonalSolve op

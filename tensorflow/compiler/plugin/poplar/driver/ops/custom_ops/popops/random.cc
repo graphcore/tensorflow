@@ -152,8 +152,9 @@ class RngOp : public PoplarOpDef {
     }
     for (auto* op : inst->operands()) {
       if (op->opcode() != HloOpcode::kConstant) {
-        return FailedPrecondition("RNG operand %s is not a constant.",
-                                  op->ToString().c_str());
+        return UnimplementedStrCat("RNG operation ", inst->ToString(),
+                                   " has non-constant input ", op->ToString(),
+                                   " which is not currently supported.");
       }
     }
 

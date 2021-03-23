@@ -1994,7 +1994,7 @@ bool HloInstruction::IdenticalInternal(
     }
   }
 
-  if (backend_config_ != other.backend_config_) {
+  if (!eq_backend_config(backend_config_, other.backend_config_)) {
     return false;
   }
 
@@ -2005,9 +2005,6 @@ bool HloInstruction::IdenticalInternal(
     }
   }
 
-  if (!eq_backend_config(backend_config_, other.backend_config_)) {
-    return false;
-  }
   return IdenticalSlowPath(other, eq_computations);
 }
 

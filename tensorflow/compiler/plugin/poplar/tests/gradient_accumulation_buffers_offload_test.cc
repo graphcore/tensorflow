@@ -122,7 +122,7 @@ pipeline {
   pipeline_accumulator_1_sink = f32[128] custom-call(pipeline_stage_1_bwd.2), custom_call_target="GradientAccumulatorSink", backend_config="{\"num_mini_batches\":1}\n"
   pipeline_accumulator_0_sink = f32[128] custom-call(pipeline_stage_0_bwd.0), custom_call_target="GradientAccumulatorSink", backend_config="{\"num_mini_batches\":1}\n"
 
-  call_ru = (f16[128]) call(pipeline_accumulator_0_sink, pipeline_accumulator_1_sink), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f16[128]) call(pipeline_accumulator_0_sink, pipeline_accumulator_1_sink), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   pipeline_p0_updated = f16[128] get-tuple-element(call_ru), index=0
   ROOT pipeline_tuple = (f16[128]) tuple(pipeline_p0_updated)
 }

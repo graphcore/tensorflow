@@ -990,7 +990,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           '/negate/Op/Negate',
-          'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd',
+          'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
           'vs/embedding_lookup*/multi-slice',
           'vs/absolute_difference/Sub/subtract.*/Subtract',
           'vs/absolute_difference/Abs/abs.*/Op/Absolute',
@@ -1170,7 +1170,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log()
       ok = [
           'random_normal/RandomStandardNormal/rng.*/normal',
-          'mul/multiply.*/Op/Multiply', 'add/add/Op/Add', '__seed*'
+          'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

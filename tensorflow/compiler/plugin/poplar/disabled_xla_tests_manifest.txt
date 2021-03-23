@@ -1,14 +1,33 @@
 ArrayElementwiseOpTest.RemF64s    POPLAR // F64
 ArrayElementwiseOpTest.MaxF64s    POPLAR
 ArrayElementwiseOpTest.MinF64s    POPLAR
+ArrayElementwiseOpTest.NegConstantF64      POPLAR
+ArrayElementwiseOpTest.DivTwoConstantF64s  POPLAR
+ArrayElementwiseOpTest.SubTwoConstantF64s  POPLAR
+ArrayElementwiseOpTest.CompareGeF32sTO     POPLAR
+ArrayElementwiseOpTest.CompareEqF32sTO     POPLAR
 ScalarComputationsTest.TanhDoubleScalar    POPLAR
 ScalarComputationsTest.AddTwoScalarsF64    POPLAR
 ParametricDotTestWithoutLayoutAssignment.TestF64 POPLAR
+ParametricDotTestWithoutLayoutAssignment.TestC64 POPLAR
+ParametricDotTestWithoutLayoutAssignment.TestC128 POPLAR
 ParametricDotTest.TestF64 POPLAR
+ParametricDotTest.TestC64 POPLAR
+ParametricDotTest.TestC128 POPLAR
 DotOperationTest.VectorDotF64 POPLAR
 DotOperationTest.OneElementVectorDotF64 POPLAR
 DotOperationTest.NonsquareMatrixDotF64 POPLAR
 DotOperationTest.SquareMatrixDotF64 POPLAR
+DotOperationTextTest.S8Dot POPLAR
+DotOperationTextTest.S32Dot POPLAR
+DotOperationTextTest.S16IotaDot POPLAR
+DotOperationTextTest.U16IotaDot POPLAR
+DotOperationTextTest.S32IotaDot POPLAR
+DotOperationTextTest.U32IotaDot POPLAR
+DotOperationTextTest.S16IotaSquaredDot POPLAR
+DotOperationTextTest.U16IotaSquaredDot POPLAR
+DotOperationTextTest.S32IotaSquaredDot POPLAR
+DotOperationTextTest.U32IotaSquaredDot POPLAR
 ConvertTest.ConvertR1F32ToR1F64 POPLAR
 ConvertTest.ConvertR1F64ToR1F32 POPLAR
 SliceR1Test.DoIt_F64 POPLAR
@@ -177,6 +196,7 @@ UnaryOpTest.SignAbsTestR1 POPLAR
 SquareMatrixDot/3.TypesTT POPLAR
 SquareMatrixDot/3.TypesTF POPLAR
 SquareMatrixDot/3.TypesFF POPLAR
+RandomCholeskyTest.Complex POPLAR // Complex
 
 ArrayElementwiseOpTest.NegConstantZeroElementC64 POPLAR // Complex<double>
 ArrayElementwiseOpTest.NegConstantC64 POPLAR
@@ -198,6 +218,7 @@ ConvertTest.ConvertC64ToC64 POPLAR
 ArrayElementwiseOpTest.PowC64s POPLAR
 TriangularSolveTest.SimpleRightLowerTransposeConjugate POPLAR
 TriangularSolveTest.SimpleLeftUpperTransposeNoconjugate POPLAR
+MathTest.AcosComplexValues POPLAR
 
 ConvolveWithAndWithoutCanonicalization.Convolve2D_NoSpatialDims POPLAR // ??
 
@@ -356,6 +377,7 @@ PoolingTest.AvgPool2DGradWithPaddingCountNotIncludePadding POPLAR
 PoolingTest.AvgPool2DGradWithPadding POPLAR
 
 CholeskyTest.NonPSDInput POPLAR // Incompatible input, implementation dependent results
+CholeskyTest.NonPSDBatched POPLAR // Incompatible input, implementation dependent results
 ConstantsTest.NanValueF32 POPLAR // NaNs
 MathTypedTest.IsInfOrNan POPLAR // NaNs
 ArrayElementwiseOpTest.IsFiniteScalarF32 POPLAR // NaNs
@@ -383,3 +405,5 @@ HloParserTestLong POPLAR // Failing to get shape of TridiaganalSolve
 HloParserTestLongProto POPLAR
 
 ParametricDotTestWithoutLayoutAssignment.TestF16 POPLAR // Fail to handle major/minor ordering
+
+LogDetTest POPLAR # Unsupported matmul type.

@@ -19,9 +19,9 @@ IPUPipelineEstimator
 
 import collections
 
-from tensorflow.python import ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops

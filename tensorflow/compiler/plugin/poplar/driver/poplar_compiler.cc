@@ -170,6 +170,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
+#include "tensorflow/compiler/xla/service/dynamic_padder.h"
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_constant_folding.h"
@@ -179,6 +180,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_pipeline.h"
 #include "tensorflow/compiler/xla/service/map_inliner.h"
+#include "tensorflow/compiler/xla/service/qr_expander.h"
 #include "tensorflow/compiler/xla/service/reshape_mover.h"
 #include "tensorflow/compiler/xla/service/sort_simplifier.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
@@ -1202,6 +1204,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<CustomOpReplacer>();
     pipeline.AddPass<ParsePoplarBackendConfig>();
+    pipeline.AddPass<DynamicPadder>();
     pipeline.AddPass<PipelineFixer>();
     pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
@@ -1210,6 +1213,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<NotSupportedGatherExpander>();
     pipeline.AddPass<NotSupportedScatterExpander>();
+    pipeline.AddPass<QrExpander>();
     pipeline.AddPass<DynamicIndexSplitter>();
     pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);

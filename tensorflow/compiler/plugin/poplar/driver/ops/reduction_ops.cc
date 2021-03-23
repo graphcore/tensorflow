@@ -175,8 +175,7 @@ static popops::Operation PoplibsReductionOperation(const HloInstruction* inst) {
     case HloOpcode::kOr:
       return popops::Operation::LOGICAL_OR;
     default:
-      // Cannot reach here
-      return popops::Operation::ADD;
+      LOG(FATAL) << "Unsupported reduction operation";
   }
 }
 

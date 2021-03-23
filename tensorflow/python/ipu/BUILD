@@ -1004,6 +1004,7 @@ tf_py_test(
 
 py_library(
     name = "pipelining_test_util",
+    testonly = 1,
     srcs = ["tests/pipelining_test_util.py"],
     deps = [
         ":ipu_lib",

@@ -15,6 +15,7 @@
 import time
 
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import loops
@@ -24,7 +25,6 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 from tensorflow.python.platform import tf_logging
 from tensorflow.python.training.monitored_session import MonitoredTrainingSession
-from tensorflow.python import ops
 
 
 @test_util.deprecated_graph_mode_only

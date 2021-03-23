@@ -29,6 +29,7 @@ from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework.errors_impl import NotFoundError
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -46,7 +47,8 @@ from tensorflow.python.keras import optimizers
 from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import data_adapter
-from tensorflow.python.keras.engine import network
+# TODO(T31437): Fix up Keras API.
+# from tensorflow.python.keras.engine import network
 from tensorflow.python.keras.engine import node as node_module
 from tensorflow.python.keras.engine import training as keras_training
 from tensorflow.python.keras.engine import training_utils
@@ -60,8 +62,7 @@ from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
 from tensorflow.python.util import tf_inspect
-from tensorflow.python import cast
-from tensorflow.python import dtypes
+from tensorflow.python.ops import math_ops
 
 
 def _validate_args(kwargs, fn):
@@ -138,7 +139,7 @@ def _autocast_dataset(dataset):
   def autocast_structure(*structure):
     def autocast_tensor(tensor):
       if tensor.dtype == dtypes.float64:
-        return cast(tensor, dtypes.float32)
+        return math_ops.cast(tensor, dtypes.float32)
       return tensor
 
     return nest.map_structure(autocast_tensor, structure)
@@ -1582,8 +1583,12 @@ class IPUModel(_IpuModelBase):
     self._is_graph_network = True
 
     # Keep track of the network's nodes and layers.
-    nodes, nodes_by_depth, layers, _ = network._map_graph_network(  # pylint: disable=protected-access
-        self.inputs, self.outputs)
+    # TODO(T31437): Fix up Keras API.
+    # nodes, nodes_by_depth, layers, _ = network._map_graph_network(  # pylint: disable=protected-access
+    #     self.inputs, self.outputs)
+    nodes, nodes_by_depth, layers = (None, None, None)
+    assert False
+
     self._network_nodes = nodes
     self._nodes_by_depth = nodes_by_depth
     self._layers = layers
@@ -1651,7 +1656,10 @@ class IPUModel(_IpuModelBase):
     # Ensure `training` arg propagation if applicable.
     kwargs = copy.copy(node.arguments) if node.arguments else {}
     if convert_kwargs_to_constants:
-      kwargs = network._map_tensors_to_constants(kwargs)  # pylint: disable=protected-access
+      # TODO(T31437): Fix up Keras API.
+      # kwargs = network._map_tensors_to_constants(kwargs)  # pylint: disable=protected-access
+      kwargs = None
+      assert False
 
     argspec = self._layer_call_argspecs[layer].args
     if 'training' in argspec:

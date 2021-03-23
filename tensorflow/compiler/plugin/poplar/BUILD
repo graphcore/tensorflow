@@ -543,11 +543,13 @@ cc_library(
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:call_inliner",
+        "//tensorflow/compiler/xla/service:dynamic_padder",
         "//tensorflow/compiler/xla/service:flatten_call_graph",
         "//tensorflow/compiler/xla/service:gather_expander",
         "//tensorflow/compiler/xla/service:hlo_memory_scheduler",
         "//tensorflow/compiler/xla/service:hlo_pass",
         "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:qr_expander",
         "//tensorflow/compiler/xla/service:scatter_expander",
         "//tensorflow/compiler/xla/service:tuple_simplifier",
         "//tensorflow/compiler/xla/service:while_loop_analysis",
@@ -3406,10 +3408,14 @@ xla_test(
 
 py_library(
     name = "test_utils_py",
-    srcs = ["tests/test_utils.py"],
+    testonly = 1,
+    srcs = [
+        "tests/test_utils.py",
+    ],
     deps = [
         ":ipu_ops_py",
         "//tensorflow/compiler/tf2xla/python:xla",
+        "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )

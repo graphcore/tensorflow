@@ -476,7 +476,6 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/add*/Op/Add',
           'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
-          'gradients/MatMul_1_grad/MatMul/dot',
           'gradients/MatMul_grad/MatMul_1/dot',
       ]
       report.assert_all_compute_sets_and_list(ok)

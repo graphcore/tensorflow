@@ -18,7 +18,7 @@ Session run hooks
 """
 import numpy as np
 
-from tensorflow.python import ops
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.platform import tf_logging as logging

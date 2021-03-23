@@ -19,7 +19,7 @@ from __future__ import print_function
 
 import numpy as np
 
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops

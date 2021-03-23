@@ -474,7 +474,9 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
           VLOG(1) << "Simplified while loop " << while_inst->name()
                   << " with a repeat of count " << count;
 
-          while_inst->parent()->RemoveInstructionAndUnusedOperands(while_inst);
+          TF_RETURN_IF_ERROR(
+              while_inst->parent()->RemoveInstructionAndUnusedOperands(
+                  while_inst));
           PruneComputations(module);
           TF_RETURN_IF_ERROR(TupleSimplifier(true).Run(module).status());
           return true;

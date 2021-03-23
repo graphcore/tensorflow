@@ -17,7 +17,7 @@
 from absl.testing import parameterized
 
 from tensorflow.python import ones
-from tensorflow.python import dtypes
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import layers as ipu_layers
 from tensorflow.python.ipu import ipu_strategy
