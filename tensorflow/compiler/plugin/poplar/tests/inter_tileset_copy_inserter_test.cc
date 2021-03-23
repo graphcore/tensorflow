@@ -96,9 +96,9 @@ ENTRY top {
   buffer = f32[] parameter(0)
   offset = s32[] parameter(1)
   constant = f32[] constant(2)
-  load = f32[] custom-call(buffer, offset), custom_call_target="BufferLoadSlice"
+  load = f32[] custom-call(buffer, offset), custom_call_target="BufferLoadSlice", backend_config="{\"replication_factor\":1}\n"
   mul = f32[] multiply(load, constant)
-  store = f32[] custom-call(buffer, mul, offset), custom_call_target="BufferStoreSlice"
+  store = f32[] custom-call(buffer, mul, offset), custom_call_target="BufferStoreSlice", backend_config="{\"replication_factor\":1}\n"
   ROOT tuple = (f32[]) tuple(store)
 }
   )";
