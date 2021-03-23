@@ -99,6 +99,12 @@ struct CompilerResources {
   /* The global number of replicas that we are compiling for. */
   uint32 replication_factor;
 
+  /* The number of replicas per IPU-link domain. This is the number of replicas
+   * that are interconnected with IPU-links. This is only different from the
+   * `replication_factor` when gateway links are used to connect different
+   * IPU-link domains. */
+  uint32 ipu_link_domain_replication_factor;
+
   /* The local number of replicas owned by this process. This is the number of
    * replicas that we are responsible for at run-time in this process. This is
    * only different from the `replication_factor` when using multi-replica
@@ -183,6 +189,7 @@ struct CompilerResources {
       const poplar::OptionFlags& pooling_options, bool verified_transfers,
       bool clear_matmul_pass_type, bool disable_graph_outlining,
       bool merge_infeed_io_copies, uint32 replication_factor,
+      uint32 ipu_link_domain_replication_factor,
       uint32 local_replication_factor,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
@@ -202,6 +209,7 @@ struct CompilerResources {
         clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
+        ipu_link_domain_replication_factor(ipu_link_domain_replication_factor),
         local_replication_factor(local_replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
@@ -235,7 +243,8 @@ struct CompilerResources {
         /*pooling_options=*/poplar::OptionFlags(), /*verified_transfers=*/false,
         /*clear_matmul_pass_type=*/false,
         /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
-        /*replication_factor=*/1, /*local_replication_factor=*/1,
+        /*replication_factor=*/1, /*ipu_link_domain_replication_factor=*/1,
+        /*local_replication_factor=*/1,
         /*floating_point_behaviour=*/IpuOptions::FloatingPointBehaviour(),
         /*always_rearrange_copies_on_host=*/false, /*scheduler_selection=*/"",
         /*recomputation_enabled=*/false, /*use_stable_norm_statistics=*/false,
