@@ -17,7 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_
 
 #include <memory>
-
+#include <string>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 
@@ -34,7 +34,10 @@ struct GRUAttributes : public RNNAttributes {
 
  protected:
   GRUAttributes(int32 num_channels, bool is_training,
-                xla::PrimitiveType partials_xla_type, bool reset_after);
+                xla::PrimitiveType partials_xla_type,
+                rnn_helper::ActivationType activation,
+                rnn_helper::ActivationType recurrent_activation,
+                bool reset_after);
 };
 }  // namespace rnn_helper
 
@@ -52,11 +55,11 @@ class HloGRUInstructionCommon {
 class HloGRUFwdInstruction : public HloRNNFwdInstruction,
                              public HloGRUInstructionCommon {
  public:
-  explicit HloGRUFwdInstruction(const Shape& shape,
-                                absl::Span<HloInstruction* const> operands,
-                                bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type,
-                                bool reset_after);
+  explicit HloGRUFwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -70,11 +73,11 @@ class HloGRUFwdInstruction : public HloRNNFwdInstruction,
 class HloGRUBwdInstruction : public HloRNNBwdInstruction,
                              public HloGRUInstructionCommon {
  public:
-  explicit HloGRUBwdInstruction(const Shape& shape,
-                                absl::Span<HloInstruction* const> operands,
-                                bool is_training, int32 num_channels,
-                                xla::PrimitiveType partials_type,
-                                bool reset_after);
+  explicit HloGRUBwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -84,21 +87,24 @@ class HloGRUBwdInstruction : public HloRNNBwdInstruction,
 
 std::unique_ptr<HloInstruction> CreateGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 class HloDynamicGRUFwdInstruction : public HloRNNFwdInstruction,
                                     public HloGRUInstructionCommon {
  public:
   explicit HloDynamicGRUFwdInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-      bool reset_after);
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -114,8 +120,9 @@ class HloDynamicGRUBwdInstruction : public HloRNNBwdInstruction,
  public:
   explicit HloDynamicGRUBwdInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-      bool reset_after);
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -125,22 +132,24 @@ class HloDynamicGRUBwdInstruction : public HloRNNBwdInstruction,
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 std::unique_ptr<HloInstruction> CreateDynamicGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
                                public HloGRUInstructionCommon {
  public:
-  explicit HloAUGRUFwdInstruction(const Shape& shape,
-                                  absl::Span<HloInstruction* const> operands,
-                                  bool is_training, int32 num_channels,
-                                  xla::PrimitiveType partials_type,
-                                  bool reset_after);
+  explicit HloAUGRUFwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -154,11 +163,11 @@ class HloAUGRUFwdInstruction : public HloRNNFwdInstruction,
 class HloAUGRUBwdInstruction : public HloRNNBwdInstruction,
                                public HloGRUInstructionCommon {
  public:
-  explicit HloAUGRUBwdInstruction(const Shape& shape,
-                                  absl::Span<HloInstruction* const> operands,
-                                  bool is_training, int32 num_channels,
-                                  xla::PrimitiveType partials_type,
-                                  bool reset_after);
+  explicit HloAUGRUBwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type, bool reset_after);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -168,13 +177,15 @@ class HloAUGRUBwdInstruction : public HloRNNBwdInstruction,
 
 std::unique_ptr<HloInstruction> CreateAUGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 std::unique_ptr<HloInstruction> CreateAUGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type,
-    bool reset_after);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type, bool reset_after);
 
 }  // namespace poplarplugin
 }  // namespace xla

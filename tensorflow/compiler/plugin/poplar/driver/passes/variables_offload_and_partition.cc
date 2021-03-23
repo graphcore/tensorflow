@@ -103,7 +103,7 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
         element_type,
         {replication_factor, ShapeUtil::ElementsIn(load->shape())});
     HloInstruction* all_gather = builder.AddInstruction(
-        CreateAllGather({load_parameter}, all_gather_shape));
+        CreatePoplarAllGather({load_parameter}, all_gather_shape));
 
     HloInstruction* output;
     // If there's no padding, just reshape the tensor.

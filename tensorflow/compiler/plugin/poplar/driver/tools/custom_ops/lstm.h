@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_LSTM_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_LSTM_H_
 
+#include <string>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 
@@ -24,10 +25,11 @@ namespace poplarplugin {
 
 class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
  public:
-  explicit HloLSTMFwdInstruction(const Shape& shape,
-                                 absl::Span<HloInstruction* const> operands,
-                                 bool is_training, int32 num_channels,
-                                 xla::PrimitiveType partials_type);
+  explicit HloLSTMFwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -40,10 +42,11 @@ class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
 
 class HloLSTMBwdInstruction : public HloRNNBwdInstruction {
  public:
-  explicit HloLSTMBwdInstruction(const Shape& shape,
-                                 absl::Span<HloInstruction* const> operands,
-                                 bool is_training, int32 num_channels,
-                                 xla::PrimitiveType partials_type);
+  explicit HloLSTMBwdInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      bool is_training, rnn_helper::ActivationType activation,
+      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+      xla::PrimitiveType partials_type);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -53,11 +56,15 @@ class HloLSTMBwdInstruction : public HloRNNBwdInstruction {
 
 std::unique_ptr<HloInstruction> CreateLSTMFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type);
 
 std::unique_ptr<HloInstruction> CreateLSTMBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
+    bool is_training, rnn_helper::ActivationType activation,
+    rnn_helper::ActivationType recurrent_activation, int32 num_channels,
+    xla::PrimitiveType partials_type);
 }  // namespace poplarplugin
 }  // namespace xla
 
