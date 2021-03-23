@@ -40,14 +40,14 @@ namespace poplarplugin {
 namespace {
 
 std::vector<HloInstruction*> CombineOperands(
-    const std::vector<HloInstruction*>& to_combine) {
+    const std::vector<HloAbstractRemoteLoadStore*>& to_combine) {
   std::vector<HloInstruction*> operands;
 
   const auto* first_inst = to_combine.front();
   if (IsPoplarInstruction(RemoteParameterLoad)(first_inst)) {
     for (const auto* inst : to_combine) {
-      operands.insert(operands.end(), inst->operands().cbegin(),
-                      inst->operands().cend());
+      operands.insert(operands.end(), inst->RemoteBuffers().cbegin(),
+                      inst->RemoteBuffers().cend());
     }
   } else if (IsPoplarInstruction(BufferLoadSlice)(first_inst)) {
     std::vector<HloInstruction*> remote_buffers;
@@ -116,35 +116,23 @@ std::vector<HloInstruction*> CombineOperands(
 }
 
 std::vector<uint64> CombineReplicationFactors(
-    const std::vector<HloInstruction*>& to_combine) {
+    const std::vector<HloAbstractRemoteLoadStore*>& to_combine) {
   std::vector<uint64> replication_factors(to_combine.size());
-  absl::c_transform(
-      to_combine, replication_factors.begin(), [](const HloInstruction* inst) {
-        if (IsPoplarInstruction(RemoteParameterLoad)(inst)) {
-          return Cast<HloRemoteParameterLoad>(inst)->GetReplicationFactor(0);
-        } else if (IsPoplarInstruction(RemoteParameterStore)(inst)) {
-          return Cast<HloRemoteParameterStore>(inst)->GetReplicationFactor(0);
-        } else {
-          LOG(FATAL) << "Unexpected instruction: " << inst->ToString();
-        }
-      });
+  absl::c_transform(to_combine, replication_factors.begin(),
+                    [](const HloAbstractRemoteLoadStore* inst) {
+                      return inst->GetReplicationFactor(0);
+                    });
   return replication_factors;
 }
 
 StatusOr<HloInstruction*> Combine(
-    const std::vector<HloInstruction*>& to_combine, const Shape& shape) {
+    const std::vector<HloAbstractRemoteLoadStore*>& to_combine,
+    const Shape& shape) {
   const auto operands = CombineOperands(to_combine);
-  auto* first_inst = to_combine.front();
-  HloComputation* comp = first_inst->parent();
-
-  if (IsPoplarInstruction(BufferLoadSlice)(first_inst) ||
-      IsPoplarInstruction(BufferStoreSlice)(first_inst)) {
-    return comp->AddInstruction(
-        first_inst->CloneWithNewOperands(shape, operands));
-  }
-
   const auto replication_factors = CombineReplicationFactors(to_combine);
 
+  auto* first_inst = to_combine.front();
+  HloComputation* comp = first_inst->parent();
   HloInstruction* new_inst = nullptr;
   if (IsPoplarInstruction(RemoteParameterLoad)(first_inst)) {
     new_inst = comp->AddInstruction(
@@ -153,6 +141,12 @@ StatusOr<HloInstruction*> Combine(
     new_inst = comp->AddInstruction(
         CreateHloRemoteParameterStore(operands, replication_factors));
     CHECK(absl::c_all_of(to_combine, IsLoweredInplace));
+  } else if (IsPoplarInstruction(BufferLoadSlice)(first_inst)) {
+    new_inst = comp->AddInstruction(absl::make_unique<HloBufferLoadSlice>(
+        shape, operands, replication_factors));
+  } else if (IsPoplarInstruction(BufferStoreSlice)(first_inst)) {
+    new_inst = comp->AddInstruction(absl::make_unique<HloBufferStoreSlice>(
+        shape, operands, replication_factors));
   } else {
     return FailedPrecondition("Unexpected instruction: %s",
                               first_inst->ToString().c_str());
@@ -164,7 +158,7 @@ StatusOr<HloInstruction*> Combine(
 }
 
 StatusOr<HloInstruction*> CombineAndReplace(
-    const std::vector<HloInstruction*>& to_combine) {
+    const std::vector<HloAbstractRemoteLoadStore*>& to_combine) {
   CHECK_GE(to_combine.size(), 2);
   HloComputation* comp = to_combine.front()->parent();
 
@@ -204,8 +198,9 @@ StatusOr<HloInstruction*> CombineAndReplace(
   return new_inst;
 }
 
-bool IndependentlySchedulable(const std::vector<HloInstruction*>& instructions,
-                              const HloReachabilityMap& reachability_map) {
+bool IndependentlySchedulable(
+    const std::vector<HloAbstractRemoteLoadStore*>& instructions,
+    const HloReachabilityMap& reachability_map) {
   // Quadratic complexity in the number of shards; shouldn't be too bad.
   for (const auto* a : instructions) {
     for (const auto* b : instructions) {
@@ -260,7 +255,8 @@ struct DecreasingSizeComparator {
 };
 
 using DecreasingSizeQueue =
-    std::priority_queue<HloInstruction*, std::vector<HloInstruction*>,
+    std::priority_queue<HloAbstractRemoteLoadStore*,
+                        std::vector<HloAbstractRemoteLoadStore*>,
                         DecreasingSizeComparator>;
 
 StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
@@ -268,7 +264,7 @@ StatusOr<std::vector<HloInstruction*>> CombineFromDifferentShards(
   std::vector<HloInstruction*> combined;
 
   while (true) {
-    std::vector<HloInstruction*> to_combine;
+    std::vector<HloAbstractRemoteLoadStore*> to_combine;
 
     // Pop the largest one from each shard.
     for (auto& shard_queue : shard_queues) {
@@ -413,9 +409,9 @@ StatusOr<bool> RunForOpTypes(HloComputation* comp, PoplarOp load_op_type,
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (auto shard = inst->sharding_unique_device()) {
       if (IsPoplarInstruction(load_op_type, inst)) {
-        shard_loads[*shard].push(inst);
+        shard_loads[*shard].push(Cast<HloAbstractRemoteLoadStore>(inst));
       } else if (IsPoplarInstruction(store_op_type, inst)) {
-        shard_stores[*shard].push(inst);
+        shard_stores[*shard].push(Cast<HloAbstractRemoteLoadStore>(inst));
       }
     }
   }

@@ -105,22 +105,21 @@ class RemoteParameterStoreOp : public PoplarOpDef {
     poplar::program::Sequence stream_copies_seq;
     for (int64 i = 0; i < num_outputs; ++i) {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
-      if (store_inst->GetReplicationFactor(i) != res.replication_factor &&
-          store_inst->GetReplicationFactor(i) != 1) {
-        return xla::FailedPrecondition(
-            "RemoteBuffer store instruction replication factor doesn't match "
-            "graph replication factor.");
-      }
-
       CHECK_EQ(outputs[i].size(), 1);
+      TensorOrRemoteBuffer& output = outputs[i][0];
 
-      if (!outputs[i][0].IsRemoteBuffer()) {
+      const uint64 store_replication_factor =
+          output.IsReplicaPartitioned() ? res.replication_factor : 1;
+      CHECK_EQ(store_inst->GetReplicationFactor(i), store_replication_factor)
+          << store_inst->ToString();
+
+      if (!output.IsRemoteBuffer()) {
         return xla::FailedPrecondition(
             "Expected a Poplar RemoteBuffer as operand %d to %s", i,
             GetDebugName(inst));
       }
 
-      poplar::RemoteBuffer remote_buffer = outputs[i][0].AsRemoteBuffer();
+      poplar::RemoteBuffer remote_buffer = output.AsRemoteBuffer();
 
       if (!UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         TF_ASSIGN_OR_RETURN(
@@ -178,6 +177,11 @@ class BufferStoreSliceOp : public PoplarOpDef {
       poplar::Graph& shard_graph = GetGraphWithOutputIndex(res, inst, i);
       CHECK_EQ(outputs[i].size(), 1);
       TensorOrRemoteBuffer& output = outputs[i][0];
+
+      const uint64 store_replication_factor =
+          output.IsReplicaPartitioned() ? res.replication_factor : 1;
+      CHECK_EQ(store_inst->GetReplicationFactor(i), store_replication_factor)
+          << store_inst->ToString();
 
       if (!UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
         poplar::RemoteBuffer remote_buffer = output.AsRemoteBuffer();

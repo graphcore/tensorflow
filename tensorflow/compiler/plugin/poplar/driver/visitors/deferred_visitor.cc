@@ -1103,13 +1103,6 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
   CHECK_EQ(shapes.size(), num_inputs);
 
   for (size_t i = 0; i < shapes.size(); i++) {
-    if (load_inst->GetReplicationFactor(i) != resources_.replication_factor &&
-        load_inst->GetReplicationFactor(i) != 1) {
-      return xla::FailedPrecondition(
-          "RemoteBuffer load instruction replication factor doesn't match "
-          "graph replication factor.");
-    }
-
     const Shape shape = shapes[i];
     TensorLocation input_location(inst, i);
 
@@ -1126,9 +1119,10 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
     // Function which is called after the tensor has been created - this
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst, i, shape,
+        [this, load_inst, i, shape,
          debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-      poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
+      poplar::Graph& shard_graph =
+          GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
@@ -1143,18 +1137,24 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
         stream_copy_seq.add(poplar::program::WriteUndef(tensor));
       } else {
         TensorOrRemoteBufferVector inputs =
-            FindInstructionInputs(tensor_map, resources_, inst, i,
+            FindInstructionInputs(tensor_map, resources_, load_inst, i,
                                   stream_copy_seq, debug_name_and_id, true);
 
         CHECK_EQ(inputs.size(), 1);
+        const TensorOrRemoteBuffer& input = inputs[0];
 
-        if (!inputs[0].IsRemoteBuffer()) {
+        const uint64 load_replication_factor =
+            input.IsReplicaPartitioned() ? resources_.replication_factor : 1;
+        CHECK_EQ(load_inst->GetReplicationFactor(i), load_replication_factor)
+            << load_inst->ToString();
+
+        if (!input.IsRemoteBuffer()) {
           return xla::FailedPrecondition(
               "Expected a Poplar RemoteBuffer as operand %d to %s", i,
-              GetDebugName(inst));
+              GetDebugName(load_inst));
         }
 
-        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
+        poplar::RemoteBuffer remote_buffer = input.AsRemoteBuffer();
         auto pair_seq = AddRemoteBufferLoadCopy(
             shard_graph, resources_, remote_buffer, tensor, debug_name_and_id);
         stream_copy_seq.add(pair_seq.first);
@@ -1164,9 +1164,9 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
       // Add grouped such that all copies from the same instruction are
       // grouped together in the sequence, allowing Poplar to merge them.
       TF_RETURN_IF_ERROR(
-          PrependSequenceGroupedByInstruction(inst, stream_copy_seq));
+          PrependSequenceGroupedByInstruction(load_inst, stream_copy_seq));
       TF_RETURN_IF_ERROR(
-          AppendSequenceGroupedByInstruction(inst, temporary_copy_seq));
+          AppendSequenceGroupedByInstruction(load_inst, temporary_copy_seq));
 
       return tensor;
     };
@@ -1210,9 +1210,10 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
     // Function which is called after the tensor has been created - this
     // function copies the values from the buffer into the tensor.
     DeferredPostProcessFunction post_process_fn =
-        [this, inst, i, num_outputs, shape,
+        [this, load_inst, i, num_outputs, shape,
          debug_name_and_id](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
-      poplar::Graph& shard_graph = GetGraphWithOutputIndex(resources_, inst, i);
+      poplar::Graph& shard_graph =
+          GetGraphWithOutputIndex(resources_, load_inst, i);
 
       poplar::program::Sequence stream_copy_seq({}, debug_name_and_id);
       poplar::program::Sequence temporary_copy_seq({}, debug_name_and_id);
@@ -1228,15 +1229,23 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
       } else {
         // Get the remote buffer input.
         TensorOrRemoteBufferVector inputs =
-            FindInstructionInputs(tensor_map, resources_, inst, i,
+            FindInstructionInputs(tensor_map, resources_, load_inst, i,
                                   stream_copy_seq, debug_name_and_id);
         CHECK_EQ(inputs.size(), 1);
-        poplar::RemoteBuffer remote_buffer = inputs[0].AsRemoteBuffer();
+        const TensorOrRemoteBuffer& input = inputs[0];
+
+        const uint64 load_replication_factor =
+            input.IsReplicaPartitioned() ? resources_.replication_factor : 1;
+        CHECK_EQ(load_inst->GetReplicationFactor(i), load_replication_factor)
+            << load_inst->ToString();
+
+        poplar::RemoteBuffer remote_buffer = input.AsRemoteBuffer();
 
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor offset,
-            FindInstructionInput(tensor_map, resources_, inst, num_outputs + i,
-                                 stream_copy_seq, debug_name_and_id));
+            FindInstructionInput(tensor_map, resources_, load_inst,
+                                 num_outputs + i, stream_copy_seq,
+                                 debug_name_and_id));
 
         auto pair_seq =
             AddRemoteBufferLoadCopy(shard_graph, resources_, remote_buffer,
@@ -1248,9 +1257,9 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
       // Add grouped such that all copies from the same instruction are
       // grouped together in the sequence, allowing Poplar to merge them.
       TF_RETURN_IF_ERROR(
-          PrependSequenceGroupedByInstruction(inst, stream_copy_seq));
+          PrependSequenceGroupedByInstruction(load_inst, stream_copy_seq));
       TF_RETURN_IF_ERROR(
-          AppendSequenceGroupedByInstruction(inst, temporary_copy_seq));
+          AppendSequenceGroupedByInstruction(load_inst, temporary_copy_seq));
 
       return tensor;
     };

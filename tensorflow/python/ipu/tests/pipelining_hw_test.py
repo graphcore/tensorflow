@@ -36,17 +36,25 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
   @parameterized.parameters(
       {
           'replication_factor': 1,
-          'minimum_remote_tensor_size': 128
+          'minimum_remote_tensor_size': 128,
+          'replicated_optimizer_state_sharding': False,
+          'merge_remote_buffers': True,
       }, {
           'replication_factor': 2,
-          'minimum_remote_tensor_size': 128
+          'minimum_remote_tensor_size': 128,
+          'replicated_optimizer_state_sharding': False,
+          'merge_remote_buffers': False,
       }, {
           'replication_factor': 2,
-          'minimum_remote_tensor_size': 0
+          'minimum_remote_tensor_size': 0,
+          'replicated_optimizer_state_sharding': True,
+          'merge_remote_buffers': True,
       })
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, replication_factor,
-                           minimum_remote_tensor_size):
+                           minimum_remote_tensor_size,
+                           replicated_optimizer_state_sharding,
+                           merge_remote_buffers):
     # Check there is enough IPUs for this test.
     num_ipus_in_test = 4
     tu.skip_if_not_enough_ipus(self, replication_factor * num_ipus_in_test)
@@ -157,7 +165,9 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         device_mapping=[0, 1, 2],
         replication_factor=replication_factor,
         schedule=pipelining_ops.PipelineSchedule.Interleaved,
-        minimum_remote_tensor_size=minimum_remote_tensor_size)
+        minimum_remote_tensor_size=minimum_remote_tensor_size,
+        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
+        merge_remote_buffers=merge_remote_buffers)
 
   @parameterized.parameters(
       {

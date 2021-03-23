@@ -105,9 +105,12 @@ ENTRY top {
 
   EXPECT_EQ(merged.size(), 2);
   EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
-  EXPECT_EQ(merged[0].num_merged, merged[1].num_merged);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
   EXPECT_EQ(merged[0].buffer_offset, 0);
   EXPECT_EQ(merged[1].buffer_offset, 1);
+  EXPECT_FALSE(merged[0].is_replica_partitioned);
+  EXPECT_FALSE(merged[1].is_replica_partitioned);
 }
 
 TEST_F(RemoteBufferMergerTest, TestRemoteParametersPassedToFunction) {
@@ -178,9 +181,12 @@ ENTRY top {
 
   EXPECT_EQ(merged.size(), 2);
   EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
-  EXPECT_EQ(merged[0].num_merged, merged[1].num_merged);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
   EXPECT_EQ(merged[0].buffer_offset, 0);
   EXPECT_EQ(merged[1].buffer_offset, 1);
+  EXPECT_FALSE(merged[0].is_replica_partitioned);
+  EXPECT_FALSE(merged[1].is_replica_partitioned);
 }
 
 TEST_F(RemoteBufferMergerTest, TestRemoteParametersDifferentShapes) {
@@ -282,22 +288,16 @@ ENTRY top {
   EXPECT_EQ(new_load->control_predecessors()[0], new_buffer);
 }
 
-TEST_F(RemoteBufferMergerTest,
-       TestRemoteParameterLoadWithReplicationFactorIsSkipped) {
+TEST_F(RemoteBufferMergerTest, TestRemoteParameterLoadWithReplicationFactor) {
   const auto hlo_string = R"(
 HloModule top
 
-load_func {
-  buffer = f32[5,2] parameter(0), sharding={maximal device=0}
-  ROOT load = f32[5] custom-call(buffer), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
-}
-
 ENTRY top {
-  buffer1 = f32[5,2] parameter(0), sharding={maximal device=0}
-  buffer2 = f32[5,2] parameter(1), sharding={maximal device=0}
-  loaded1 = f32[5] call(buffer1), to_apply=load_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
-  loaded2 = f32[5] call(buffer2), to_apply=load_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}", sharding={maximal device=0}
-  ROOT ret = (f32[5], f32[5]) tuple(loaded1, loaded2)
+  buffer1 = f32[5,4] parameter(0), sharding={maximal device=0}
+  buffer2 = f32[5,4] parameter(1), sharding={maximal device=0}
+  loaded1 = f32[10] custom-call(buffer1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
+  loaded2 = f32[10] custom-call(buffer2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
+  ROOT ret = (f32[10], f32[10]) tuple(loaded1, loaded2)
 }
   )";
 
@@ -312,12 +312,158 @@ ENTRY top {
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
   EXPECT_TRUE(FlattenCallGraph().Run(module).ValueOrDie());
 
-  // Mark both parameters as remote.
+  // Mark both parameters as remote and replica partitioned.
   CompilerAnnotations annotations(module);
-  annotations.remote_parameter_infos.emplace(0);
-  annotations.remote_parameter_infos.emplace(1);
 
-  EXPECT_FALSE(RemoteBufferMerger(annotations).Run(module).ValueOrDie());
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/0, /*is_replica_partitioned=*/true,
+      /*name=*/"p0", /*buffer_offset=*/0, /*num_merged=*/0);
+
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/1, /*is_replica_partitioned=*/true,
+      /*name=*/"p1", /*buffer_offset=*/0, /*num_merged=*/0);
+
+  EXPECT_TRUE(
+      RemoteBufferMerger(annotations, THREESTATE_ON).Run(module).ValueOrDie());
+
+  // Check that the merging was performed correctly.
+  const auto* root = module->entry_computation()->root_instruction();
+  const auto* loaded1 = Cast<HloBufferLoadSlice>(root->operand(0));
+  const auto* loaded2 = Cast<HloBufferLoadSlice>(root->operand(1));
+  EXPECT_EQ(loaded1->GetReplicationFactorCount(), 1);
+  EXPECT_EQ(loaded2->GetReplicationFactorCount(), 1);
+  EXPECT_EQ(loaded1->GetReplicationFactor(0), 2);
+  EXPECT_EQ(loaded2->GetReplicationFactor(0), 2);
+
+  const auto merged = std::vector<RemoteParameterInfo>(
+      annotations.remote_parameter_infos.begin(),
+      annotations.remote_parameter_infos.end());
+
+  EXPECT_EQ(merged.size(), 2);
+  EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
+  EXPECT_EQ(merged[0].buffer_offset, 0);
+  EXPECT_EQ(merged[1].buffer_offset, 1);
+  EXPECT_TRUE(merged[0].is_replica_partitioned);
+  EXPECT_TRUE(merged[1].is_replica_partitioned);
+}
+
+TEST_F(RemoteBufferMergerTest, TestRemoteParameterStoreWithReplicationFactor) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY top {
+  buffer1 = f32[5,4] parameter(0), sharding={maximal device=0}
+  buffer2 = f32[5,4] parameter(1), sharding={maximal device=0}
+  value1 = f32[10] parameter(2), sharding={maximal device=0}
+  value2 = f32[10] parameter(3), sharding={maximal device=0}
+  stored1 = f32[5,4] custom-call(buffer1, value1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
+  stored2 = f32[5,4] custom-call(buffer2, value2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
+  ROOT ret = (f32[5,4], f32[5,4]) tuple(stored1, stored2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+  EXPECT_TRUE(FlattenCallGraph().Run(module).ValueOrDie());
+
+  // Mark both parameters as remote and replica partitioned.
+  CompilerAnnotations annotations(module);
+
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/0, /*is_replica_partitioned=*/true,
+      /*name=*/"p0", /*buffer_offset=*/0, /*num_merged=*/0);
+
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/1, /*is_replica_partitioned=*/true,
+      /*name=*/"p1", /*buffer_offset=*/0, /*num_merged=*/0);
+
+  EXPECT_TRUE(
+      RemoteBufferMerger(annotations, THREESTATE_ON).Run(module).ValueOrDie());
+
+  // Check that the merging was performed correctly.
+  const auto* root = module->entry_computation()->root_instruction();
+  const auto* stored1 = Cast<HloBufferStoreSlice>(root->operand(0));
+  const auto* stored2 = Cast<HloBufferStoreSlice>(root->operand(1));
+  EXPECT_EQ(stored1->GetReplicationFactorCount(), 1);
+  EXPECT_EQ(stored2->GetReplicationFactorCount(), 1);
+  EXPECT_EQ(stored1->GetReplicationFactor(0), 2);
+  EXPECT_EQ(stored2->GetReplicationFactor(0), 2);
+
+  const auto merged = std::vector<RemoteParameterInfo>(
+      annotations.remote_parameter_infos.begin(),
+      annotations.remote_parameter_infos.end());
+
+  EXPECT_EQ(merged.size(), 2);
+  EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
+  EXPECT_EQ(merged[0].buffer_offset, 0);
+  EXPECT_EQ(merged[1].buffer_offset, 1);
+  EXPECT_TRUE(merged[0].is_replica_partitioned);
+  EXPECT_TRUE(merged[1].is_replica_partitioned);
+}
+
+TEST_F(RemoteBufferMergerTest,
+       TestRemoteParametersWithIncompatibleReplicaPartitioning) {
+  const auto hlo_string = R"(
+HloModule top
+
+ENTRY top {
+  buffer1 = f32[5,4] parameter(0), sharding={maximal device=0}
+  buffer2 = f32[5,4] parameter(1), sharding={maximal device=0}
+  loaded1 = f32[10] custom-call(buffer1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=0}
+  loaded2 = f32[5,4] custom-call(buffer2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  ROOT ret = (f32[10], f32[5,4]) tuple(loaded1, loaded2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+  EXPECT_TRUE(FlattenCallGraph().Run(module).ValueOrDie());
+
+  // Mark both parameters as remote and replica partitioned.
+  CompilerAnnotations annotations(module);
+
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/0, /*is_replica_partitioned=*/true,
+      /*name=*/"p0", /*buffer_offset=*/0, /*num_merged=*/1);
+
+  annotations.remote_parameter_infos.emplace(
+      /*parameter_number=*/1, /*is_replica_partitioned=*/false,
+      /*name=*/"p1", /*buffer_offset=*/0, /*num_merged=*/1);
+
+  EXPECT_FALSE(
+      RemoteBufferMerger(annotations, THREESTATE_ON).Run(module).ValueOrDie());
+
+  // Check that the remote parameters were unchanged.
+  const auto infos = std::vector<RemoteParameterInfo>(
+      annotations.remote_parameter_infos.begin(),
+      annotations.remote_parameter_infos.end());
+  EXPECT_EQ(infos.size(), 2);
+  EXPECT_EQ(infos[0].num_merged, 1);
+  EXPECT_EQ(infos[1].num_merged, 1);
+  EXPECT_EQ(infos[0].buffer_offset, 0);
+  EXPECT_EQ(infos[1].buffer_offset, 0);
+  EXPECT_EQ(infos[0].buffer_name, "p0");
+  EXPECT_EQ(infos[1].buffer_name, "p1");
+  EXPECT_TRUE(infos[0].is_replica_partitioned);
+  EXPECT_FALSE(infos[1].is_replica_partitioned);
 }
 
 TEST_F(RemoteBufferMergerTest, TestOnlyOneRemoteParameterPassedToFunction) {
@@ -586,8 +732,8 @@ HloModule top
 load_store_func {
   buffer = f32[5,2] parameter(0), sharding={maximal device=0}
   offset = s32[] parameter(1), sharding={maximal device=0}
-  load = f32[2] custom-call(buffer, offset), custom_call_target="BufferLoadSlice", sharding={maximal device=0}
-  ROOT store = f32[5,2] custom-call(buffer, load, offset), custom_call_target="BufferStoreSlice", sharding={maximal device=0}
+  load = f32[2] custom-call(buffer, offset), custom_call_target="BufferLoadSlice", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  ROOT store = f32[5,2] custom-call(buffer, load, offset), custom_call_target="BufferStoreSlice", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
 }
 
 ENTRY top {
@@ -820,7 +966,8 @@ ENTRY top {
 
   EXPECT_EQ(merged.size(), 2);
   EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
-  EXPECT_EQ(merged[0].num_merged, merged[1].num_merged);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
   EXPECT_EQ(merged[0].buffer_offset, 0);
   EXPECT_EQ(merged[1].buffer_offset, 1);
 }
@@ -898,7 +1045,8 @@ ENTRY top {
 
   EXPECT_EQ(merged.size(), 2);
   EXPECT_EQ(merged[0].buffer_name, merged[1].buffer_name);
-  EXPECT_EQ(merged[0].num_merged, merged[1].num_merged);
+  EXPECT_EQ(merged[0].num_merged, 2);
+  EXPECT_EQ(merged[1].num_merged, 2);
   EXPECT_EQ(merged[0].buffer_offset, 0);
   EXPECT_EQ(merged[1].buffer_offset, 1);
 }

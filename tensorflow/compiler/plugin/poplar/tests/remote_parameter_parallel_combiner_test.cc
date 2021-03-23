@@ -117,14 +117,14 @@ HloModule top
 
 ENTRY %top {
   %buffer1 = f32[] parameter(0)
-  %buffer2 = f32[] parameter(1)
+  %buffer2 = f32[2] parameter(1)
   %offset1 = s32[] parameter(2)
   %offset2 = s32[] parameter(3)
   %buffer3 = f32[] parameter(4)
-  %load1 = f32[] custom-call(buffer1, offset1), custom_call_target="BufferLoadSlice", sharding={maximal device=0}
-  %load2 = f32[] custom-call(buffer2, offset2), custom_call_target="BufferLoadSlice", sharding={maximal device=1}
+  %load1 = f32[] custom-call(buffer1, offset1), custom_call_target="BufferLoadSlice", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %load2 = f32[1] custom-call(buffer2, offset2), custom_call_target="BufferLoadSlice", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
   %load3 = f32[] custom-call(buffer3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=2}
-  ROOT %tuple = (f32[], f32[], f32[]) tuple(load1, load2, load3)
+  ROOT %tuple = (f32[], f32[1], f32[]) tuple(load1, load2, load3)
 }
   )";
 
@@ -177,6 +177,11 @@ ENTRY %top {
   const auto* offset1 = load_inst->Offsets().at(gte1_index);
   EXPECT_EQ(offset0->parameter_number(), 2);
   EXPECT_EQ(offset1->parameter_number(), 3);
+
+  // Check the replication factors.
+  EXPECT_EQ(load_inst->GetReplicationFactorCount(), 2);
+  EXPECT_EQ(load_inst->GetReplicationFactor(gte0_index), 1);
+  EXPECT_EQ(load_inst->GetReplicationFactor(gte1_index), 2);
 
   // Check the sharding.
   EXPECT_TRUE(load_inst->sharding().IsTuple());
@@ -308,8 +313,8 @@ ENTRY %top {
   %offset2 = f32[] parameter(3)
   %value1 = f32[] constant(1)
   %value2 = f32[] constant(2)
-  %store1 = f32[] custom-call(buffer1, value1, offset1), custom_call_target="BufferStoreSlice", sharding={maximal device=0}
-  %store2 = f32[] custom-call(buffer2, value2, offset2), custom_call_target="BufferStoreSlice", sharding={maximal device=1}
+  %store1 = f32[] custom-call(buffer1, value1, offset1), custom_call_target="BufferStoreSlice", backend_config="{\"replication_factor\":1}\n", sharding={maximal device=0}
+  %store2 = f32[] custom-call(buffer2, value2, offset2), custom_call_target="BufferStoreSlice", backend_config="{\"replication_factor\":2}\n", sharding={maximal device=1}
   ROOT %tuple = (f32[], f32[]) tuple(%store1, %store2)
 }
   )";
@@ -367,6 +372,11 @@ ENTRY %top {
   const auto* const1 = store_inst->ValuesToStore().at(gte1_index);
   EXPECT_EQ(const0->literal().data<float>()[0], 1.0f);
   EXPECT_EQ(const1->literal().data<float>()[0], 2.0f);
+
+  // Check the replication factors.
+  EXPECT_EQ(store_inst->GetReplicationFactorCount(), 2);
+  EXPECT_EQ(store_inst->GetReplicationFactor(gte0_index), 1);
+  EXPECT_EQ(store_inst->GetReplicationFactor(gte1_index), 2);
 
   // Check the sharding.
   EXPECT_TRUE(store_inst->sharding().IsTuple());
