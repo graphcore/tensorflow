@@ -287,14 +287,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return true;
   }
 
-  se::SharedMemoryConfig GetDeviceSharedMemoryConfig() override {
-    return se::SharedMemoryConfig::kDefault;
-  }
-
-  Status SetDeviceSharedMemoryConfig(se::SharedMemoryConfig config) override {
-    return xla::Unimplemented("Shared memory not supported");
-  }
-
   std::unique_ptr<se::internal::EventInterface> CreateEventImplementation()
       override {
     return nullptr;
@@ -308,7 +300,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::unique_ptr<se::internal::StreamInterface> GetStreamImplementation()
       override {
     return std::unique_ptr<se::internal::StreamInterface>(
-        new se::host::HostStream());
+        new se::host::HostStream(/*thread_stack_size=*/0));
   }
 
   std::unique_ptr<se::internal::TimerInterface> GetTimerImplementation()

@@ -247,7 +247,8 @@ class XlaSendFromHostOp : public OpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(XlaSendFromHostOp);
 };
 
-REGISTER_XLA_OP(Name("XlaHostCompute"), XlaHostComputeOp);
+REGISTER_XLA_OP(Name("XlaHostCompute").Device(DEVICE_IPU_XLA_JIT),
+                XlaHostComputeOp);
 
 REGISTER_KERNEL_BUILDER(Name("_XlaRecvAtHost").Device(DEVICE_CPU),
                         XlaRecvAtHostOp);

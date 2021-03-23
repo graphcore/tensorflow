@@ -211,9 +211,11 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
   }
 
   // Create the context for the iterator.
-  iterator_ctx_ = absl::make_unique<tensorflow::IteratorContext>(base_params);
+  iterator_ctx_ =
+      absl::make_unique<tensorflow::data::IteratorContext>(base_params);
   // Create the iterator.
-  s = dataset->MakeIterator(iterator_ctx_.get(), feed_id, &iterator_);
+  s = dataset->MakeIterator(iterator_ctx_.get(), /*parent=*/nullptr, feed_id,
+                            &iterator_);
   if (!s.ok()) {
     LOG(FATAL) << s.ToString();
   }

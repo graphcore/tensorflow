@@ -138,9 +138,9 @@ Status PoplarExecutable::ExecuteComputeFunction(
   return Status::OK();
 }
 
-StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
+StatusOr<ExecutionOutput> PoplarExecutable::ExecuteAsyncOnStream(
     const ServiceExecutableRunOptions* run_options,
-    absl::Span<const ShapedBuffer* const> arguments,
+    std::vector<ExecutionInput> arguments,
     HloExecutionProfile* hlo_execution_profile) {
   TENSORFLOW_TRACEPOINT();
   se::Stream* stream = run_options->stream();
@@ -150,8 +150,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   for (size_t i = 0; i < arguments.size(); ++i) {
     const se::DeviceMemoryBase& argument_buffer =
-        arguments[i]->buffer(/*index=*/{});
-    const Shape& argument_shape = arguments[i]->on_device_shape();
+        arguments[i].Buffer(/*index=*/{}).AsDeviceMemoryBase();
+    const Shape& argument_shape = arguments[i].shape();
     argument_buffers.push_back(argument_buffer);
     argument_shapes.push_back(argument_shape);
     // Make sure inputs are not deallocated during execution by increasing the
@@ -267,7 +267,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       this, *run_options, result, hlo_execution_profile, argument_buffers,
       argument_shapes, args_map, start_time_us});
 
-  return std::move(result_buffer);
+  return ExecutionOutput(std::move(result_buffer));
 }
 
 /*static*/ int64 PoplarExecutable::ShapeSizeBytes(const Shape& shape) {

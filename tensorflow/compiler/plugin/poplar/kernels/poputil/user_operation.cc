@@ -112,7 +112,7 @@ class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
 
   Status LoadLibrary(void** handle, XlaOpKernelContext* context) {
     TF_RETURN_IF_ERROR(
-        Env::Default()->LoadLibrary(library_path.c_str(), handle));
+        Env::Default()->LoadDynamicLibrary(library_path.c_str(), handle));
 
     TF_ASSIGN_OR_DEFAULT(const void* api_level_ptr,
                          GetSymbolAddress(*handle, "custom_op_api_level"),

@@ -72,7 +72,7 @@ TEST_F(UserOperator, UserOpReadMetadata) {
 
   // Load the shared library.
   void* handle;
-  tensorflow::Env::Default()->LoadLibrary(lib_path.c_str(), &handle);
+  tensorflow::Env::Default()->LoadDynamicLibrary(lib_path.c_str(), &handle);
 
   void* function_ptr = nullptr;
 

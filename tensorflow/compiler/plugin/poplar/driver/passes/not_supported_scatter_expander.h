@@ -28,6 +28,9 @@ namespace poplarplugin {
 // Note that it copies sharding information if available.
 class NotSupportedScatterExpander : public ScatterExpander {
  public:
+  NotSupportedScatterExpander()
+      : ScatterExpander(ScatterExpander::Mode::kEliminateSimpleScatters) {}
+
   absl::string_view name() const override {
     return "not-supported-scatter-expander";
   }

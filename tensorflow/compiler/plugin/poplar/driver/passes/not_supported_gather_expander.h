@@ -28,6 +28,9 @@ namespace poplarplugin {
 // Note that it copies sharding information if available.
 class NotSupportedGatherExpander : public GatherExpander {
  public:
+  NotSupportedGatherExpander()
+      : GatherExpander(GatherExpander::Mode::kEliminateSimpleGathers) {}
+
   absl::string_view name() const override {
     return "not-supported-gather-expander";
   }

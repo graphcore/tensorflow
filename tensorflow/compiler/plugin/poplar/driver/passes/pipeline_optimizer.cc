@@ -278,7 +278,11 @@ StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
   if (unused_outputs.size()) {
     VLOG(3) << "Removing unused outputs.";
     TF_RETURN_IF_ERROR(RemoveOutputsFromCall(inst, unused_outputs));
-    TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(inst->to_apply()).status());
+    TF_RETURN_IF_ERROR(
+        HloDCE()
+            .RunOnComputation(inst->to_apply(),
+                              /*remove_cross_partition_collective_ops=*/false)
+            .status());
   }
 
   // Find any duplicate inputs and change the parameters such that they become
@@ -296,7 +300,11 @@ StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
     VLOG(3) << "Removing unused inputs.";
     TF_ASSIGN_OR_RETURN(inst,
                         RemoveParametersFromCall(inst, unused_parameters));
-    TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(inst->to_apply()).status());
+    TF_RETURN_IF_ERROR(
+        HloDCE()
+            .RunOnComputation(inst->to_apply(),
+                              /*remove_cross_partition_collective_ops=*/false)
+            .status());
   }
 
   (*changed) |= (propagated_constants || duplicate_outputs.size() ||

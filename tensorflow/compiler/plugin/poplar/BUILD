@@ -803,7 +803,6 @@ cc_library(
         "//tensorflow/compiler/xla/service:hlo_cost_analysis",
         "//tensorflow/compiler/xla/service:hlo_cse",
         "//tensorflow/compiler/xla/service:hlo_dce",
-        "//tensorflow/compiler/xla/service:hlo_get_dimension_size_rewriter",
         "//tensorflow/compiler/xla/service:hlo_graph_dumper",
         "//tensorflow/compiler/xla/service:hlo_pass",
         "//tensorflow/compiler/xla/service:hlo_pass_pipeline",
@@ -1215,13 +1214,6 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
-    name = "host_compute_ops",
-    srcs = ["ops/host_compute_ops.cc"],
-    deps = ["//tensorflow/core:framework"],
-    alwayslink = True,
-)
-
 tf_gen_op_wrapper_py(
     name = "sendrecv_ops_wrapper_py",
     out = "ops/gen_sendrecv_ops.py",
@@ -1325,7 +1317,6 @@ cc_library(
         ":driver",
         ":functional_ops",
         ":graph_optimizer_passes",
-        ":host_compute_ops",
         ":ipu_ops",
         ":kernels",
         ":pop_datastream_ops",
@@ -1734,6 +1725,7 @@ xla_test(
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -2148,6 +2140,7 @@ xla_test(
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -3676,9 +3669,9 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
+        "//tensorflow/python:layers_base",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -3793,13 +3786,13 @@ tf_xla_py_test(
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:init_ops",
+        "//tensorflow/python:layers_base",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python:random_ops",
         "//tensorflow/python:resource_variable_ops",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -3999,9 +3992,9 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
+        "//tensorflow/python:layers_base",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 

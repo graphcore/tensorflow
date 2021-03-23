@@ -184,10 +184,10 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override {
     // Get the flr and create base parameters.
     FunctionLibraryRuntime* flr = ctx->function_library();
-    IteratorContext::Params params(ctx);
+    data::IteratorContext::Params params(ctx);
 
     // Get the dataset
-    DatasetBase* dataset;
+    data::DatasetBase* dataset;
     OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0), &dataset));
 
     auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");

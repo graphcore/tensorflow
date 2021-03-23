@@ -68,9 +68,9 @@ class PoplarExecutable : public Executable {
 
   ~PoplarExecutable() override;
 
-  StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
+  StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
-      absl::Span<const ShapedBuffer* const> arguments,
+      std::vector<ExecutionInput> arguments,
       HloExecutionProfile* hlo_execution_profile) override;
 
   static int64 ShapeSizeBytes(const Shape& shape);

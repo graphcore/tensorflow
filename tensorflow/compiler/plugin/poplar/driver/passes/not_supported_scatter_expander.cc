@@ -66,7 +66,7 @@ StatusOr<bool> NotSupportedScatterExpander::Run(HloModule* module) {
     const HloInstruction* updates_inst = scatter_inst->operand(2);
 
     TF_ASSIGN_OR_RETURN(HloInstruction * expanded_root,
-                        ExpandScatter(scatter_inst));
+                        ExpandInstruction(scatter_inst));
     // The expand scatter returns either:
     // * operand tensor if the updates is a zero element array
     // * while loop to the expanded computation
