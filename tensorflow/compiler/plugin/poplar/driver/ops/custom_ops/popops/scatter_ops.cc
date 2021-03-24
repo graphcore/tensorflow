@@ -21,11 +21,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -201,16 +199,7 @@ class ScatterOp : public PoplarOpDef {
     return prog;
   }
 };
-
-void RegisterScatterExtensions(HloOpcode opcode) {
-  auto allocatingIndices = [](HloInstruction*) {
-    return absl::flat_hash_set<int64>{0, 1, 2};
-  };
-  RegisterHloInstructionExtension<AllocatingIndicesExtension>(
-      opcode, allocatingIndices);
-}
-REGISTER_HLO_OP_WITH_EXTENSIONS(kScatter, ScatterOp, RegisterScatterExtensions);
-
+REGISTER_HLO_OP(kScatter, ScatterOp);
 }  // anonymous namespace
 }  // namespace poplarplugin
 }  // namespace xla

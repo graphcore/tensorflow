@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -189,19 +188,7 @@ class TriangularSolveOp : public PoplarOpDef {
   }
 };
 
-void RegisterTriangularSolveExtensions(HloOpcode opcode) {
-  auto allocatingIndices = [](HloInstruction*) {
-    return absl::flat_hash_set<int64>{0, 1};
-  };
-  RegisterHloInstructionExtension<AllocatingIndicesExtension>(
-      opcode, allocatingIndices);
-
-  auto allocatingOutput = [](HloInstruction*) { return true; };
-  RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
-                                                             allocatingOutput);
-}
-REGISTER_HLO_OP_WITH_EXTENSIONS(kTriangularSolve, TriangularSolveOp,
-                                RegisterTriangularSolveExtensions);
+REGISTER_HLO_OP(kTriangularSolve, TriangularSolveOp);
 
 }  // namespace
 }  // namespace poplarplugin
