@@ -275,6 +275,7 @@ cc_library(
 
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
+        "driver/tools/hlo_instruction_extensions.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
         "driver/tools/custom_ops/all_gather.cc",
         "driver/tools/custom_ops/assert.cc",
@@ -291,6 +292,7 @@ cc_library(
         "driver/tools/custom_ops/gru.cc",
         "driver/tools/custom_ops/elementwise.cc",
         "driver/tools/custom_ops/execution_counter.cc",
+        "driver/tools/custom_ops/hlo_extensions.cc",
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/inter_tileset_copy.cc",
@@ -504,9 +506,11 @@ cc_library(
         "driver/tools/custom_ops/truncated_normal.h",
         "driver/tools/custom_ops/user_op_hlo.h",
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.h",
+        "driver/tools/extension_registry.h",
         "driver/tools/find_all_users.h",
         "driver/tools/flags.h",
         "driver/tools/hlo_hash.h",
+        "driver/tools/hlo_instruction_extensions.h",
         "driver/tools/hlo_matcher.h",
         "driver/tools/hlo_poplar_buffer.h",
         "driver/tools/hlo_poplar_buffer_util.h",
@@ -1550,6 +1554,19 @@ xla_test(
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "instruction_extensions_test",
+    size = "small",
+    srcs = ["tests/instruction_extensions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
@@ -5171,6 +5188,7 @@ test_suite(
         "host_compute_schedule_optimizer_test",
         "infeed_prefetch_test",
         "inplace_test",
+        "instruction_extensions_test",
         "inter_ipu_copy_inserter_test",
         "inter_tileset_copy_inserter_test",
         "invalid_scheduler_selection",
