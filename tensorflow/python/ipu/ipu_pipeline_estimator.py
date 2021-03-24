@@ -73,6 +73,10 @@ class IPUPipelineEstimatorSpec(
     Refer to the :mod:`~tensorflow.python.ipu.pipelining_ops`
     documentation for more details about pipelining.
 
+    Note that the pipeline keyword argument `accumulate_outfeed` cannot be
+    passed to the `IPUPipelineEstimatorSpec`, since the `IPUPipelineEstimator`
+    uses it internally to accumulate the loss when training.
+
     Args:
       mode: A `ModeKeys`. Specifies if this is training, evaluation or
         prediction.
@@ -120,6 +124,12 @@ class IPUPipelineEstimatorSpec(
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`gradient_accumulation_count`")
 
+    # Do not allow setting of the `accumulate_outfeed` pipeline kwarg, since the
+    # estimator uses it internally.
+    if "accumulate_outfeed" in pipeline_op_kwargs:
+      raise ValueError("The `accumulate_outfeed` pipeline keyword argument"
+                       " cannot be passed to the `IPUPipelineEstimatorSpec`.")
+
     return super().__new__(
         cls,
         mode=mode,
@@ -141,6 +151,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     self._infeed_queue = infeed_queue
     self._outfeed_queue = outfeed_queue
     self._captured_eval_metrics_fn = None
+    self._captured_gradient_accumulation_count = None
 
   @staticmethod
   def need_outfeed(mode):  # pylint: disable=unused-argument
@@ -177,6 +188,11 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
   def create_training_loop(self):
     def training_pipeline():
       spec = self._call_model_fn(model_fn_lib.ModeKeys.TRAIN)
+
+      assert not self._captured_gradient_accumulation_count
+      self._captured_gradient_accumulation_count = \
+          spec.gradient_accumulation_count
+
       return pipelining_ops.pipeline(
           infeed_queue=self._infeed_queue,
           outfeed_queue=self._outfeed_queue,
@@ -186,6 +202,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           optimizer_function=spec.optimizer_function,
           device_mapping=spec.device_mapping,
           outfeed_loss=True,
+          accumulate_outfeed=True,
           name="ipu_pipeline_estimator_train",
           **spec.pipeline_op_kwargs)
 
@@ -196,8 +213,11 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       with ops.control_dependencies([compiled_training_loop]):
         loss = self._outfeed_queue.dequeue(wait_for_completion=True)
 
-      # Reduce loss over all dimensions (i.e. batch_size, gradient_accumulation_count)
-      loss = math_ops.reduce_mean(math_ops.cast(loss, dtypes.float32))
+      assert self._captured_gradient_accumulation_count
+      # Reduce loss over all dimensions, then normalise by ga-count since
+      # the loss has been accumulated inside the pipeline.
+      loss = math_ops.reduce_mean(math_ops.cast(
+          loss, dtypes.float32)) / self._captured_gradient_accumulation_count
 
     train_op = compiled_training_loop
 
@@ -218,6 +238,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._calc_repeat_count(spec),
           device_mapping=spec.device_mapping,
+          accumulate_outfeed=False,
           name="ipu_pipeline_estimator_eval",
           **spec.pipeline_op_kwargs)
 
@@ -254,6 +275,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           gradient_accumulation_count=spec.gradient_accumulation_count,
           repeat_count=self._calc_repeat_count(spec),
           device_mapping=spec.device_mapping,
+          accumulate_outfeed=False,
           name="ipu_pipeline_estimator_predict",
           **spec.pipeline_op_kwargs)
 

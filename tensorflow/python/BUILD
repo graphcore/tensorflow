@@ -201,6 +201,14 @@ py_library(
 
 tf_py_build_info_genrule()
 
+cc_binary(
+    name = "_cpu_feature_guard.so",
+    deps = [
+        "//tensorflow/core/platform:cpu_feature_guard",
+    ],
+    linkshared = True,
+)
+
 py_library(
     name = "platform",
     srcs = glob(
@@ -212,6 +220,10 @@ py_library(
             "**/benchmark.py",  # In platform_benchmark.
         ],
     ) + ["platform/build_info.py"],
+    data = select({
+        "//tensorflow:windows": [],
+        "//conditions:default": [":_cpu_feature_guard.so"],
+    }),
     srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [

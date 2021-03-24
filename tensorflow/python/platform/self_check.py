@@ -54,5 +54,11 @@ def preload_check():
             "https://www.microsoft.com/en-us/download/details.aspx?id=53587"
             % build_info.msvcp_dll_name)
   else:
-    # TODO(mrry): Consider adding checks for the Linux and Mac OS X builds.
-    pass
+    # Load a library that performs CPU feature guard checking as a part of its
+    # static initialization. Doing this here as a preload check makes it more
+    # likely that we detect any CPU feature incompatibilities before we trigger
+    # them (which would typically result in SIGILL).
+    import ctypes  # pylint: disable=g-import-not-at-top
+    cpu_feature_guard_library = os.path.join(
+        os.path.dirname(__file__), os.pardir, "_cpu_feature_guard.so")
+    ctypes.CDLL(cpu_feature_guard_library)
