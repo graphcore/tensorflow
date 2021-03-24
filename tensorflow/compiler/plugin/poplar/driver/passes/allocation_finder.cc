@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_instruction_extensions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
@@ -32,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
+
 namespace xla {
 namespace poplarplugin {
 
@@ -58,84 +60,28 @@ struct AllocationLocation {
   Shape shape;
 };
 
-class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
- public:
-  FindAllocatingInstructions() {}
+std::vector<AllocationLocation> FindAllocatingInstructions(
+    const HloComputation* comp) {
+  std::vector<AllocationLocation> allocation_locations;
 
-  ~FindAllocatingInstructions() override = default;
+  for (auto* inst : comp->MakeInstructionPostOrder()) {
+    const bool allocating =
+        CallHloInstructionExtension<AllocatingOutputExtension>(inst);
+    if (allocating) {
+      auto shape = inst->shape();
+      if (auto* infeed = DynCast<HloInfeedInstruction>(inst)) {
+        shape = infeed->infeed_shape();
+      }
 
-  Status DefaultAction(HloInstruction* hlo_instruction) override {
-    return Status::OK();
-  }
-
-  Status HandleCholesky(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-
-  Status HandleConstant(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-
-  Status HandleReduce(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-
-  Status HandleRng(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-
-  Status HandleTriangularSolve(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-
-  Status HandleParameter(HloInstruction* inst) override {
-    auto shapes = FlattenedXlaShape(inst->shape());
-    for (unsigned int i = 0; i < shapes.size(); i++) {
-      allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
-    }
-    return Status::OK();
-  }
-
-  Status HandleInfeed(HloInstruction* inst) override {
-    HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
-    auto shapes = FlattenedXlaShape(infeed->infeed_shape());
-    for (unsigned int i = 0; i < shapes.size(); i++) {
-      allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
-    }
-    return Status::OK();
-  }
-
-  Status HandleCustomCall(HloInstruction* inst) override {
-    const auto is_allocating =
-        Cast<HloPoplarInstruction>(inst)->AllocatingOutput();
-    if (is_allocating) {
-      auto shapes = FlattenedXlaShape(inst->shape());
+      const auto shapes = FlattenedXlaShape(shape);
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocation_locations.push_back({TensorLocation{inst, i}, shapes[i]});
       }
     }
-
-    return Status::OK();
   }
 
-  Status HandleFusion(HloInstruction* inst) override {
-    if (IsWideConstant(inst) || IsReductionFusion(inst)) {
-      allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    }
-    return Status::OK();
-  }
-
-  Status HandleReduceWindow(HloInstruction* inst) override {
-    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
-    return Status::OK();
-  }
-  std::vector<AllocationLocation> allocation_locations;
-};
+  return allocation_locations;
+}
 }  // namespace
 
 int64 AllocationFinder::GetAllocationPriority(
@@ -263,15 +209,17 @@ void AllocationFinder::FindConsumers(
         TensorTarget(user, op_index, backward_path, permutation);
 
     switch (user->opcode()) {
-      case HloOpcode::kCholesky: {
-        if (op_index == 0) {
+      case HloOpcode::kCholesky:
+      case HloOpcode::kConvolution:
+      case HloOpcode::kDot:
+      case HloOpcode::kScatter:
+      case HloOpcode::kTriangularSolve:
+      case HloOpcode::kGather: {
+        const auto allocating_indices =
+            CallHloInstructionExtension<AllocatingIndicesExtension>(user);
+        if (allocating_indices.count(op_index)) {
           AddTensorTarget(src, tensor_target);
         }
-        break;
-      }
-      case HloOpcode::kConvolution:
-      case HloOpcode::kDot: {
-        AddTensorTarget(src, tensor_target);
         break;
       }
       case HloOpcode::kDynamicSlice: {
@@ -301,24 +249,6 @@ void AllocationFinder::FindConsumers(
             tensor_target.sliceable_dimension =
                 (*tensor_target.permutation)[slice_info.sliced_dims[0]];
           }
-          AddTensorTarget(src, tensor_target);
-        }
-        break;
-      }
-      case HloOpcode::kScatter: {
-        if (op_index == 0 || op_index == 1 || op_index == 2) {
-          AddTensorTarget(src, tensor_target);
-        }
-        break;
-      }
-      case HloOpcode::kTriangularSolve: {
-        if (op_index == 0 || op_index == 1) {
-          AddTensorTarget(src, tensor_target);
-        }
-        break;
-      }
-      case HloOpcode::kGather: {
-        if (op_index == 0 || op_index == 1) {
           AddTensorTarget(src, tensor_target);
         }
         break;
@@ -460,22 +390,19 @@ void AllocationFinder::FindConsumers(
 }
 
 StatusOr<bool> AllocationFinder::Run(HloModule* module) {
-  FindAllocatingInstructions finder;
-
   for (const auto& comp : module->MakeComputationPostOrder()) {
     if (!IsPopOpsFusion(comp)) {
-      TF_RETURN_IF_ERROR(comp->Accept(&finder));
+      for (auto allocation_location : FindAllocatingInstructions(comp)) {
+        // Starting dimensions permutation is just all the dimensions mapping to
+        // themselves.
+        std::vector<int64> permutation(allocation_location.shape.rank());
+        absl::c_iota(permutation, 0);
+        FindConsumers(allocation_location.location,
+                      allocation_location.location.instruction,
+                      allocation_location.location.flattened_output_tuple_index,
+                      permutation);
+      }
     }
-  }
-
-  for (auto allocation_location : finder.allocation_locations) {
-    // Starting dimensions permutation is just all the dimensions mapping to
-    // themselves.
-    std::vector<int64> permutation(allocation_location.shape.rank());
-    absl::c_iota(permutation, 0);
-    FindConsumers(
-        allocation_location.location, allocation_location.location.instruction,
-        allocation_location.location.flattened_output_tuple_index, permutation);
   }
 
   return true;
