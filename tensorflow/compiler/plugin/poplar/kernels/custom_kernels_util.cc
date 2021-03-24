@@ -173,6 +173,14 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     for (auto val : casted_vals) {
       values.append(GetAsJsonValue(val));
     }
+  } else if (tinfo == typeid(std::vector<unsigned int>)) {
+    auto casted_vals = absl::any_cast<std::vector<unsigned int>>(attr);
+    // Always create the field.
+    auto& values = attributes_[field_name];
+    values = Json::arrayValue;
+    for (auto val : casted_vals) {
+      values.append(GetAsJsonValue(val));
+    }
   } else if (tinfo == typeid(absl::flat_hash_set<int64>)) {
     auto casted_vals = absl::any_cast<absl::flat_hash_set<int64>>(attr);
     // Always create the field.

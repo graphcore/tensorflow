@@ -97,6 +97,8 @@ enum PoplarOp {
   Assert = 93;
   Swish = 94;
   SwishGrad = 95;
+  SequenceSlice = 96;
+  SequenceSliceUnpack = 97;
   
   // Supported Fusions.
   Conv_biasadd = 200;
