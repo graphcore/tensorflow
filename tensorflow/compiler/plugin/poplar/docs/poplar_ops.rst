@@ -74,3 +74,12 @@ This is described in `"Gaussian Error Linear Units (GELUs)" Dan Hendrycks, Kevin
 Gimpel <https://arxiv.org/abs/1606.08415>`_.
 
 See :py:func:`tensorflow.python.ipu.nn_ops.gelu`.
+
+Sequence slice
+~~~~~~~~~~~~~~
+
+The set of sequence slicing ops provided for the IPU.
+
+See :py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice`,
+:py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice_unpack` and
+:py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice_pack`.
