@@ -152,19 +152,6 @@ class HloOpRegistrar {
     HloOpManager::RegsiterOp(hlo_opcode, std::move(poplar_op_def));
   }
 
-  HloOpRegistrar(HloOpcode hlo_opcode,
-                 std::unique_ptr<PoplarOpDef> poplar_op_def,
-                 std::function<void(HloOpcode)>&& register_extensions_cb)
-      : HloOpRegistrar(hlo_opcode, std::move(poplar_op_def)) {
-    register_extensions_cb(hlo_opcode);
-  }
-
-  // Extension registration only, no PoplarOp
-  HloOpRegistrar(HloOpcode hlo_opcode,
-                 std::function<void(HloOpcode)>&& register_extensions_cb) {
-    register_extensions_cb(hlo_opcode);
-  }
-
   HloOpRegistrar() = delete;
 };
 
@@ -172,19 +159,6 @@ class HloOpRegistrar {
   namespace {                                                                  \
   static HloOpRegistrar registrar__hlo_opcode__##hlo_opcode##__object(         \
       HloOpcode::hlo_opcode, std::unique_ptr<PoplarOpDef>(new poplar_op_def)); \
-  }
-
-#define REGISTER_HLO_OP_WITH_EXTENSIONS(hlo_opcode, poplar_op_def, ext_cb)    \
-  namespace {                                                                 \
-  static HloOpRegistrar registrar__hlo_opcode__##hlo_opcode##__object(        \
-      HloOpcode::hlo_opcode, std::unique_ptr<PoplarOpDef>(new poplar_op_def), \
-      ext_cb);                                                                \
-  }
-
-#define REGISTER_HLO_OP_EXTENSIONS(hlo_opcode, ext_cb)                 \
-  namespace {                                                          \
-  static HloOpRegistrar registrar__hlo_opcode__##hlo_opcode##__object( \
-      HloOpcode::hlo_opcode, ext_cb);                                  \
   }
 
 }  // namespace poplarplugin
