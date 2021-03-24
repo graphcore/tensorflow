@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 #include <pvti/pvti.hpp>
 
 namespace xla {
@@ -29,20 +31,23 @@ struct string_view {
 };
 
 class TensorflowPoplarPluginTracepoint : public pvti::Tracepoint {
-  static pvti::TraceChannel traceTensorflow;
+  static pvti::TraceChannel trace_tensorflow;
 
  public:
-  explicit TensorflowPoplarPluginTracepoint(const std::string& traceLabel)
-      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::traceTensorflow,
-                         traceLabel) {}
+  explicit TensorflowPoplarPluginTracepoint(const std::string& trace_label)
+      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::trace_tensorflow,
+                         trace_label) {}
 
-  explicit TensorflowPoplarPluginTracepoint(const char* traceLabel)
-      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::traceTensorflow,
-                         traceLabel) {}
+  explicit TensorflowPoplarPluginTracepoint(const char* trace_label)
+      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::trace_tensorflow,
+                         trace_label) {}
 
-  explicit TensorflowPoplarPluginTracepoint(const string_view traceLabel)
-      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::traceTensorflow,
-                         traceLabel.ptr, traceLabel.len) {}
+  explicit TensorflowPoplarPluginTracepoint(const string_view trace_label)
+      : pvti::Tracepoint(&TensorflowPoplarPluginTracepoint::trace_tensorflow,
+                         trace_label.ptr, trace_label.len) {}
+
+  static void BeginTrace(const absl::string_view trace_label);
+  static void EndTrace(const absl::string_view trace_label);
 
   ~TensorflowPoplarPluginTracepoint() = default;
 };
