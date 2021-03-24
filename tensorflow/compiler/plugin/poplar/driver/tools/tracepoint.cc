@@ -18,8 +18,20 @@ namespace xla {
 namespace poplarplugin {
 
 // Initialize static class member
-pvti::TraceChannel TensorflowPoplarPluginTracepoint::traceTensorflow = {
+pvti::TraceChannel TensorflowPoplarPluginTracepoint::trace_tensorflow = {
     "tensorflow_plugin"};
+
+void TensorflowPoplarPluginTracepoint::BeginTrace(
+    const absl::string_view trace_label) {
+  pvti::Tracepoint::begin(&trace_tensorflow,
+                          static_cast<std::string>(trace_label));
+}
+
+void TensorflowPoplarPluginTracepoint::EndTrace(
+    const absl::string_view trace_label) {
+  pvti::Tracepoint::end(&trace_tensorflow,
+                        static_cast<std::string>(trace_label));
+}
 
 }  // namespace poplarplugin
 }  // namespace xla
