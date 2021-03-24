@@ -41,6 +41,8 @@ from tensorflow.python.ipu.ops import reduce_scatter_op
 from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
+from tensorflow.python.ipu.ops import slicing_ops
+from tensorflow.python.ipu.ops import slicing_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
 
 from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat

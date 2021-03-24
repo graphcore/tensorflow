@@ -24,6 +24,7 @@ py_library(
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
+        "ops/slicing_ops.py",
         "ops/summary_ops.py",
     ],
     srcs_version = "PY2AND3",
@@ -54,6 +55,7 @@ py_library(
         "ops/pipelining_ops_grad.py",
         "ops/rand_ops_grad.py",
         "ops/rnn_ops_grad.py",
+        "ops/slicing_ops_grad.py",
     ],
     srcs_version = "PY2AND3",
     deps = [
@@ -140,6 +142,7 @@ py_library(
         "ops/reduce_scatter_op.py",
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
+        "ops/slicing_ops.py",
         "ops/summary_ops.py",
         "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
@@ -1696,6 +1699,24 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "sequence_slice_test",
+    size = "large",
+    srcs = ["tests/sequence_slice_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 12,
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1783,6 +1804,7 @@ test_suite(
         "replication_all_to_all_test",
         "replication_normalise_test",
         "seed_control_test",
+        "sequence_slice_test",
         "sharded_and_replicated_test",
         "user_ops_test",
         "utils_get_config_test",

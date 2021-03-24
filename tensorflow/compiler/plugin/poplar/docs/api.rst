@@ -235,6 +235,11 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.slicing_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
 .. Poprand
 
 .. automodule:: tensorflow.python.ipu.rand_ops

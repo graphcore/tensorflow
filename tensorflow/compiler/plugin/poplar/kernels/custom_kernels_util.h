@@ -65,7 +65,7 @@ class AttributeMap {
   StatusOr<tensorflow::DataType> GetAttributeAsTFDataType(
       const std::string& field_name) const;
 
-  // This is included as absl::flat_hash_set<T> is unordered,
+  // These are included as absl::flat_hash_set<T> is unordered,
   // whereas this allows a list to be passed whilst preserving ordering.
   StatusOr<std::vector<int64>> GetAttributeInt64Vector(
       const std::string& field_name) const;
