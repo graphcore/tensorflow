@@ -80,9 +80,9 @@ class RecomputationMode(Enum):
   This Enum class is used to control the recomputation implementation, with the
   following approaches supported:
 
-  * `AUTO`: automatically try and select the best recomputation strategy based
+  * `Auto`: automatically try and select the best recomputation strategy based
     on the provided model and pipeline schedule.
-  * `RECOMPUTE_THEN_BACKPROPAGATE`: first recompute all the activations and then
+  * `RecomputeThenBackpropagate`: first recompute all the activations and then
     perform backpropagation. This mode allows for better code reuse as the
     corresponding forward propagation and the recomputation operations can share
     the exact same code. This recomputation mode is supported by
@@ -90,9 +90,9 @@ class RecomputationMode(Enum):
     schedules.
     This is the default recomputation mode for `PipelineSchedule.Grouped` and
     `PipelineSchedule.Interleaved` pipeline schedules.
-  * `RECOMPUTE_AND_BACKPROPAGATE_INTERLEAVED`: recompute and backpropagate
+  * `RecomputeAndBackpropagateInterleaved`: recompute and backpropagate
     operations are interleaved together. This mode can help reduce the maximum
-    liveness compared to `RECOMPUTE_THEN_BACKPROPAGATE` as the backpropagation
+    liveness compared to `RecomputeThenBackpropagate` as the backpropagation
     operations can be scheduled as soon as possible, however less code reuse
     will be possible. This recomputation mode is supported by
     `PipelineSchedule.Grouped` and `PipelineSchedule.Sequential` pipeline
