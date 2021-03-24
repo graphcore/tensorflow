@@ -169,6 +169,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/compilation_stats.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
@@ -208,6 +209,22 @@ std::once_flag help_flag_printed;
 int64 SizeFunction(const BufferValue& buffer) {
   return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
 }
+
+// CompilationStats wrapper for generating PVTI tracepoints
+// for HloPasses.
+class PVTICompilerStats : public xla::CompilationStats {
+ public:
+  void StartPass(absl::string_view pass_name) override {
+    TensorflowPoplarPluginTracepoint::BeginTrace(pass_name);
+  }
+
+  void EndPass(absl::string_view pass_name) override {
+    TensorflowPoplarPluginTracepoint::EndTrace(pass_name);
+  }
+
+  // Pure virtual but not needed for our tracepoints.
+  void CompilationReport() override {}
+};
 
 bool GetConstantSubOutput(const HloInstruction* root, const Shape& layout,
                           std::vector<Literal>& sub_result) {
@@ -1222,7 +1239,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   resources.progress_bar->Start();
 
   {
-    HloPassPipeline pipeline("OptimizerPipeline");
+    std::unique_ptr<PVTICompilerStats> optimizer_compiler_stats =
+        absl::make_unique<PVTICompilerStats>();
+    HloPassPipeline pipeline("OptimizerPipeline",
+                             optimizer_compiler_stats.get());
     if (!poplar_executor->RetainControlDependencies()) {
       pipeline.AddPass<DependencyReplacer>(false);
     }
@@ -1573,7 +1593,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       // Run a compile only Poplar specific pipeline - these passes do not
       // modify the module in a functional way.
       VLOG(1) << "Begin Poplar Pipeline.";
-      HloPassPipeline pipeline("PoplarPipeline");
+      std::unique_ptr<PVTICompilerStats> poplar_pipline_compiler_stats =
+          absl::make_unique<PVTICompilerStats>();
+      HloPassPipeline pipeline("PoplarPipeline",
+                               poplar_pipline_compiler_stats.get());
       pipeline.AddPass<EmbeddingPlansPreplanning>(resources);
       pipeline.AddPass<ConvolutionPreplanning>(resources);
       pipeline.AddPass<MatMulPreplanning>(resources);
