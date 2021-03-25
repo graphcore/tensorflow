@@ -66,6 +66,11 @@ static bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("DstT", DT_UINT8, kdef);
   }
 
+  if (kdef->op() == "Identity") {
+    AddDtypeToKernelDefConstraint("T", DT_INT8, kdef);
+    AddDtypeToKernelDefConstraint("T", DT_UINT8, kdef);
+  }
+
   if (kdef->op() == "_Arg" || kdef->op() == "_Retval") {
     AddDtypeToKernelDefConstraint("T", DT_INT8, kdef);
     AddDtypeToKernelDefConstraint("T", DT_UINT8, kdef);
