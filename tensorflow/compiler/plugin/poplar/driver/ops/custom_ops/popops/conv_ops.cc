@@ -444,9 +444,14 @@ class MultiConvOp : public PoplarOpDef {
             return convolution_spec.type == ConvType::ConvWithReverse;
           });
 
+      std::vector<poplin::multiconv::ConvolutionArgs> flip_args;
+      std::vector<poplar::Tensor> flip_weights;
+      flip_args.reserve(convolution_specs.size());
+      flip_weights.reserve(convolution_specs.size());
+
       std::vector<poplin::multiconv::ConvolutionArgs> conv_args(
           convolution_specs.size());
-      for (int64 i = 0; i != convolution_specs.size(); ++i) {
+      for (std::size_t i = 0; i != convolution_specs.size(); ++i) {
         const auto& convolution_spec = convolution_specs[i];
         poplar::Tensor input = args[i];
         poplar::Tensor kernel = args[i + convolution_specs.size()];
@@ -474,16 +479,15 @@ class MultiConvOp : public PoplarOpDef {
             kernel = AddGroupsDimensionToWeights(create_args[i].params, kernel,
                                                  true);
             if (!all_transpose_and_flip_weights) {
-              // Transpose the individual kernel.
+              // Create new kernel and pass it to the
+              // multiconv::weightsTransposeChansFlipXY later.
               poplar::Tensor new_kernel = poplin::createWeights(
                   graph, create_args[i].params,
                   {debug_name_and_id, absl::StrCat(i, "/BwdWeights")},
                   create_args[i].options, &res.convolution_cache);
-
-              poplin::weightsTransposeChansFlipXY(
-                  graph, kernel, new_kernel, prog,
-                  {debug_name_and_id, std::to_string(i)});
-              kernel = new_kernel;
+              flip_args.push_back({input, new_kernel, create_args[i].params,
+                                   create_args[i].options});
+              flip_weights.push_back(kernel);
             }
             break;
           }
@@ -491,6 +495,22 @@ class MultiConvOp : public PoplarOpDef {
         }
         conv_args[i] = {input, kernel, create_args[i].params,
                         create_args[i].options};
+      }
+
+      if (!flip_args.empty()) {
+        CHECK_EQ(flip_args.size(), flip_weights.size());
+        poplin::multiconv::weightsTransposeChansFlipXY(
+            graph, flip_args, flip_weights, prog, {}, debug_name_and_id,
+            &res.convolution_cache);
+
+        for (std::size_t i = 0, flip_index = 0; i != convolution_specs.size();
+             ++i) {
+          const auto& convolution_spec = convolution_specs[i];
+          if (convolution_spec.type == ConvType::ConvWithReverse) {
+            // Update weights for the future multiconvolution.
+            conv_args[i].weights = flip_args.at(flip_index++).weights;
+          }
+        }
       }
 
       std::vector<poplar::Tensor> outputs = poplin::multiconv::convolution(
