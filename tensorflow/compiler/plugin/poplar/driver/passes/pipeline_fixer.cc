@@ -270,8 +270,13 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // We can't just iterate over users as we might remove some of them during
     // lowering.
     HloInstructionSet stage_users(stage->users().begin(), stage->users().end());
-    // We try and lower one user at a time, otherwise we might create clusters
-    // which cannot be lowered because they are using multiple pipeline stages.
+
+    // The combined instruction clusters which we want to lower for this stage.
+    std::vector<HloInstruction*> all_ordered_lowerings;
+
+    // Find and combine the clusters which we want to lower. The combining is
+    // done to reduce calls to PipelineDataflowAnalysis::GetAnalysis, which can
+    // be expensive.
     while (!stage_users.empty()) {
       HloInstruction* stage_gte_user = *stage_users.begin();
       stage_users.erase(stage_gte_user);
@@ -300,17 +305,24 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
         stage_users.erase(inst);
       });
 
-      // Lower the instructions into the computation.
-      TF_ASSIGN_OR_RETURN(
-          stage, AddInstructionsToPipelineStage(stage, ordered_lowering));
-
-      TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
-      TF_RETURN_IF_ERROR(RemovePipelineStageDeadUsers(stage, stage_users));
-      // Recompute the analysis.
-      TF_ASSIGN_OR_RETURN(analysis,
-                          PipelineDataflowAnalysis::GetAnalysis(stages_));
+      // Combine the clusters such that we preserve the post ordering.
+      for (auto* inst : ordered_lowering) {
+        const auto unique = absl::c_find(all_ordered_lowerings, inst) ==
+                            all_ordered_lowerings.end();
+        if (unique) {
+          all_ordered_lowerings.push_back(inst);
+        }
+      }
     }
+    // Lower the instructions into the computation.
+    TF_ASSIGN_OR_RETURN(
+        stage, AddInstructionsToPipelineStage(stage, all_ordered_lowerings));
 
+    TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
+    TF_RETURN_IF_ERROR(RemovePipelineStageDeadUsers(stage, stage_users));
+    // Recompute the analysis.
+    TF_ASSIGN_OR_RETURN(analysis,
+                        PipelineDataflowAnalysis::GetAnalysis(stages_));
     // The dataflow in pipelining requires all the tensors to be thread through
     // consecutive pipeline stages. Check if there are any outputs from the
     // previous stage which are used by other stages directly and thread them
