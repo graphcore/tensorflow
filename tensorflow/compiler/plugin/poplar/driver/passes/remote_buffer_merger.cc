@@ -73,17 +73,22 @@ bool IsRemoteParameter(const HloInstruction* inst,
                      RemoteParameterInfo(inst->parameter_number()));
 }
 
+bool IsReplicaPartitionedRemoteParameter(
+    const HloInstruction* inst, const CompilerAnnotations& annotations) {
+  if (!IsRemoteParameter(inst, annotations)) {
+    return false;
+  }
+
+  auto found = annotations.remote_parameter_infos.find(
+      RemoteParameterInfo(inst->parameter_number()));
+  CHECK(found != annotations.remote_parameter_infos.end());
+  return found->is_replica_partitioned;
+}
+
 bool IsRemoteBufferCreator(const HloInstruction* inst,
                            const CompilerAnnotations& annotations) {
   return IsRemoteParameter(inst, annotations) ||
          IsRemoteGradientAccumulatorCreate(inst) || IsRemoteCreateBuffer(inst);
-}
-
-bool IsReplicatedRemoteParameterLoadOrStore(const HloInstruction* inst) {
-  return (IsPoplarInstruction(RemoteParameterLoad, inst) &&
-          Cast<HloRemoteParameterLoad>(inst)->GetReplicationFactor(0) > 1) ||
-         (IsPoplarInstruction(RemoteParameterStore, inst) &&
-          Cast<HloRemoteParameterStore>(inst)->GetReplicationFactor(0) > 1);
 }
 
 bool IsGradientAccumulatorSink(const HloInstruction* inst) {
@@ -99,9 +104,13 @@ bool IsRemoteBufferPassthrough(const HloInstruction* inst) {
          IsReshape(inst);
 }
 
-StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(
+using CreatorToUsers =
+    HloInstructionMap<std::vector<HloAbstractRemoteLoadStore*>>;
+using UserToCreator = std::map<HloAbstractRemoteLoadStore*, HloInstruction*>;
+
+StatusOr<UserToCreator> FindRemoteBufferSources(
     const HloModule* module, const CompilerAnnotations& annotations) {
-  std::map<HloInstruction*, HloInstruction*> result;
+  UserToCreator result;
 
   TF_ASSIGN_OR_RETURN(auto dataflow_analysis,
                       HloDataflowAnalysis::Run(*module));
@@ -113,12 +122,13 @@ StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(
 
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (IsRemoteBufferUser(inst)) {
-        HloInstruction* source = inst;
+        auto* load_store_inst = Cast<HloAbstractRemoteLoadStore>(inst);
 
         // Find the source (creator) of the remote buffer used by this
         // instruction, traversing through instructions that merely pass
         // through the remote buffer.
         // TODO(T10387): Replace with our own alias analysis when we have it.
+        HloInstruction* source = inst;
         do {
           CHECK_GT(source->operand_count(), 0) << source->ToString();
           const auto* buffer_operand = source->operand(0);
@@ -129,7 +139,7 @@ StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(
             return FailedPrecondition(
                 "Failed to determine remote buffer source. Is complex control "
                 "flow used to pass remote buffers? Found %d sources for: %s.",
-                value_set.values().size(), source->ToString().c_str());
+                value_set.values().size(), source->ToString());
           }
 
           auto* next = value_set.values()[0]->instruction();
@@ -140,13 +150,21 @@ StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(
         if (!IsRemoteBufferCreator(source, annotations)) {
           return FailedPrecondition(
               "The source for %s does not create a remote buffer: %s",
-              inst->ToString().c_str(), source->ToString().c_str());
+              inst->ToString(), source->ToString());
+        }
+
+        if (load_store_inst->GetReplicationFactor(0) > 1 &&
+            !IsReplicaPartitionedRemoteParameter(source, annotations)) {
+          return FailedPrecondition(
+              "The source for the replicated load/store %s is not a replica "
+              "partitioned remote parameter: %s",
+              load_store_inst->ToString(), source->ToString());
         }
 
         VLOG(2) << "Found remote buffer source for " << inst->ToString() << ": "
                 << source->ToString();
 
-        result[inst] = source;
+        result[load_store_inst] = source;
       }
     }
   }
@@ -154,24 +172,22 @@ StatusOr<std::map<HloInstruction*, HloInstruction*>> FindRemoteBufferSources(
   return result;
 }
 
-HloInstruction* CreateSlicedVersion(HloInstruction* inst,
+HloInstruction* CreateSlicedVersion(HloAbstractRemoteLoadStore* inst,
                                     HloInstruction* offset_inst) {
   HloComputation* comp = inst->parent();
+  CHECK_EQ(inst->RemoteBuffers().size(), 1) << inst->ToString();
+  CHECK_EQ(inst->GetReplicationFactorCount(), 1) << inst->ToString();
 
   if (IsPoplarInstruction(RemoteParameterLoad)(inst)) {
-    const auto* load_inst = Cast<HloRemoteParameterLoad>(inst);
-    CHECK_EQ(load_inst->operand_count(), 1) << load_inst->ToString();
-    CHECK_EQ(load_inst->GetReplicationFactor(0), 1) << load_inst->ToString();
-    return comp->AddInstruction(CreateBufferLoadSlice(
-        inst->shape(), inst->mutable_operand(0), offset_inst));
+    return comp->AddInstruction(
+        CreateBufferLoadSlice(inst->shape(), inst->mutable_operand(0),
+                              offset_inst, inst->GetReplicationFactor(0)));
   }
 
   CHECK(IsPoplarInstruction(RemoteParameterStore)(inst));
-  const auto* store_inst = Cast<HloRemoteParameterStore>(inst);
-  CHECK_EQ(store_inst->RemoteBuffers().size(), 1) << store_inst->ToString();
-  CHECK_EQ(store_inst->GetReplicationFactor(0), 1) << store_inst->ToString();
-  return comp->AddInstruction(CreateBufferStoreSlice(
-      inst->mutable_operand(0), inst->mutable_operand(1), offset_inst));
+  return comp->AddInstruction(
+      CreateBufferStoreSlice(inst->mutable_operand(0), inst->mutable_operand(1),
+                             offset_inst, inst->GetReplicationFactor(0)));
 }
 
 Status HoistOffsets(HloInstruction* call,
@@ -254,7 +270,7 @@ Status HoistOffsets(HloInstruction* call,
 
 StatusOr<bool> AddLoadStoreOffsets(
     CallGraph& call_graph, HloComputation* comp,
-    const std::map<HloInstruction*, HloInstruction*> user_to_creator,
+    const UserToCreator& user_to_creator,
     const ConstHloInstructionMap<int64>& creator_to_offset,
     bool is_inside_function = false) {
   bool changed = false;
@@ -263,7 +279,8 @@ StatusOr<bool> AddLoadStoreOffsets(
 
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (IsRemoteBufferUser(inst)) {
-      auto* creator = user_to_creator.at(inst);
+      auto* load_store_inst = Cast<HloAbstractRemoteLoadStore>(inst);
+      auto* creator = user_to_creator.at(load_store_inst);
       auto found_offset = creator_to_offset.find(creator);
       if (found_offset == creator_to_offset.end()) {
         // No offset found; this is an unmerged buffer.
@@ -281,7 +298,7 @@ StatusOr<bool> AddLoadStoreOffsets(
         }
         offset_instructions.push_back(offset_inst);
 
-        auto* sliced_inst = CreateSlicedVersion(inst, offset_inst);
+        auto* sliced_inst = CreateSlicedVersion(load_store_inst, offset_inst);
         TF_RETURN_IF_ERROR(sliced_inst->CopyAllControlDepsFrom(inst));
         TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
         sliced_inst->set_raw_backend_config_string(
@@ -366,12 +383,15 @@ struct RemoteBufferInfo {
   PrimitiveType type;
   int64 num_repeats;
   int64 sharding_device;
+  bool is_replica_partitioned;
 };
 
 struct RemoteBufferInfoCmp {
   bool operator()(const RemoteBufferInfo& a, const RemoteBufferInfo& b) const {
-    return std::tie(a.dimensions, a.type, a.num_repeats, a.sharding_device) <
-           std::tie(b.dimensions, b.type, b.num_repeats, b.sharding_device);
+    return std::tie(a.dimensions, a.type, a.num_repeats, a.sharding_device,
+                    a.is_replica_partitioned) <
+           std::tie(b.dimensions, b.type, b.num_repeats, b.sharding_device,
+                    b.is_replica_partitioned);
   }
 };
 
@@ -404,11 +424,15 @@ RemoteBufferCreators FindRemoteBufferCreators(
 
         const int64 sharding_device = GetSingleShardingDeviceId(inst);
 
+        const bool is_replica_partitioned =
+            IsReplicaPartitionedRemoteParameter(inst, annotations);
+
         const auto key =
             RemoteBufferInfo{{dimensions.begin(), dimensions.end()},
                              single_shape.element_type(),
                              num_repeats,
-                             sharding_device};
+                             sharding_device,
+                             is_replica_partitioned};
 
         remote_buffers[key].push_back(inst);
       }
@@ -444,8 +468,8 @@ using GroupedInstructions = std::vector<std::vector<HloInstruction*>>;
 
 StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
     const RemoteBufferCreators& buffer_creators,
-    const HloInstructionMap<std::vector<HloInstruction*>>& creator_to_users,
-    const CallGraph& call_graph, bool merge_all) {
+    const CreatorToUsers& creator_to_users, const CallGraph& call_graph,
+    bool merge_all) {
   GroupedInstructions result;
 
   // The default heuristic (unless merge_all is true) is that a remote buffer
@@ -458,22 +482,17 @@ StatusOr<GroupedInstructions> ChooseCreatorsToMerge(
     return merge_all || is_inside_function.ValueOrDie();
   };
 
-  // TODO(T29856): Replicated loads and stores do not yet support merging.
-  auto does_not_support_merging = IsReplicatedRemoteParameterLoadOrStore;
-
   for (auto& group : buffer_creators) {
     std::vector<HloInstruction*> to_merge;
 
-    // We attempt to merge remote buffers that have: 1) at least one user that
-    // would benefit from merging, and 2) no users that do not support merging.
+    // We attempt to merge remote buffers that have at least one user that
+    // would benefit from merging.
     absl::c_copy_if(group.second, std::back_inserter(to_merge),
                     [&](HloInstruction* creator) {
                       auto found_users = creator_to_users.find(creator);
                       if (found_users != creator_to_users.end()) {
-                        const auto& users = found_users->second;
-                        return absl::c_any_of(users,
-                                              would_benefit_from_merging) &&
-                               absl::c_none_of(users, does_not_support_merging);
+                        return absl::c_any_of(found_users->second,
+                                              would_benefit_from_merging);
                       }
                       return false;
                     });
@@ -568,7 +587,7 @@ StatusOr<bool> RemoteBufferMerger::Run(HloModule* module) {
                       FindRemoteBufferSources(module, annotations_));
 
   // Invert the above map.
-  HloInstructionMap<std::vector<HloInstruction*>> creator_to_users;
+  CreatorToUsers creator_to_users;
   for (auto& inst_creator : user_to_creator) {
     creator_to_users[inst_creator.second].push_back(inst_creator.first);
   }
