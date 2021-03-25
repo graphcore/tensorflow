@@ -62,9 +62,9 @@ class CTCLoss(layers.Layer):
     super().__init__(name=name)
     self.blank_index = blank_index
     if from_logits:
-      self.loss_function = nn_ops.ctc_loss_with_logits
+      self.loss_function = nn_ops.ctc_loss_v2
     else:
-      self.loss_function = nn_ops.ctc_loss
+      self.loss_function = nn_ops.ctc_loss_with_log_probs
 
   def call(self, labels, data, label_length, data_length, **kwargs):  # pylint: disable=W0221
     """
