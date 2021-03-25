@@ -90,7 +90,7 @@ enum PoplarOp {
   CandidateSampler = 86;
   AUGRULayerFwd = 87;
   AUGRULayerBwd = 88;
-  CTCLoss = 89;
+  CTCLossWithLogProbs = 89;
   CTCLossWithLogits = 90;
   HardSigmoid = 91;
   HardSigmoidGrad = 92;

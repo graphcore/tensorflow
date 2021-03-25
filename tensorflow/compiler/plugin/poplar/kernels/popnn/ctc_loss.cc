@@ -111,20 +111,6 @@ class PopnnCTCLossOpBase : public XlaOpKernel, IpuOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnCTCLossOpBase);
 };
 
-class PopnnCTCLossOp : public PopnnCTCLossOpBase {
- public:
-  explicit PopnnCTCLossOp(OpKernelConstruction* ctx)
-      : PopnnCTCLossOpBase(ctx) {}
-
-  ~PopnnCTCLossOp() override{};
-
-  PoplarOp OpType() const override { return PoplarOp::CTCLoss; }
-
-  TF_DISALLOW_COPY_AND_ASSIGN(PopnnCTCLossOp);
-};
-
-REGISTER_IPU_OP("PopnnCTCLoss", PopnnCTCLossOp);
-
 class PopnnCTCLossWithLogitsOp : public PopnnCTCLossOpBase {
  public:
   explicit PopnnCTCLossWithLogitsOp(OpKernelConstruction* ctx)
@@ -138,5 +124,19 @@ class PopnnCTCLossWithLogitsOp : public PopnnCTCLossOpBase {
 };
 
 REGISTER_IPU_OP("PopnnCTCLossWithLogits", PopnnCTCLossWithLogitsOp);
+
+class PopnnCTCLossWithLogProbsOp : public PopnnCTCLossOpBase {
+ public:
+  explicit PopnnCTCLossWithLogProbsOp(OpKernelConstruction* ctx)
+      : PopnnCTCLossOpBase(ctx) {}
+
+  ~PopnnCTCLossWithLogProbsOp() override{};
+
+  PoplarOp OpType() const override { return PoplarOp::CTCLossWithLogProbs; }
+
+  TF_DISALLOW_COPY_AND_ASSIGN(PopnnCTCLossWithLogProbsOp);
+};
+
+REGISTER_IPU_OP("PopnnCTCLossWithLogProbs", PopnnCTCLossWithLogProbsOp);
 
 }  // namespace tensorflow

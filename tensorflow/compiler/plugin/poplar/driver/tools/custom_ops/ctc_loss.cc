@@ -36,16 +36,16 @@ HloCTCLossInstructionBase::HloCTCLossInstructionBase(
       out_dtype_(out_dtype),
       blank_index_(blank_index) {}
 
-HloCTCLossInstruction::HloCTCLossInstruction(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index)
-    : HloCTCLossInstructionBase(PoplarOp::CTCLoss, shape, operands, in_dtype,
-                                out_dtype, blank_index) {}
-
 HloCTCLossWithLogitsInstruction::HloCTCLossWithLogitsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index)
     : HloCTCLossInstructionBase(PoplarOp::CTCLossWithLogits, shape, operands,
+                                in_dtype, out_dtype, blank_index) {}
+
+HloCTCLossWithLogProbsInstruction::HloCTCLossWithLogProbsInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index)
+    : HloCTCLossInstructionBase(PoplarOp::CTCLossWithLogProbs, shape, operands,
                                 in_dtype, out_dtype, blank_index) {}
 
 PrimitiveType HloCTCLossInstructionBase::in_dtype() const { return in_dtype_; }
@@ -88,12 +88,6 @@ HloCTCLossInstructionBase::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
-std::unique_ptr<HloInstruction> HloCTCLossInstruction::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    HloCloneContext* ctx) const {
-  return CreateCTCLoss(shape, operands, in_dtype(), out_dtype(), blank_index());
-}
-
 std::unique_ptr<HloInstruction>
 HloCTCLossWithLogitsInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -102,11 +96,12 @@ HloCTCLossWithLogitsInstruction::CloneWithNewOperandsImpl(
                                  blank_index());
 }
 
-std::unique_ptr<HloInstruction> CreateCTCLoss(
+std::unique_ptr<HloInstruction>
+HloCTCLossWithLogProbsInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index) {
-  return absl::make_unique<HloCTCLossInstruction>(shape, operands, in_dtype,
-                                                  out_dtype, blank_index);
+    HloCloneContext* ctx) const {
+  return CreateCTCLossWithLogProbs(shape, operands, in_dtype(), out_dtype(),
+                                   blank_index());
 }
 
 std::unique_ptr<HloInstruction> CreateCTCLossWithLogits(
@@ -116,28 +111,14 @@ std::unique_ptr<HloInstruction> CreateCTCLossWithLogits(
       shape, operands, in_dtype, out_dtype, blank_index);
 }
 
+std::unique_ptr<HloInstruction> CreateCTCLossWithLogProbs(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    PrimitiveType in_dtype, PrimitiveType out_dtype, int64 blank_index) {
+  return absl::make_unique<HloCTCLossWithLogProbsInstruction>(
+      shape, operands, in_dtype, out_dtype, blank_index);
+}
+
 namespace {
-
-static HloPoplarInstructionFactory ctc_loss_factory(
-    PoplarOp::CTCLoss,
-    [](HloCustomCallInstruction* call)
-        -> StatusOr<std::unique_ptr<HloInstruction>> {
-      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-      TF_ASSIGN_OR_RETURN(tensorflow::DataType in_dtype,
-                          attribute_map.GetAttributeAsTFDataType("in_dtype"));
-      TF_ASSIGN_OR_RETURN(tensorflow::DataType out_dtype,
-                          attribute_map.GetAttributeAsTFDataType("out_dtype"));
-      TF_ASSIGN_OR_RETURN(int64 blank_index,
-                          attribute_map.GetAttributeAsInt("blank_index"));
-
-      PrimitiveType in_dtype_xla;
-      PrimitiveType out_dtype_xla;
-      TF_CHECK_OK(DataTypeToPrimitiveType(in_dtype, &in_dtype_xla));
-      TF_CHECK_OK(DataTypeToPrimitiveType(out_dtype, &out_dtype_xla));
-
-      return CreateCTCLoss(call->shape(), call->operands(), in_dtype_xla,
-                           out_dtype_xla, blank_index);
-    });
 
 static HloPoplarInstructionFactory ctc_loss_with_logits_factory(
     PoplarOp::CTCLossWithLogits,
@@ -158,6 +139,28 @@ static HloPoplarInstructionFactory ctc_loss_with_logits_factory(
 
       return CreateCTCLossWithLogits(call->shape(), call->operands(),
                                      in_dtype_xla, out_dtype_xla, blank_index);
+    });
+
+static HloPoplarInstructionFactory ctc_loss_with_log_probs_factory(
+    PoplarOp::CTCLossWithLogProbs,
+    [](HloCustomCallInstruction* call)
+        -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      TF_ASSIGN_OR_RETURN(tensorflow::DataType in_dtype,
+                          attribute_map.GetAttributeAsTFDataType("in_dtype"));
+      TF_ASSIGN_OR_RETURN(tensorflow::DataType out_dtype,
+                          attribute_map.GetAttributeAsTFDataType("out_dtype"));
+      TF_ASSIGN_OR_RETURN(int64 blank_index,
+                          attribute_map.GetAttributeAsInt("blank_index"));
+
+      PrimitiveType in_dtype_xla;
+      PrimitiveType out_dtype_xla;
+      TF_CHECK_OK(DataTypeToPrimitiveType(in_dtype, &in_dtype_xla));
+      TF_CHECK_OK(DataTypeToPrimitiveType(out_dtype, &out_dtype_xla));
+
+      return CreateCTCLossWithLogProbs(call->shape(), call->operands(),
+                                       in_dtype_xla, out_dtype_xla,
+                                       blank_index);
     });
 
 }  // namespace
