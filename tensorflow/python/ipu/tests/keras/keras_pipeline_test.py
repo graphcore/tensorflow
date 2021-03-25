@@ -29,6 +29,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import vis_utils
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
@@ -1131,6 +1132,36 @@ class IPUPipelineTest(test.TestCase):
       no_sub_out = m_no_sub.predict(data, batch_size=4)
 
     self.assertAllClose(ipu_out, no_sub_out)
+
+  @test_util.run_v2_only
+  def testUint8(self):
+    dataset = dataset_ops.Dataset.from_tensor_slices(np.array(range(16)))
+    dataset = dataset.map(lambda x: math_ops.cast(x, dtype=np.uint8)).batch(
+        1, drop_remainder=True).batch(1, drop_remainder=True)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      inputs = keras.layers.Input(shape=[1])
+
+      with ipu.keras.PipelineStage(0):
+        x = keras.layers.Lambda(lambda x: math_ops.cast(x, dtype=np.float16))(
+            inputs)
+        x = keras.layers.Dense(10, dtype=np.float16,
+                               kernel_initializer='ones')(x)
+
+      with ipu.keras.PipelineStage(1):
+        x = keras.layers.Dense(1, dtype=np.float16,
+                               kernel_initializer='ones')(x)
+
+      m = ipu.keras.PipelineModel(inputs, x, gradient_accumulation_count=4)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      output = m.predict(dataset, steps_per_run=1)
+      self.assertEqual(output.shape, (16, 1))
+      self.assertAllClose(output.flatten(), [n * 10 for n in range(16)])
 
 
 if __name__ == '__main__':
