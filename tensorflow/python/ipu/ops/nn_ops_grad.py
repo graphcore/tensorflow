@@ -62,10 +62,10 @@ def _multi_conv_grad(op, *grads):
       func_grad_graph.structured_outputs, outputs)
 
 
-@ops.RegisterGradient("PopnnCTCLoss")
 @ops.RegisterGradient("PopnnCTCLossWithLogits")
+@ops.RegisterGradient("PopnnCTCLossWithLogProbs")
 def _ctc_loss_grad(op, loss_grad, _):
-  """The gradient of CTCLoss and CTCLossWithLogits ops."""
+  """The gradient of PopnnCTCLossWithLogits and PopnnCTCLossWithLogProbs ops."""
   op_grad = array_ops.prevent_gradient(
       op.outputs[1],
       message="Second order derivative is not currently available for CTC Loss."

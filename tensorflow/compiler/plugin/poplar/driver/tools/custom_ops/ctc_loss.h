@@ -55,19 +55,6 @@ class HloCTCLossInstructionBase : public HloPoplarInstruction {
   int64 blank_index_;
 };
 
-class HloCTCLossInstruction : public HloCTCLossInstructionBase {
- public:
-  explicit HloCTCLossInstruction(const Shape& shape,
-                                 absl::Span<HloInstruction* const> operands,
-                                 xla::PrimitiveType in_dtype,
-                                 xla::PrimitiveType out_dtype,
-                                 int64 blank_index);
-
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const> operands,
-      HloCloneContext* ctx) const override;
-};
-
 class HloCTCLossWithLogitsInstruction : public HloCTCLossInstructionBase {
  public:
   explicit HloCTCLossWithLogitsInstruction(
@@ -80,12 +67,24 @@ class HloCTCLossWithLogitsInstruction : public HloCTCLossInstructionBase {
       HloCloneContext* ctx) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateCTCLoss(
+class HloCTCLossWithLogProbsInstruction : public HloCTCLossInstructionBase {
+ public:
+  explicit HloCTCLossWithLogProbsInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      xla::PrimitiveType in_dtype, xla::PrimitiveType out_dtype,
+      int64 blank_index);
+
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* ctx) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateCTCLossWithLogits(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     xla::PrimitiveType in_dtype, xla::PrimitiveType out_dtype,
     int64 blank_index);
 
-std::unique_ptr<HloInstruction> CreateCTCLossWithLogits(
+std::unique_ptr<HloInstruction> CreateCTCLossWithLogProbs(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     xla::PrimitiveType in_dtype, xla::PrimitiveType out_dtype,
     int64 blank_index);

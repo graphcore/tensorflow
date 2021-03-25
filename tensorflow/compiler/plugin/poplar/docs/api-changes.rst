@@ -28,6 +28,14 @@ Recompute suggestions deprecated
 The ``recompute`` and ``block_recompute`` utility ops have been deprecated and will be removed
 in release 2.2. Automatic recomputation of casts will remain.
 
+
+CTC loss ops deprecated
+''''''''''''''''''''''''''''''''
+
+The ``ctc_loss`` and ``ctc_loss_with_logits`` ops from ``ipu.ops.nn_ops`` have been deprecated and
+will be removed in release 2.2. They have been superseeded by ``ctc_loss_v2`` and
+``ctc_loss_with_log_probs``.
+
 Release 2.0
 ~~~~~~~~~~~
 

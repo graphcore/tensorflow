@@ -143,24 +143,6 @@ class CTCLossOpBase : public PoplarOpDef {
   }
 };
 
-class CTCLossOp : public CTCLossOpBase {
-  const std::string ClassName() const override { return "CTCLossOp"; }
-
-  std::pair<poplar::Tensor, poplar::Tensor> CalcLossAndGradient(
-      poplar::Graph& graph, const poplar::Type& out_type,
-      const poplar::Tensor& log_probs, const poplar::Tensor& labels,
-      const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
-      poplar::program::Sequence& prog, const int64 blank_class,
-      const popnn::ctc::Plan& plan,
-      const poplar::DebugInfo& debug_info) const override {
-    return popnn::ctc::calcLossAndGradientLogProbabilities(
-        graph, out_type, log_probs, labels, data_lengths, label_lengths, prog,
-        blank_class, plan, debug_info);
-  }
-};
-
-REGISTER_POPLAR_OP(CTCLoss, CTCLossOp);
-
 class CTCLossWithLogitsOp : public CTCLossOpBase {
   const std::string ClassName() const override { return "CTCLossWithLogitsOp"; }
 
@@ -178,6 +160,24 @@ class CTCLossWithLogitsOp : public CTCLossOpBase {
 };
 
 REGISTER_POPLAR_OP(CTCLossWithLogits, CTCLossWithLogitsOp);
+
+class CTCLossWithLogProbsOp : public CTCLossOpBase {
+  const std::string ClassName() const override { return "CTCLossOp"; }
+
+  std::pair<poplar::Tensor, poplar::Tensor> CalcLossAndGradient(
+      poplar::Graph& graph, const poplar::Type& out_type,
+      const poplar::Tensor& log_probs, const poplar::Tensor& labels,
+      const poplar::Tensor& data_lengths, const poplar::Tensor& label_lengths,
+      poplar::program::Sequence& prog, const int64 blank_class,
+      const popnn::ctc::Plan& plan,
+      const poplar::DebugInfo& debug_info) const override {
+    return popnn::ctc::calcLossAndGradientLogProbabilities(
+        graph, out_type, log_probs, labels, data_lengths, label_lengths, prog,
+        blank_class, plan, debug_info);
+  }
+};
+
+REGISTER_POPLAR_OP(CTCLossWithLogProbs, CTCLossWithLogProbsOp);
 
 }  // namespace
 }  // namespace poplarplugin

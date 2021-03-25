@@ -441,7 +441,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
     }
 
   @test_util.deprecated_graph_mode_only
-  def testCTCLoss(self):
+  def testCTCLossWithLogProbs(self):
     batch_size = 8
     label_length = 4
     # randomly generated labels need 2n+1 time steps because there are
@@ -468,9 +468,10 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                                         max_label_length, np.float32)
         feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
         inputs_ipu = self.logits_to_log_probs(inputs_ipu)
-        loss_ipu, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
-                                         inputs_ipu,
-                                         blank_index=blank_index)
+        loss_ipu, _ = self.loss_and_grad(
+            ipu.ops.nn_ops.ctc_loss_with_log_probs,
+            inputs_ipu,
+            blank_index=blank_index)
 
       loss_value_cpu = sess.run(loss_cpu, feed_dict=feed_dict_cpu)
       loss_value_ipu = sess.run(loss_ipu, feed_dict=feed_dict_ipu)
@@ -478,7 +479,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
     self.assertAllClose(loss_value_cpu, loss_value_ipu)
 
   @test_util.deprecated_graph_mode_only
-  def testCTCGradient(self):
+  def testCTCGradientWithLogProbs(self):
     batch_size = 2
     label_length = 2
     # randomly generated labels need 2n+1 time steps because there are
@@ -505,9 +506,10 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                                         max_label_length, np.float32)
         feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
         inputs_ipu = self.logits_to_log_probs(inputs_ipu)
-        _, grad_ipu = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
-                                         inputs_ipu,
-                                         blank_index=blank_index)
+        _, grad_ipu = self.loss_and_grad(
+            ipu.ops.nn_ops.ctc_loss_with_log_probs,
+            inputs_ipu,
+            blank_index=blank_index)
 
       grad_value_cpu = sess.run(grad_cpu, feed_dict=feed_dict_cpu)
       grad_value_ipu = sess.run(grad_ipu, feed_dict=feed_dict_ipu)
@@ -540,7 +542,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
                                         max_label_length, np.float32)
-        loss_ipu, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+        loss_ipu, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                                          inputs_ipu,
                                          blank_index=blank_index)
         feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
@@ -577,7 +579,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
         inputs_ipu = self.create_inputs(batch_size, max_time, num_classes,
                                         max_label_length, np.float32)
         feed_dict_ipu = self.create_feed_dict(inputs_ipu, input_values)
-        _, grad_ipu = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+        _, grad_ipu = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                                          inputs_ipu,
                                          blank_index=blank_index)
 
@@ -587,7 +589,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
     self.assertAllClose(grad_value_cpu, grad_value_ipu)
 
   @test_util.deprecated_graph_mode_only
-  def testCTCLossOutDtype(self):
+  def testCTCLossWithLogProbsOutDtype(self):
     batch_size = 8
     label_length = 4
     # randomly generated labels need 2n+1 time steps because there are
@@ -609,7 +611,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                                     max_label_length, in_dtype)
         feed_dict = self.create_feed_dict(inputs, input_values)
         inputs = self.logits_to_log_probs(inputs)
-        loss, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
+        loss, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_log_probs,
                                      inputs,
                                      blank_index=blank_index,
                                      out_dtype=out_dtype)
@@ -639,7 +641,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
         inputs = self.create_inputs(batch_size, max_time, num_classes,
                                     max_label_length, in_dtype)
         feed_dict = self.create_feed_dict(inputs, input_values)
-        loss, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
+        loss, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                                      inputs,
                                      blank_index=blank_index,
                                      out_dtype=out_dtype)
@@ -648,7 +650,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
       self.assertEqual(loss_value.dtype, out_dtype)
 
   @test_util.deprecated_graph_mode_only
-  def testCTCLossDefaultOutDtype(self):
+  def testCTCLossWithLogProbsDefaultOutDtype(self):
     batch_size = 8
     label_length = 4
     # randomly generated labels need 2n+1 time steps because there are
@@ -671,10 +673,10 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
         feed_dict_32 = self.create_feed_dict(inputs_32, input_values)
         inputs_16 = self.logits_to_log_probs(inputs_16)
         inputs_32 = self.logits_to_log_probs(inputs_32)
-        loss_16, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
+        loss_16, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_log_probs,
                                         inputs_16,
                                         blank_index=blank_index)
-        loss_32, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
+        loss_32, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_log_probs,
                                         inputs_32,
                                         blank_index=blank_index)
 
@@ -705,10 +707,10 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                                        max_label_length, np.float32)
         feed_dict_16 = self.create_feed_dict(inputs_16, input_values)
         feed_dict_32 = self.create_feed_dict(inputs_32, input_values)
-        loss_16, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+        loss_16, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                                         inputs_16,
                                         blank_index=blank_index)
-        loss_32, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+        loss_32, _ = self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                                         inputs_32,
                                         blank_index=blank_index)
 
@@ -718,7 +720,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
       self.assertEqual(loss_value_32.dtype, np.float32)
 
   @test_util.deprecated_graph_mode_only
-  def testCTCLossInvalidOutDtype(self):
+  def testCTCLossWithLogProbsInvalidOutDtype(self):
     batch_size = 8
     label_length = 4
     # randomly generated labels need 2n+1 time steps because there are
@@ -737,7 +739,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(
           ValueError,
           "out_dtype cannot be float16 when dtype of data is float32"):
-        self.loss_and_grad(ipu.ops.nn_ops.ctc_loss,
+        self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_log_probs,
                            inputs,
                            blank_index=blank_index,
                            out_dtype=out_dtype)
@@ -761,7 +763,7 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(
           ValueError,
           "out_dtype cannot be float16 when dtype of logits is float32"):
-        self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_with_logits,
+        self.loss_and_grad(ipu.ops.nn_ops.ctc_loss_v2,
                            inputs,
                            blank_index=blank_index,
                            out_dtype=out_dtype)
