@@ -69,10 +69,13 @@ Status ReplaceConvsWithMultiConv(
                                  new_conv->ToString(),
                                  " convolution for the MultiConv operation.");
     }
-    convolution_spec.window = GetConvolutionWindow(new_conv);
-    convolution_spec.dims = GetConvolutionDims(new_conv);
-    convolution_spec.feature_group_count = GetFeatureGroupCount(new_conv);
-    convolution_spec.batch_group_count = GetBatchGroupCount(new_conv);
+    TF_ASSIGN_OR_RETURN(convolution_spec.window,
+                        GetConvolutionWindow(new_conv));
+    TF_ASSIGN_OR_RETURN(convolution_spec.dims, GetConvolutionDims(new_conv));
+    TF_ASSIGN_OR_RETURN(convolution_spec.feature_group_count,
+                        GetFeatureGroupCount(new_conv));
+    TF_ASSIGN_OR_RETURN(convolution_spec.batch_group_count,
+                        GetBatchGroupCount(new_conv));
     convolution_specs[i] = convolution_spec;
   }
 

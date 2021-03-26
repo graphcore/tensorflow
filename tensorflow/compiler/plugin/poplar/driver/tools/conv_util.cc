@@ -26,46 +26,95 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-Window GetConvolutionWindow(const HloInstruction* inst) {
+StatusOr<Window> GetConvolutionWindow(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().window();
+    TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
+    return cfg.fusion_config().window();
   } else if (inst->opcode() == HloOpcode::kCustomCall) {
     if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
       auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
       return inst_wtxy->window();
     } else {
-      LOG(FATAL) << "Trying to access window on non "
-                    "HloWeightsTransposeChansFlipXYInstruction"
-                    "operation.";
+      return InternalError(
+          "Trying to access window on non "
+          "HloWeightsTransposeChansFlipXYInstruction"
+          "operation.");
     }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution window on a non convolution "
-                    "operation.";
+      return InternalError(
+          "Trying to access convolution window on a non convolution "
+          "operation.");
     }
     return inst->window();
   }
 }
 
-ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst) {
+StatusOr<ConvolutionDimensionNumbers> GetConvolutionDims(
+    const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().dimension_numbers();
+    TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
+    return cfg.fusion_config().dimension_numbers();
   } else if (inst->opcode() == HloOpcode::kCustomCall) {
     if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
       auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
       return inst_wtxy->convolution_dimension_numbers();
     } else {
-      LOG(FATAL) << "Trying to access convolution_dimension_numbers on a non "
+      return InternalError(
+          "Trying to access convolution_dimension_numbers on a non "
+          "HloWeightsTransposeChansFlipXYInstruction.");
+    }
+  } else {
+    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
+      return InternalError(
+          "Trying to access convolution dimension numbers on a non "
+          "convolution operation.");
+    }
+    return inst->convolution_dimension_numbers();
+  }
+}
+
+StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kFusion) {
+    TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
+    return cfg.fusion_config().feature_group_count();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->feature_group_count();
+    } else {
+      return InternalError(
+          "Trying to access feature_group_count on non "
+          "HloWeightsTransposeChansFlipXYInstruction.");
+    }
+  } else {
+    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
+      return InternalError(
+          "Trying to access convolution feature group count numbers "
+          "on a non convolution operation.");
+    }
+    return inst->feature_group_count();
+  }
+}
+
+StatusOr<int64> GetBatchGroupCount(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kFusion) {
+    TF_ASSIGN_OR_RETURN(auto cfg, inst->backend_config<PoplarBackendConfig>());
+    return cfg.fusion_config().batch_group_count();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->batch_group_count();
+    } else {
+      LOG(FATAL) << "Trying to access batch_group_count on non "
                     "HloWeightsTransposeChansFlipXYInstruction.";
     }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution dimension numbers on a non "
-                    "convolution operation.";
+      LOG(FATAL) << "Trying to access convolution batch group count numbers on "
+                    "a non convolution operation.";
     }
-    return inst->convolution_dimension_numbers();
+    return inst->batch_group_count();
   }
 }
 
@@ -84,48 +133,6 @@ ConvolutionDimensionNumbers FlipConvolutionDimensionNumbersFeatureAxis(
   result.set_kernel_output_feature_dimension(input_dim);
   result.set_kernel_input_feature_dimension(output_dim);
   return result;
-}
-
-int64 GetFeatureGroupCount(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().feature_group_count();
-  } else if (inst->opcode() == HloOpcode::kCustomCall) {
-    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
-      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
-      return inst_wtxy->feature_group_count();
-    } else {
-      LOG(FATAL) << "Trying to access feature_group_count on non "
-                    "HloWeightsTransposeChansFlipXYInstruction.";
-    }
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution feature group count numbers "
-                    "on a non convolution operation.";
-    }
-    return inst->feature_group_count();
-  }
-}
-
-int64 GetBatchGroupCount(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().batch_group_count();
-  } else if (inst->opcode() == HloOpcode::kCustomCall) {
-    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
-      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
-      return inst_wtxy->batch_group_count();
-    } else {
-      LOG(FATAL) << "Trying to access batch_group_count on non "
-                    "HloWeightsTransposeChansFlipXYInstruction.";
-    }
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution batch group count numbers on "
-                    "a non convolution operation.";
-    }
-    return inst->batch_group_count();
-  }
 }
 
 }  // namespace poplarplugin

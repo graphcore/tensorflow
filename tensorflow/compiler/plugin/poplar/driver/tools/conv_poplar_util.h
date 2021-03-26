@@ -35,35 +35,35 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
 StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
     const HloMultiConvInstruction* inst);
 
-poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
-                                               const poplar::Tensor& tensor);
+StatusOr<poplar::Tensor> ShuffleConvolutionInputToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(
     int64 group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor);
 
-poplar::Tensor ShuffleConvolutionOutputToPoplar(const HloInstruction* inst,
-                                                const poplar::Tensor& tensor);
+StatusOr<poplar::Tensor> ShuffleConvolutionOutputToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionOutputToPoplar(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor);
 
-poplar::Tensor ShuffleConvolutionWeightsToPoplar(const HloInstruction* inst,
-                                                 const poplar::Tensor& tensor,
-                                                 bool swap_features);
+StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor,
+    bool swap_features);
 
 poplar::Tensor ShuffleConvolutionWeightsToPoplar(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
     bool swap_features);
 
-poplar::Tensor ShuffleConvolutionInputToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
     int64 group_count, const ConvolutionDimensionNumbers& dims,
     const poplar::Tensor& tensor);
 
-poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor,
     bool swap_features = false);
 
@@ -71,7 +71,7 @@ poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
     bool swap_features = false);
 
-poplar::Tensor ShuffleConvolutionOutputToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionOutputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor);
 
 poplar::Tensor ShuffleConvolutionOutputToTensorflow(

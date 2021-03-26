@@ -153,7 +153,7 @@ TEST_P(ConvBwdInputToFwdWeightsTransposeTest, DoTest) {
   EXPECT_EQ(GetNumWeightsTransposeChansFlipXY(module->entry_computation()), 0);
   auto bwd_conv = GetConvolutionWithReverse(module->entry_computation());
   EXPECT_EQ(bwd_conv.size(), 1);
-  auto bwd_dims = GetConvolutionDims(bwd_conv[0]);
+  TF_ASSERT_OK_AND_ASSIGN(auto bwd_dims, GetConvolutionDims(bwd_conv[0]));
 
   CompilerAnnotations annotations(module);
 
@@ -175,7 +175,7 @@ TEST_P(ConvBwdInputToFwdWeightsTransposeTest, DoTest) {
   HloInstruction* inst_wt = insts_wt.at(0);
   EXPECT_EQ(inst_wt->users().size(), 1);
   HloInstruction* fwd_conv = inst_wt->users()[0];
-  auto fwd_dims = GetConvolutionDims(fwd_conv);
+  TF_ASSERT_OK_AND_ASSIGN(auto fwd_dims, GetConvolutionDims(fwd_conv));
   EXPECT_TRUE(
       ForwardBackwardConvolutionDimensionNumbersMatch(fwd_dims, bwd_dims));
 

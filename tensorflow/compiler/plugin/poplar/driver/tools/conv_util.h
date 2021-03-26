@@ -20,9 +20,14 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-Window GetConvolutionWindow(const HloInstruction* inst);
+StatusOr<Window> GetConvolutionWindow(const HloInstruction* inst);
 
-ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst);
+StatusOr<ConvolutionDimensionNumbers> GetConvolutionDims(
+    const HloInstruction* inst);
+
+StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst);
+
+StatusOr<int64> GetBatchGroupCount(const HloInstruction* inst);
 
 // Checks that forward and backward convolution dimension number match: input
 // and output feature dimensions are swapped and the rest of the parameters are
@@ -35,10 +40,6 @@ bool ForwardBackwardConvolutionDimensionNumbersMatch(
 // dimension flipped.
 ConvolutionDimensionNumbers FlipConvolutionDimensionNumbersFeatureAxis(
     const ConvolutionDimensionNumbers& dims);
-
-int64 GetFeatureGroupCount(const HloInstruction* inst);
-
-int64 GetBatchGroupCount(const HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla

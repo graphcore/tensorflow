@@ -98,8 +98,9 @@ class Conv2DOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
-    int64 group_count = GetBatchGroupCount(inst);
-    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
+    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+    TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dims,
+                        GetConvolutionDims(inst));
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, params, opts, group_count, conv_dims,
@@ -198,8 +199,9 @@ class Conv2DReverseOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
-    int64 group_count = GetBatchGroupCount(inst);
-    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
+    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+    TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dims,
+                        GetConvolutionDims(inst));
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, params, opts, group_count, conv_dims,
@@ -278,13 +280,14 @@ class ConvScaledInplaceOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
                         GetConvolutionOptionsForInst(inst, res));
 
-    const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
+    TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dims,
+                        GetConvolutionDims(inst));
     // Get the root of the fusion - it indicates whether this is add or
     // subtract.
     const auto* root_inst = inst->fused_expression_root();
     auto op_type = root_inst->opcode();
 
-    int64 group_count = GetBatchGroupCount(inst);
+    TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
     poplar::DebugNameAndId debug_name_and_id(debug_info);
     auto func = [&graph, &res, params, opts, group_count, conv_dims, op_type,
                  inst, debug_name_and_id](std::vector<poplar::Tensor>& args,
