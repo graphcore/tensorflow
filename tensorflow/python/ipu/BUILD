@@ -46,6 +46,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs = [
         "ops/all_to_all_op_grad.py",
+        "ops/cross_replica_ops_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/functional_ops_grad.py",
@@ -482,18 +483,18 @@ tf_py_test(
     name = "keras_synthetic_data_test",
     size = "large",
     srcs = ["tests/keras/keras_synthetic_data_test.py"],
-    additional_deps = [
-        ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python/keras:layers",
-        "//third_party/py/numpy",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework_test_lib",
-    ],
     # Shard count set equal to the number of tests as one process per test is
     # required
     shard_count = 3,
     tags = ["hw_poplar_test"],
+    deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+    ],
 )
 
 tf_py_test(
@@ -1428,7 +1429,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/replicated_graph_test.py"],
     # Shard count needs to match the number of tests.
-    shard_count = 4,
+    shard_count = 12,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow:tensorflow_py",
@@ -1703,18 +1704,18 @@ tf_py_test(
     name = "sequence_slice_test",
     size = "large",
     srcs = ["tests/sequence_slice_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+    shard_count = 12,
+    deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
-    shard_count = 12,
 )
 
 test_suite(

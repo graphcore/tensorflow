@@ -25,6 +25,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.platform import googletest
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -71,6 +72,45 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
       # Test that the output is just the input
       self.assertAllClose(result[0], 4 * data)
+
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def testReplicatedGraphWithLossAndGrad(self):
+    def my_graph(inp):
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          b = variable_scope.get_variable(
+              "b",
+              dtype=np.float32,
+              shape=[4],
+              initializer=init_ops.constant_initializer(3))
+        x = inp + b
+        loss = ipu.ops.cross_replica_ops.cross_replica_sum(x)
+        b_grad = gradients_impl.gradients(loss, b)
+        return [loss, b_grad]
+
+    with ops.device('cpu'):
+      inp = array_ops.placeholder(np.float32, [4], name="data")
+
+    out = ipu.ipu_compiler.compile(my_graph, [inp])
+
+    cfg = ipu.utils.create_ipu_config(profiling=False)
+    cfg = ipu.utils.set_optimization_options(
+        cfg, max_cross_replica_sum_buffer_size=10000)
+    cfg = ipu.utils.auto_select_ipus(cfg, 2)
+    cfg = tu.add_hw_ci_connection_options(cfg)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with sl.Session() as sess:
+      sess.run(variables.global_variables_initializer())
+
+      data = np.ones([4])
+      fd = {inp: data}
+
+      loss, b_grad = sess.run(out, fd)
+
+      self.assertAllClose(loss, [8, 8, 8, 8])
+      self.assertAllClose(b_grad, [[2, 2, 2, 2]])
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
