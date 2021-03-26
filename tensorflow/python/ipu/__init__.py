@@ -22,6 +22,7 @@ from tensorflow.python.ipu.ops import all_to_all_op
 from tensorflow.python.ipu.ops import all_to_all_op_grad
 from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.ipu.ops import cross_replica_ops_grad
 from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.ipu.ops import embedding_ops_grad
 from tensorflow.python.ipu.ops import functional_ops
