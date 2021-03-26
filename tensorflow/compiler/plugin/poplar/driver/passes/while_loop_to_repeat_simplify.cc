@@ -50,13 +50,13 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
   // "cond COMP const". There must be only 4 instructions which prevents
   // detached stateful instructions from being excluded from execution.
   if (while_condition->instruction_count() != 4) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   // The root instruction must be the comparison
   HloInstruction* c_inst = while_condition->root_instruction();
   if (c_inst->opcode() != HloOpcode::kCompare) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   // Only some comparisons are ok
@@ -67,7 +67,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
     case ComparisonDirection::kGe:
       break;
     default:
-      return xla::FailedPrecondition("%s", err_msg);
+      return FailedPrecondition("%s", err_msg);
   }
 
   // Make sure that for the comparison instruction:
@@ -77,29 +77,31 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
     const bool lhs_is_GTE_param_from_param_0 =
         WhileLoopUtil::IsGTEFromParamIndex(c_inst->operand(0), 0);
     if (!lhs_is_GTE_param_from_param_0) {
-      return xla::FailedPrecondition("%s", err_msg);
+      return FailedPrecondition("%s", err_msg);
     }
 
     const bool rhs_is_integer_const =
         WhileLoopUtil::Is32BitsOrLessIntegerConstant(c_inst->operand(1));
     if (!rhs_is_integer_const) {
-      return xla::FailedPrecondition("%s", err_msg);
+      return FailedPrecondition("%s", err_msg);
     }
   }
-  HloInstruction* comp_GTE = c_inst->mutable_operand(0);
-  int64 tuple_index = comp_GTE->tuple_index();
-
+  HloInstruction* comp_gte = c_inst->mutable_operand(0);
+  const int64 tuple_index = comp_gte->tuple_index();
   HloInstruction* input_tuple = while_inst->mutable_operand(0);
+  if (input_tuple->opcode() != HloOpcode::kTuple) {
+    return FailedPrecondition("%s", err_msg);
+  }
   HloInstruction* init_inst = input_tuple->mutable_operand(tuple_index);
 
   if (init_inst->opcode() != HloOpcode::kConstant) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   const HloInstruction* limit_inst = c_inst->operand(1);
 
   if (limit_inst->opcode() != HloOpcode::kConstant) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   // Find corresponding GTE in the body
@@ -116,7 +118,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
   }
   // Make sure there is only one
   if (matching_GTEs != 1) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   // Check that the mapped GTE instruction is modified by 1 (or -1 for greater
@@ -140,7 +142,7 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
 
   if (matching_increments.size() != 1 ||
       matching_increments[0].second != delta) {
-    return xla::FailedPrecondition("%s", err_msg);
+    return FailedPrecondition("%s", err_msg);
   }
 
   TF_ASSIGN_OR_RETURN(int64 initial_value,

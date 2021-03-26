@@ -837,6 +837,39 @@ ENTRY entry {
   EXPECT_EQ(module->computation_count(), 3);
 }
 
+TEST_F(WhileLoopToRepeatSimplifyTest, SingleConditionalS32_NonTupleInput) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  ROOT root = (s32[],s32[]) tuple(add, p_body.1)
+}
+
+condition {
+  p_cond = (s32[],s32[]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(999)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LE
+}
+
+ENTRY entry {
+  param0 = (s32[], s32[]) parameter(0)
+  ROOT while = (s32[],s32[]) while(param0), condition=condition, body=body
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  HloPassFix<WhileLoopToRepeatSimplify> wltrs;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
+  EXPECT_FALSE(changed);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
