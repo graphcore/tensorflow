@@ -60,8 +60,8 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
   HloInstruction* conv_input = inst_conv_with_reverse->mutable_operand(0);
   HloInstruction* conv_kernel = inst_conv_with_reverse->mutable_operand(1);
 
-  ConvolutionDimensionNumbers conv_dimension_numbers =
-      GetConvolutionDims(inst_conv_with_reverse);
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers conv_dimension_numbers,
+                      GetConvolutionDims(inst_conv_with_reverse));
 
   std::vector<size_t> conv_input_shape(conv_input->shape().dimensions().begin(),
                                        conv_input->shape().dimensions().end());
@@ -69,8 +69,10 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
       inst_conv_with_reverse->shape().dimensions().begin(),
       inst_conv_with_reverse->shape().dimensions().end());
 
-  Window window = GetConvolutionWindow(inst_conv_with_reverse);
-  int64 feature_group_count = GetFeatureGroupCount(inst_conv_with_reverse);
+  TF_ASSIGN_OR_RETURN(Window window,
+                      GetConvolutionWindow(inst_conv_with_reverse));
+  TF_ASSIGN_OR_RETURN(int64 feature_group_count,
+                      GetFeatureGroupCount(inst_conv_with_reverse));
 
   HloInstruction* weights_transpose_flip =
       comp->AddInstruction(CreateHloWeightsTransposeChansFlipXY(
@@ -87,7 +89,8 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
         predecessor->AddControlDependencyTo(weights_transpose_flip));
   }
 
-  int64 batch_group_count = GetBatchGroupCount(inst_conv_with_reverse);
+  TF_ASSIGN_OR_RETURN(int64 batch_group_count,
+                      GetBatchGroupCount(inst_conv_with_reverse));
   HloInstruction* root_inst =
       inst_conv_with_reverse->fused_instructions_computation()
           ->root_instruction();
@@ -140,7 +143,8 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
   return true;
 }
 
-bool ForwardBackwardConvolutionMatch(HloInstruction* fwd, HloInstruction* bwd) {
+StatusOr<bool> ForwardBackwardConvolutionMatch(HloInstruction* fwd,
+                                               HloInstruction* bwd) {
   const int64 operand_count = fwd->operand_count();
   if (operand_count != bwd->operand_count() || operand_count == 0) {
     return false;
@@ -159,13 +163,15 @@ bool ForwardBackwardConvolutionMatch(HloInstruction* fwd, HloInstruction* bwd) {
     }
   }
 
-  if (!google::protobuf::util::MessageDifferencer::Equivalent(
-          GetConvolutionWindow(fwd), GetConvolutionWindow(bwd))) {
+  TF_ASSIGN_OR_RETURN(auto fwd_window, GetConvolutionWindow(fwd));
+  TF_ASSIGN_OR_RETURN(auto bwd_window, GetConvolutionWindow(bwd));
+  if (!google::protobuf::util::MessageDifferencer::Equivalent(fwd_window,
+                                                              bwd_window)) {
     return false;
   }
 
-  auto fwd_dims = GetConvolutionDims(fwd);
-  auto bwd_dims = GetConvolutionDims(bwd);
+  TF_ASSIGN_OR_RETURN(auto fwd_dims, GetConvolutionDims(fwd));
+  TF_ASSIGN_OR_RETURN(auto bwd_dims, GetConvolutionDims(bwd));
   return ForwardBackwardConvolutionDimensionNumbersMatch(fwd_dims, bwd_dims);
 }
 
@@ -202,13 +208,11 @@ StatusOr<bool> ConvBwdInputToFwdWeightsTranspose::Run(HloModule* module) {
   for (HloInstruction* inst : to_replace) {
     bool replace = false;
     VLOG(2) << "Found backward convolution " << inst->ToString();
-    VLOG(2) << "Dimension numbers "
-            << ConvolutionDimensionNumbersToString(GetConvolutionDims(inst));
     for (HloInstruction* fwd : fwd_conv) {
       VLOG(2) << "Comparing against forward convolution " << fwd->ToString();
-      VLOG(2) << "Dimension numbers "
-              << ConvolutionDimensionNumbersToString(GetConvolutionDims(fwd));
-      if (ForwardBackwardConvolutionMatch(fwd, inst)) {
+      TF_ASSIGN_OR_RETURN(bool match,
+                          ForwardBackwardConvolutionMatch(fwd, inst));
+      if (match) {
         VLOG(2) << "Found matching forward convolution: " << fwd->ToString();
         replace = true;
         break;
