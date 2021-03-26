@@ -20,7 +20,7 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_OP("PopnnCTCLoss")
+REGISTER_OP("PopnnCTCLossWithLogits")
     .Input("data: in_dtype")
     .Input("labels: int32")
     .Input("data_lengths: int32")
@@ -38,7 +38,7 @@ REGISTER_OP("PopnnCTCLoss")
       return Status::OK();
     });
 
-REGISTER_OP("PopnnCTCLossWithLogits")
+REGISTER_OP("PopnnCTCLossWithLogProbs")
     .Input("data: in_dtype")
     .Input("labels: int32")
     .Input("data_lengths: int32")

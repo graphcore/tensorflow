@@ -90,13 +90,15 @@ enum PoplarOp {
   CandidateSampler = 86;
   AUGRULayerFwd = 87;
   AUGRULayerBwd = 88;
-  CTCLoss = 89;
+  CTCLossWithLogProbs = 89;
   CTCLossWithLogits = 90;
   HardSigmoid = 91;
   HardSigmoidGrad = 92;
   Assert = 93;
   Swish = 94;
   SwishGrad = 95;
+  SequenceSlice = 96;
+  SequenceSliceUnpack = 97;
   
   // Supported Fusions.
   Conv_biasadd = 200;

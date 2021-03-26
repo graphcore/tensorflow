@@ -35,8 +35,8 @@ StatusOr<bool> CTCPreplanning::Run(HloModule* module) {
 
   for (const HloComputation* comp : module->computations()) {
     for (const HloInstruction* inst : comp->instructions()) {
-      if (IsPoplarInstruction(PoplarOp::CTCLoss)(inst) ||
-          IsPoplarInstruction(PoplarOp::CTCLossWithLogits)(inst)) {
+      if (IsPoplarInstruction(PoplarOp::CTCLossWithLogits)(inst) ||
+          IsPoplarInstruction(PoplarOp::CTCLossWithLogProbs)(inst)) {
         poplar::Graph& graph = GetGraph(resources_, inst);
         const HloCTCLossInstructionBase* ctc_inst =
             Cast<HloCTCLossInstructionBase>(inst);
