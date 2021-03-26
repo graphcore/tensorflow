@@ -166,7 +166,8 @@ class ConvBiasAddOp : public PoplarOpDef {
                                              {debug_info}, false));
 
     const auto* conv_op = GetOperandLookThroughInterIpuCopy(inst, 0);
-    poplar::Tensor shuffled_in = ShuffleConvolutionOutputToPoplar(conv_op, in);
+    TF_ASSIGN_OR_RETURN(poplar::Tensor shuffled_in,
+                        ShuffleConvolutionOutputToPoplar(conv_op, in));
 
     poplin::addBias(graph, shuffled_in, bias, prog, {debug_info});
 
@@ -197,7 +198,7 @@ class ConvBiasAddOp : public PoplarOpDef {
 
     poplar::Tensor acts = outputs[layout_output_idx];
 
-    acts = ShuffleConvolutionOutputToPoplar(layout, acts);
+    TF_ASSIGN_OR_RETURN(acts, ShuffleConvolutionOutputToPoplar(layout, acts));
     TF_ASSIGN_OR_RETURN(
         acts, ReversePathTransform(graph, acts, forward_path, {debug_info}));
 

@@ -140,12 +140,13 @@ HloInstruction* FindOperand(HloInstruction* inst,
   return source;
 }
 
-bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
+StatusOr<bool> IsArg1Gradient(const HloInstruction* inst,
+                              const HloInstruction* arg0) {
   switch (inst->opcode()) {
     case HloOpcode::kConvolution: {
       // We assume that if the batch dimension (the non-reducing matrix
       // dimensions) isn't 0, then it is a grad
-      const auto& d = GetConvolutionDims(inst);
+      TF_ASSIGN_OR_RETURN(auto d, GetConvolutionDims(inst));
       return d.input_batch_dimension() != 0;
     }
     case HloOpcode::kDot: {
@@ -259,7 +260,8 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
 
     for (auto t = targets.first; t != targets.second; ++t) {
       auto* arg0 = t->second->operand(operands.at(t->second).first);
-      if (IsArg1Gradient(t->second, arg0)) {
+      TF_ASSIGN_OR_RETURN(bool arg1_gradient, IsArg1Gradient(t->second, arg0));
+      if (arg1_gradient) {
         wu.insert(t->second);
       } else {
         fwd.insert(t->second);
