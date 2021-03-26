@@ -198,6 +198,9 @@ def frontend_attribute(attribute_name, attribute_value, restore_to=None):
 def stochastic_rounding(override):
   """Control stochastic rounding for a set of operations.
 
+  EXPERIMENTAL - there are no guarantees that the stochastic rounding provided
+  will be used and therefore this should not be used.
+
   Args:
     override: if True then stochastic rounding will be used, otherwise it will
       be disabled for this set of operations.
@@ -216,7 +219,11 @@ def stochastic_rounding(override):
 
 @tf_contextlib.contextmanager
 def partials_type(override_type):
-  """Override the default type used to store intermediate results by some operations.
+  """Override the default type used to store intermediate results by
+  convolution and matrix mutliply operations.
+
+  EXPERIMENTAL - there are no guarantees that the partials type provided will be
+  used and therefore this should not be used.
 
   Args:
     override_type: Numpy type of the partials (float16 or float32)
