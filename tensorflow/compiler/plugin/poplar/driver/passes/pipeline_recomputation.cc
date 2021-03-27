@@ -436,7 +436,15 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
         GetRecomputationCluster(fwd_stage, oi_info, last_stage));
 
     if (cluster_info.instructions.empty()) {
-      LOG(INFO) << "Cannot recompute pipline stage " << fwd_stage->ToString();
+      if (cluster_info.recomputation_checkpoints.size()) {
+        LOG(INFO) << "Found checkpoint instructions in pipeline stage "
+                  << stage_id
+                  << ", however could not find any operations which can be "
+                     "recomputed.";
+      } else if (!last_stage) {
+        LOG(INFO) << "Cannot recompute pipeline stage " << stage_id << " ("
+                  << fwd_stage->ToString() << ")";
+      }
       continue;
     }
 
