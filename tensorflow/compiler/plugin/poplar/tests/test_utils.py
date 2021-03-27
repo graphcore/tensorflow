@@ -178,7 +178,6 @@ class TensorMap(object):
   def tensor_inst_name_mappings(self):
     mappings = {}
     for comp, tensors in self.mappings.items():
-      print(comp)
       for tensor in tensors:
         assert tensor.id not in mappings, ("Instruction %s already in"
                                            " mappings %s") % (tensor.id,

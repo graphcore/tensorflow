@@ -75,6 +75,7 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
           x = x * x
           with outside_compilation_scope():
             y = constant_op.constant(2.0, dtype=dtypes.float32)
+            y = y * y
           z = x + y
         return z
 
@@ -85,7 +86,7 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       utils.configure_ipu_system(opts)
 
       result = sess.run(device_out, feed_dict={inputs: 2.0})
-      self.assertEqual(6.0, result)
+      self.assertEqual(8.0, result)
 
   def testNoInputTwoOutputs(self):
     with self.session() as sess:
@@ -96,7 +97,9 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
           with outside_compilation_scope():
             y = constant_op.constant(2.0, dtype=dtypes.float32)
             z = constant_op.constant(3.0, dtype=dtypes.float32)
-          return x + y + z
+            a = y * z
+            b = z + y
+          return x + a + b
 
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
@@ -105,7 +108,7 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       utils.configure_ipu_system(opts)
 
       result = sess.run(device_out, feed_dict={inputs: 2.0})
-      self.assertEqual(9.0, result)
+      self.assertEqual(15.0, result)
 
   def testScalarInputNoOutput(self):
     with self.session() as sess:

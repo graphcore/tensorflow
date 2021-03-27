@@ -262,27 +262,6 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
       report.assert_compute_sets_not_in_blacklist(bl)
       report.assert_tensor_input_names("input_a")
 
-  def testBatchNormalizeLayerFp16(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        with variable_scope.variable_scope("", use_resource=True):
-          a = array_ops.placeholder(np.float16, [4, 64, 64, 4], name="input_a")
-
-          normed = layers_norm.batch_normalization(a, fused=False)
-
-      report = ReportJSON(self, sess)
-      sess.run(variables.global_variables_initializer())
-
-      report.reset()
-      result = sess.run(normed, {a: np.zeros([4, 64, 64, 4])})
-      self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
-
-      report.parse_log()
-
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a")
-
   def testBatchNormalizeLayerFusedFp16(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):

@@ -407,3 +407,9 @@ HloParserTestLongProto POPLAR
 ParametricDotTestWithoutLayoutAssignment.TestF16 POPLAR // Fail to handle major/minor ordering
 
 LogDetTest POPLAR # Unsupported matmul type.
+
+BufferDonationTest.SimpleWhileTupleTest POPLAR // Unsupported aliasing of buffers. (T36704)
+BufferDonationTest.TestMustAliasNotDonated POPLAR
+
+LocalClientExecuteTest.SizeOfGeneratedCodeInBytes POPLAR // Unsupported features.
+LocalClientExecuteTest.CompilePartitionedExecutable POPLAR
