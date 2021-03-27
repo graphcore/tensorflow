@@ -205,9 +205,15 @@ static Status CompileToLocalExecutable(
                                           !platform_info.is_on_xla_device() &&
                                           may_alias_resource_update;
 
+  // IPU Specific - store the names of all inputs.
+  std::vector<std::string> mangled_input_names(inputs.size());
+  for (int64 i = 0; i != inputs.size(); ++i) {
+    mangled_input_names[i] = ctx->op_kernel().requested_input(i);
+  }
+
   xla::StatusOr<std::vector<XlaCompiler::Argument>> args =
-      XlaComputationLaunchContext::BuildXlaCompilerArguments(constants, inputs,
-                                                             variable_infos);
+      XlaComputationLaunchContext::BuildXlaCompilerArguments(
+          constants, inputs, variable_infos, mangled_input_names);
   TF_RETURN_IF_ERROR(args.status());
   return cache->Compile(options, function, *args, compile_options,
                         lazy ? XlaCompilationCache::CompileMode::kLazy
