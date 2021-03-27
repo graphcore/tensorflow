@@ -243,7 +243,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
           inst->user_count(), " users.");
     }
     HloInstruction* user = inst->users()[0];
-    do {
+    while (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(user)) {
       if (user->user_count() != 1) {
         return InternalErrorStrCat(
             "Expected the gradient accumulation buffer to be used "
@@ -272,7 +272,7 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
             (*inplace_modifier)->ToString(), ".");
       }
       user = next_user;
-    } while (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(user));
+    }
 
     // Make sure the sink is only used by a resource update.
     if (user->user_count() != 1) {
@@ -398,7 +398,6 @@ Status GradientAccumulationVerifier::VerifyGenericGradientAccumulation(
 
 StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
-
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
