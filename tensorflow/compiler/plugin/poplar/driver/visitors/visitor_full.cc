@@ -46,6 +46,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
+#include "tensorflow/compiler/xla/window_util.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
@@ -243,7 +244,8 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
-  if (IsReducibleArithmetic(inst->to_apply())) {
+  if (IsReducibleArithmetic(inst->to_apply()) &&
+      !window_util::HasWindowDilation(inst->window())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
