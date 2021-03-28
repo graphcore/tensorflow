@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -5341,6 +5342,415 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideBitcastConvert) {
   ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::BitcastConvert(m::Parameter(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MaxAndArgMax_1D) {
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmax {
+  running_max = f32[] parameter(0)
+  running_max_idx = u32[] parameter(1)
+  current_value = f32[] parameter(2)
+  current_value_idx = u32[] parameter(3)
+
+  cmp_code = pred[] compare(current_value, running_max), direction=GT
+
+  new_max = f32[] select(cmp_code, current_value, running_max)
+  new_idx = u32[] select(cmp_code, current_value_idx, running_max_idx)
+
+  ROOT out = (f32[], u32[]) tuple(new_max, new_idx)
+}
+
+ENTRY main {
+  input = f32[10] parameter(0)
+  idxs = u32[10] iota(), iota_dimension=0
+  init = f32[] constant(-inf)
+  zero_idx = u32[] constant(0)
+
+  ROOT out = (f32[], u32[]) reduce(input, idxs, init, zero_idx), dimensions={0}, to_apply=%argmax
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction *op1, *op2;
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    EXPECT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&op1), 0),
+                                     m::GetTupleElement(m::Op(&op2), 1))));
+    EXPECT_EQ(op1, op2);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MaxAndArgMax)(op1));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 =
+        LiteralUtil::CreateR1<float>({1, 5, 2, 3, 4, 9, 6, 7, 8, 0});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMin_1D) {
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min = f32[] parameter(0)
+  running_min_idx = u32[] parameter(1)
+  current_value = f32[] parameter(2)
+  current_value_idx = u32[] parameter(3)
+
+  cmp_code = pred[] compare(current_value, running_min), direction=LT
+
+  new_min = f32[] select(cmp_code, current_value, running_min)
+  new_idx = u32[] select(cmp_code, current_value_idx, running_min_idx)
+
+  ROOT out = (f32[], u32[]) tuple(new_min, new_idx)
+}
+
+ENTRY main {
+  input = f32[10] parameter(0)
+  idxs = u32[10] iota(), iota_dimension=0
+  init = f32[] constant(inf)
+  zero_idx = u32[] constant(0)
+
+  ROOT out = (f32[], u32[]) reduce(input, idxs, init, zero_idx), dimensions={0}, to_apply=%argmin
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction *op1, *op2;
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    EXPECT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&op1), 0),
+                                     m::GetTupleElement(m::Op(&op2), 1))));
+    EXPECT_EQ(op1, op2);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MinAndArgMin)(op1));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 =
+        LiteralUtil::CreateR1<float>({1, 5, 2, 3, 4, 9, 6, 7, 8, 0});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MaxAndArgMax1_2D) {
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmax {
+  running_max = f32[] parameter(0)
+  running_max_idx = u32[] parameter(1)
+  current_value = f32[] parameter(2)
+  current_value_idx = u32[] parameter(3)
+
+  cmp_code = pred[] compare(current_value, running_max), direction=GT
+
+  new_max = f32[] select(cmp_code, current_value, running_max)
+  new_idx = u32[] select(cmp_code, current_value_idx, running_max_idx)
+
+  ROOT out = (f32[], u32[]) tuple(new_max, new_idx)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=0
+  init = f32[] constant(-inf)
+  zero_idx = u32[] constant(0)
+
+  ROOT out = (f32[10], u32[10]) reduce(input, idxs, init, zero_idx), dimensions={0}, to_apply=%argmax
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction *op1, *op2;
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    EXPECT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&op1), 0),
+                                     m::GetTupleElement(m::Op(&op2), 1))));
+    EXPECT_EQ(op1, op2);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MaxAndArgMax)(op1));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 = LiteralUtil::CreateR2<float>(
+        {{8, 5, 2, 4, 4, 9, 6, 7, 8, 2}, {1, 9, 5, 3, 2, 8, 1, 2, -1, 0}});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MaxAndArgMax2_2D) {
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmax {
+  running_max = f32[] parameter(0)
+  running_max_idx = u32[] parameter(1)
+  current_value = f32[] parameter(2)
+  current_value_idx = u32[] parameter(3)
+
+  cmp_code = pred[] compare(running_max, current_value), direction=GT
+
+  new_max = f32[] select(cmp_code, running_max, current_value)
+  new_idx = u32[] select(cmp_code, running_max_idx, current_value_idx)
+
+  ROOT out = (f32[], u32[]) tuple(new_max, new_idx)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=0
+  init = f32[] constant(-inf)
+  zero_idx = u32[] constant(0)
+
+  ROOT out = (f32[10], u32[10]) reduce(input, idxs, init, zero_idx), dimensions={0}, to_apply=%argmax
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction *op1, *op2;
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    EXPECT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&op1), 0),
+                                     m::GetTupleElement(m::Op(&op2), 1))));
+    EXPECT_EQ(op1, op2);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MaxAndArgMax)(op1));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 = LiteralUtil::CreateR2<float>(
+        {{8, 5, 2, 4, 4, 9, 6, 7, 8, 2}, {1, 9, 5, 3, 2, 8, 1, 2, -1, 0}});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MaxAndArgMax3_2D) {
+  // Note how operands to the reduce are swapped.
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmax {
+  running_max_idx = u32[] parameter(0)
+  running_max = f32[] parameter(1)
+  current_value_idx = u32[] parameter(2)
+  current_value = f32[] parameter(3)
+
+  cmp_code = pred[] compare(running_max, current_value), direction=GT
+
+  new_max = f32[] select(cmp_code, running_max, current_value)
+  new_idx = u32[] select(cmp_code, running_max_idx, current_value_idx)
+
+  ROOT out = (u32[], f32[]) tuple(new_idx, new_max)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=0
+  init = f32[] constant(-inf)
+  zero_idx = u32[] constant(0)
+  outs = (u32[10], f32[10]) reduce(idxs, input, zero_idx, init), dimensions={0}, to_apply=%argmax
+  ROOT gte = u32[10] get-tuple-element(outs), index=0
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    HloInstruction* op;
+    EXPECT_TRUE(Match(root, m::GetTupleElement(m::Op(&op), 1)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MaxAndArgMax)(op));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 = LiteralUtil::CreateR2<float>(
+        {{8, 5, 2, 4, 4, 9, 6, 7, 8, 2}, {1, 9, 5, 3, 2, 8, 1, 2, -1, 0}});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMin1_2D) {
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min = f32[] parameter(0)
+  running_min_idx = u32[] parameter(1)
+  current_value = f32[] parameter(2)
+  current_value_idx = u32[] parameter(3)
+
+  cmp_code = pred[] compare(current_value, running_min), direction=LT
+
+  new_min = f32[] select(cmp_code, current_value, running_min)
+  new_idx = u32[] select(cmp_code, current_value_idx, running_min_idx)
+
+  ROOT out = (f32[], u32[]) tuple(new_min, new_idx)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=1
+  init = f32[] constant(inf)
+  zero_idx = u32[] constant(0)
+
+  ROOT out = (f32[2], u32[2]) reduce(input, idxs, init, zero_idx), dimensions={1}, to_apply=%argmin
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction *op1, *op2;
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    EXPECT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&op1), 0),
+                                     m::GetTupleElement(m::Op(&op2), 1))));
+    EXPECT_EQ(op1, op2);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MinAndArgMin)(op1));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 = LiteralUtil::CreateR2<float>(
+        {{8, 5, 2, 4, 4, 9, 6, 7, 8, 2}, {1, 9, 5, 3, 2, 8, 1, 2, -1, 0}});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMin2_2D) {
+  // Note how operands to the reduce are swapped.
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min_idx = u32[] parameter(0)
+  running_min = f32[] parameter(1)
+  current_value_idx = u32[] parameter(2)
+  current_value = f32[] parameter(3)
+
+  cmp_code = pred[] compare(running_min, current_value), direction=LT
+
+  new_min = f32[] select(cmp_code, running_min, current_value)
+  new_idx = u32[] select(cmp_code, running_min_idx, current_value_idx)
+
+  ROOT out = (u32[], f32[]) tuple(new_idx, new_min)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=0
+  init = f32[] constant(inf)
+  zero_idx = u32[] constant(0)
+  outs = (u32[10], f32[10]) reduce(idxs, input, zero_idx, init), dimensions={0}, to_apply=%argmin
+  ROOT gte = u32[10] get-tuple-element(outs), index=0
+}
+)";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    HloInstruction* root = m->entry_computation()->root_instruction();
+    HloInstruction* op;
+    EXPECT_TRUE(Match(root, m::GetTupleElement(m::Op(&op), 1)));
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MinAndArgMin)(op));
+  }
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+    Literal param0 = LiteralUtil::CreateR2<float>(
+        {{8, 5, 2, 4, 4, 9, 6, 7, 8, 2}, {1, 9, 5, 3, 2, 8, 1, 2, -1, 0}});
+    EXPECT_TRUE(RunAndCompare(std::move(m), {&param0}, ErrorSpec{1e-3, 1e-3}));
+  }
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMinInvalidDims) {
+  // Note how operands to the reduce are swapped.
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min_idx = u32[] parameter(0)
+  running_min = f32[] parameter(1)
+  current_value_idx = u32[] parameter(2)
+  current_value = f32[] parameter(3)
+
+  cmp_code = pred[] compare(running_min, current_value), direction=LT
+
+  new_min = f32[] select(cmp_code, running_min, current_value)
+  new_idx = u32[] select(cmp_code, running_min_idx, current_value_idx)
+
+  ROOT out = (u32[], f32[]) tuple(new_idx, new_min)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=1
+  init = f32[] constant(inf)
+  zero_idx = u32[] constant(0)
+  outs = (u32[10], f32[10]) reduce(idxs, input, zero_idx, init), dimensions={0}, to_apply=%argmin
+  ROOT gte = u32[10] get-tuple-element(outs), index=0
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMinInvalidStartingValues) {
+  // Note how operands to the reduce are swapped.
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min_idx = u32[] parameter(0)
+  running_min = f32[] parameter(1)
+  current_value_idx = u32[] parameter(2)
+  current_value = f32[] parameter(3)
+
+  cmp_code = pred[] compare(running_min, current_value), direction=LT
+
+  new_min = f32[] select(cmp_code, running_min, current_value)
+  new_idx = u32[] select(cmp_code, running_min_idx, current_value_idx)
+
+  ROOT out = (u32[], f32[]) tuple(new_idx, new_min)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=0
+  init = f32[] constant(-inf)
+  zero_idx = u32[] constant(0)
+  outs = (u32[10], f32[10]) reduce(idxs, input, zero_idx, init), dimensions={0}, to_apply=%argmin
+  ROOT gte = u32[10] get-tuple-element(outs), index=0
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, MinAndArgMinInvaliComparison) {
+  // Note how operands to the reduce are swapped.
+  absl::string_view hlo_string = R"(
+HloModule top
+
+argmin {
+  running_min_idx = u32[] parameter(0)
+  running_min = f32[] parameter(1)
+  current_value_idx = u32[] parameter(2)
+  current_value = f32[] parameter(3)
+
+  cmp_code = pred[] compare(running_min, current_value), direction=LE
+
+  new_min = f32[] select(cmp_code, running_min, current_value)
+  new_idx = u32[] select(cmp_code, running_min_idx, current_value_idx)
+
+  ROOT out = (u32[], f32[]) tuple(new_idx, new_min)
+}
+
+ENTRY main {
+  input = f32[2, 10] parameter(0)
+  idxs = u32[2, 10] iota(), iota_dimension=1
+  init = f32[] constant(inf)
+  zero_idx = u32[] constant(0)
+  outs = (u32[10], f32[10]) reduce(idxs, input, zero_idx, init), dimensions={0}, to_apply=%argmin
+  ROOT gte = u32[10] get-tuple-element(outs), index=0
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(hlo_string));
+  EXPECT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
 }
 
 }  // namespace
