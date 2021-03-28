@@ -371,11 +371,6 @@ Exhaustive32BitOrLessUnaryTest POPLAR
 
 LocalClientExecuteTest.LargeNestedTuple POPLAR // Too long on IPU
 
-
-ReduceWindowTextTest.R4OnlyDilation POPLAR // Dilated reductions
-PoolingTest.AvgPool2DGradWithPaddingCountNotIncludePadding POPLAR
-PoolingTest.AvgPool2DGradWithPadding POPLAR
-
 CholeskyTest.NonPSDInput POPLAR // Incompatible input, implementation dependent results
 CholeskyTest.NonPSDBatched POPLAR // Incompatible input, implementation dependent results
 ConstantsTest.NanValueF32 POPLAR // NaNs
