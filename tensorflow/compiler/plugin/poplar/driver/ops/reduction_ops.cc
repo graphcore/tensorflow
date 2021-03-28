@@ -119,7 +119,11 @@ bool IsPoplibsPool(const HloInstruction* inst,
     return false;
   }
 
-  const Window& window(inst->window());
+  const Window& window = inst->window();
+  if (window_util::HasDilation(window)) {
+    return false;
+  }
+
   unsigned reduction_count = 0;
   for (int64 i = 0; i < window.dimensions_size(); i++) {
     auto& d = window.dimensions(i);
@@ -443,22 +447,10 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
 
     // Find the type and vertex
     HloInstruction* root(inst->to_apply()->root_instruction());
-    std::string vertex_name =
+    const std::string vertex_name =
         templateVertex(ReductionVertexBaseName(root), to_reduce.elementType());
 
     const Window& window(inst->window());
-
-    // Find the number of windows in each dimension
-    std::vector<unsigned> window_count(output_shape.rank());
-    for (int64 d = 0; d < window.dimensions().size(); d++) {
-      std::size_t input_dim(to_reduce.dim(d));
-      input_dim += window.dimensions(d).padding_low();
-      input_dim += window.dimensions(d).padding_high();
-
-      window_count[d] =
-          window_util::StridedBound(input_dim, window.dimensions(d).size(),
-                                    window.dimensions(d).stride());
-    }
 
     // Allocate the output tensor
     TF_ASSIGN_OR_RETURN(
@@ -467,42 +459,50 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     poplar::Tensor out_flat = out.flatten();
 
     auto cs = graph.addComputeSet({debug_name_and_id});
-    const unsigned long N = out_flat.dim(0);
-
-    unsigned dim_count(to_reduce.rank());
+    const int64 N = ShapeUtil::ElementsIn(output_shape);
+    const int64 rank = output_shape.rank();
 
     // Vector for walking the window through the tensor
-    std::vector<std::size_t> pos(dim_count, 0);
+    std::vector<std::size_t> pos(rank, 0);
 
-    // Slice boundaries
-    std::vector<std::size_t> start(dim_count);
-    std::vector<std::size_t> end(dim_count);
+    for (int64 i = 0; i != N; ++i) {
+      // Find the window boundries.
+      std::vector<std::size_t> start(rank);
+      std::vector<std::size_t> end(rank);
+      for (int64 d = 0; d != rank; d++) {
+        const auto& dim = window.dimensions(d);
+        const int dim_start = pos[d] * dim.stride() - dim.padding_low();
+        const int dim_end = dim_start + dim.size();
+        const int dilated_dim_start =
+            (dim_start + (dim_start % dim.base_dilation())) /
+            dim.base_dilation();
+        const int dilated_dim_end =
+            (dim_end + (dim_end % dim.base_dilation())) / dim.base_dilation();
 
-    for (unsigned i = 0; i < N; ++i) {
-      // Find the window
-      for (unsigned d = 0; d < dim_count; d++) {
-        const auto& wd(window.dimensions(d));
-
-        int s(pos[d] * wd.stride() - wd.padding_low());
-        int e(s + wd.size());
-        start[d] = std::min(std::max(s, 0), (int)to_reduce.dim(d));
-        end[d] = std::min(std::max(e, 0), (int)to_reduce.dim(d));
+        start[d] = std::min(std::max(dilated_dim_start, 0),
+                            static_cast<int>(to_reduce.dim(d)));
+        end[d] = std::min(std::max(dilated_dim_end, 0),
+                          static_cast<int>(to_reduce.dim(d)));
       }
 
-      poplar::Tensor w = to_reduce.slice(start, end).flatten();
+      poplar::Tensor tensor_window = to_reduce.slice(start, end).flatten();
+      poplar::Tensor output = out_flat.slice(i, i + 1).reshape({});
 
-      // Create the vertex
+      // Create the vertex.
       auto v = graph.addVertex(cs, vertex_name,
-                               {{"a", w}, {"out", out_flat.slice(i, i + 1)}});
+                               {{"a", tensor_window}, {"out", output}});
       graph.setTileMapping(v, (i / graph.getTarget().getNumWorkerContexts()) %
                                   graph.getTarget().getNumTiles());
       graph.setPerfEstimate(v, 1);
 
-      // Advance the window
-      for (int d = dim_count - 1; d >= 0; d--) {
+      // Advance the window.
+      for (int64 d = rank - 1; d >= 0; d--) {
         pos[d]++;
-        if (pos[d] < window_count[d]) break;
-        pos[d] = 0;
+        if (pos[d] < output_shape.dimensions(d)) {
+          break;
+        } else {
+          pos[d] = 0;
+        }
       }
     }
 
@@ -517,7 +517,7 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
                           FindInstructionInput(tensor_map, res, inst, 1, seq,
                                                debug_name_and_id));
 
-      // Create a binary op with the scatter_root opcode
+      // Create a binary op with the reduce window opcode.
       TF_ASSIGN_OR_RETURN(init_val, BroadcastTensor(init_val, output_shape));
 
       TF_ASSIGN_OR_RETURN(popops::expr::BinaryOpType op, LookupBinaryFn(root));

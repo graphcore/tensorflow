@@ -63,7 +63,7 @@ UNIQUE_SEQ_SAMPLE(LogUniform)
   class NAME : public Vertex {                  \
    public:                                      \
     Input<Vector<T>> a;                         \
-    Output<Vector<T>> out;                      \
+    Output<T> out;                              \
                                                 \
     bool compute() {                            \
       T v = (INIT);                             \
@@ -72,7 +72,7 @@ UNIQUE_SEQ_SAMPLE(LogUniform)
         v = (EXP);                              \
       }                                         \
                                                 \
-      out[0] = v;                               \
+      *out = v;                                 \
       return true;                              \
     }                                           \
   };                                            \
@@ -93,7 +93,7 @@ REDUCTION_ELEMENTWISE(ReductionMul, 1.0, v* a[i])
   class NAME : public Vertex {                         \
    public:                                             \
     Input<Vector<T>> a;                                \
-    Output<Vector<T>> out;                             \
+    Output<T> out;                                     \
                                                        \
     bool compute() {                                   \
       T v = (INIT);                                    \
@@ -102,8 +102,8 @@ REDUCTION_ELEMENTWISE(ReductionMul, 1.0, v* a[i])
         v = (EXP);                                     \
       }                                                \
                                                        \
-      out[0] = v;                                      \
-      return out[0];                                   \
+      *out = v;                                        \
+      return v;                                        \
     }                                                  \
   };                                                   \
                                                        \
