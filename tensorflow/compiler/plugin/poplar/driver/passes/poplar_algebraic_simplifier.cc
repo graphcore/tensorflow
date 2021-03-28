@@ -33,6 +33,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -3403,6 +3404,123 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     }
   }
 
+  if (hlo->operand_count() == 4 && hlo->operand(0)->shape().rank() < 3) {
+    // Matching for a combined max with argmax or min with argmin.
+    // Handle both permutations of inputs.
+    const bool max_or_min_then_arg_max_or_min =
+        // Pattern for running value being 0th input to compare.
+        Match(function->root_instruction(),
+              m::Tuple(m::Select(m::Compare(m::Parameter(0), m::Parameter(2)),
+                                 m::Parameter(0), m::Parameter(2)),
+                       m::Select(m::Compare(m::Parameter(0), m::Parameter(2)),
+                                 m::Parameter(1), m::Parameter(3)))) ||
+        // Pattern for running value being 1st input to compare.
+        Match(function->root_instruction(),
+              m::Tuple(m::Select(m::Compare(m::Parameter(2), m::Parameter(0)),
+                                 m::Parameter(2), m::Parameter(0)),
+                       m::Select(m::Compare(m::Parameter(2), m::Parameter(0)),
+                                 m::Parameter(3), m::Parameter(1))));
+
+    const bool arg_max_or_min_then_max_or_min =
+        // Pattern for running value being 0th input to compare.
+        Match(function->root_instruction(),
+              m::Tuple(m::Select(m::Compare(m::Parameter(1), m::Parameter(3)),
+                                 m::Parameter(0), m::Parameter(2)),
+                       m::Select(m::Compare(m::Parameter(1), m::Parameter(3)),
+                                 m::Parameter(1), m::Parameter(3)))) ||
+        // Pattern for running value being 1st input to compare.
+        Match(function->root_instruction(),
+              m::Tuple(m::Select(m::Compare(m::Parameter(3), m::Parameter(1)),
+                                 m::Parameter(2), m::Parameter(0)),
+                       m::Select(m::Compare(m::Parameter(3), m::Parameter(1)),
+                                 m::Parameter(3), m::Parameter(1))));
+
+    if (max_or_min_then_arg_max_or_min || arg_max_or_min_then_max_or_min) {
+      const HloInstruction* output_0 = function->root_instruction()->operand(0);
+      const HloInstruction* output_1 = function->root_instruction()->operand(1);
+
+      // Check that the compare is the same.
+      bool valid = output_0->operand(0) == output_1->operand(0);
+
+      // Get the instruction inputs and verify them.
+      HloInstruction* value;
+      HloInstruction* iota;
+      HloInstruction* init_value;
+      HloInstruction* init_iota;
+      if ((max_or_min_then_arg_max_or_min &&
+           Match(hlo, m::Reduce(m::Op(&value), m::Op(&iota), m::Op(&init_value),
+                                m::Op(&init_iota)))) ||
+          (arg_max_or_min_then_max_or_min &&
+           Match(hlo, m::Reduce(m::Op(&iota), m::Op(&value), m::Op(&init_iota),
+                                m::Op(&init_value))))) {
+        valid = valid && Match(iota, m::Iota()) &&
+                Match(init_value, m::ConstantScalar()) &&
+                Match(init_iota, m::ConstantScalar(0));
+      } else {
+        valid = false;
+      }
+
+      // Check that the reduction is done over one dimension matching iota.
+      if (valid) {
+        valid = hlo->dimensions().size() == 1 &&
+                hlo->dimensions(0) ==
+                    Cast<HloIotaInstruction>(iota)->iota_dimension();
+      }
+
+      bool is_max = false;
+      // Find whether this is min or max and verify initial value.
+      if (valid) {
+        const HloInstruction* compare = output_0->operand(0);
+        if (compare->comparison_direction() == ComparisonDirection::kLt) {
+          // Min.
+          valid = init_value->literal() ==
+                  LiteralUtil::MaxValue(value->shape().element_type());
+          is_max = false;
+        } else if (compare->comparison_direction() ==
+                   ComparisonDirection::kGt) {
+          // Max.
+          valid = init_value->literal() ==
+                  LiteralUtil::MinValue(value->shape().element_type());
+          is_max = true;
+        }
+      }
+
+      if (valid) {
+        const int64 value_operand_index =
+            max_or_min_then_arg_max_or_min ? 0 : 1;
+        const int64 iota_operand_index = 1 - value_operand_index;
+
+        const Shape& values_shape =
+            ShapeUtil::GetSubshape(hlo->shape(), {value_operand_index});
+        const Shape& indices_shape =
+            ShapeUtil::GetSubshape(hlo->shape(), {iota_operand_index});
+        const Shape output_shape =
+            ShapeUtil::MakeTupleShape({values_shape, indices_shape});
+        HloInstruction* arg_min_max;
+        if (is_max) {
+          arg_min_max = computation_->AddInstruction(pp::CreateHloMaxAndArgMax(
+              value, output_shape, hlo->dimensions(0)));
+        } else {
+          arg_min_max = computation_->AddInstruction(pp::CreateHloMinAndArgMin(
+              value, output_shape, hlo->dimensions(0)));
+        }
+        arg_min_max = PreserveFrontendAttributesIfNeeded(arg_min_max, hlo);
+
+        // Permute the outputs based on the pattern matched.
+        TF_ASSIGN_OR_RETURN(HloInstruction * output_values,
+                            MakeGetTupleElementHlo(arg_min_max, 0));
+        TF_ASSIGN_OR_RETURN(HloInstruction * output_indices,
+                            MakeGetTupleElementHlo(arg_min_max, 1));
+
+        std::vector<HloInstruction*> tuple_operands(2);
+        tuple_operands[value_operand_index] = output_values;
+        tuple_operands[iota_operand_index] = output_indices;
+        return ReplaceWithNewInstruction(
+            hlo, HloInstruction::CreateTuple(tuple_operands));
+      }
+    }
+  }
+
   // TODO(b/131122694): Most of those optimizations below can be done for
   // multi-output reduces.
   if (multi_output_reduce) {
@@ -3502,8 +3620,8 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
   // Convert Reduce(concat({a,b,...})) to
   //  map(reduce(a),map(reduce(b),...,))
   //
-  // This should make fusion easier or use less memory bandwidth in the unfused
-  // case.
+  // This should make fusion easier or use less memory bandwidth in the
+  // unfused case.
   if (arg->opcode() == HloOpcode::kConcatenate &&
       absl::c_linear_search(reduce->dimensions(),
                             arg->concatenate_dimension())) {
@@ -3583,6 +3701,7 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
       }
     }
   }
+
   return Status::OK();
 }
 
