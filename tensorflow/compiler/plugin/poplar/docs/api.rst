@@ -267,37 +267,39 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
   :width: 100%
   :widths: 45,55
 
-  +---------------------------------------------+------------------------------------------------------------------+
-  |                  Optimizer                  |                     Alternative namespaces                       |
-  +=============================================+==================================================================+
-  | CrossReplicaOptimizer                       | tensorflow.python.ipu.cross_replica_optimizer                    |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.cross_replica_optimizer         |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | CrossReplicaGradientAccumulationOptimizer   | tensorflow.python.ipu.gradient_accumulation_optimizer            |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | CrossReplicaGradientAccumulationOptimizerV2 | tensorflow.python.ipu.gradient_accumulation_optimizer            |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | GradientAccumulationOptimizer               | tensorflow.python.ipu.gradient_accumulation_optimizer            |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | GradientAccumulationOptimizerV2             | tensorflow.python.ipu.gradient_accumulation_optimizer            |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | MapGradientOptimizer                        | tensorflow.python.ipu.map_gradient_optimizer                     |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.map_gradient_optimizer          |
-  +---------------------------------------------+------------------------------------------------------------------+
-  | ShardedOptimizer                            | tensorflow.python.ipu.sharded_optimizer                          |
-  |                                             |                                                                  |
-  |                                             | tensorflow.python.ipu.optimizers.sharded_optimizer               |
-  +---------------------------------------------+------------------------------------------------------------------+
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  |                  Optimizer                                                                     |                     Alternative namespaces                       |
+  +================================================================================================+==================================================================+
+  | :class:`~tensorflow.python.ipu.optimizers.CrossReplicaOptimizer`                               | tensorflow.python.ipu.cross_replica_optimizer                    |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.cross_replica_optimizer         |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizer`           | tensorflow.python.ipu.gradient_accumulation_optimizer            |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.CrossReplicaGradientAccumulationOptimizerV2`         | tensorflow.python.ipu.gradient_accumulation_optimizer            |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizer`                       | tensorflow.python.ipu.gradient_accumulation_optimizer            |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`                     | tensorflow.python.ipu.gradient_accumulation_optimizer            |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.MapGradientOptimizer`                                | tensorflow.python.ipu.map_gradient_optimizer                     |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.map_gradient_optimizer          |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+  | :class:`~tensorflow.python.ipu.optimizers.ShardedOptimizer`                                    | tensorflow.python.ipu.sharded_optimizer                          |
+  |                                                                                                |                                                                  |
+  |                                                                                                | tensorflow.python.ipu.optimizers.sharded_optimizer               |
+  +------------------------------------------------------------------------------------------------+------------------------------------------------------------------+
+
+.. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
 .. automodule:: tensorflow.python.ipu.optimizers
   :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, MapGradientOptimizer, ShardedOptimizer
