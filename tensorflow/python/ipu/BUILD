@@ -329,7 +329,8 @@ tf_py_test(
     name = "keras_pipeline_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_test.py"],
-    shard_count = 10,
+    shard_count = 23,
+    tags = ["isolated_poplar_tests"],
     tags = ["isolated_poplar_tests"],
     deps = [
         ":pipelining_test_util",
@@ -337,6 +338,20 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
+        "//third_party/py/numpy",
+    ],
+)
+
+tf_py_test(
+    name = "keras_pipeline_input_validation_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_pipeline_input_validation_test.py"],
+    tags = ["isolated_poplar_tests"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
         "//third_party/py/numpy",
     ],
 )
