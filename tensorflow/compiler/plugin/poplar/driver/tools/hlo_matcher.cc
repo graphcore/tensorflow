@@ -591,12 +591,14 @@ HloMatcher::HloMatcher(const std::vector<HloMatcherPattern>& patterns,
                        struct CompilerAnnotations& annotations,
                        bool root_computation_only,
                        bool requires_unique_sharding,
-                       unsigned look_through_max_depth)
+                       unsigned look_through_max_depth,
+                       bool restart_search_after_match)
     : patterns_(std::move(patterns)),
       annotations_(annotations),
       root_computation_only_(root_computation_only),
       requires_unique_sharding_(requires_unique_sharding),
-      look_through_max_depth_(look_through_max_depth) {}
+      look_through_max_depth_(look_through_max_depth),
+      restart_search_after_match_(restart_search_after_match) {}
 
 // A set of sets of ops which are associative [ (A+B)+C = A+(B+C) ]
 static std::set<HloOpcode> associative_opcodes = {
@@ -910,52 +912,93 @@ StatusOr<bool> HloMatcher::MatchPattern(HloInstruction* root,
 StatusOr<bool> HloMatcher::MatchPatternStart(HloComputation* computation) {
   bool matched = false;
 
-  // Non recursive depth first DAG traversal to match the patterns - note that
-  // we restart the search after every match.
+  // Find any matches for the set patterns, note that we conditionally
+  // restart the search after every match.
   bool start_from_root = true;
   while (start_from_root) {
     start_from_root = false;
 
     for (unsigned i = 0; i < patterns_.size(); i++) {
-      const auto& pattern = patterns_[i];
-      std::stack<HloInstruction*> to_visit;
-      // The list of instructions visited while searching for each pattern
-      std::set<HloInstruction*> visited;
+      TF_ASSIGN_OR_RETURN(bool found_match, FindMatch(computation, i));
+      if (found_match) {
+        matched = true;
 
-      // Traverse from root
-      to_visit.push(computation->root_instruction());
-      while (!to_visit.empty()) {
-        HloInstruction* inst = to_visit.top();
-        to_visit.pop();
-        visited.insert(inst);
-        // A pattern can have multiple outputs. We start the pattern match when
-        // we find an instruction which matches the first output of the pattern.
-        auto output_0_node = pattern.GetPatternNodes()[pattern.GetOutputs()[0]];
-        if (output_0_node.Matches(inst)) {
-          // Try matching the whole pattern
-          TF_ASSIGN_OR_RETURN(bool pattern_matches, MatchPattern(inst, i));
-          if (pattern_matches) {
-            matched = true;
-            VLOG(1) << "Matched pattern type " << pattern.GetType() << ".";
-            // Restart the matcher
-            start_from_root = true;
-            break;
-          }
+        if (restart_search_after_match_) {
+          start_from_root = true;
+          break;
         }
-        for (HloInstruction* operand : inst->operands()) {
-          if (visited.count(operand) == 0) {
-            to_visit.push(operand);
-          }
-        }
-      }
-
-      // Restart the matcher
-      if (start_from_root) {
-        break;
       }
     }
   }
+
   return matched;
+}
+
+StatusOr<bool> HloMatcher::FindMatch(HloComputation* computation,
+                                     const unsigned pattern_idx) {
+  // Non recursive depth first DAG traversal to match the specified pattern.
+  bool found_match = false;
+  const auto& pattern = patterns_[pattern_idx];
+
+  std::vector<HloInstruction*> to_visit;
+  // The list of instructions visited while searching for each pattern
+  std::set<HloInstruction*> visited;
+
+  // Traverse from root
+  to_visit.push_back(computation->root_instruction());
+  while (!to_visit.empty()) {
+    HloInstruction* inst = to_visit.back();
+    to_visit.pop_back();
+    const auto insert_result = visited.insert(inst);
+    const bool duplicate = insert_result.second == false;
+    if (duplicate) {
+      continue;
+    }
+    // A pattern can have multiple outputs. We start the pattern match when
+    // we find an instruction which matches the first output of the pattern.
+    auto output_0_node = pattern.GetPatternNodes()[pattern.GetOutputs()[0]];
+    if (output_0_node.Matches(inst)) {
+      // When a pattern is fully matched, a replacement (defined by the
+      // subclass) is also performed. If pattern_matches is true when we return
+      // from MatchPattern then inst is no longer valid, since it's been
+      // replaced. To find the new instructions we keep track of the users of
+      // the original, as any new instruction will be an operand of those.
+      // FIXME: Make replaced instructions an explicit part of the HandleMatch
+      // interface, that way we can iterate over the new instructions directly.
+      auto pattern_users = inst->users();
+
+      // Try matching the whole pattern
+      TF_ASSIGN_OR_RETURN(bool pattern_matches,
+                          MatchPattern(inst, pattern_idx));
+      if (pattern_matches) {
+        VLOG(1) << "Matched pattern type " << pattern.GetType() << ".";
+        found_match = true;
+        if (restart_search_after_match_) {
+          break;
+        } else {
+          // New instructions will be operands of the original users, so we
+          // visit the operands to visit the new instructions. Previously
+          // visited operands will be skipped.
+          for (HloInstruction* user : pattern_users) {
+            // Try and preserve the DFS order by only checking users that have
+            // already been visited.
+            if (visited.count(user) > 0) {
+              const HloInstruction::InstructionVector& operands =
+                  user->operands();
+              to_visit.insert(to_visit.end(), operands.begin(), operands.end());
+            }
+          }
+          // We have to finish here as inst is no longer valid.
+          continue;
+        }
+      }
+    }
+    for (HloInstruction* operand : inst->operands()) {
+      to_visit.push_back(operand);
+    }
+  }
+
+  return found_match;
 }
 
 StatusOr<bool> HloMatcher::Run(HloModule* module) {

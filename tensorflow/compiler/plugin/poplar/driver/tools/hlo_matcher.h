@@ -239,7 +239,8 @@ class HloMatcher : public HloModulePass {
   HloMatcher(const std::vector<HloMatcherPattern>& patterns,
              struct CompilerAnnotations& annotations, bool root_only,
              bool requires_unique_sharding = false,
-             unsigned look_through_max_level = 0);
+             unsigned look_through_max_level = 0,
+             bool restart_search_after_match = true);
 
   ~HloMatcher() override = default;
 
@@ -283,6 +284,8 @@ class HloMatcher : public HloModulePass {
       std::vector<HloInstruction*>&& forced_parameters);
 
   StatusOr<bool> MatchPatternStart(HloComputation*);
+  StatusOr<bool> FindMatch(HloComputation*, const unsigned pattern_idx);
+
   StatusOr<bool> MatchPattern(HloInstruction* inst, const unsigned pattern_idx);
 
   std::set<HloInstruction*> GetAssociativeSet(HloInstruction*);
@@ -301,6 +304,7 @@ class HloMatcher : public HloModulePass {
   bool root_computation_only_;
   bool requires_unique_sharding_;
   unsigned look_through_max_depth_;
+  const bool restart_search_after_match_;
 };
 
 }  // namespace poplarplugin
