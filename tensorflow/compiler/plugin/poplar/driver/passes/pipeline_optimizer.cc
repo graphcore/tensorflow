@@ -187,34 +187,119 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
   return changed;
 }
 
-StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
-  std::map<int64, std::vector<HloInstruction*>> constant_outputs;
-  HloComputation* stage_comp = stage->to_apply();
-  HloInstruction* root = stage_comp->root_instruction();
-
-  // Find any constant outputs.
-  for (int64 i = 0; i != root->operand_count(); ++i) {
-    std::vector<HloInstruction*> insts;
-    HloInstruction* output = root->mutable_operand(i);
-    // Look through broadcasts.
-    if (output->opcode() == HloOpcode::kBroadcast) {
-      insts.push_back(output);
-      output = output->mutable_operand(0);
-    }
-    if (output->opcode() == HloOpcode::kConstant) {
-      insts.push_back(output);
-      constant_outputs.emplace(i, std::move(insts));
-    }
-  }
-  // Get all the GTEs by tuple index.
+absl::flat_hash_map<int64, std::vector<HloInstruction*>> GetAllGtes(
+    HloInstruction* const stage) {
   absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users;
   for (HloInstruction* user : stage->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     gte_users[user->tuple_index()].push_back(user);
   }
+  return gte_users;
+}
 
-  // Go through all the constant outputs and replace the users of the constants
-  // with constants.
+StatusOr<bool> PropagatePadsAndBroadcasts(HloInstruction* const stage) {
+  bool changed = false;
+  std::map<int64, HloInstruction*> outputs_to_propagate;
+  HloComputation* pipeline_comp = stage->parent();
+  HloComputation* stage_comp = stage->to_apply();
+  HloInstruction* stage_root = stage_comp->root_instruction();
+  CHECK_EQ(stage_root->opcode(), HloOpcode::kTuple);
+
+  for (int64 i = 0; i != stage_root->operand_count(); ++i) {
+    HloInstruction* operand = stage_root->mutable_operand(i);
+    switch (operand->opcode()) {
+      case HloOpcode::kBroadcast:
+      case HloOpcode::kPad: {
+        outputs_to_propagate[i] = operand;
+        break;
+      }
+      default: { break; }
+    }
+  }
+
+  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users =
+      GetAllGtes(stage);
+
+  // Go through all the users of padded/broadcasted outputs and do the
+  // padding/broadcast in the user.
+  for (auto& output_pair : outputs_to_propagate) {
+    auto itr = gte_users.find(output_pair.first);
+    if (itr == gte_users.end()) {
+      continue;
+    }
+
+    // Go through all the users of the output.
+    for (HloInstruction* gte : itr->second) {
+      for (HloInstruction* user : gte->users()) {
+        if (user->opcode() != HloOpcode::kCall) {
+          continue;
+        }
+        const int64 num_outputs = ShapeUtil::TupleElementCount(stage->shape());
+        // Add the operands of the output being cloned as an output of the
+        // stage.
+        HloInstruction* output = output_pair.second;
+        {
+          // New root has all the same inputs, plus the operands of the
+          // instruction being propagated.
+          auto new_outputs = stage_root->operands();
+          new_outputs.insert(new_outputs.end(), output->operands().begin(),
+                             output->operands().end());
+
+          // Create the new root.
+          HloInstruction* new_stage_root = stage_comp->AddInstruction(
+              HloInstruction::CreateTuple(new_outputs));
+          stage_root->SetupDerivedInstruction(new_stage_root);
+
+          // Use the new root and change the shape of the output.
+          stage_comp->set_root_instruction(new_stage_root, true);
+          stage_root = new_stage_root;
+          *stage->mutable_shape() = new_stage_root->shape();
+        }
+
+        // Add GTEs for the new outputs.
+        std::vector<HloInstruction*> new_gtes(output->operand_count());
+        for (int64 i = 0; i != new_gtes.size(); ++i) {
+          TF_ASSIGN_OR_RETURN(new_gtes[i],
+                              MakeGetTupleElementHlo(stage, num_outputs + i));
+        }
+
+        // Clone the instruction inside the pipeline with the new outputs of the
+        // stage.
+        HloInstruction* output_clone = pipeline_comp->AddInstruction(
+            output->CloneWithNewOperands(output->shape(), new_gtes));
+
+        // Lower the output into the stage and replace all the uses with it.
+        std::map<int64, HloInstruction*> replacements;
+        absl::c_for_each(user->OperandIndices(gte), [&](int64 operand_idx) {
+          replacements[operand_idx] = output_clone;
+        });
+        TF_RETURN_IF_ERROR(
+            AddInstructionsToPipelineStage(user, {output_clone}, replacements)
+                .status());
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
+  std::map<int64, HloInstruction*> constant_outputs;
+  HloComputation* stage_comp = stage->to_apply();
+  HloInstruction* root = stage_comp->root_instruction();
+
+  // Find any constant outputs.
+  for (int64 i = 0; i != root->operand_count(); ++i) {
+    if (root->mutable_operand(i)->opcode() == HloOpcode::kConstant) {
+      constant_outputs[i] = root->mutable_operand(i);
+    }
+  }
+
+  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users =
+      GetAllGtes(stage);
+
+  // Go through all the constant outputs and replace the users of the
+  // constants with constants.
   bool changed = false;
   for (auto& constant_output_pair : constant_outputs) {
     auto itr = gte_users.find(constant_output_pair.first);
@@ -229,17 +314,8 @@ StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
         if (gte_user->opcode() == HloOpcode::kCall) {
           HloComputation* comp = gte_user->to_apply();
           // Create the constant inside of the computation.
-          auto& insts_to_lower = constant_output_pair.second;
           HloInstruction* propagated_const =
-              comp->AddInstruction(insts_to_lower.back()->Clone());
-          // Handle the broadcast case.
-          if (insts_to_lower.size() == 2) {
-            HloInstruction* broadcast = insts_to_lower[0];
-            CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
-            propagated_const =
-                comp->AddInstruction(broadcast->CloneWithNewOperands(
-                    broadcast->shape(), {propagated_const}));
-          }
+              comp->AddInstruction(constant_output_pair.second->Clone());
 
           for (int64 input_index : gte_user->OperandIndices(gte)) {
             // Get the parameter instruction for this operand.
@@ -261,7 +337,9 @@ StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
 StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
     HloInstruction* inst, bool* changed) {
   VLOG(2) << "Optimizing: " << inst->ToString();
-  // Find any constant outputs and propagate them into the users.
+  // Propagate operations which are safe to be moved and save on size/aliasing.
+  TF_ASSIGN_OR_RETURN(bool propagated_pads_and_broadcasts,
+                      PropagatePadsAndBroadcasts(inst));
   TF_ASSIGN_OR_RETURN(bool propagated_constants,
                       PropagateConstantOutputs(inst));
 
@@ -307,9 +385,9 @@ StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
             .status());
   }
 
-  (*changed) |= (propagated_constants || duplicate_outputs.size() ||
-                 unused_outputs.size() || duplicate_inputs.size() ||
-                 unused_parameters.size());
+  (*changed) |= (propagated_pads_and_broadcasts || propagated_constants ||
+                 duplicate_outputs.size() || unused_outputs.size() ||
+                 duplicate_inputs.size() || unused_parameters.size());
   return inst;
 }
 
