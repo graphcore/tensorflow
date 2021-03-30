@@ -548,7 +548,7 @@ ENTRY e {
               FindInstruction(module0, "pipeline_weights1"));
 }
 
-TEST_F(PipelineOptimizerTest, TestPropagateConstant) {
+TEST_F(PipelineOptimizerTest, TestPropagateConstantAndBroadcast) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -637,6 +637,74 @@ ENTRY cluster {
                                           m::Broadcast(m::ConstantScalar())),
                                    m::Constant()),
                           m::Op())));
+}
+
+TEST_F(PipelineOptimizerTest, TestPropagatePad) {
+  std::string hlo = R"(
+HloModule cluster
+
+stage_0 {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,1] parameter(1)
+  c = f32[] constant(0)
+  p_arg1 = f32[1,4,4,2] pad(arg1, c), padding=0_0x0_0x0_0x1_0
+  add = f32[1,4,4,2] add(arg0, p_arg1)
+  ROOT t1 = (f32[1,4,4,2], f32[1,4,4,2]) tuple(p_arg1, add)
+}
+
+stage_1 {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  add = f32[1,4,4,2] add(arg0, arg1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(add, arg1)
+}
+
+pipeline {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,1] parameter(1)
+  call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=stage_0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  get-tuple-element_0 = f32[1,4,4,2] get-tuple-element(call), index=0
+  get-tuple-element_1 = f32[1,4,4,2] get-tuple-element(call), index=1
+  ROOT call2 = (f32[1,4,4,2], f32[1,4,4,2]) call(get-tuple-element_0, get-tuple-element_1), to_apply=stage_1, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+}
+
+ENTRY cluster {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,1] parameter(1)
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  auto module0 = module.get();
+
+  PipelineOptimizer optimizer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, optimizer.Run(module.get()));
+  EXPECT_FALSE(changed);
+  HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  const HloInstruction* stage_0 = stages.forward[0];
+  // Check that the pad has been removed from the stage output.
+  EXPECT_TRUE(
+      Match(stage_0->to_apply()->root_instruction(),
+            m::Tuple(m::Add(m::Parameter(0),
+                            m::Pad(m::Parameter(1), m::ConstantScalar(0))),
+                     m::Parameter(1))));
+
+  // Check that the pad has been propagated to the next stage.
+  auto stage_1 = stages.forward[1];
+  EXPECT_TRUE(
+      Match(stage_1->to_apply()->root_instruction(),
+            m::Tuple(m::Add(m::Pad(m::Parameter(1), m::ConstantScalar(0)),
+                            m::Parameter(0)),
+                     m::Parameter(0))));
 }
 
 }  // namespace
