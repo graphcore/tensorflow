@@ -337,7 +337,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 22,
+    shard_count = 25,
     tags = ["isolated_poplar_tests"],
 )
 

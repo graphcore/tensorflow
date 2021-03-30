@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import backend
 from tensorflow.python.keras.engine import base_layer_utils
@@ -130,6 +131,13 @@ class Node(object):
     # For compatibility with external Keras, we use the deprecated
     # accessor here.
     outbound_layer.inbound_nodes.append(self)
+
+    # For pipelining of ipu.keras.IPUModel
+    if ds_context.has_strategy():
+      strategy = ds_context.get_strategy()
+      if hasattr(strategy, "_pipeline_stage"):
+        stage = strategy._pipeline_stage
+        self._pipeline_stage = stage
 
   def iterate_inbound(self, include_arguments=False):
     """Returns a list of tuples representing the inbound data.

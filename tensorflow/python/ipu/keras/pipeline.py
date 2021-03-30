@@ -875,8 +875,9 @@ class PipelineModel(ipu_model.Model):
   the stages.
 
   The different stages are specified when defining the graph structure via use
-  of the `PipelineStage` context manager, as follows for a simple two stage
-  pipeline:
+  of the `PipelineStage` context manager. Pipeline stages can be assigned to
+  all calls of layer by constructing the layer within a `PipelineStage` scope
+  as follows:
 
   .. code-block:: python
 
@@ -888,6 +889,27 @@ class PipelineModel(ipu_model.Model):
 
       with PipelineStage(1):
         x = Dense(4)(x)
+
+  Pipeline stages can also be assigned to individual layer calls, as follows:
+
+  .. code-block:: python
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    input_layer = Input(2)
+    l = Dense(4)
+    with strategy.scope():
+      with PipelineStage(0):
+        x = l(input_layer)
+
+      with PipelineStage(1):
+        x = l(x)
+
+  Pipeline stages assigned to layer calls take precedence over those assigned
+  when constructing the layer.
+
+  If a layer which use Variables (such as weights) is assigned to multiple
+  pipeline stages, these stages must be mapped to the same device. This can
+  be done using the `device_mapping` argument.
 
   The `gradient_accumulation_count` argument describes the number of
   mini-batches which are sent through the pipeline in a single operation of the
@@ -1135,36 +1157,27 @@ class PipelineModel(ipu_model.Model):
 
   def _assign_node_stages(self):
     # Get stages for each layer - used for mapping to nodes below.
-    stages = dict()
+    nodes_per_stage = {}
     max_stage_id = -1
 
-    for n, layer in enumerate(self._layers):
-      # Input layers need not have a pipeline stage assigned -
-      # we don't have to wait for a computation to complete to
-      # access the "result" of an input layer.
-      if isinstance(layer, InputLayer):
-        continue
-
-      # Verify that a pipeline stage has been assigned.
-      if not hasattr(layer, "_pipeline_stage"):
-        raise ValueError(
-            f"All layers of a pipelined model must have an associated "
-            f"pipeline stage. \nHowever, {layer} has not been assigned to one."
-        )
-
-      layer_id = id(layer)
-      stages[layer_id] = layer._pipeline_stage  # pylint: disable=protected-access
-      max_stage_id = max(max_stage_id, layer._pipeline_stage)  # pylint: disable=protected-access
-
     num_inputs = len(self._input_layers)
-    nodes_per_stage = {}
+    # The first num_inputs layers are input layers which don't need pipeline
+    # stages assigned.
     for node in self._post_order_node_execution[num_inputs:]:
-      layer = node.outbound_layer
-      layer_id = id(layer)
-      assert layer_id in stages
-      pipeline_stage = stages[layer_id]
-      node._pipeline_stage = pipeline_stage  # pylint: disable=protected-access
+      # Verify that a pipeline stage has been assigned.
+      if not hasattr(node, "_pipeline_stage"):
+        if not hasattr(node.outbound_layer, "_pipeline_stage"):
+          raise ValueError(
+              f"All layers of a pipelined model must have an associated "
+              f"pipeline stage.\nHowever, {node.outbound_layer} has not been "
+              f"assigned to one.\nPipeline stages can be assigned when a "
+              f"layer is constructed, or each time a layer is called."
+              f"\nDifferent pipeline stages can assigned to each call.")
+        node._pipeline_stage = node.outbound_layer._pipeline_stage  # pylint: disable=protected-access
+
+      pipeline_stage = node._pipeline_stage  # pylint: disable=protected-access
       nodes_per_stage.setdefault(pipeline_stage, []).append(node)
+      max_stage_id = max(max_stage_id, pipeline_stage)
 
     # Check that all pipeline stages are visited.
     found_stages = sorted(nodes_per_stage.keys())
@@ -1214,7 +1227,7 @@ class PipelineModel(ipu_model.Model):
         self._post_order_node_execution)
     self._post_order_node_execution = new_post_order_node_execution
 
-    stage_node_ids = list(set(stages.values()))
+    stage_node_ids = list(set(nodes_per_stage.keys()))
     stage_node_ids.sort()
     return stage_node_ids
 
