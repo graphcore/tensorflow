@@ -142,11 +142,11 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
   std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
   std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
 
-  const Window& window = GetConvolutionWindow(inst);
-  const auto& dims = GetConvolutionDims(inst);
+  TF_ASSIGN_OR_RETURN(Window window, GetConvolutionWindow(inst));
+  TF_ASSIGN_OR_RETURN(auto dims, GetConvolutionDims(inst));
 
-  unsigned int f_g = GetFeatureGroupCount(inst);
-  unsigned int b_g = GetBatchGroupCount(inst);
+  TF_ASSIGN_OR_RETURN(unsigned int f_g, GetFeatureGroupCount(inst));
+  TF_ASSIGN_OR_RETURN(unsigned int b_g, GetBatchGroupCount(inst));
 
   return GetConvolutionParametersCore(inst, input_dims, kernel_dims,
                                       output_dims, f_g, b_g, dims, window,
@@ -157,15 +157,14 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
     const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
     const std::vector<size_t>& conv_output_shape) {
   const Shape& kernel = inst->operand(0)->shape();
-  const Window& window = GetConvolutionWindow(inst);
-
+  TF_ASSIGN_OR_RETURN(Window window, GetConvolutionWindow(inst));
   TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(kernel));
 
   std::vector<size_t> kernel_shape = PoplarShapeFromXlaShape(kernel);
 
-  const auto& dims = GetConvolutionDims(inst);
-  unsigned int f_g = GetFeatureGroupCount(inst);
-  unsigned int b_g = GetBatchGroupCount(inst);
+  TF_ASSIGN_OR_RETURN(auto dims, GetConvolutionDims(inst));
+  TF_ASSIGN_OR_RETURN(unsigned int f_g, GetFeatureGroupCount(inst));
+  TF_ASSIGN_OR_RETURN(unsigned int b_g, GetBatchGroupCount(inst));
 
   return GetConvolutionParametersCore(inst, conv_input_shape, kernel_shape,
                                       conv_output_shape, f_g, b_g, dims, window,
@@ -224,10 +223,10 @@ poplar::Tensor ShuffleConvolutionInputToPoplar(
   return out;
 }
 
-poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
-                                               const poplar::Tensor& tensor) {
-  auto group_count = GetBatchGroupCount(inst);
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+StatusOr<poplar::Tensor> ShuffleConvolutionInputToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor) {
+  TF_ASSIGN_OR_RETURN(auto group_count, GetBatchGroupCount(inst));
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionInputToPoplar(group_count, d, tensor);
 }
 
@@ -245,9 +244,9 @@ poplar::Tensor ShuffleConvolutionOutputToPoplar(
   return tensor.dimShuffle(shuffle);
 }
 
-poplar::Tensor ShuffleConvolutionOutputToPoplar(const HloInstruction* inst,
-                                                const poplar::Tensor& tensor) {
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+StatusOr<poplar::Tensor> ShuffleConvolutionOutputToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor) {
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionOutputToPoplar(d, tensor);
 }
 
@@ -269,10 +268,10 @@ poplar::Tensor ShuffleConvolutionWeightsToPoplar(
   return tensor.dimShuffle(shuffle);
 }
 
-poplar::Tensor ShuffleConvolutionWeightsToPoplar(const HloInstruction* inst,
-                                                 const poplar::Tensor& tensor,
-                                                 bool swap_features) {
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToPoplar(
+    const HloInstruction* inst, const poplar::Tensor& tensor,
+    bool swap_features) {
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionWeightsToPoplar(d, tensor, swap_features);
 }
 
@@ -295,10 +294,10 @@ poplar::Tensor ShuffleConvolutionInputToTensorflow(
   return out.dimShuffle(shuffle);
 }
 
-poplar::Tensor ShuffleConvolutionInputToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
-  int64 group_count = GetBatchGroupCount(inst);
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  TF_ASSIGN_OR_RETURN(int64 group_count, GetBatchGroupCount(inst));
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionInputToTensorflow(group_count, d, tensor);
 }
 
@@ -316,10 +315,10 @@ poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
   return tensor.dimShuffle(shuffle);
 }
 
-poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionWeightsToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor,
     bool swap_features) {
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionWeightsToTensorflow(d, tensor, swap_features);
 }
 
@@ -335,9 +334,9 @@ poplar::Tensor ShuffleConvolutionOutputToTensorflow(
   return tensor.dimShuffle(shuffle);
 }
 
-poplar::Tensor ShuffleConvolutionOutputToTensorflow(
+StatusOr<poplar::Tensor> ShuffleConvolutionOutputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  TF_ASSIGN_OR_RETURN(ConvolutionDimensionNumbers d, GetConvolutionDims(inst));
   return ShuffleConvolutionOutputToTensorflow(d, tensor);
 }
 

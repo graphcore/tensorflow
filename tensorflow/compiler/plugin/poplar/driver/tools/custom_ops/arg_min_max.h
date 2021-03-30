@@ -22,11 +22,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-class HloArgMinMax : public HloPoplarInstruction {
- public:
-  explicit HloArgMinMax(HloInstruction* input, const Shape outputShape,
-                        int64 axis, bool is_min);
+class HloArgMinMaxBase : public HloPoplarInstruction {
+ protected:
+  HloArgMinMaxBase(HloInstruction* input, const Shape& output_shape, int64 axis,
+                   const PoplarOp& opcode);
 
+ public:
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
 
@@ -44,28 +45,66 @@ class HloArgMinMax : public HloPoplarInstruction {
       const HloPrintOptions& options) const override;
 
  private:
+  const int64 axis;
+};
+
+class HloArgMax : public HloArgMinMaxBase {
+ public:
+  HloArgMax(HloInstruction* input, const Shape& output_shape, int64 axis)
+      : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::ArgMax) {}
+
+ private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
-
-  int64 axis;
 };
 
-class HloArgMax : public HloArgMinMax {
+std::unique_ptr<HloInstruction> CreateHloArgMax(HloInstruction* input,
+                                                const Shape& shape, int64 axis);
+
+class HloArgMin : public HloArgMinMaxBase {
  public:
-  explicit HloArgMax(HloInstruction* input, const Shape outputShape, int64 axis)
-      : HloArgMinMax(input, outputShape, axis, false) {}
+  HloArgMin(HloInstruction* input, const Shape& output_shape, int64 axis)
+      : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::ArgMin) {}
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
 };
 
-class HloArgMin : public HloArgMinMax {
+std::unique_ptr<HloInstruction> CreateHloArgMin(HloInstruction* input,
+                                                const Shape& shape, int64 axis);
+
+class HloMaxAndArgMax : public HloArgMinMaxBase {
  public:
-  explicit HloArgMin(HloInstruction* input, const Shape outputShape, int64 axis)
-      : HloArgMinMax(input, outputShape, axis, true) {}
+  HloMaxAndArgMax(HloInstruction* input, const Shape& output_shape, int64 axis)
+      : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::MaxAndArgMax) {}
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateHloArgMinMax(HloInstruction* input,
-                                                   const Shape& shape,
-                                                   int64 axis, bool is_min);
+std::unique_ptr<HloInstruction> CreateHloMaxAndArgMax(HloInstruction* input,
+                                                      const Shape& shape,
+                                                      int64 axis);
+
+class HloMinAndArgMin : public HloArgMinMaxBase {
+ public:
+  HloMinAndArgMin(HloInstruction* input, const Shape& output_shape, int64 axis)
+      : HloArgMinMaxBase(input, output_shape, axis, PoplarOp::MinAndArgMin) {}
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateHloMinAndArgMin(HloInstruction* input,
+                                                      const Shape& shape,
+                                                      int64 axis);
 
 }  // namespace poplarplugin
 }  // namespace xla

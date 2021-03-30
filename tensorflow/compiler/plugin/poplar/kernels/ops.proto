@@ -99,6 +99,8 @@ enum PoplarOp {
   SwishGrad = 95;
   SequenceSlice = 96;
   SequenceSliceUnpack = 97;
+  MaxAndArgMax = 98;
+  MinAndArgMin = 99;
   
   // Supported Fusions.
   Conv_biasadd = 200;

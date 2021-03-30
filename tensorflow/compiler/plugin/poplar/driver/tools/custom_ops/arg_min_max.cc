@@ -14,11 +14,13 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
 
+#include <string>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 #include "absl/container/flat_hash_map.h"
@@ -26,61 +28,89 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-static PoplarOp SwitchArgMinMax(bool is_arg_min) {
-  return is_arg_min ? PoplarOp::ArgMin : PoplarOp::ArgMax;
-}
+HloArgMinMaxBase::HloArgMinMaxBase(HloInstruction* input,
+                                   const Shape& output_shape, int64 axis,
+                                   const PoplarOp& opcode)
+    : HloPoplarInstruction(output_shape, {input}, opcode, axis), axis(axis) {}
 
-// Constructor.
-HloArgMinMax::HloArgMinMax(HloInstruction* input, const Shape shape,
-                           int64 axis_, bool is_min)
-    : HloPoplarInstruction(shape, {input}, SwitchArgMinMax(is_min), axis),
-      axis(axis_) {}
-
-absl::flat_hash_set<int64> HloArgMinMax::AllocatingIndices() const {
+absl::flat_hash_set<int64> HloArgMinMaxBase::AllocatingIndices() const {
   return {};
 }
 
-bool HloArgMinMax::AllocatingOutput() const { return false; }
+bool HloArgMinMaxBase::AllocatingOutput() const { return false; }
 
-absl::flat_hash_map<int64, int64> HloArgMinMax::LayoutDependencies() const {
+absl::flat_hash_map<int64, int64> HloArgMinMaxBase::LayoutDependencies() const {
   return {};
 }
 
-HloPoplarUseDescriptions HloArgMinMax::GetUseDescriptions() const {
+HloPoplarUseDescriptions HloArgMinMaxBase::GetUseDescriptions() const {
   return UseDescriptionsNoInputOutputAlias();
 }
 
-HloPoplarBufferDescriptions HloArgMinMax::GetBufferDescriptions() const {
+HloPoplarBufferDescriptions HloArgMinMaxBase::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
-bool HloArgMinMax::IsPopOpsElementwise() const { return false; }
+bool HloArgMinMaxBase::IsPopOpsElementwise() const { return false; }
 
-// Creates an instance of a HloOneHotInstruction
-std::unique_ptr<HloInstruction> CreateHloArgMinMax(HloInstruction* input,
-                                                   const Shape& shape,
-                                                   int64 axis, bool is_min) {
-  if (is_min) {
-    return absl::make_unique<HloArgMin>(input, shape, axis);
-  } else {
-    return absl::make_unique<HloArgMax>(input, shape, axis);
-  }
-}
-
-std::unique_ptr<HloInstruction> HloArgMinMax::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    HloCloneContext*) const {
-  const bool is_min = IsPoplarInstruction(PoplarOp::ArgMin)(this);
-
-  return CreateHloArgMinMax(operands[0], shape, Axis(), is_min);
-}
-
-std::vector<std::string> HloArgMinMax::ExtraPoplarAttributesToStringImpl(
+std::vector<std::string> HloArgMinMaxBase::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<string> attributes;
   attributes.push_back(absl::StrCat("axis=", axis));
 
   return attributes;
+}
+
+std::unique_ptr<HloInstruction> HloArgMax::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 1);
+  return CreateHloArgMax(operands[0], shape, Axis());
+}
+
+std::unique_ptr<HloInstruction> CreateHloArgMax(HloInstruction* input,
+                                                const Shape& shape,
+                                                int64 axis) {
+  return absl::make_unique<HloArgMax>(input, shape, axis);
+}
+
+std::unique_ptr<HloInstruction> HloArgMin::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 1);
+  return CreateHloArgMin(operands[0], shape, Axis());
+}
+
+std::unique_ptr<HloInstruction> CreateHloArgMin(HloInstruction* input,
+                                                const Shape& shape,
+                                                int64 axis) {
+  return absl::make_unique<HloArgMin>(input, shape, axis);
+}
+
+std::unique_ptr<HloInstruction> HloMaxAndArgMax::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 1);
+  return CreateHloMaxAndArgMax(operands[0], shape, Axis());
+}
+
+std::unique_ptr<HloInstruction> CreateHloMaxAndArgMax(HloInstruction* input,
+                                                      const Shape& shape,
+                                                      int64 axis) {
+  return absl::make_unique<HloMaxAndArgMax>(input, shape, axis);
+}
+
+std::unique_ptr<HloInstruction> HloMinAndArgMin::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 1);
+  return CreateHloMinAndArgMin(operands[0], shape, Axis());
+}
+
+std::unique_ptr<HloInstruction> CreateHloMinAndArgMin(HloInstruction* input,
+                                                      const Shape& shape,
+                                                      int64 axis) {
+  return absl::make_unique<HloMinAndArgMin>(input, shape, axis);
 }
 
 namespace {
@@ -92,8 +122,7 @@ static HloPoplarInstructionFactory argmax_factory(
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
       TF_ASSIGN_OR_RETURN(int64 axis, attribute_map.GetAttributeAsInt("axis"));
 
-      return CreateHloArgMinMax(call->mutable_operand(0), call->shape(), axis,
-                                false);
+      return CreateHloArgMax(call->mutable_operand(0), call->shape(), axis);
     });
 
 static HloPoplarInstructionFactory argmin_factory(
@@ -103,8 +132,7 @@ static HloPoplarInstructionFactory argmin_factory(
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
       TF_ASSIGN_OR_RETURN(int64 axis, attribute_map.GetAttributeAsInt("axis"));
 
-      return CreateHloArgMinMax(call->mutable_operand(0), call->shape(), axis,
-                                true);
+      return CreateHloArgMin(call->mutable_operand(0), call->shape(), axis);
     });
 
 }  // namespace

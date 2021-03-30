@@ -36,6 +36,29 @@ namespace poplarplugin {
 namespace {
 
 class ArgMinMaxOp : public PoplarOpDef {
+  virtual Status LowerToPoplar(
+      poplar::Graph& graph, poplar::Tensor& input,
+      poplar::program::Sequence& seq, CompilerResources& res,
+      const HloInstruction* inst, TensorMap& tensor_map,
+      const std::vector<std::size_t>& output_dimensions,
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    poplar::Tensor indices;
+    if (IsPoplarInstruction(PoplarOp::ArgMax)(inst)) {
+      indices = popnn::argMax(graph, input, seq, {debug_name_and_id});
+    } else {
+      CHECK(IsPoplarInstruction(PoplarOp::ArgMin)(inst));
+      indices = popnn::argMin(graph, input, seq, {debug_name_and_id});
+    }
+
+    TF_ASSIGN_OR_RETURN(poplar::Type output_type,
+                        PoplarDataType(inst->shape().element_type()));
+    indices = indices.reinterpret(output_type);
+    indices = indices.reshape(output_dimensions);
+
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, indices));
+    return Status::OK();
+  }
+
   StatusOr<poplar::program::Program> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
@@ -49,58 +72,70 @@ class ArgMinMaxOp : public PoplarOpDef {
         poplar::Tensor input,
         FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info));
 
-    const bool is_max = IsPoplarInstruction(PoplarOp::ArgMax)(inst);
-    const bool is_min = IsPoplarInstruction(PoplarOp::ArgMin)(inst);
-
-    if (!is_max && !is_min) {
-      return xla::FailedPrecondition(
-          "Expected HLO instruction to be one of HloArgMax or HloArgMin!");
-    }
-    const int64 axis = Cast<HloArgMinMax>(inst)->Axis();
-
-    std::vector<std::size_t> index_shape;
-
+    const int64 axis = Cast<HloArgMinMaxBase>(inst)->Axis();
+    std::vector<std::size_t> output_dimensions;
     if (inst->operand(0)->shape().rank() > 1) {
       // Roll the axis dim to the end.
       input = input.dimRoll(axis, input.rank() - 1);
 
       // Use the remaining dims as the dims of the output.
-      index_shape = input.shape();
+      output_dimensions = input.shape();
 
       // Remove the last element.
-      index_shape.pop_back();
+      output_dimensions.pop_back();
 
-      std::size_t sum = std::accumulate(index_shape.begin(), index_shape.end(),
-                                        1, std::multiplies<std::size_t>());
+      const std::size_t sum = absl::c_accumulate(
+          output_dimensions, 1, std::multiplies<std::size_t>());
 
       // Flatten the remaining dims as popnn expects a 2d input.
       input = input.reshapePartial(0, input.rank() - 1, {sum});
     } else {
       // Special case for vectors.
       input = input.reshape({1, input.numElements()});
-      index_shape = {};
+      output_dimensions = {};
     }
-
-    // Call into the
-    poplar::Tensor output;
-    if (is_max) {
-      output = popnn::argMax(graph, input, seq, {debug_info});
-    } else {
-      output = popnn::argMin(graph, input, seq, {debug_info});
-    }
-    output = output.reinterpret(poplar::INT);
-
-    // Reshape the output back.
-    output = output.reshape(index_shape);
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_RETURN_IF_ERROR(LowerToPoplar(graph, input, seq, res, inst, tensor_map,
+                                     output_dimensions, debug_info));
 
     return seq;
   }
 };
-
 REGISTER_POPLAR_OP(ArgMax, ArgMinMaxOp);
 REGISTER_POPLAR_OP(ArgMin, ArgMinMaxOp);
+
+class MaxMinAndArgMinMaxOp : public ArgMinMaxOp {
+  virtual Status LowerToPoplar(
+      poplar::Graph& graph, poplar::Tensor& input,
+      poplar::program::Sequence& seq, CompilerResources& res,
+      const HloInstruction* inst, TensorMap& tensor_map,
+      const std::vector<std::size_t>& output_dimensions,
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    poplar::Tensor values;
+    poplar::Tensor indices;
+    if (IsPoplarInstruction(PoplarOp::MaxAndArgMax)(inst)) {
+      std::tie(values, indices) =
+          popnn::maxAndArgMax(graph, input, seq, {debug_name_and_id});
+    } else {
+      CHECK(IsPoplarInstruction(PoplarOp::MinAndArgMin)(inst));
+      std::tie(values, indices) =
+          popnn::minAndArgMin(graph, input, seq, {debug_name_and_id});
+    }
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Type output_type,
+        PoplarDataType(ShapeUtil::GetSubshape(inst->shape(), ShapeIndexView{1})
+                           .element_type()));
+    indices = indices.reinterpret(output_type);
+    indices = indices.reshape(output_dimensions);
+    values = values.reshape(output_dimensions);
+
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, values));
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 1, indices));
+    return Status::OK();
+  }
+};
+REGISTER_POPLAR_OP(MaxAndArgMax, MaxMinAndArgMinMaxOp);
+REGISTER_POPLAR_OP(MinAndArgMin, MaxMinAndArgMinMaxOp);
 
 }  // namespace
 }  // namespace poplarplugin

@@ -46,6 +46,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs = [
         "ops/all_to_all_op_grad.py",
+        "ops/cross_replica_ops_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/functional_ops_grad.py",
@@ -1236,7 +1237,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     # Shard count needs to match the number of tests.
-    shard_count = 4,
+    shard_count = 12,
     tags = ["hw_poplar_test"],
 )
 
