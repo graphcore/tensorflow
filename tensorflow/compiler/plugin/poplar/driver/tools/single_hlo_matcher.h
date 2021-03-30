@@ -27,9 +27,10 @@ class SingleHloMatcher : public HloMatcher {
  public:
   SingleHloMatcher(struct CompilerAnnotations& annotations,
                    const std::vector<HloMatcherPattern>& patterns,
-                   std::string op_prefix)
+                   std::string op_prefix,
+                   bool restart_search_after_match = true)
       : HloMatcher(patterns, annotations, false, true,
-                   /* look through max */ 3),
+                   /* look through max */ 3, restart_search_after_match),
         op_prefix_(op_prefix){};
 
   ~SingleHloMatcher() override = default;
