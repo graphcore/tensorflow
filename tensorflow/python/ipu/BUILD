@@ -329,8 +329,7 @@ tf_py_test(
     name = "keras_pipeline_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_test.py"],
-    shard_count = 23,
-    tags = ["isolated_poplar_tests"],
+    shard_count = 27,
     tags = ["isolated_poplar_tests"],
     deps = [
         ":pipelining_test_util",

@@ -956,6 +956,138 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(output.shape, (16, 1))
       self.assertAllClose(output.flatten(), [n * 10 for n in range(16)])
 
+  @test_util.run_v2_only
+  def testFitWithReusedLayer(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      layer1 = keras.layers.Dense(32,
+                                  activation=keras.activations.relu,
+                                  kernel_initializer='glorot_uniform')
+      layer2 = keras.layers.Dense(32,
+                                  activation=keras.activations.relu,
+                                  kernel_initializer='glorot_uniform')
+      with ipu.keras.PipelineStage(0):
+        x = layer1(input_layer)
+      with ipu.keras.PipelineStage(1):
+        x = layer2(x)
+      with ipu.keras.PipelineStage(2):
+        x = layer1(x)
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=6,
+                                  device_mapping=[0, 1, 0])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD()
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Ensure fit runs through succesfully
+      m.fit(test_language_dataset(), steps_per_epoch=1)
+
+      self.assertAllEqual(m.stages, [0, 1, 2])
+
+  @test_util.run_v2_only
+  def testFitWithStagesDefinedForLayerAndNodes(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      input_layer = keras.layers.Input(shape=(32))
+      with ipu.keras.PipelineStage(0):  # Define stage 0 for layer.
+        layer = keras.layers.Dense(32,
+                                   activation=keras.activations.relu,
+                                   kernel_initializer='glorot_uniform')
+
+      x = input_layer
+      for stage in [0, 1, 2]:  # Define stages for nodes.
+        with ipu.keras.PipelineStage(stage):
+          x = layer(x)
+
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=6,
+                                  device_mapping=[0, 0, 0])
+
+      opt = keras.optimizer_v2.gradient_descent.SGD()
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Ensure fit runs through succesfully
+      m.fit(test_language_dataset(), steps_per_epoch=1)
+
+      self.assertAllEqual(m.stages, [0, 1, 2])
+
+  @test_util.run_v2_only
+  def testFitFailsWithSameLayerOnDifferentDevices(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      input_layer = keras.layers.Input(shape=(32))
+      with ipu.keras.PipelineStage(0):  # Define stage 0 for layer.
+        layer = keras.layers.Dense(32,
+                                   activation=keras.activations.relu,
+                                   kernel_initializer='glorot_uniform')
+
+      x = input_layer
+      for stage in [0, 1]:  # Define stages for nodes.
+        with ipu.keras.PipelineStage(stage):
+          x = layer(x)
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=6,
+                                  device_mapping=[0, 1])
+      opt = keras.optimizer_v2.gradient_descent.SGD()
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+
+      with self.assertRaisesRegex(
+          Exception,
+          "an input can only be used by pipeline stages on the same IPU"):
+        m.fit(test_language_dataset(), steps_per_epoch=1)
+
+  @test_util.run_v2_only
+  def testFitWithStagesDefinedOnlyForLayers(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      input_layer = keras.layers.Input(shape=(32))
+      with ipu.keras.PipelineStage(0):  # Define stage 0 for layer.
+        layer1 = keras.layers.Dense(32,
+                                    activation=keras.activations.relu,
+                                    kernel_initializer='glorot_uniform')
+      with ipu.keras.PipelineStage(1):  # Define stage 0 for layer.
+        layer2 = keras.layers.Dense(32,
+                                    activation=keras.activations.relu,
+                                    kernel_initializer='glorot_uniform')
+
+      x = input_layer
+      x = layer1(x)
+      x = layer1(x)
+      x = layer2(x)
+
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=4,
+                                  device_mapping=[0, 0])
+
+      opt = keras.optimizer_v2.gradient_descent.SGD()
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Ensure fit runs through succesfully
+      m.fit(test_language_dataset(), steps_per_epoch=1)
+
+      self.assertAllEqual(m.stages, [0, 1])
+
 
 if __name__ == '__main__':
   test.main()
