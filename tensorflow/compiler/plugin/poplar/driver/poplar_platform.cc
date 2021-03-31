@@ -13,26 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "absl/memory/memory.h"
-#include "absl/strings/str_format.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
-#include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
-
-#include "tensorflow/compiler/xla/status_macros.h"
-
-#include "tensorflow/stream_executor/lib/error.h"
-#include "tensorflow/stream_executor/lib/initialize.h"
-#include "tensorflow/stream_executor/lib/status.h"
-#include "tensorflow/stream_executor/lib/status_macros.h"
-
-#include "tensorflow/core/public/version.h"
 
 #include <poplar/Device.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/Graph.hpp>
+
+#include "absl/memory/memory.h"
+#include "absl/strings/str_format.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
+#include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
+#include "tensorflow/compiler/xla/status_macros.h"
+#include "tensorflow/core/public/version.h"
+#include "tensorflow/stream_executor/lib/error.h"
+#include "tensorflow/stream_executor/lib/initialize.h"
+#include "tensorflow/stream_executor/lib/status.h"
+#include "tensorflow/stream_executor/lib/status_macros.h"
 
 // Pre-processor convert token to string
 #define QUOTE(str) #str
@@ -45,8 +42,7 @@ namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
   VLOG(tensorflow::INFO) << "Poplar version: " << poplar::versionString()
-                         << " Poplar package: " << poplar::packageHash()
-                         << " Poplar TensorFlow version: " << tf_git_version();
+                         << " Poplar package: " << poplar::packageHash();
 }
 
 PoplarPlatform::~PoplarPlatform() {}
