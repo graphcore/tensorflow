@@ -131,7 +131,8 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
     opts = utils.create_ipu_config()
     if offline_compilation:
       opts = utils.set_ipu_connection_type(opts,
-                                           utils.DeviceConnectionType.NEVER, 1)
+                                           utils.DeviceConnectionType.NEVER,
+                                           "ipu1")
     if serialization_folder:
       opts = utils.set_serialization_options(opts, serialization_folder)
     utils.configure_ipu_system(opts)

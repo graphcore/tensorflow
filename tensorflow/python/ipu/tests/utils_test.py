@@ -84,18 +84,16 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
     self.assertTrue(isinstance(cfg, IpuOptions))
     self.assertEqual(len(cfg.device_config), 2)
-    self.assertFalse(cfg.floating_point_behaviour.flags_set)
-    self.assertFalse(cfg.has_ipu_version)
 
     cfg = ipu.utils.set_floating_point_behaviour_options(cfg)
-    self.assertTrue(cfg.floating_point_behaviour.flags_set)
 
     self.assertFalse(cfg.enable_matmul_combiner)
     self.assertEqual(cfg.remote_buffer_merging_mode,
                      threestate_pb2.THREESTATE_OFF)
-    cfg = ipu.utils.set_optimization_options(cfg,
-                                             combine_matmuls=True,
-                                             merge_remote_buffers=True)
+    cfg = ipu.utils.set_optimization_options(
+        cfg,
+        combine_matmuls=True,
+        merge_remote_buffers=ipu.utils.MergeRemoteBuffersBehaviour.MERGE)
     self.assertTrue(cfg.enable_matmul_combiner)
     self.assertEqual(cfg.remote_buffer_merging_mode,
                      threestate_pb2.THREESTATE_ON)
@@ -170,10 +168,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_connection_type(
-        cfg, ipu.utils.DeviceConnectionType.NEVER, ipu_version=1)
+        cfg, ipu.utils.DeviceConnectionType.NEVER, ipu_version="ipu1")
     self.assertEqual(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
-    self.assertEqual(cfg.ipu_version, 1)
-    self.assertTrue(cfg.has_ipu_version)
+    self.assertEqual(cfg.ipu_version, "ipu1")
     self.assertFalse(cfg.enable_remote_buffers_without_device)
 
     cfg = ipu.utils.create_ipu_config()
