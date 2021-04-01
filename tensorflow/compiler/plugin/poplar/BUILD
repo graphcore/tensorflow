@@ -253,6 +253,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/repeat_loop_copy_inserter.cc",
+        "driver/passes/replicated_resource_update_elementwise_clustering.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/resource_update_copy_inserter.cc",
         "driver/passes/resource_update_elementwise_clustering.cc",
@@ -327,6 +328,7 @@ cc_library(
         "driver/tools/custom_ops/truncated_normal.cc",
         "driver/tools/custom_ops/user_op_hlo.cc",
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.cc",
+        "driver/tools/elementwise_cluster.cc",
         "driver/tools/find_all_users.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
@@ -436,6 +438,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/repeat_loop_copy_inserter.h",
+        "driver/passes/replicated_resource_update_elementwise_clustering.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/resource_update_copy_inserter.h",
         "driver/passes/resource_update_elementwise_clustering.h",
@@ -508,6 +511,7 @@ cc_library(
         "driver/tools/custom_ops/truncated_normal.h",
         "driver/tools/custom_ops/user_op_hlo.h",
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.h",
+        "driver/tools/elementwise_cluster.h",
         "driver/tools/extension_registry.h",
         "driver/tools/find_all_users.h",
         "driver/tools/flags.h",
@@ -3885,6 +3889,18 @@ tf_xla_py_test(
 )
 
 xla_test(
+    name = "replicated_resource_update_elementwise_clustering_test",
+    srcs = ["tests/replicated_resource_update_elementwise_clustering_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "resource_update_elementwise_clustering_test",
     srcs = ["tests/resource_update_elementwise_clustering_test.cc"],
     backends = ["poplar"],
@@ -5265,6 +5281,7 @@ test_suite(
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
         "repeat_loop_copy_inserter_test",
+        "replicated_resource_update_elementwise_clustering_test",
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",
