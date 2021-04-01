@@ -553,13 +553,14 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
             dtype=np.float32,
             initializer=init_ops.ones_initializer())
         x = math_ops.matmul(x, weight)
+        x = array_ops.pad(x, [[0, 0], [0, 0], [1, 1]])
         return x, label
 
     def stage2(x, label):
       with variable_scope.variable_scope("vs2", use_resource=True):
         weight = variable_scope.get_variable(
             "w1",
-            shape=[4, 4],
+            shape=[6, 4],
             dtype=np.float32,
             initializer=init_ops.ones_initializer())
         x = math_ops.matmul(x, weight)
