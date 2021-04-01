@@ -16,8 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_ELEMENTWISE_CLUSTERING_H_
 
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "absl/container/flat_hash_set.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
@@ -29,90 +33,18 @@ class HloModule;
 
 namespace poplarplugin {
 
-struct UserPositions {
-  HloInstruction* instruction;
-  std::vector<int64> indices;
+class ElementwiseCluster;
+struct ElementwiseClusterValidator;
+struct UserPositions;
 
-  std::string ToString() const {
-    return absl::StrCat("UserPositions: ", instruction->name(), ":",
-                        absl::StrJoin(indices, ","));
-  }
-};
-
-using CrossReplicaValidInputs = absl::flat_hash_set<const HloInstruction*>;
-
-class ElementwiseCluster {
- public:
-  explicit ElementwiseCluster(HloInstruction* top) noexcept;
-  bool In(HloInstruction* inst) const;
-  bool AnyUserIn(HloInstruction* inst) const;
-  bool AllUsersIn(HloInstruction* inst) const;
-  void Add(HloInstruction* inst);
-  bool MaybeAdd(HloInstruction* inst);
-  bool CanMerge(const ElementwiseCluster& other);
-  void Merge(const ElementwiseCluster& other);
-  const HloInstruction* GetTop() const;
-  HloComputation* GetComputation() const;
-  std::string Dump() const;
-
-  // Finalize the cluster - no more instructions will be added. Returns whether
-  // this is a cluster which should be processed further.
-  bool Finalize(const CrossReplicaValidInputs& cross_replica_valid_inputs,
-                ThreeState partition_offload_variables,
-                uint32 replication_factor);
-
-  // Following functions can be called once finalized.
-  std::string ToString() const;
-  const std::vector<HloInstruction*>& GetInputs() const;
-  const std::vector<HloInstruction*>& GetPostOrder() const;
-  const std::vector<HloInstruction*>& GetOutputs() const;
-  const std::vector<UserPositions>& GetUsersForOutput(
-      HloInstruction* inst) const;
-
-  // The dimensions of the operations in the cluster before it is partitioned.
-  const std::vector<int64>& GetClusterDimensions() const;
-  // The dimensions of the operations in the cluster after it is partitioned.
-  const std::vector<int64>& GetShardDimensions() const;
-  // The size of the cluster before it is partitioned.
-  int64 GetClusterSize() const;
-  // The size of the cluster taking the padding on all-gathers into account.
-  int64 GetAlignedClusterSize() const;
-  // The size of the partitioned shape.
-  int64 GetShardSize() const;
-  // Whether this cluster is replica partitioned.
-  bool IsReplicaPartitioned() const;
-  // Returns original shape of the top-level instruction.
-  Shape GetClusterShape(PrimitiveType type) const;
-
- private:
-  HloInstruction* top_;
-  Shape cluster_shape_;
-  HloInstructionSet insts_;
-  HloInstructionSet inputs_;
-  bool finalized_ = false;
-
-  // Populated once finalized.
-  bool is_replica_partitioned_;
-  std::vector<HloInstruction*> inputs_vec_;
-  std::vector<HloInstruction*> post_order_;
-  std::vector<HloInstruction*> outputs_;
-  HloInstructionMap<std::vector<UserPositions>> outputs_to_users_;
-  std::vector<int64> cluster_dimensions_;
-  std::vector<int64> shard_dimensions_;
-  int64 cluster_size_;
-  int64 shard_size_;
-  int64 aligned_cluster_size_;
-};
+enum struct ClusterOutlinePolicy { Ignore, Outline, OutlineNonUnique };
 
 // Find and replace clusters of elementwise instructions, sharding resource
 // update computation across replicas. For each cluster, remove
 // all-gather(remote-parameter-load) and store result in remote buffer shard.
 class ResourceUpdateElementwiseClustering : public HloModulePass {
  public:
-  explicit ResourceUpdateElementwiseClustering(
-      uint32 replication_factor, bool handle_non_replicated_clusters = false)
-      : replication_factor_(replication_factor),
-        handle_non_replicated_clusters_(handle_non_replicated_clusters) {}
+  ResourceUpdateElementwiseClustering() {}
 
   absl::string_view name() const override {
     return "resource-update-elementwise-clustering";
@@ -122,23 +54,61 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
 
   // Returns all computations in the module which are elementwise and can be
   // clustered.
-  static absl::flat_hash_set<const HloComputation*>
-  GetElementwiseClusterableComputations(const HloModule* module);
+  absl::flat_hash_set<const HloComputation*>
+  GetElementwiseClusterableComputations(const HloModule* module) const;
 
   // Get clusters inside of the call, where the call has to be a repeat loop or
   // a pipeline.
-  static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
+  StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const call,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-      uint32 replication_factor);
+      const absl::flat_hash_set<const HloComputation*>& elementwise_comps)
+      const;
 
   // Outline the provided cluster - returns the call instruction to the cluster.
-  static StatusOr<HloInstruction*> OutlineCluster(ElementwiseCluster& cluster,
-                                                  uint32 replication_factor);
+  StatusOr<HloInstruction*> OutlineCluster(ElementwiseCluster& cluster) const;
+
+ protected:
+  // Clone instruction using operands from HloCloneContext
+  static Status CloneInstruction(const Shape& shape, const HloInstruction* inst,
+                                 HloComputation::Builder* builder,
+                                 HloCloneContext* context);
+
+  // Creates validator specific to the concrete pass implementation.
+  virtual std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
+      const HloComputation*,
+      const std::function<bool(int64)>& allowed_resource_update_parameter)
+      const;
+
+  virtual std::unique_ptr<ElementwiseClusterValidator> CreateValidator(
+      const HloInstruction* call, const HloInstruction* resource_update) const;
+
+  virtual StatusOr<HloInstruction*> AddClusterInput(
+      int64 param_idx, const ElementwiseCluster& cluster,
+      HloInstruction* cluster_input, HloComputation::Builder* builder,
+      HloCloneContext* context) const;
+
+  virtual StatusOr<HloInstruction*> AddClusterOutput(
+      const ElementwiseCluster& cluster, HloInstruction* cluster_output,
+      std::vector<UserPositions>& inst_users, HloComputation::Builder* builder,
+      HloCloneContext* context) const;
+
+  virtual Status AddClusterInstruction(const ElementwiseCluster& cluster,
+                                       HloInstruction* inst,
+                                       HloComputation::Builder* builder,
+                                       HloCloneContext* context) const;
+
+  virtual ClusterOutlinePolicy GetClusterOutlinePolicy(
+      const ElementwiseCluster& cluster) const;
 
  private:
-  uint32 replication_factor_;
-  bool handle_non_replicated_clusters_;
+  StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call,
+                             const absl::flat_hash_set<const HloComputation*>&
+                                 elementwise_comps) const;
+
+  StatusOr<HloInstruction*> AddClusterInputToOutlinedComputation(
+      int64 param_idx, const ElementwiseCluster& cluster,
+      HloInstruction* cluster_input, HloComputation::Builder* builder,
+      HloCloneContext* context) const;
 };
 
 }  // namespace poplarplugin

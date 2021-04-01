@@ -129,9 +129,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/repeat_loop_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/replicated_resource_update_elementwise_clustering.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_copy_inserter.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_elementwise_clustering.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
@@ -1374,7 +1374,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
-    pipeline.AddPass<ResourceUpdateElementwiseClustering>(
+    pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
         resources.replication_factor);
     {
       auto inline_fusion = [](const HloInstruction* inst) {
