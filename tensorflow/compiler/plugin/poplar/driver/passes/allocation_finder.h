@@ -17,10 +17,12 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_ALLOCATION_FINDER_H_
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -128,6 +130,7 @@ class AllocationFinder : public HloModulePass {
                        const TensorTarget& tensor_target);
 
   std::vector<const HloInstruction*> path;
+  std::unique_ptr<CallGraph> call_graph;
 
   const CompilerAnnotations& annotations;
   TensorAllocationMap& tensor_allocation_map;

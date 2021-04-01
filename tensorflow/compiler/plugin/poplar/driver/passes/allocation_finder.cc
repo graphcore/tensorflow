@@ -199,6 +199,7 @@ void AllocationFinder::FindConsumers(
     const TensorLocation& src, const HloInstruction* tgt, int64 index,
     absl::optional<std::vector<int64>> permutation) {
   path.emplace_back(tgt);
+
   for (auto user : tgt->users()) {
     int64 op_index = user->operand_index(tgt);
     // The backward path does not contain the source.
@@ -385,11 +386,29 @@ void AllocationFinder::FindConsumers(
       }
     }
   }
+
+  // If the target is the root instruction, look through it's caller.
+  const auto comp = tgt->parent();
+  if (comp->root_instruction() == tgt) {
+    auto callsites = call_graph->GetNode(comp).caller_callsites();
+    if (callsites.size() == 1) {
+      auto caller = callsites.front().instruction();
+      if (caller->shape() == tgt->shape()) {
+        FindConsumers(src, caller, index, permutation);
+      }
+    }
+  }
+
   path.pop_back();
   return;
 }
 
 StatusOr<bool> AllocationFinder::Run(HloModule* module) {
+  call_graph = CallGraph::Build(module);
+  if (!call_graph->IsFlattened()) {
+    return FailedPrecondition("Call graph must be flattened.");
+  }
+
   for (const auto& comp : module->MakeComputationPostOrder()) {
     if (!IsPopOpsFusion(comp)) {
       for (auto allocation_location : FindAllocatingInstructions(comp)) {
