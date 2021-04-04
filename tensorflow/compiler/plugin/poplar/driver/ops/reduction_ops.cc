@@ -462,35 +462,91 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     const int64 N = ShapeUtil::ElementsIn(output_shape);
     const int64 rank = output_shape.rank();
 
+    // Find the within window strides in case subsampling is required.
+    std::vector<uint32> strides(rank, 1);
+    for (int64 d = 0; d != rank; d++) {
+      const auto& dim = window.dimensions(d);
+      if (dim.window_dilation() > dim.base_dilation()) {
+        bool valid = false;
+        for (int64 i = 0; i != dim.size(); ++i) {
+          if ((((i + 1) * dim.window_dilation()) % dim.base_dilation()) == 0) {
+            strides[d] =
+                ((i + 1) * dim.window_dilation()) / dim.base_dilation();
+            valid = true;
+            break;
+          }
+        }
+        if (!valid) {
+          return FailedPrecondition(
+              "Cannot compute a valid stride for a reduction window.");
+        }
+      }
+    }
+
     // Vector for walking the window through the tensor
     std::vector<std::size_t> pos(rank, 0);
-
     for (int64 i = 0; i != N; ++i) {
       // Find the window boundries.
       std::vector<std::size_t> start(rank);
       std::vector<std::size_t> end(rank);
+      bool valid = true;
       for (int64 d = 0; d != rank; d++) {
         const auto& dim = window.dimensions(d);
-        const int dim_start = pos[d] * dim.stride() - dim.padding_low();
-        const int dim_end = dim_start + dim.size();
-        const int dilated_dim_start =
-            (dim_start + (dim_start % dim.base_dilation())) /
-            dim.base_dilation();
-        const int dilated_dim_end =
-            (dim_end + (dim_end % dim.base_dilation())) / dim.base_dilation();
+        const size_t max_idx = to_reduce.dim(d);
 
-        start[d] = std::min(std::max(dilated_dim_start, 0),
-                            static_cast<int>(to_reduce.dim(d)));
-        end[d] = std::min(std::max(dilated_dim_end, 0),
-                          static_cast<int>(to_reduce.dim(d)));
+        int32 start_idx = pos[d] * dim.stride() - dim.padding_low();
+        int32 end_idx = start_idx + (dim.size() - 1) * dim.window_dilation();
+
+        auto is_valid_idx = [&dim, d, max_idx](int32 idx) {
+          return idx >= 0 && (idx % dim.base_dilation()) == 0 &&
+                 (idx / dim.base_dilation()) < max_idx;
+        };
+
+        // Find the first valid start index.
+        for (int64 i = 0; i != dim.size(); ++i) {
+          if (!is_valid_idx(start_idx)) {
+            start_idx += dim.window_dilation();
+          } else {
+            break;
+          }
+        }
+        // Find the last valid index.
+        for (int64 i = 0; i != dim.size(); ++i) {
+          if (!is_valid_idx(end_idx)) {
+            end_idx -= dim.window_dilation();
+          } else {
+            break;
+          }
+        }
+
+        if (!is_valid_idx(start_idx) || !is_valid_idx(end_idx)) {
+          valid = false;
+          break;
+        }
+
+        start[d] = start_idx / dim.base_dilation();
+        end[d] = end_idx / dim.base_dilation() + 1;
       }
 
-      poplar::Tensor tensor_window = to_reduce.slice(start, end).flatten();
+      if (!valid) {
+        std::fill_n(start.data(), rank, 0);
+        std::fill_n(end.data(), rank, 0);
+      }
+      poplar::Tensor tensor_window = to_reduce.slice(start, end);
+
+      if (valid) {
+        for (int64 d = 0; d != rank; d++) {
+          if (strides[d] > 1) {
+            tensor_window = tensor_window.subSample(strides[d], d);
+          }
+        }
+      }
+
       poplar::Tensor output = out_flat.slice(i, i + 1).reshape({});
 
       // Create the vertex.
-      auto v = graph.addVertex(cs, vertex_name,
-                               {{"a", tensor_window}, {"out", output}});
+      auto v = graph.addVertex(
+          cs, vertex_name, {{"a", tensor_window.flatten()}, {"out", output}});
       graph.setTileMapping(v, (i / graph.getTarget().getNumWorkerContexts()) %
                                   graph.getTarget().getNumTiles());
       graph.setPerfEstimate(v, 1);
