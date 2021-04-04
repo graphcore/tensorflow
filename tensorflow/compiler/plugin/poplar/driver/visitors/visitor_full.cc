@@ -244,8 +244,7 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
                                      tensor_map, debug_name_and_id));
     return AddSequenceForInstruction(inst, prog);
   }
-  if (IsReducibleArithmetic(inst->to_apply()) &&
-      !window_util::HasWindowDilation(inst->window())) {
+  if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
