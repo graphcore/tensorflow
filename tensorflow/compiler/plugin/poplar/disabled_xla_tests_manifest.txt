@@ -280,7 +280,6 @@ TrivialCrossReplicaSumTest POPLAR // Don't support cross-replica-sum
 
 TestUtilsTest.UnusedParam POPLAR // Decide what to do with strange reductions
 ReduceWindowTest.NonstandardReduceFunction POPLAR
-R4ReduceWindowTest POPLAR // Very slow engine creation for the bigger reductions
 
 MultiOutputFusionTest POPLAR // Don't support fusion
 FusionTest.FusionWithLayout POPLAR
