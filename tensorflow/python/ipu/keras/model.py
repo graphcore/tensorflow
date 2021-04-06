@@ -95,7 +95,7 @@ def _validate_dataset_element_count(ds, count, fn_name):
   if num_elements != count:
     raise ValueError(
         "%s requires a dataset with a structure containing %d element(s), but "
-        "got %d element(s) instead." % (fn_name, num_elements, count))
+        "got %d element(s) instead." % (fn_name, count, num_elements))
 
 
 def _get_dataset_and_count(x, y, batch_size):
