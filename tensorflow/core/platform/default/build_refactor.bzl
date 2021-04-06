@@ -575,12 +575,11 @@ def tf_instantiate_platform_libraries(names = []):
                     "@snappy",
                 ] + select({
                     # TF Additional NUMA dependencies
-                    "//tensorflow:android": [],
-                    "//tensorflow:ios": [],
-                    "//tensorflow:macos": [],
-                    "//conditions:default": [
+                    "//tensorflow:with_numa_support": [
+                        # Don't merge in a single line
                         "@hwloc",
                     ],
+                    "//conditions:default": [],
                 }),
                 visibility = ["//visibility:private"],
                 tags = ["no_oss", "manual"],
