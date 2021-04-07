@@ -983,6 +983,17 @@ cc_library(
     alwayslink = True,
 )
 
+cc_library(
+    name = "poplar_test_base",
+    testonly = True,
+    srcs = ["driver/tools/hlo_poplar_test_base.cc"],
+    hdrs = ["driver/tools/hlo_poplar_test_base.h"],
+    deps = [
+        ":driver",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 # When creating a new set of ops the following needs to be done:
 #
 # 1. New cc_library:
@@ -3368,8 +3379,10 @@ xla_test(
     srcs = ["tests/graph_caching_with_remote_buffer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["hw_poplar_test"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",

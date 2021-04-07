@@ -330,6 +330,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status ConfigurePoplarDevice(const IpuOptions&);
   Status AttachToPoplarDevice();
+  static StatusOr<std::size_t> AttachToPoplarDevice(
+      absl::Span<const poplar::Device> device_list, int32 ordinal,
+      bool wait_for_device);
 
   bool PoplarDeviceIsAttached() const;
   bool HasPoplarTarget() const;
