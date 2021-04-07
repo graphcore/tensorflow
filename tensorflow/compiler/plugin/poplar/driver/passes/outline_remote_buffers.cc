@@ -293,12 +293,27 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
       const int64 new_parameter_number =
           rbioi.GetInputsOldToNewPermutation().at(parameter_number);
 
-      // Create a parameter.
-      new_inst = builder.AddInstruction(HloInstruction::CreateParameter(
-          new_parameter_number, old_inst->shape(), old_inst->name()));
-
       // Add a parameter load instruction if required.
       if (new_parameter_number < rbioi.GetNumLoadInputs()) {
+        // The shape of this parameter has to be the shape of the remote buffer,
+        // not RemoteBufferLoad instruction itself. Consider the following
+        // example for the replication_factor of 2.
+        // Before:
+        //   f32[8] shard = remote-buffer-load(f32[16] buffer)
+        //   call(f32[8] shard)
+        // After:
+        //   call(f32[16] buffer):
+        //     f32[8] shard = remote-buffer-load(f32[16] buffer)
+        const HloInstruction* old_func_operand =
+            func->operand(parameter_number);
+        VLOG(2) << "RemoteBufferLoad instruction: "
+                << old_func_operand->ToString();
+        CHECK(IsRemoteBufferLoad(old_func_operand));
+        const HloInstruction* remote_buffer = old_func_operand->operand(0);
+        new_inst = builder.AddInstruction(HloInstruction::CreateParameter(
+            new_parameter_number, remote_buffer->shape(),
+            remote_buffer->name()));
+
         const uint64 replication_factor =
             rbioi.GetLoadReplicationFactor(parameter_number);
 
@@ -307,6 +322,10 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
 
         new_inst = builder.AddInstruction(
             CreateHloRemoteParameterLoad({new_inst}, {replication_factor}));
+      } else {
+        // Create a parameter.
+        new_inst = builder.AddInstruction(HloInstruction::CreateParameter(
+            new_parameter_number, old_inst->shape(), old_inst->name()));
       }
 
     } else if (old_inst == old_root) {
@@ -417,13 +436,6 @@ bool ShouldOutlineFunctions(const Functions& functions) {
   // Can't outline loads/stores without them being inputs.
   if (rbioi.GetNumLoadInputs() == 0) {
     return false;
-  }
-
-  // TODO(T31225): Support outlining replica partitioned remote buffers.
-  for (auto& pair : rbioi.GetReplicationFactors()) {
-    if (pair.second != 1) {
-      return false;
-    }
   }
 
   // Only outline if all the functions have the same loads/stores indicies.
