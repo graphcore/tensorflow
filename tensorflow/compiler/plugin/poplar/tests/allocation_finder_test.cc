@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
@@ -5045,6 +5046,96 @@ main {
   TF_ASSERT_OK(AddTensorForTarget(*graph, p2_loc, alloc_map.at(p2_loc),
                                   *resources, tensor_map, {})
                    .status());
+}
+
+TEST_F(AllocationFinderTest, LookThroughSequenceSlice) {
+  std::string hlo = R"(
+HloModule module
+
+loop_body {
+  dst = f16[128, 1024] parameter(0)
+  src = f16[128, 1024] parameter(1)
+  num_elems = s32[8] parameter(2)
+  src_offsets = s32[8] parameter(3)
+  dst_offsets = s32[8] parameter(4)
+
+  out = f16[128, 1024] custom-call(dst, src, num_elems, src_offsets, dst_offsets), custom_call_target="SequenceSlice", backend_config="{\"zero_unused\":1}\n"
+  ROOT t = (f16[128, 1024]) tuple(out)
+}
+
+ENTRY main {
+  p0 = f16[128, 1024] parameter(0)
+  p1 = f16[128, 1024] parameter(1)
+  p2 = s32[8] parameter(2)
+  p3 = s32[8] parameter(3)
+  p4 = s32[8] parameter(4)
+  
+  w = f16[] constant(2)
+  weights = f16[1024, 3] broadcast(w), dimensions={}
+
+  repeat = (f16[128, 1024]) call(p0, p1, p2, p3, p4), to_apply=loop_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"16\"}}}"
+  gte = f16[128, 1024] get-tuple-element(repeat), index=0
+  ROOT dot = f16[128, 3] dot(gte, weights), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module0.ok());
+  auto* module_ptr = module0.ValueOrDie().get();
+
+  auto resources = CompilerResources::CreateTestDefault(module_ptr);
+
+  CompilerAnnotations annotations(module_ptr);
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module_ptr).ValueOrDie());
+  EXPECT_TRUE(FuseWideConst(annotations).Run(module_ptr).ValueOrDie());
+  EXPECT_TRUE(AllocationFinder(annotations).Run(module_ptr).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
+
+  const auto* entry = module_ptr->entry_computation();
+  const auto* dot = entry->root_instruction();
+  const auto* gte = dot->operand(0);
+  const auto* weights = dot->operand(1);
+  const auto* repeat = gte->operand(0);
+  const auto* p0 = repeat->operand(0);
+  const auto* t_loop = repeat->to_apply()->root_instruction();
+  const auto* seq_slice = t_loop->operand(0);
+  const auto* dst = seq_slice->operand(0);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, dot);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 5);
+  EXPECT_EQ(t.backward_path[0], dst);
+  EXPECT_EQ(t.backward_path[1], seq_slice);
+  EXPECT_EQ(t.backward_path[2], t_loop);
+  EXPECT_EQ(t.backward_path[3], repeat);
+  EXPECT_EQ(t.backward_path[4], gte);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
+  EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{weights, 0});
+  EXPECT_EQ(t.tgt, dot);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
+  EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{dst, 0});
+  EXPECT_EQ(t.tgt, dot);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 4);
+  EXPECT_EQ(t.backward_path[0], seq_slice);
+  EXPECT_EQ(t.backward_path[1], t_loop);
+  EXPECT_EQ(t.backward_path[2], repeat);
+  EXPECT_EQ(t.backward_path[3], gte);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
+  EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 }
 
 // // TODO:
