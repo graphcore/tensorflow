@@ -309,6 +309,13 @@ void AllocationFinder::FindConsumers(
               // instruction which may use this tensor later.
               FindConsumers(src, user, index, permutation);
             }
+          } else {
+            // Look through SequenceSlice.
+            if (IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
+                op_index == 0) {
+              FindConsumers(src, user, index, permutation);
+              break;
+            }
           }
         } else {
           auto shapes = FlattenedXlaShape(src.instruction->shape());
