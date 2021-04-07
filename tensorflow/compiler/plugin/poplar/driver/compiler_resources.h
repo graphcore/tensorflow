@@ -137,7 +137,7 @@ struct CompilerResources {
 
   std::stack<ExecutionCounters*> execution_counter_scopes;
 
-  std::string scheduler_selection;
+  IpuSchedulingAlgorithm scheduler_selection;
 
   bool recomputation_enabled;
 
@@ -193,7 +193,7 @@ struct CompilerResources {
       uint32 local_replication_factor,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
-      const std::string& scheduler_selection, bool recomputation_enabled,
+      IpuSchedulingAlgorithm scheduler_selection, bool recomputation_enabled,
       bool use_stable_norm_statistics, bool remote_memory_supported,
       const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
@@ -246,7 +246,8 @@ struct CompilerResources {
         /*replication_factor=*/1, /*ipu_link_domain_replication_factor=*/1,
         /*local_replication_factor=*/1,
         /*floating_point_behaviour=*/IpuOptions::FloatingPointBehaviour(),
-        /*always_rearrange_copies_on_host=*/false, /*scheduler_selection=*/"",
+        /*always_rearrange_copies_on_host=*/false,
+        /*scheduler_selection=*/IpuSchedulingAlgorithm::CHOOSE_BEST,
         /*recomputation_enabled=*/false, /*use_stable_norm_statistics=*/false,
         /*remote_memory_supported=*/false,
         /*gcl_options=*/poplar::OptionFlags(),

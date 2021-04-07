@@ -43,6 +43,24 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
+enum IpuSchedulingAlgorithm {
+  // Tries to automatically determine the best scheduler based on TensorFlow's
+  // native heap simulator.
+  CHOOSE_BEST = 0;
+  // Groups clusters of operations together in order to look through stretches
+  // of instructions with potentially high liveness.
+  CLUSTERING = 1;
+  // Schedules the instructions in the order which is obtained by walking the
+  // graph in 'post order'.
+  POST_ORDER = 2;
+  // Looks ahead a number of operations from any schedulable one, as given by
+  // the `max_scheduler_lookahead_depth` and `max_scheduler_search_space_size`
+  // options. It attempts to look through areas of high liveness.
+  LOOK_AHEAD = 3;
+  // Schedules the graph giving priority to the shortest path to the root.
+  SHORTEST_PATH = 4;
+}
+
 enum SyntheticDataCategory {
   Seed = 0;
   Infeed = 1;
@@ -143,8 +161,8 @@ message IpuOptions {
     // having more live tensors in memory on the device.
     bool merge_infeed_io_copies = 6;
 
-    // When not an empty string, specifies the scheduler to use
-    string scheduler_selection = 7;
+    // Specifies the scheduling algorithm to use
+    IpuSchedulingAlgorithm scheduler_selection = 7;
   }
   SpeedSizeConfig speed_size_config = 5;
 
@@ -170,10 +188,6 @@ message IpuOptions {
   int64 max_reduce_scatter_buffer_size = 12;
 
   message FloatingPointBehaviour {
-    // When set, the flags below will be used to configure the hardware at the
-    // start of program execution.
-    bool flags_set = 1;
-
     // These flags match the ones provided by the poplar::FloatingPointBehaviour
     // structure
     bool inv = 2;
@@ -221,8 +235,7 @@ message IpuOptions {
   IpuDeviceConnectionType device_connection_type = 24;
 
   // Version of the IPU hardware used.
-  int64 ipu_version = 25;
-  bool has_ipu_version = 26;
+  string ipu_version = 25;
 
   IpuOptionsCreator creator_id = 27;
 
@@ -261,7 +274,7 @@ message IpuOptions {
   // Enable remote buffer embeddings
   bool enable_experimental_remote_buffer_embedding = 33;
 
-  // Enable math optimizations which might not adhere to IEEE. 
+  // Enable math optimizations which might not adhere to IEEE.
   bool enable_fast_math = 34;
 
   // Options for multi-replica distribution.

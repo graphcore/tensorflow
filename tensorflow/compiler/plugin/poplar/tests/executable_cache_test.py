@@ -46,7 +46,7 @@ offline_compilation_needed = "--use_ipu_model" in os.environ.get(
 def _extra_ipu_config(opts):
   if offline_compilation_needed:
     return ipu.utils.set_ipu_connection_type(
-        opts, ipu.utils.DeviceConnectionType.NEVER, 1)
+        opts, ipu.utils.DeviceConnectionType.NEVER, "ipu1")
   return tu.add_hw_ci_connection_options(opts)
 
 

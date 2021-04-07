@@ -797,25 +797,22 @@ def tf_additional_binary_deps():
 
 def tf_additional_numa_deps():
     return select({
-        "//tensorflow:android": [],
-        "//tensorflow:ios": [],
-        "//tensorflow:windows": [],
-        "//tensorflow:macos": [],
-        "//conditions:default": [
+        # TF Additional NUMA dependencies
+        "//tensorflow:with_numa_support": [
+            # Don't merge in a single line
             "@hwloc",
         ],
+        "//conditions:default": [],
     })
 
 def tf_additional_numa_copts():
     return select({
-        "//tensorflow:android": [],
-        "//tensorflow:ios": [],
-        "//tensorflow:windows": [],
-        "//tensorflow:macos": [],
-        "//conditions:default": [
+        # TF Additional NUMA dependencies
+        "//tensorflow:with_numa_support": [
             "-Ithird_party/hwloc/hwloc-master/include",
             "-DTENSORFLOW_USE_NUMA",
         ],
+        "//conditions:default": [],
     })
 
 def tf_additional_rpc_deps():

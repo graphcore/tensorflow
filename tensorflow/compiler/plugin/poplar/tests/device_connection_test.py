@@ -47,7 +47,7 @@ class Process:
 def _ConfigureSystem(connection_type):
   cfg = ipu.utils.create_ipu_config()
   cfg = ipu.utils.select_ipus(cfg, [0])  # Always use the same IPU.
-  cfg = ipu.utils.set_ipu_connection_type(cfg, connection_type, 1)
+  cfg = ipu.utils.set_ipu_connection_type(cfg, connection_type, "ipu1")
   ipu.utils.configure_ipu_system(cfg)
 
 

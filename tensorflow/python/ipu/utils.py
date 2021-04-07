@@ -46,13 +46,14 @@ from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import
 from tensorflow.compat.v1 import executing_eagerly
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.util import deprecation
-from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.util import deprecation
 
 
 class SelectionOrder(Enum):
@@ -190,6 +191,43 @@ class DeviceConnectionType(Enum):
   NEVER = config_pb2.IpuDeviceConnectionType.NEVER
 
 
+class MergeRemoteBuffersBehaviour(Enum):
+  """The remote buffers merging behaviour indicates when or if compatible remote
+  buffers should be merged.
+
+  * `NO_MERGING` indicates that there should be no merging.
+  * `MERGE` indicates that all compatible remote buffers will be merged.
+  * `IF_BENEFICIAL` indicates that compatible remote buffers will only
+    be merged when it is considered beneficial for code re-use.
+  """
+  NO_MERGING = threestate_pb2.ThreeState.Value("THREESTATE_OFF")
+  MERGE = threestate_pb2.ThreeState.Value("THREESTATE_ON")
+  IF_BENEFICIAL = threestate_pb2.ThreeState.Value("THREESTATE_UNDEFINED")
+
+
+class SchedulingAlgorithm(Enum):
+  """Controls the algorithm that the scheduler uses.
+
+  * `CHOOSE_BEST` creates several schedules and chooses the one with the lowest
+    predicted liveness.
+  * `CLUSTERING` groups clusters of operations together in order to look through
+    stretches of instructions with potentially high liveness.
+  * `POST_ORDER` schedules the instructions in the order which is obtained by
+    walking the graph in 'post order'.
+  * `LOOK_AHEAD` looks ahead a number of operations from any schedulable one, as
+    given by the `max_scheduler_lookahead_depth` and
+    `max_scheduler_search_space_size` options. It attempts to look through areas
+    of high liveness.
+  * `SHORTEST_PATH` schedules the graph giving priority to the shortest path to
+    the root.
+  """
+  CHOOSE_BEST = config_pb2.IpuSchedulingAlgorithm.Value("CHOOSE_BEST")
+  CLUSTERING = config_pb2.IpuSchedulingAlgorithm.Value("CLUSTERING")
+  POST_ORDER = config_pb2.IpuSchedulingAlgorithm.Value("POST_ORDER")
+  LOOK_AHEAD = config_pb2.IpuSchedulingAlgorithm.Value("LOOK_AHEAD")
+  SHORTEST_PATH = config_pb2.IpuSchedulingAlgorithm.Value("SHORTEST_PATH")
+
+
 def configure_ipu_system(config, device="cpu"):
   """Configure an IPU system.  Passing an IpuOptions protobuf created by the
   ``create_ipu_config`` function.
@@ -297,7 +335,7 @@ def create_ipu_config(profiling=False,
                       report_every_nth_execution=0,
                       max_report_size=0x10000000,
                       report_directory="",
-                      scheduler_selection="",
+                      scheduler_selection=SchedulingAlgorithm.CHOOSE_BEST,
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
                       disable_graph_convolution_caching=False,
@@ -308,7 +346,7 @@ def create_ipu_config(profiling=False,
                       max_scheduler_lookahead_depth=5,
                       max_scheduler_search_space_size=64,
                       prefetch_data_streams=True,
-                      selection_order=None,
+                      selection_order=SelectionOrder.AUTO,
                       enable_experimental_remote_buffer_embedding=False):
   """Create an empty IPU session configuration structure.
 
@@ -330,9 +368,10 @@ def create_ipu_config(profiling=False,
     report_directory: When set, reports will be written to files in this
       directory, instead of being written into the events.  The events will
       contain the full paths of the report files.
-    scheduler_selection: When set, this forces the compiler to use a specific
-      scheduler when ordering the instructions.  See the documentation for a
-      list of valid schedulers.
+    scheduler_selection: A `SchedulingAlgorithm`. By default, several schedules
+      will be created and the one with the lowest predicted liveness chosen.
+      Setting this to a specific scheduling algorithm forces the compiler to use
+      that algorithm when ordering the instructions.
     always_rearrange_copies_on_the_host: *** Experimental Flag ***
       The data which is streamed to/from the device might be stored in different
       layouts on the device and on the host. If that is the case the
@@ -363,9 +402,8 @@ def create_ipu_config(profiling=False,
     prefetch_data_streams: When set to true, the prefetching of data for data
       streams on the host will be overlapped with execution on the IPU.
     selection_order: the order in which IPUs are selected and mapped to physical
-      IPU devices when using a multi-IPU devices (see `SelectionOrder`). When
-      not specified, then automatic selection order is used, otherwise an
-      instance of `SelectionOrder`.
+      IPU devices when using a multi-IPU devices (see `SelectionOrder`). By
+      default, automatic selection order is used.
     enable_experimental_remote_buffer_embedding: When set to true,
       `HostEmbedding` will make use of Poplar remote buffers.
 
@@ -377,7 +415,6 @@ def create_ipu_config(profiling=False,
     raise Exception(
         "`profiling` and `enable_ipu_events` are mutually exclusive")
 
-  selection_order = selection_order if selection_order else SelectionOrder.AUTO
   profile_execution = profile_execution if profile_execution \
                                         else ExecutionProfileType.NO_PROFILE
 
@@ -424,7 +461,23 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.disable_graph_outlining = \
       disable_graph_outlining
-  opts.speed_size_config.scheduler_selection = scheduler_selection
+  if isinstance(scheduler_selection, str):
+    logging.warn(
+        "Passing a string for `scheduler_selection` is deprecated and will be"
+        " removed in a future release. The argument must now be a valid"
+        " `SchedulingAlgorithm`.")
+    deprecation_mapping = {
+        "": SchedulingAlgorithm.CHOOSE_BEST,
+        "Clustering": SchedulingAlgorithm.CLUSTERING,
+        "PostOrder": SchedulingAlgorithm.POST_ORDER,
+        "LookAhead": SchedulingAlgorithm.LOOK_AHEAD,
+        "ShortestPath": SchedulingAlgorithm.SHORTEST_PATH
+    }
+    if scheduler_selection not in deprecation_mapping:
+      raise TypeError(f"Could not convert '{scheduler_selection}' to a valid"
+                      " `SchedulingAlgorithm`.")
+    scheduler_selection = deprecation_mapping[scheduler_selection]
+  opts.speed_size_config.scheduler_selection = scheduler_selection.value
 
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
@@ -470,19 +523,20 @@ def set_serialization_options(opts, output_folder=""):
   return opts
 
 
-def set_optimization_options(opts,
-                             combine_embedding_lookups=False,
-                             combine_matmuls=False,
-                             max_cross_replica_sum_buffer_size=0,
-                             max_reduce_scatter_buffer_size=0,
-                             max_inter_ipu_copies_buffer_size=0,
-                             max_send_recv_cluster_size=0,
-                             minimum_remote_tensor_size=128,
-                             merge_remote_buffers=False,
-                             gather_simplifier=True,
-                             triangular_solve_expander_block_size=0,
-                             cholesky_block_size=0,
-                             enable_fast_math=False):
+def set_optimization_options(
+    opts,
+    combine_embedding_lookups=False,
+    combine_matmuls=False,
+    max_cross_replica_sum_buffer_size=0,
+    max_reduce_scatter_buffer_size=0,
+    max_inter_ipu_copies_buffer_size=0,
+    max_send_recv_cluster_size=0,
+    minimum_remote_tensor_size=128,
+    merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+    gather_simplifier=True,
+    triangular_solve_expander_block_size=0,
+    cholesky_block_size=0,
+    enable_fast_math=False):
   """Set the IPU options related to performance / optimizations.
 
   .. code-block:: python
@@ -514,13 +568,9 @@ def set_optimization_options(opts,
       in order to be consider for being stored in remote memory.
     merge_remote_buffers: Whether to merge compatible remote buffers. Merging
       of remote buffers can allow for more code re-use if the only difference
-      between computations are the remote buffers being accessed. One of:
-        - False: Do not attempt to merge any remote buffers.
-        - True: Attempt to merge all compatible remote buffers.
-        - None: Merge remote buffers only when it is considered beneficial
-          according to a simple heuristic predicting its possibility to enable
-          code re-use (the default).
-
+      between computations are the remote buffers being accessed. Must be a
+      :py:class:`~tensorflow.python.ipu.utils.MergeRemoteBuffersBehaviour`.
+      Defaults to `MergeRemoteBuffersBehaviour.NO_MERGING`.
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
@@ -558,6 +608,20 @@ def set_optimization_options(opts,
       return threestate_pb2.THREESTATE_ON
     return threestate_pb2.THREESTATE_OFF
 
+  # Backwards compatibility
+  if not isinstance(merge_remote_buffers, MergeRemoteBuffersBehaviour):
+    logging.warn(
+        "Passing a boolean or None value for `merge_remote_buffers` is"
+        " deprecated and will be removed in a future release. The argument must"
+        " now be a valid `MergeRemoteBuffersBehaviour`. The old values map to"
+        " the new values as follows:"
+        "  * True  -> MergeRemoteBuffersBehaviour.MERGE"
+        "  * False -> MergeRemoteBuffersBehaviour.NO_MERGING"
+        "  * None  -> MergeRemoteBuffersBehaviour.IF_BENEFICIAL")
+    merge_remote_buffers = bool_to_three_state(merge_remote_buffers)
+  else:
+    merge_remote_buffers = merge_remote_buffers.value
+
   # Internally embedding lookups are implemented using multiSlice operations.
   opts.enable_multi_slice_combiner = combine_embedding_lookups
   opts.enable_matmul_combiner = combine_matmuls
@@ -566,7 +630,7 @@ def set_optimization_options(opts,
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.minimum_remote_tensor_size = minimum_remote_tensor_size
-  opts.remote_buffer_merging_mode = bool_to_three_state(merge_remote_buffers)
+  opts.remote_buffer_merging_mode = merge_remote_buffers
   opts.disable_gather_simplifier = not gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
@@ -907,15 +971,15 @@ def set_report_options(opts,
 def set_ipu_model_options(opts,
                           compile_ipu_code=True,
                           tiles_per_ipu=None,
-                          ipu_model_version=None):
+                          ipu_model_version="ipu2"):
   """Set the IPU Model options.
 
   Args:
     compile_ipu_code: Whether or not to actually compile real IPU code for
       modelling.
     tiles_per_ipu: The number of tiles per IPU Model device.
-    ipu_module_version: Specify the ipu version to be used by the IPU Model.
-      Options are "ipu1" or "ipu2", `None` defaults to "ipu2".
+    ipu_model_version: Specify the IPU version to be used by the IPU Model.
+      Must be one of "ipu1" or "ipu2" (default).
 
   Returns:
     The IpuOptions configuration protobuf, with IPU model options set.
@@ -923,8 +987,6 @@ def set_ipu_model_options(opts,
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
   if tiles_per_ipu:
     opts.ipu_model_config.tiles_per_ipu = tiles_per_ipu
-  if ipu_model_version is None:
-    ipu_model_version = "ipu2"
   opts.ipu_model_config.ipu_model_version = ipu_model_version
 
   return opts
@@ -979,7 +1041,6 @@ def set_floating_point_behaviour_options(opts,
     esr: Enable stochastic rounding.
     nanoo: Enable Not-a-Number on overflow mode.
   """
-  opts.floating_point_behaviour.flags_set = True
   opts.floating_point_behaviour.inv = inv
   opts.floating_point_behaviour.div0 = div0
   opts.floating_point_behaviour.oflo = oflo
@@ -1298,8 +1359,8 @@ def select_ipus(opts, indices):
 
 
 def set_ipu_connection_type(opts,
-                            connection_type=None,
-                            ipu_version=None,
+                            connection_type=DeviceConnectionType.ALWAYS,
+                            ipu_version="",
                             enable_remote_buffers=False):
   """ Configure when to attach to the device. For example, you can use
       this to compile and cache a program without attaching to an IPU,
@@ -1320,9 +1381,9 @@ def set_ipu_connection_type(opts,
   Args:
     opts: An IpuOptions session control protobuf.
     connection_type: One of `DeviceConnectionType`.
-                     Defaults to `DeviceConnectionType.ALWAYS` if None.
-    ipu_version: Version of the IPU hardware used (int). E.g. 1 for Mk1
-                 and 2 for Mk2. Required if the `connection_type`
+                     Defaults to `DeviceConnectionType.ALWAYS`.
+    ipu_version: Version of the IPU hardware to use (string). Must be one of
+                 "ipu1", "ipu2" or "". Only required if the `connection_type`
                  provided is `DeviceConnectionType.PRE_COMPILE` or
                  `DeviceConnectionType.NEVER`.
     enable_remote_buffers: When `connection_type` is
@@ -1333,23 +1394,23 @@ def set_ipu_connection_type(opts,
   Returns:
     The IpuOptions configuration protobuf.
   """
-  connection_type = connection_type if connection_type \
-                                    else DeviceConnectionType.ALWAYS
 
-  if connection_type == DeviceConnectionType.NEVER and ipu_version is None:
-    raise Exception("`ipu_version` must be set when `connection_type` is set "
-                    "to `DeviceConnectionType.NEVER`")
-
-  if (connection_type == DeviceConnectionType.PRE_COMPILE
-      and ipu_version is None):
-    raise Exception("`ipu_version` must be set when `connection_type` is set "
-                    "to `DeviceConnectionType.PRE_COMPILE`")
+  if ipu_version == "" and connection_type in [
+      DeviceConnectionType.NEVER, DeviceConnectionType.PRE_COMPILE
+  ]:
+    raise Exception("`ipu_version` must be specified when `connection_type` is"
+                    f"set to `{connection_type}`.")
 
   opts.device_connection_type = connection_type.value
 
-  if ipu_version is not None:
-    opts.ipu_version = ipu_version
-    opts.has_ipu_version = True
+  # Passing an int is deprecated
+  if isinstance(ipu_version, int):
+    logging.warn(
+        "Passing an integer for ipu_version is deprecated and will be removed"
+        " in a future version. Pass a string that looks like 'ipu1' or 'ipu2'"
+        " instead.")
+    ipu_version = "ipu" + str(ipu_version)
+  opts.ipu_version = ipu_version
 
   opts.enable_remote_buffers_without_device = enable_remote_buffers
 
