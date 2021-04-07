@@ -15,6 +15,7 @@
 
 import numpy as np
 
+from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
@@ -28,12 +29,14 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
 
-class IoTilesTest(test_util.TensorFlowTestCase):
+class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @parameterized.parameters([True, False])
   @test_util.deprecated_graph_mode_only
-  def testTensorPlacementAndExchanges(self):
+  def testTensorPlacementAndExchanges(self, buffer_fits_on_io_tiles):
     tiles_per_ipu = 1216
     num_io_tiles = 32
     num_compute_tiles = tiles_per_ipu - num_io_tiles
+    proportion = 100 if buffer_fits_on_io_tiles else 0.1
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors((data, data))
@@ -56,9 +59,11 @@ class IoTilesTest(test_util.TensorFlowTestCase):
                                           compile_ipu_code=False,
                                           tiles_per_ipu=tiles_per_ipu)
 
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
+    cfg = ipu_utils.set_io_tile_options(
+        cfg,
+        num_io_tiles=num_io_tiles,
+        place_ops_on_io_tiles=True,
+        io_tile_available_memory_proportion=proportion)
 
     cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
     ipu_utils.configure_ipu_system(cfg)
@@ -85,8 +90,12 @@ class IoTilesTest(test_util.TensorFlowTestCase):
           compute_tensors.append(t)
 
       self.assertGreater(len(io_tensors), 0)
+
       for t in io_tensors:
-        self.assertLessEqual(len(t.tiles), num_io_tiles)
+        if buffer_fits_on_io_tiles:
+          self.assertLessEqual(len(t.tiles), num_io_tiles)
+        else:
+          self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
       self.assertGreater(len(compute_tensors), 0)
       for t in compute_tensors:
@@ -98,9 +107,11 @@ class IoTilesTest(test_util.TensorFlowTestCase):
           "infeed/*/inter-tileset-copy",  # copy from IO tiles to compute tiles
           "matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
       ]
-      self.assertFalse(
-          tu.missing_whitelist_entries_in_names(exchanges, expected_exchanges),
-          exchanges)
+      if buffer_fits_on_io_tiles:
+        self.assertFalse(
+            tu.missing_whitelist_entries_in_names(exchanges,
+                                                  expected_exchanges),
+            exchanges)
 
   @test_util.deprecated_graph_mode_only
   def testTensorLayoutOnIoTiles(self):

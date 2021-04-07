@@ -212,6 +212,7 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
     ],
+    shard_count = 3,  # as can't have differing config in same process
 )
 
 tf_py_test(

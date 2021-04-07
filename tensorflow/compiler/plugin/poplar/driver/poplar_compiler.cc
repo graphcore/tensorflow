@@ -1155,6 +1155,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   const auto num_ipus = target.getNumIPUs();
   const auto num_shards = NumIPUsInShards(module.get());
   const auto replication_factor = num_ipus / num_shards;
+  TF_ASSIGN_OR_RETURN(const auto num_io_tiles, GetNumIoTiles(poplar_executor));
 
   // Check that it's divisible.
   if (num_ipus % num_shards) {
@@ -1232,6 +1233,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetCholeskyBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
       poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles(),
+      poplar_executor->GetIoTileAvailableMemoryProportion(),
       EnableProgressBar(module.get()));
 
   if (replication_factor > 1) {
@@ -1423,7 +1425,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<HostComputeScheduleOptimizer>();
     pipeline.AddPass<InterIpuCopyInserter>();
-    pipeline.AddPass<IoTilesPlacer>(poplar_executor->ShouldPlaceOpsOnIoTiles());
+    pipeline.AddPass<IoTilesPlacer>(
+        poplar_executor->ShouldPlaceOpsOnIoTiles(), num_io_tiles,
+        target.getBytesPerTile(),
+        poplar_executor->GetIoTileAvailableMemoryProportion());
     pipeline.AddPass<InterTilesetCopyInserter>();
     pipeline.AddPass<TupleSimplifier>(true);
     pipeline.AddPass<FixRootInstructionsPass>();
