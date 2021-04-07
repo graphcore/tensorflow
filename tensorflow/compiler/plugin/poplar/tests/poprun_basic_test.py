@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import os
 import numpy as np
+
+import popdist
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session
@@ -24,32 +25,21 @@ from tensorflow.python.ipu.ops.replication_ops import replication_index
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
-# Prerequisite for running this test on a POD system:
-#
-# Create a partition with two IPUs and two GCDs:
-# $ vipu-admin create partition part --size 2 --num-gcds 2 --cluster clust
-#
-# After that you should have two IPUs like this:
-# $ gc-info --list-devices
-# Graphcore device listing:
-#
-# -+- Id: [0], target: [Fabric], PCI Domain: [3]
-# -+- Id: [1], target: [Fabric], PCI Domain: [2]
 
-
-class MultiReplicaDistributionTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
   @test_util.deprecated_graph_mode_only
   def test_cross_replica_sum(self):
-    rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
-    size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
-
-    data = np.array([2.0], dtype=np.float32)
+    num_local_replicas = popdist.getNumLocalReplicas()
+    num_total_replicas = popdist.getNumTotalReplicas()
+    data = np.array([0.0] * num_local_replicas, dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensor_slices((data,))
-    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="infeed")
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(
+        dataset, feed_name="infeed", replication_factor=num_local_replicas)
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        feed_name="outfeed", replication_factor=num_local_replicas)
 
     def my_body(acc, x):
-      index = math_ops.cast(replication_index(), np.float32) + 1.0
+      index = math_ops.cast(replication_index(), np.float32)
       acc += cross_replica_sum(index)
       acc += x * x
       return acc, outfeed.enqueue(index)
@@ -65,19 +55,24 @@ class MultiReplicaDistributionTest(test_util.TensorFlowTestCase):  # pylint: dis
 
     with session.Session() as sess:
       config = ipu.utils.create_ipu_config()
-      config = ipu.utils.select_ipus(config, indices=[rank])
+      config = ipu.utils.select_ipus(config, indices=[popdist.getDeviceId()])
 
       config = ipu.utils.set_experimental_multi_replica_distribution_options(
-          config, process_count=size, process_index=rank)
+          config,
+          process_count=popdist.getNumInstances(),
+          process_index=popdist.getInstanceIndex())
 
       ipu.utils.configure_ipu_system(config)
 
       sess.run(init_op)
       res = sess.run(result)
-      dequeued = sess.run(dequeue_op)
+      [dequeued] = sess.run(dequeue_op)
 
-      self.assertEqual(dequeued, rank + 1.0)
-      self.assertEqual(res, 4.0 + np.sum(range(size + 1)))
+      replica_offset = popdist.getReplicaIndexOffset()
+      self.assertAllEqual(
+          dequeued,
+          np.arange(replica_offset, replica_offset + num_local_replicas))
+      self.assertEqual(res, np.sum(np.arange(num_total_replicas)))
 
 
 if __name__ == "__main__":

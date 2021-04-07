@@ -84,3 +84,8 @@ filegroup(
     name = "mpirun",
     srcs = glob(["**/mpirun"]),
 )
+
+filegroup(
+    name = "poprun",
+    srcs = glob(["**/poprun"]),
+)
