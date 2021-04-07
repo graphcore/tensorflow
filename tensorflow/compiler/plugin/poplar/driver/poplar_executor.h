@@ -502,6 +502,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }
 
+  double GetIoTileAvailableMemoryProportion() const {
+    return current_config_.io_tile_available_memory_proportion();
+  }
+
   bool ShouldPlaceOpsOnIoTiles() const {
     return current_config_.place_ops_on_io_tiles() && GetNumIoTiles() > 0;
   }

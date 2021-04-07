@@ -1071,18 +1071,29 @@ def set_floating_point_behaviour_options(opts,
   return opts
 
 
-def set_io_tile_options(opts, num_io_tiles, place_ops_on_io_tiles=None):
+def set_io_tile_options(opts,
+                        num_io_tiles,
+                        place_ops_on_io_tiles=None,
+                        io_tile_available_memory_proportion=0.9):
   """Set the number of tiles reserved for I/O per IPU.
 
   Args:
     num_io_tiles: Number of tiles to reserve I/O.
     place_ops_on_io_tiles: Whether to place TensorFlow I/O operations on the
       I/O tiles. The value `None` leaves the current value unchanged.
+    io_tile_available_memory_proportion: Proportion of I/O tiles memory which
+      can be used to store data in, with the remaining memory assumed to be
+      used by code. If the size of data which is to be stored on I/O tiles
+      exceeds the total I/O tiles memory multiplied by this proportion, then
+      a warning message will appear and the operations will not be placed on
+      I/O tiles.
+
 
   Returns:
     The IpuOptions configuration protobuf.
   """
   opts.num_io_tiles = num_io_tiles
+  opts.io_tile_available_memory_proportion = io_tile_available_memory_proportion
 
   if place_ops_on_io_tiles is not None:
     if place_ops_on_io_tiles and num_io_tiles == 0:

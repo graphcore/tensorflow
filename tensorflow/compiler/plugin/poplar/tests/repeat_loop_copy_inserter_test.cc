@@ -63,7 +63,7 @@ ENTRY entry () -> s32[] {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  EXPECT_TRUE(IoTilesPlacer(true).Run(module).ValueOrDie());
+  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x4000, 0.5).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
   EXPECT_TRUE(RepeatLoopCopyInserter().Run(module).ValueOrDie());
 
@@ -126,7 +126,7 @@ ENTRY entry () -> s32[] {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  EXPECT_TRUE(IoTilesPlacer(true).Run(module).ValueOrDie());
+  EXPECT_TRUE(IoTilesPlacer(true, 32, 0x4000, 0.5).Run(module).ValueOrDie());
   EXPECT_TRUE(InterTilesetCopyInserter().Run(module).ValueOrDie());
 
   // Don't expect this pass to change the module.

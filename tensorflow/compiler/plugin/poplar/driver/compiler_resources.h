@@ -165,6 +165,8 @@ struct CompilerResources {
 
   int64 num_io_tiles;
 
+  double io_tile_available_memory_proportion;
+
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
 
   absl::flat_hash_map<std::string,
@@ -201,7 +203,8 @@ struct CompilerResources {
       bool remote_memory_supported, const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
       bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
-      int64 num_io_tiles, bool enable_progress_bar)
+      int64 num_io_tiles, double io_tile_available_memory_proportion,
+      bool enable_progress_bar)
       : annotations(module),
         information(information),
         global_floating_point_behaviour(floating_point_behaviour),
@@ -230,7 +233,9 @@ struct CompilerResources {
         enable_experimental_remote_buffer_embedding(
             enable_experimental_remote_buffer_embedding),
         enable_fast_math(enable_fast_math),
-        num_io_tiles(num_io_tiles) {
+        num_io_tiles(num_io_tiles),
+        io_tile_available_memory_proportion(
+            io_tile_available_memory_proportion) {
     if (enable_progress_bar) {
       progress_bar = absl::make_unique<ProgressBar>(module);
     } else {
@@ -262,6 +267,7 @@ struct CompilerResources {
         /*enable_experimental_remote_buffer_embedding=*/false,
         /*enable_fast_math=*/false,
         /*num_io_tiles=*/0,
+        /*io_tile_available_memory_proportion*/ 0.9,
         /*enable_progress_bar=*/false);
   }
 };

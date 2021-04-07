@@ -41,6 +41,8 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
                                    parameterized.TestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
+    number_of_io_tiles = 32
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -100,7 +102,7 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
         self,
         14172,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
-        number_of_io_tiles=32)
+        number_of_io_tiles=number_of_io_tiles)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
