@@ -219,8 +219,8 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     // Add any necessary padding before scatter.
     TF_ASSIGN_OR_RETURN(parameter, PadInput(cluster, parameter, builder));
 
-    HloInstruction* scatter = builder->AddInstruction(
-        CreateReduceScatter({parameter}, in_comp_shape));
+    HloInstruction* scatter = builder->AddInstruction(CreateReduceScatter(
+        in_comp_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_ADD));
     context->MapInstruction(cluster_input, scatter);
     return input;
   }
