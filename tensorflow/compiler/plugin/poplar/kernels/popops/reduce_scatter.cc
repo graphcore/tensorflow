@@ -29,12 +29,15 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
   explicit PopopsReduceScatter(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("replication_factor", &replication_factor_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("op", &op_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
     const TensorShape input_shape = ctx->InputShape(0);
     OP_REQUIRES(ctx, TensorShapeUtils::IsVector(input_shape),
                 errors::InvalidArgument("Input must be vector"));
+
+    attribute_map_.AddAttribute("op", op_);
 
     const int64 input_length = input_shape.dim_size(0);
     const int64 output_length =
@@ -64,6 +67,7 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
   // operation. It *should* be the same as the global replication factor but
   // since it is raw user input it may, erroneously, not be.
   int64 replication_factor_;
+  std::string op_;
 };
 
 REGISTER_XLA_OP(Name("IpuReduceScatter").Device(DEVICE_IPU_XLA_JIT),

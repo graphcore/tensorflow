@@ -27,8 +27,9 @@ namespace poplarplugin {
 
 class HloReduceScatterInstruction : public HloPoplarInstruction {
  public:
-  explicit HloReduceScatterInstruction(absl::Span<HloInstruction* const> inputs,
-                                       const Shape outputShape);
+  explicit HloReduceScatterInstruction(const Shape outputShape,
+                                       absl::Span<HloInstruction* const> inputs,
+                                       CollectiveOperator op);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -40,18 +41,23 @@ class HloReduceScatterInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
+  CollectiveOperator GetCollectiveOperator() const;
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
 
  private:
+  CollectiveOperator op_;
+
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateReduceScatter(
-    absl::Span<HloInstruction* const> input, const Shape& shape);
+    const Shape& shape, absl::Span<HloInstruction* const> input,
+    CollectiveOperator op);
 
 }  // namespace poplarplugin
 }  // namespace xla
