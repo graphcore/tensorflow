@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod", "poprun_py_test")
 load("//tensorflow:tensorflow.bzl", "py_binary", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load(
     "//tensorflow/core/platform:default/build_config.bzl",
@@ -998,6 +998,17 @@ cc_library(
         "@jsoncpp_git//:jsoncpp",
     ],
     alwayslink = True,
+)
+
+cc_library(
+    name = "poplar_test_base",
+    testonly = True,
+    srcs = ["driver/tools/hlo_poplar_test_base.cc"],
+    hdrs = ["driver/tools/hlo_poplar_test_base.h"],
+    deps = [
+        ":driver",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
 )
 
 # When creating a new set of ops the following needs to be done:
@@ -3290,8 +3301,10 @@ xla_test(
     srcs = ["tests/graph_caching_with_remote_buffer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
+    tags = ["hw_poplar_test"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
@@ -4563,14 +4576,14 @@ tf_xla_py_test(
     ],
 )
 
-horovod_py_test(
-    name = "multi_replica_distribution_test",
-    size = "medium",
-    srcs = ["tests/multi_replica_distribution_test.py"],
-    main = "tests/multi_replica_distribution_test.py",
-    num_processes = 2,
+poprun_py_test(
+    name = "poprun_basic_test",
+    size = "large",
+    srcs = ["tests/poprun_basic_test.py"],
+    main = "tests/poprun_basic_test.py",
+    num_instances = 2,
+    num_replicas = 4,
     deps = [
-        ":test_utils_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
@@ -5122,6 +5135,7 @@ test_suite(
         "pipeline_visitor_utils_test",
         "poplar_algebraic_simplifier_test",
         "poplar_executable_runner_test",
+        "poprun_basic_test",
         "post_serialize_gradient_accumulation_test",
         "pre_compile_test",
         "random_ops",

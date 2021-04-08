@@ -1488,15 +1488,16 @@ const bool PoplarExecutor::IpuOptionsConfigured() const { return configured_; }
 
 bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
 
-Status PoplarExecutor::AttachToPoplarDevice() {
+StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
+    absl::Span<const poplar::Device> device_list, int32 ordinal,
+    bool wait_for_device) {
   TENSORFLOW_TRACEPOINT();
-  if (device_attached_) {
-    return InternalError("Already attached to device");
+  if (device_list.empty()) {
+    return InvalidArgumentStrCat(
+        "No device matches the requested configuration for ordinal ", ordinal,
+        ".");
   }
 
-  const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-  const bool wait_for_device =
-      ConnectionType() == IpuDeviceConnectionType::ON_DEMAND;
   const uint64 on_demand_device_poll_time =
       std::max<uint64>(PoplarXlaFlags::Get().on_demand_device_poll_time, 100);
   const uint64 on_demand_device_poll_time_us =
@@ -1506,6 +1507,54 @@ Status PoplarExecutor::AttachToPoplarDevice() {
 
   tensorflow::Env* env = tensorflow::Env::Default();
   auto start_time = std::chrono::steady_clock::now();
+
+  bool logged_message = false;
+  while (true) {
+    std::size_t attached;
+    for (attached = 0; attached < device_list.size(); ++attached) {
+      // Try to attach to that device.
+      if (device_list[attached].attach()) {
+        break;
+      }
+    }
+
+    if (attached < device_list.size()) {
+      return attached;
+    }
+
+    if (wait_for_device) {
+      auto now_time = std::chrono::steady_clock::now();
+      auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now_time - start_time);
+
+      if (elapsed_time.count() > on_demand_device_timeout) {
+        return InternalErrorStrCat(
+            "Timed out trying to find an available device for ordinal ",
+            ordinal, ".");
+      } else {
+        if (!logged_message) {
+          LOG(INFO) << "Currently there is no available device for ordinal ",
+              ordinal, ". Waiting for one to become available.";
+          logged_message = true;
+        }
+        env->SleepForMicroseconds(on_demand_device_poll_time_us);
+      }
+    } else {
+      return InternalErrorStrCat(
+          "Could not find an available device for ordinal ", ordinal, ".");
+    }
+  }
+}
+
+Status PoplarExecutor::AttachToPoplarDevice() {
+  TENSORFLOW_TRACEPOINT();
+  if (device_attached_) {
+    return InternalError("Already attached to device");
+  }
+
+  const bool wait_for_device =
+      ConnectionType() == IpuDeviceConnectionType::ON_DEMAND;
+  const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
 
   try {
     if (!ipu_.TargetConfigured()) {
@@ -1523,41 +1572,11 @@ Status PoplarExecutor::AttachToPoplarDevice() {
               ".");
         }
       } else {
-        const int32 cfg_index =
-            current_config_.device_config(ordinal_).cfg_index();
-        bool logged_message = false;
-        while (true) {
-          if (ipu_.Device().attach()) {
-            break;
-          }
-
-          if (wait_for_device) {
-            auto now_time = std::chrono::steady_clock::now();
-            auto elapsed_time =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now_time - start_time);
-
-            if (elapsed_time.count() > on_demand_device_timeout) {
-              return InternalErrorStrCat(
-                  "Timed out trying to attach to the requested device "
-                  "configuration index ",
-                  cfg_index, ".");
-            } else {
-              if (!logged_message) {
-                LOG(INFO) << "Specified device at device configuration index "
-                          << cfg_index
-                          << " is currently unavailable. Waiting for it to "
-                             "become available.";
-                logged_message = true;
-              }
-              env->SleepForMicroseconds(on_demand_device_poll_time_us);
-            }
-          } else {
-            return InternalErrorStrCat(
-                "Could not attach to the requested device configuration index ",
-                cfg_index, ".");
-          }
-        }
+        auto& device = ipu_.Device();
+        TF_ASSIGN_OR_RETURN(
+            std::size_t device_index,
+            AttachToPoplarDevice(absl::Span<const poplar::Device>(&device, 1),
+                                 ordinal_, wait_for_device));
       }
     } else {
       // Poplar device would already be set if we were using the model.
@@ -1568,51 +1587,10 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Hardware devices
       auto device_list =
           GetDeviceManager().getDevices(target.getTargetType(), num_local_ipus);
-      if (device_list.empty()) {
-        return InvalidArgumentStrCat(
-            "No device matches the requested configuration for ordinal ",
-            ordinal_, ".");
-      }
-
-      bool logged_message = false;
-      while (true) {
-        bool attached = false;
-        for (auto& d : device_list) {
-          // Try to attach to that device.
-          if (d.attach()) {
-            ipu_.SetDevice(std::move(d));
-            attached = true;
-            break;
-          }
-        }
-
-        if (attached) {
-          break;
-        }
-        if (wait_for_device) {
-          auto now_time = std::chrono::steady_clock::now();
-          auto elapsed_time =
-              std::chrono::duration_cast<std::chrono::milliseconds>(now_time -
-                                                                    start_time);
-
-          if (elapsed_time.count() > on_demand_device_timeout) {
-            return InternalErrorStrCat(
-                "Timed out trying to find an available device for ordinal ",
-                ordinal_, ".");
-          } else {
-            if (!logged_message) {
-              LOG(INFO)
-                  << "Currently there is no available device for ordinal ",
-                  ordinal_, ". Waiting for one to become available.";
-              logged_message = true;
-            }
-            env->SleepForMicroseconds(on_demand_device_poll_time_us);
-          }
-        } else {
-          return InternalErrorStrCat(
-              "Could not find an available device for ordinal ", ordinal_, ".");
-        }
-      }
+      TF_ASSIGN_OR_RETURN(
+          std::size_t attached,
+          AttachToPoplarDevice(device_list, ordinal_, wait_for_device));
+      ipu_.SetDevice(std::move(device_list.at(attached)));
     }
 
     // If real HW only

@@ -31,67 +31,76 @@ namespace {
 
 using OutlineRemoteBuffersTest = HloTestBase;
 
-std::string GetValidHlo() {
-  const string& hlo = R"(
+std::string GetValidHlo(int64 n = 0, int64 replication_factor = 1,
+                        int64 shard_size = 0) {
+  std::string hlo = R"(
 HloModule module
 
 comp_0 {
-  c0_param_0 = f32[] parameter(0)
-  c0_param_1 = f32[] parameter(1)
-  c0_param_2 = f32[] parameter(2)
-  c0_param_3 = f32[] parameter(3)
-  c0_add = f32[] add(c0_param_2, c0_param_1)
-  c0_subtract = f32[] subtract(c0_param_2, c0_param_1)
-  ROOT c0_t = (f32[], f32[], f32[]) tuple(c0_param_0, c0_add, c0_subtract)
+  c0_param_0 = f32[$N] parameter(0)
+  c0_param_1 = f32[$RN] parameter(1)
+  c0_param_2 = f32[$RN] parameter(2)
+  c0_param_3 = f32[$RN] parameter(3)
+  c0_add = f32[$RN] add(c0_param_2, c0_param_1)
+  c0_subtract = f32[$RN] subtract(c0_param_2, c0_param_1)
+  ROOT c0_t = (f32[$N], f32[$RN], f32[$RN]) tuple(c0_param_0, c0_add, c0_subtract)
 }
 
 comp_1 {
-  c1_param_0 = f32[] parameter(0)
-  c1_param_1 = f32[] parameter(1)
-  c1_param_2 = f32[] parameter(2)
-  c1_param_3 = f32[] parameter(3)
-  c1_add = f32[] add(c1_param_2, c1_param_1)
-  c1_subtract = f32[] subtract(c1_param_2, c1_param_1)
-  ROOT c1_t = (f32[], f32[], f32[]) tuple(c1_param_0, c1_add, c1_subtract)
+  c1_param_0 = f32[$N] parameter(0)
+  c1_param_1 = f32[$RN] parameter(1)
+  c1_param_2 = f32[$RN] parameter(2)
+  c1_param_3 = f32[$RN] parameter(3)
+  c1_add = f32[$RN] add(c1_param_2, c1_param_1)
+  c1_subtract = f32[$RN] subtract(c1_param_2, c1_param_1)
+  ROOT c1_t = (f32[$N], f32[$RN], f32[$RN]) tuple(c1_param_0, c1_add, c1_subtract)
 }
 
 ENTRY main {
-  param_0 = f32[] parameter(0)
-  param_1 = f32[] parameter(1)
-  param_2 = f32[] parameter(2)
-  param_3 = f32[] parameter(3)
-  param_4 = f32[] parameter(4)
-  param_5 = f32[] parameter(5)
-  param_6 = f32[] parameter(6)
-  param_7 = f32[] parameter(7)
+  param_0 = f32[$N] parameter(0)
+  param_1 = f32[$N] parameter(1)
+  param_2 = f32[$N] parameter(2)
+  param_3 = f32[$N] parameter(3)
+  param_4 = f32[$N] parameter(4)
+  param_5 = f32[$N] parameter(5)
+  param_6 = f32[$N] parameter(6)
+  param_7 = f32[$N] parameter(7)
 
-  load_0 = f32[] custom-call(param_0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
-  load_1 = f32[] custom-call(param_1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
-  load_2 = f32[] custom-call(param_2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load_0 = f32[$RN] custom-call(param_0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_1 = f32[$RN] custom-call(param_1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_2 = f32[$RN] custom-call(param_2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
 
-  c0 = (f32[], f32[], f32[]) call(param_6, load_0, load_1, load_2), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
-  c0_gte0 = f32[] get-tuple-element(c0), index=0
-  c0_gte1 = f32[] get-tuple-element(c0), index=1
-  c0_gte2 = f32[] get-tuple-element(c0), index=2
+  c0 = (f32[$N], f32[$RN], f32[$RN]) call(param_6, load_0, load_1, load_2), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c0_gte0 = f32[$N] get-tuple-element(c0), index=0
+  c0_gte1 = f32[$RN] get-tuple-element(c0), index=1
+  c0_gte2 = f32[$RN] get-tuple-element(c0), index=2
 
-  new_param_0 = f32[] custom-call(param_0, c0_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
-  new_param_1 = f32[] custom-call(param_1, c0_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  new_param_0 = f32[$N] custom-call(param_0, c0_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
+  new_param_1 = f32[$N] custom-call(param_1, c0_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
 
-  load_3 = f32[] custom-call(param_3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
-  load_4 = f32[] custom-call(param_4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
-  load_5 = f32[] custom-call(param_5), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  load_3 = f32[$RN] custom-call(param_3), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_4 = f32[$RN] custom-call(param_4), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_5 = f32[$RN] custom-call(param_5), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
 
-  c1 = (f32[], f32[], f32[]) call(param_7, load_3, load_4, load_5), to_apply=comp_1, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
-  c1_gte0 = f32[] get-tuple-element(c1), index=0
-  c1_gte1 = f32[] get-tuple-element(c1), index=1
-  c1_gte2 = f32[] get-tuple-element(c1), index=2
+  c1 = (f32[$N], f32[$RN], f32[$RN]) call(param_7, load_3, load_4, load_5), to_apply=comp_1, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  c1_gte0 = f32[$N] get-tuple-element(c1), index=0
+  c1_gte1 = f32[$RN] get-tuple-element(c1), index=1
+  c1_gte2 = f32[$RN] get-tuple-element(c1), index=2
 
-  new_param_3 = f32[] custom-call(param_3, c1_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
-  new_param_4 = f32[] custom-call(param_4, c1_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":1}\n"
+  new_param_3 = f32[$N] custom-call(param_3, c1_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
+  new_param_4 = f32[$N] custom-call(param_4, c1_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
 
-  ROOT t = (f32[], f32[], f32[], f32[], f32[], f32[]) tuple(new_param_0, new_param_1, new_param_3, new_param_4, c0_gte0, c1_gte0)
+  ROOT t = (f32[$N], f32[$N], f32[$N], f32[$N], f32[$RN], f32[$RN]) tuple(new_param_0, new_param_1, new_param_3, new_param_4, c0_gte0, c1_gte0)
 }
 )";
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$RN", shard_size ? std::to_string(shard_size) : std::string(),
+      true);
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$R", std::to_string(replication_factor), true);
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$N", n ? std::to_string(n) : std::string(), true);
+
   return hlo;
 }
 
@@ -297,9 +306,40 @@ ENTRY main {
               ::testing::ElementsAre(1, 2, 0));
 }
 
-TEST_F(OutlineRemoteBuffersTest, TestOutline) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(GetValidHlo()));
+struct OutlinePartitionedRemoteBuffersTestSpec {
+  unsigned n;
+  unsigned replication_factor;
+  unsigned shard_size;
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const OutlinePartitionedRemoteBuffersTestSpec& spec) {
+  return os << "{ "
+            << "n: " << spec.n
+            << ", replication factor: " << spec.replication_factor
+            << ", shard_size: " << spec.shard_size << " }";
+}
+
+class OutlinePartitionedRemoteBuffersTest
+    : public HloTestBase,
+      public ::testing::WithParamInterface<
+          OutlinePartitionedRemoteBuffersTestSpec> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    OutlinePartitionedRemoteBuffersTestCases,
+    OutlinePartitionedRemoteBuffersTest,
+    ::testing::ValuesIn(std::vector<OutlinePartitionedRemoteBuffersTestSpec>{
+        {0, 1, 0},
+        {8, 1, 8},
+        {8, 2, 4},
+        {10, 3, 4},
+    }));
+
+TEST_P(OutlinePartitionedRemoteBuffersTest, TestOutline) {
+  auto param = GetParam();
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetValidHlo(
+                       param.n, param.replication_factor, param.shard_size)));
 
   ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
   ASSERT_TRUE(OutlineRemoteBuffers().Run(module.get()).ValueOrDie());
