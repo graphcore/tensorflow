@@ -85,6 +85,17 @@ enum ConvType {
   */
 };
 
+enum CollectiveOperator {
+  COLLECTIVE_OP_ADD = 0;
+  COLLECTIVE_OP_MUL = 1;
+  COLLECTIVE_OP_MIN = 2;
+  COLLECTIVE_OP_MAX = 3;
+  COLLECTIVE_OP_LOGICAL_AND = 4;
+  COLLECTIVE_OP_LOGICAL_OR = 5;
+  COLLECTIVE_OP_SQUARE_ADD = 6;
+  COLLECTIVE_OP_LOCAL = 7;
+};
+
 // An enum representing a subset of tiles per IPU.
 enum Tileset {
   TILESET_COMPUTE_TILES = 0;

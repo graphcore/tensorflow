@@ -468,11 +468,13 @@ HloModule top
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{}\n"
+  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
   %arg1 = f16[4] parameter(1)
-  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{}\n"
+  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
   %arg2 = f16[4] parameter(2)
-  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{}\n"
+  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
+  %arg3 = f16[4] parameter(3)
+  %r3 = f16[4] custom-call(arg3), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_LOCAL\"}\n"
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
 }
   )";
@@ -493,7 +495,7 @@ HloModule top
 
   ASSERT_EQ(absl::c_count_if(entry->instructions(),
                              IsPoplarInstruction(PoplarOp::ReduceScatter)),
-            3);
+            4);
 
   // Schedule and combine.
   HloMemoryScheduler scheduler(
@@ -512,9 +514,10 @@ HloModule top
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
 
-  // There should be a single combined reduce scatter.
+  // There should be a single combined reduce scatter with op=ADD and one with
+  // op=LOCAL.
   ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceScatter)),
-            1);
+            2);
 }
 
 TEST_F(CombineInstructionsTest, TestCombineSendToHost) {

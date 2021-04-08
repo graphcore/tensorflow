@@ -23,6 +23,7 @@ REGISTER_OP("IpuReduceScatter")
     .Input("input: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("op: string")
     .Attr("replication_factor: int")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 replication_factor;

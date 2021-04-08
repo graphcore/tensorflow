@@ -27,8 +27,10 @@ namespace xla {
 namespace poplarplugin {
 
 HloReduceScatterInstruction::HloReduceScatterInstruction(
-    absl::Span<HloInstruction* const> inputs, const Shape shape)
-    : HloPoplarInstruction(shape, inputs, PoplarOp::ReduceScatter) {}
+    const Shape shape, absl::Span<HloInstruction* const> inputs,
+    CollectiveOperator op)
+    : HloPoplarInstruction(shape, inputs, PoplarOp::ReduceScatter, op),
+      op_(op) {}
 
 absl::flat_hash_set<int64> HloReduceScatterInstruction::AllocatingIndices()
     const {
@@ -55,21 +57,28 @@ HloPoplarBufferDescriptions HloReduceScatterInstruction::GetBufferDescriptions()
 bool HloReduceScatterInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> CreateReduceScatter(
-    absl::Span<HloInstruction* const> inputs, const Shape& shape) {
-  return absl::make_unique<HloReduceScatterInstruction>(inputs, shape);
+    const Shape& shape, absl::Span<HloInstruction* const> inputs,
+    CollectiveOperator op) {
+  return absl::make_unique<HloReduceScatterInstruction>(shape, inputs, op);
 }
 
 std::unique_ptr<HloInstruction>
 HloReduceScatterInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateReduceScatter(operands, shape);
+  return CreateReduceScatter(shape, operands, op_);
 }
 
 std::vector<std::string>
 HloReduceScatterInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back(absl::StrCat("op=", CollectiveOperator_Name(op_)));
+  return attributes;
+}
+
+CollectiveOperator HloReduceScatterInstruction::GetCollectiveOperator() const {
+  return op_;
 }
 
 namespace {
@@ -78,7 +87,14 @@ static HloPoplarInstructionFactory reduce_scatter_factory(
     PoplarOp::ReduceScatter,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
-      return CreateReduceScatter(call->operands(), call->shape());
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      CollectiveOperator op;
+      TF_ASSIGN_OR_RETURN(std::string op_string,
+                          attribute_map.GetAttributeAsString("op"));
+      if (!CollectiveOperator_Parse(op_string, &op)) {
+        return InternalError("Failed to parse reduce-scatter `op` attribute.");
+      }
+      return CreateReduceScatter(call->shape(), call->operands(), op);
     });
 
 }  // namespace
