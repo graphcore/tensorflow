@@ -29,8 +29,8 @@ REGISTER_OP("IpuAllGather")
       int32 replication_factor = 0;
       TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
-      TF_RETURN_IF_ERROR(c->Concatenate(
-          c->input(0), c->MakeShape({replication_factor}), &output));
+      TF_RETURN_IF_ERROR(c->Concatenate(c->MakeShape({replication_factor}),
+                                        c->input(0), &output));
 
       c->set_output(0, output);
       return Status::OK();

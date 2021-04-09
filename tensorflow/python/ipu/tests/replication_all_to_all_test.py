@@ -67,6 +67,12 @@ class TestAllGather(test_util.TensorFlowTestCase):
         self.assertAllEqual(result[replica][6], [6] * 8)
         self.assertAllEqual(result[replica][7], [7] * 8)
 
+  @test_util.deprecated_graph_mode_only
+  def testAllGatherShapeInference(self):
+    x = array_ops.placeholder(np.float32, shape=(2, 4))
+    y = gen_popops_ops.ipu_all_gather(x, replication_factor=8)
+    self.assertAllEqual((8, 2, 4), y.shape)
+
   @tu.test_uses_ipus(num_ipus=8)
   @test_util.deprecated_graph_mode_only
   def testSerializedMultiUpdateAdd(self):
