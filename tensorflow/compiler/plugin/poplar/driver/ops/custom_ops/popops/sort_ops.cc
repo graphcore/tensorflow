@@ -73,6 +73,12 @@ class SortOp : public PoplarOpDef {
           "Current Sort implementation only supports GT/LT/GE/LE comparisons");
     }
 
+    if (sort->is_stable()) {
+      LOG(INFO) << "Detected a stable sort instruction " << inst->ToString()
+                << ", however stable sort is not supported and an unstable "
+                   "sort is performed instead.";
+    }
+
     poplar::program::Sequence prog({}, debug_info);
     // Get the inplace input/outputs.
     TF_ASSIGN_OR_RETURN(

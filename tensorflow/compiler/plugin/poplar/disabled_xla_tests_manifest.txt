@@ -338,7 +338,8 @@ ComparatorsTest.CompareGtF32 POPLAR
 MatrixTest.GetMatrixDiagonal_S32 POPLAR // Don't support int32 reduction.
 MatrixTest.GetMatrixDiagonal_S64 POPLAR // Don't support int64 reduction.
 
-SortingTest.TopKFullSortWithDuplicates POPLAR // T7292 Requires stable sort.
+SortingTest.TopKFullSortWithDuplicates POPLAR // T9438 Requires stable sort.
+SortingTest.TopKFullSortWithDuplicates2Partitions POPLAR // T9438 Requires stable sort.
 
 MathExhaustiveTest POPLAR // Precision errors
 

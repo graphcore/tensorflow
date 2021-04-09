@@ -95,17 +95,24 @@ StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random unif
 StatelessRandomOpsTest.testDistributionOfStatelessRandomUniform # Unsupported non-constant range
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
 SvdOpTest # Seg fault
+UnaryOpsTest.testIntOps$ # Unsupported cast
+UnaryOpsTest.testFloatOps$ # Different NaN behaviour on sign
+UnaryOpsTest.testCast$  # Unsupported unsgined behaviour
 UnaryOpsTest.testAllTypeOps # Need bitwise reductions
 WhileTest.testCountingLoopHandrolledC64 # C64
 WhileTest.testNestedWhileLoopWithMaxItersFromOuterContext # badly constructed test
+XlaOpsNumericalTest.testGather$ # Implementation defined out of bounds behaviour
 XlaOpsNumericalTest.testShiftRightArithmetic  # Unsigned int
 XlaOpsNumericalTest.testShiftRightLogical # Unsigned int
+XlaOpsNumericalTest.testVariadicReduce # Variadic reduction not supported
 XlaSortOpTest.testTopK_200000
 XlaSortOpTest.testTopKLarge
 XlaSortOpTest.testTopK2D_200000
 XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
-XlaSortOpTest.testInTopKLarge
+XlaSortOpTest.testTopK$ # Too large on CPU target
+XlaSortOpTest.testTopK2D #  Too large on CPU target
+XlaSortOpTest.testTopKZeros$ # T37228
 MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
 MatrixDiagPartTest.testBatch # need popops::reduce(OR, int)
 MatrixDiagPartTest.testPadding # need popops::reduce(OR, int)
