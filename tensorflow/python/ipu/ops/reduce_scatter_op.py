@@ -20,8 +20,8 @@ Popops reduce scatter operator
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
-def reduce_scatter(x, replication_factor, name=None):
-  """Reduce (sum) the given replicated tensor with the result scattered across
+def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
+  """Reduce the given replicated tensor with the result scattered across
   the replicas. For an input of shape `[num_elements]`, the output will have
   shape `[ceil(num_elements / replication_factor)]`. If `replication_factor`
   does not evenly divide `num_elements`, the result is zero-padded. Example:
@@ -36,10 +36,14 @@ def reduce_scatter(x, replication_factor, name=None):
   Args:
     x: The input `Tensor`. Must have rank 1.
     replication_factor: The replication factor of the model.
+    op: Reduce operation, valid ops are: COLLECTIVE_OP_ADD,
+    COLLECTIVE_OP_MUL, COLLECTIVE_OP_MIN, COLLECTIVE_OP_MAX,
+    COLLECTIVE_OP_LOGICAL_AND, COLLECTIVE_OP_LOGICAL_OR,
+    COLLECTIVE_OP_SQUARE_ADD and COLLECTIVE_OP_LOCAL.
     name: Optional op name.
 
   Returns:
     A `Tensor` with the result for this replica.
   """
   return gen_popops_ops.ipu_reduce_scatter(
-      x, replication_factor=replication_factor, name=name)
+      x, replication_factor=replication_factor, op=op, name=name)

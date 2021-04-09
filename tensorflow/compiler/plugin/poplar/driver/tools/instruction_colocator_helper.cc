@@ -23,6 +23,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_to_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
@@ -263,6 +264,14 @@ class ReduceScatterColocatorHelper : public InstructionColocatorHelper {
   int64 GetColocateBufferSize(
       const CompilerInformation& information) const override {
     return information.max_reduce_scatter_buffer_size;
+  }
+
+  bool CanColocateExtra(const HloInstruction* a,
+                        const HloInstruction* b) const override {
+    auto* ra = Cast<HloReduceScatterInstruction>(a);
+    auto* rb = Cast<HloReduceScatterInstruction>(b);
+
+    return ra->GetCollectiveOperator() == rb->GetCollectiveOperator();
   }
 };
 

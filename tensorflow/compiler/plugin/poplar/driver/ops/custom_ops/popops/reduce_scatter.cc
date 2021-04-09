@@ -17,17 +17,44 @@ limitations under the License.
 #include <popops/ElementWise.hpp>
 #include <popops/Pad.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
+
+StatusOr<popops::CollectiveOperator> ToPoplarCollectiveOperator(
+    CollectiveOperator op) {
+  switch (op) {
+    case CollectiveOperator::COLLECTIVE_OP_ADD:
+      return popops::CollectiveOperator::ADD;
+    case CollectiveOperator::COLLECTIVE_OP_MUL:
+      return popops::CollectiveOperator::MUL;
+    case CollectiveOperator::COLLECTIVE_OP_MIN:
+      return popops::CollectiveOperator::MIN;
+    case CollectiveOperator::COLLECTIVE_OP_MAX:
+      return popops::CollectiveOperator::MAX;
+    case CollectiveOperator::COLLECTIVE_OP_LOGICAL_AND:
+      return popops::CollectiveOperator::LOGICAL_AND;
+    case CollectiveOperator::COLLECTIVE_OP_LOGICAL_OR:
+      return popops::CollectiveOperator::LOGICAL_OR;
+    case CollectiveOperator::COLLECTIVE_OP_SQUARE_ADD:
+      return popops::CollectiveOperator::SQUARE_ADD;
+    case CollectiveOperator::COLLECTIVE_OP_LOCAL:
+      return popops::CollectiveOperator::LOCAL;
+    default:
+      return InternalError("Invalid collective operator type.");
+  }
+}
 
 int64 PerReplicaLength(int64 length, int64 num_replicas) {
   return tensorflow::MathUtil::CeilOfRatio(length, num_replicas);
@@ -86,10 +113,15 @@ class ReduceScatterOp : public PoplarOpDef {
     poplar::Tensor interleaved_input =
         InterleavePerReplica(graph, inputs, res.replication_factor);
 
+    const HloReduceScatterInstruction* reduce_scatter_inst =
+        Cast<HloReduceScatterInstruction>(inst);
+    TF_ASSIGN_OR_RETURN(auto op,
+                        ToPoplarCollectiveOperator(
+                            reduce_scatter_inst->GetCollectiveOperator()));
     // Do the actual reduce scatter on the interleaved input.
     poplar::Tensor interleaved_output = gcl::reduceScatter(
-        graph, interleaved_input, popops::CollectiveOperator::ADD, seq,
-        {debug_info, "ReduceScatter"}, GetReplicatedCollectiveOptions(res));
+        graph, interleaved_input, op, seq, {debug_info, "ReduceScatter"},
+        GetReplicatedCollectiveOptions(res));
 
     // Deinterleave output.
     // Before: interleaved_output = [sum(a0), sum(a1), sum(b0)] (on replica 1/2)
