@@ -17,6 +17,11 @@ ________________
 We have removed several items that have been deprecated for at least one
 release.
 
+``tensorflow.python.ipu.ops.all_to_all_op.all_gather``
+
+  - The output shape has changed to have the `replication_factor` as the
+    outermost instead of innermost dimension, matching the documentation.
+
 Non-breaking changes
 ____________________
 
