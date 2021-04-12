@@ -143,6 +143,8 @@ struct CompilerResources {
 
   bool use_stable_norm_statistics;
 
+  int64 experimental_distributed_batch_norm_replica_group_size;
+
   bool remote_memory_supported;
 
   poplar::OptionFlags gcl_options;
@@ -194,8 +196,9 @@ struct CompilerResources {
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
       IpuSchedulingAlgorithm scheduler_selection, bool recomputation_enabled,
-      bool use_stable_norm_statistics, bool remote_memory_supported,
-      const poplar::OptionFlags& gcl_options,
+      bool use_stable_norm_statistics,
+      int64 experimental_distributed_batch_norm_replica_group_size,
+      bool remote_memory_supported, const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size, int64 cholesky_block_size,
       bool enable_experimental_remote_buffer_embedding, bool enable_fast_math,
       int64 num_io_tiles, bool enable_progress_bar)
@@ -217,6 +220,8 @@ struct CompilerResources {
         scheduler_selection(scheduler_selection),
         recomputation_enabled(recomputation_enabled),
         use_stable_norm_statistics(use_stable_norm_statistics),
+        experimental_distributed_batch_norm_replica_group_size(
+            experimental_distributed_batch_norm_replica_group_size),
         remote_memory_supported(remote_memory_supported),
         gcl_options(gcl_options),
         triangular_solve_expander_block_size(
@@ -249,6 +254,7 @@ struct CompilerResources {
         /*always_rearrange_copies_on_host=*/false,
         /*scheduler_selection=*/IpuSchedulingAlgorithm::CHOOSE_BEST,
         /*recomputation_enabled=*/false, /*use_stable_norm_statistics=*/false,
+        /*experimental_distributed_batch_norm_replica_group_size=*/1,
         /*remote_memory_supported=*/false,
         /*gcl_options=*/poplar::OptionFlags(),
         /*triangular_solve_expander_block_size=*/0,

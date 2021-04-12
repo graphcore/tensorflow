@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 
+#include <gcl/Collectives.hpp>
 #include <poplar/DebugContext.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplin/Norms.hpp>
@@ -28,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -203,6 +205,74 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
 
   // `beta` is appended to the name by the createNorm function
   return poplin::createNormBeta(graph, shuffled, {debug_name_and_id});
+}
+
+int64 CalculateNormBatchSize(const poplar::Tensor& t,
+                             int64 replica_group_size) {
+  CHECK_GT(t.rank(), 1);
+  return t.dim(0) * replica_group_size;
+}
+
+poplin::DistributedNormReduceCallback GetDistributedNormReduceCallback(
+    const std::string& debug_name_ref) {
+  const std::string debug_name = debug_name_ref;
+  return [debug_name](
+             poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+             poplar::program::Sequence& prog, unsigned replica_group_size,
+             const poplar::DebugContext& debug_context,
+             const poplar::OptionFlags& options)
+             -> std::vector<poplar::Tensor> {
+    PoplarOpDefDebugInfo debug_info(debug_context, debug_name);
+    const int64 num_inputs = inputs.size();
+    std::vector<poplar::Tensor> output_tensors(num_inputs);
+
+    // Keeps track of what types we have seen in a deterministic ordering.
+    std::vector<poplar::Type> seen_types;
+
+    // Merge all tensors of the same type and keep information about them to
+    // undo the merging.
+    struct TensorInfo {
+      const poplar::Tensor& tensor;
+      const int64 index;
+    };
+
+    absl::flat_hash_map<poplar::Type, std::vector<TensorInfo>, PoplarTypeHasher>
+        inputs_by_type;
+
+    for (int64 i = 0; i != num_inputs; ++i) {
+      const poplar::Type& type = inputs[i].elementType();
+      if (!inputs_by_type.contains(type)) {
+        seen_types.push_back(type);
+      }
+      inputs_by_type[type].push_back(TensorInfo{inputs[i], i});
+    }
+
+    // Do a single all-reduce per element type.
+    for (const poplar::Type& type : seen_types) {
+      const auto& tensor_infos = inputs_by_type.at(type);
+      // Merge the inputs.
+      std::vector<poplar::Tensor> input_type_tensors(tensor_infos.size());
+      absl::c_transform(tensor_infos, input_type_tensors.begin(),
+                        [](const TensorInfo& info) { return info.tensor; });
+      poplar::Tensor to_reduce =
+          FlattenAndConcatenateTensors(input_type_tensors);
+
+      poplar::Tensor reduced = gcl::allReduce(
+          graph, to_reduce, popops::CollectiveOperator::ADD, prog,
+          {gcl::CommGroupType::CONSECUTIVE, replica_group_size}, {debug_info},
+          options);
+
+      // Slice out the tensor and place them in the correct output positions.
+      std::vector<poplar::Tensor> output_type_tensors =
+          SliceTensorIntoTensorsLike(reduced, input_type_tensors);
+      CHECK_EQ(output_type_tensors.size(), tensor_infos.size());
+      for (int64 i = 0; i != tensor_infos.size(); ++i) {
+        output_tensors[tensor_infos[i].index] = output_type_tensors[i];
+      }
+    }
+
+    return output_tensors;
+  };
 }
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
@@ -393,50 +463,68 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
     }
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, debug_name_and_id, norm_opts,
-                 use_stable_statistics = res.use_stable_norm_statistics](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor operand = args[0];
-      poplar::Tensor scale = args[1];
-      poplar::Tensor offset = args[2];
+    auto& main_graph = GetMasterGraph(res);
+    auto func =
+        [&main_graph, &graph, debug_name_and_id, norm_opts,
+         use_stable_statistics = res.use_stable_norm_statistics,
+         replica_group_size =
+             res.experimental_distributed_batch_norm_replica_group_size](
+            std::vector<poplar::Tensor>& args,
+            poplar::program::Sequence& prog) {
+          poplar::Tensor operand = args[0];
+          poplar::Tensor scale = args[1];
+          poplar::Tensor offset = args[2];
 
-      // Move the channels.
-      operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
+          // Move the channels.
+          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
 
-      switch (norm_opts.type) {
-        case NormType::BatchNorm: {
-          poplar::Tensor inv_sd;
-          std::tie(args[4], inv_sd) = popnn::bn::batchNormStatistics(
-              graph, operand, norm_opts.epsilon, prog,
-              /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_name_and_id});
+          switch (norm_opts.type) {
+            case NormType::BatchNorm: {
+              poplar::Tensor inv_sd;
+              if (replica_group_size > 1) {
+                std::tie(args[4], inv_sd) =
+                    popnn::bn::distributedBatchNormStatistics(
+                        main_graph, operand, norm_opts.epsilon, prog,
+                        /*unbiasedVarEstimate=*/false,
+                        GetDistributedNormReduceCallback(
+                            "DistributedBatchNormStatistics"),
+                        CalculateNormBatchSize(operand, replica_group_size),
+                        use_stable_statistics, poplar::FLOAT,
+                        {debug_name_and_id});
+              } else {
+                std::tie(args[4], inv_sd) = popnn::bn::batchNormStatistics(
+                    graph, operand, norm_opts.epsilon, prog,
+                    /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                    poplar::FLOAT, {debug_name_and_id});
+              }
 
-          args[3] = BatchNormalise(graph, operand, scale, offset, args[4],
-                                   inv_sd, prog, {debug_name_and_id});
-          // For batch norm variance_or_inv_std_dev is variance, so we need to
-          // convert it.
-          args[5] = ConvertInvStdDevToVariance(graph, inv_sd, norm_opts.epsilon,
-                                               prog, {debug_name_and_id});
-          break;
-        }
-        case NormType::GroupNorm: {
-          // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-          // don't need to convert it.
-          std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
-              graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
-              /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
+              args[3] = BatchNormalise(graph, operand, scale, offset, args[4],
+                                       inv_sd, prog, {debug_name_and_id});
+              // For batch norm variance_or_inv_std_dev is variance, so we need
+              // to convert it.
+              args[5] = ConvertInvStdDevToVariance(
+                  graph, inv_sd, norm_opts.epsilon, prog, {debug_name_and_id});
+              break;
+            }
+            case NormType::GroupNorm: {
+              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+              // don't need to convert it.
+              std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
+                  graph, operand, norm_opts.epsilon, prog,
+                  *norm_opts.num_groups,
+                  /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                  poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
 
-          args[3] = popnn::gn::groupNormalise(
-                        graph, operand, scale, offset, args[4], args[5], prog,
-                        {debug_name_and_id}, norm_opts.flags)
-                        .first;
-          break;
-        }
-      }
-      args[3] = ShuffleNormOutputToTensorflow(args[3], norm_opts.feature_index);
-    };
+              args[3] = popnn::gn::groupNormalise(
+                            graph, operand, scale, offset, args[4], args[5],
+                            prog, {debug_name_and_id}, norm_opts.flags)
+                            .first;
+              break;
+            }
+          }
+          args[3] =
+              ShuffleNormOutputToTensorflow(args[3], norm_opts.feature_index);
+        };
 
     poplar::Tensor output, mean, variance_or_inv_std_dev;
     std::vector<poplar::Tensor> args = {arg_operand, arg_scale,
@@ -518,62 +606,77 @@ class NormGradOp : public PoplarOpDef {
     }
 
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, debug_name_and_id, norm_opts](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor operand = args[0];
-      poplar::Tensor scale = args[1];
-      poplar::Tensor mean = args[2];
-      poplar::Tensor variance_or_inv_std_dev = args[3];
-      poplar::Tensor grad_output = args[4];
+    auto& main_graph = GetMasterGraph(res);
+    auto func =
+        [&main_graph, &graph, debug_name_and_id, norm_opts,
+         replica_group_size =
+             res.experimental_distributed_batch_norm_replica_group_size](
+            std::vector<poplar::Tensor>& args,
+            poplar::program::Sequence& prog) {
+          poplar::Tensor operand = args[0];
+          poplar::Tensor scale = args[1];
+          poplar::Tensor mean = args[2];
+          poplar::Tensor variance_or_inv_std_dev = args[3];
+          poplar::Tensor grad_output = args[4];
 
-      // Move the channels.
-      operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
-      grad_output =
-          ShuffleNormInputToPoplar(grad_output, norm_opts.feature_index);
+          // Move the channels.
+          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
+          grad_output =
+              ShuffleNormInputToPoplar(grad_output, norm_opts.feature_index);
 
-      switch (norm_opts.type) {
-        case NormType::BatchNorm: {
-          // For batch norm variance_or_inv_std_dev is variance, so we need to
-          // convert it.
-          poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
-              graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
-              {debug_name_and_id});
-          poplar::Tensor operand_whitened =
-              popnn::bn::batchNormWhiten(graph, operand, mean, inv_sd, prog,
-                                         {debug_name_and_id, "WhitenedActs"});
+          switch (norm_opts.type) {
+            case NormType::BatchNorm: {
+              // For batch norm variance_or_inv_std_dev is variance, so we need
+              // to convert it.
+              poplar::Tensor inv_sd = ConvertVarianceToInvStdDev(
+                  graph, variance_or_inv_std_dev, norm_opts.epsilon, prog,
+                  {debug_name_and_id});
+              poplar::Tensor operand_whitened = popnn::bn::batchNormWhiten(
+                  graph, operand, mean, inv_sd, prog,
+                  {debug_name_and_id, "WhitenedActs"});
 
-          // Compute the grad for the operand.
-          args[5] = popnn::bn::batchNormGradients(
-              graph, operand_whitened, grad_output, inv_sd, scale, prog,
-              poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
-          // Compute the grads for the scale and offset.
-          std::tie(args[6], args[7]) = popnn::bn::batchNormParamGradients(
-              graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-              {debug_name_and_id, "ScaleOffsetGrads"});
-          break;
-        }
-        case NormType::GroupNorm: {
-          // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-          // don't need to convert it.
-          poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
-              graph, operand, mean, variance_or_inv_std_dev, prog,
-              {debug_name_and_id, "WhitenedActs"}, norm_opts.flags);
+              // Compute the grad for the operand.
+              if (replica_group_size > 1) {
+                args[5] = popnn::bn::distributedBatchNormGradients(
+                    main_graph, operand_whitened, grad_output, inv_sd, scale,
+                    prog,
+                    GetDistributedNormReduceCallback(
+                        "DistributedBatchNormGradients"),
+                    CalculateNormBatchSize(operand, replica_group_size),
+                    poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
+              } else {
+                args[5] = popnn::bn::batchNormGradients(
+                    graph, operand_whitened, grad_output, inv_sd, scale, prog,
+                    poplar::FLOAT, {debug_name_and_id, "OperandGrad"});
+              }
+              // Compute the grads for the scale and offset.
+              std::tie(args[6], args[7]) = popnn::bn::batchNormParamGradients(
+                  graph, operand_whitened, grad_output, prog, poplar::FLOAT,
+                  {debug_name_and_id, "ScaleOffsetGrads"});
+              break;
+            }
+            case NormType::GroupNorm: {
+              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+              // don't need to convert it.
+              poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
+                  graph, operand, mean, variance_or_inv_std_dev, prog,
+                  {debug_name_and_id, "WhitenedActs"}, norm_opts.flags);
 
-          // Compute the grad for the operand.
-          args[5] = popnn::gn::groupNormGradients(
-              graph, operand_whitened, grad_output, variance_or_inv_std_dev,
-              scale, prog, poplar::FLOAT, {debug_name_and_id, "OperandGrad"},
-              norm_opts.flags);
-          // Compute the grads for the scale and offset.
-          std::tie(args[6], args[7]) = popnn::gn::groupNormParamGradients(
-              graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-              {debug_name_and_id, "ScaleOffsetGrads"}, norm_opts.flags);
-          break;
-        }
-      }
-      args[5] = ShuffleNormOutputToTensorflow(args[5], norm_opts.feature_index);
-    };
+              // Compute the grad for the operand.
+              args[5] = popnn::gn::groupNormGradients(
+                  graph, operand_whitened, grad_output, variance_or_inv_std_dev,
+                  scale, prog, poplar::FLOAT,
+                  {debug_name_and_id, "OperandGrad"}, norm_opts.flags);
+              // Compute the grads for the scale and offset.
+              std::tie(args[6], args[7]) = popnn::gn::groupNormParamGradients(
+                  graph, operand_whitened, grad_output, prog, poplar::FLOAT,
+                  {debug_name_and_id, "ScaleOffsetGrads"}, norm_opts.flags);
+              break;
+            }
+          }
+          args[5] =
+              ShuffleNormOutputToTensorflow(args[5], norm_opts.feature_index);
+        };
 
     poplar::Tensor operand_grad, scale_grad, offset_grad;
     std::vector<poplar::Tensor> args = {
