@@ -121,6 +121,7 @@ py_library(
         "keras/layers/ipu_layer.py",
         "keras/layers/math.py",
         "keras/layers/normalization.py",
+        "keras/layers/recomputation.py",
         "keras/layers/rnn.py",
         "keras/losses/__init__.py",
         "keras/losses/ctc.py",
@@ -340,6 +341,21 @@ tf_py_test(
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
+)
+
+tf_py_test(
+    name = "keras_pipeline_recomputation_test",
+    size = "large",
+    srcs = ["tests/keras/keras_pipeline_recomputation_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+    shard_count = 2,
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
@@ -1792,6 +1808,7 @@ test_suite(
         "keras_models_comparison_test",
         "keras_normalization_test",
         "keras_pipeline_model_replication_test",
+        "keras_pipeline_recomputation_test",
         "keras_pipeline_save_restore_test",
         "keras_pipeline_sequential_replication_test",
         "keras_pipeline_test",

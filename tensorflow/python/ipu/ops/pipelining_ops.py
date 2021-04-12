@@ -988,7 +988,7 @@ def _pipeline_stage(func,
 
 def recomputation_checkpoint(tensors, name=None):
   """Operation for checkpointing values in a computational pipeline stage.
-  When recomputation is enabled, these values  will not be recomputed and they
+  When recomputation is enabled, these values will not be recomputed and they
   will be stored in memory instead.
 
   This operation can reduce memory liveness peaks when using recomputation if
@@ -998,7 +998,7 @@ def recomputation_checkpoint(tensors, name=None):
   This operation should be used with the
   `RecomputationMode.RecomputeAndBackpropagateInterleaved` pipelining
   recomputation mode.
-  Note that this operation has no effect when used with
+  Note that this operation has no effect when used with the
   `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.
 

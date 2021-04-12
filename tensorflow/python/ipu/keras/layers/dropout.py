@@ -26,9 +26,7 @@ from tensorflow.python.ops import array_ops
 
 
 class Dropout(Layer):
-  """Dropout layer optimized for running on the IPU."""
-  def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
-    """Creates a Dropout layer.
+  """Dropout layer optimized for running on the IPU.
 
   The Dropout layer randomly sets input units to 0 with a frequency of `rate`
   at each step during training. Inputs not set to 0 are scaled up by
@@ -46,6 +44,7 @@ class Dropout(Layer):
       be used to seed the random number generator that generates the dropout
       mask.
   """
+  def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
     super(Dropout, self).__init__(**kwargs)
     self.built = False
     self.seed = seed
