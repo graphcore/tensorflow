@@ -20,6 +20,7 @@ from __future__ import print_function
 import collections
 import contextlib
 import fnmatch
+from functools import reduce
 import json as js
 import re
 import os
@@ -426,6 +427,17 @@ class ReportJSON(object):
     return sum(self.events[IpuTraceEvent.COMPILE_END]["memory"]["liveness"]
                ["alwaysLive"]["bytesByTile"])
 
+  # Excluding always live
+  def get_peak_liveness(self):
+    # byProgram can be a nested tree of objects each with a "bytes" entry.
+    def _helper(prog):
+      # Reduce a generator so we only keep 2 values in memory at once.
+      return reduce(max, map(_helper, prog["children"]), prog["bytes"])
+
+    prog_livenesses = (self.events[IpuTraceEvent.COMPILE_END]["memory"]
+                       ["liveness"]["notAlwaysLive"]["byProgram"])
+    return reduce(max, map(_helper, prog_livenesses), 0)
+
   def get_total_tile_memory(self):
     return sum(self.get_each_tile_memory())
 
@@ -736,7 +748,6 @@ def test_uses_ipus(num_ipus, allow_ipu_model=False, func=None):
     executed without hardware.
   * func: the test function.
   """
-
   def decorator(f):
     def decorated(self, *args, **kwargs):
       num_available_ipus = get_ci_num_ipus()

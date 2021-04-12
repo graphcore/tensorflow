@@ -174,7 +174,7 @@ class SerialDense(Layer):
     if self.serialization_factor < 1:
       raise ValueError(
           'serialization_factor has to be at least 1, but was {}.'.format(
-              serialization_factor))
+              self.serialization_factor))
 
     inputs = math_ops.cast(inputs, self._compute_dtype)
 

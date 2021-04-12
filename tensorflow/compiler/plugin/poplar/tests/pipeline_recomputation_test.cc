@@ -643,7 +643,9 @@ stage_0_fwd {
   in1 = f32[2] get-tuple-element(infeed), index=0
   add = f32[2] add(in1, checkpoint1)
   checkpoint2 = f32[2] custom-call(add), custom_call_target="RecomputationCheckpoint"
-  ROOT tuple = (f32[2], f32[2]) tuple(in0, checkpoint2)
+  checkpoint3 = f32[2] custom-call(add), custom_call_target="RecomputationCheckpoint"
+  add2 = f32[2] add(in1, checkpoint3)
+  ROOT tuple = (f32[2], f32[2]) tuple(in0, checkpoint2, add2)
 }
 
 stage_1_fwd {
@@ -657,8 +659,10 @@ stage_1_bwd {
 stage_0_bwd {
   in0 = f32[2] parameter(0)
   in1 = f32[2] parameter(1)
+  in2 = f32[2] parameter(2)
   sub = f32[2] subtract(in0, in1)
-  ROOT tuple = (f32[2]) tuple(sub)
+  sub2 = f32[2] subtract(sub, in2)
+  ROOT tuple = (f32[2]) tuple(sub2)
 }
 
 resource_update {
@@ -670,12 +674,13 @@ resource_update {
 
 pipeline {
   in0 = f32[2] parameter(0)
-  stage_0 = (f32[2], f32[2]) call(in0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0 = (f32[2], f32[2], f32[2]) call(in0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_0 = f32[2] get-tuple-element(stage_0), index=0
   stage_0_1 = f32[2] get-tuple-element(stage_0), index=1
+  stage_0_2 = f32[2] get-tuple-element(stage_0), index=2
   stage_1 = () call(), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
   stage_1_bwd = () call(), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
-  stage_0_bwd = (f32[2]) call(stage_0_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0_bwd = (f32[2]) call(stage_0_1, stage_0_0, stage_0_2), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_bwd_0 = f32[2] get-tuple-element(stage_0_bwd), index=0
   call_ru = (f32[2]) call(stage_0_bwd_0, in0), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[2] get-tuple-element(call_ru), index=0
@@ -699,23 +704,23 @@ ENTRY e {
 
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
 
-  // Check that the root tuple of stage 0 has two extra outputs.
+  // Check that the root tuple of stage 0 has three extra outputs.
   auto stage0_fwd = stages.forward[0];
   auto stage0_fwd_root = stage0_fwd->to_apply()->root_instruction();
-  ASSERT_EQ(stage0_fwd_root->operand_count(), 4);
-  auto output2 = stage0_fwd_root->operand(2);
+  ASSERT_EQ(stage0_fwd_root->operand_count(), 6);
   auto output3 = stage0_fwd_root->operand(3);
+  auto output4 = stage0_fwd_root->operand(4);
 
-  if (output2->opcode() == HloOpcode::kParameter) {
-    EXPECT_TRUE(Match(output2, m::Parameter(0)));
-    EXPECT_TRUE(Match(output3, m::GetTupleElement(m::Infeed(), 0)));
-  } else {
-    EXPECT_TRUE(Match(output2, m::GetTupleElement(m::Infeed(), 0)));
+  if (output3->opcode() == HloOpcode::kParameter) {
     EXPECT_TRUE(Match(output3, m::Parameter(0)));
+    EXPECT_TRUE(Match(output4, m::GetTupleElement(m::Infeed(), 0)));
+  } else {
+    EXPECT_TRUE(Match(output3, m::GetTupleElement(m::Infeed(), 0)));
+    EXPECT_TRUE(Match(output4, m::Parameter(0)));
   }
 
   auto stage0_bwd = stages.backward[0];
-  ASSERT_EQ(stage0_bwd->operand_count(), 4);
+  ASSERT_EQ(stage0_bwd->operand_count(), 6);
   auto input2 = stage0_bwd->operand(2);
   auto input3 = stage0_bwd->operand(3);
   EXPECT_EQ(input2->opcode(), HloOpcode::kGetTupleElement);
@@ -727,32 +732,46 @@ ENTRY e {
     EXPECT_EQ(input2->tuple_index(), 3);
   }
 
-  // Check that the add is now recomputed.
+  // Check that the adds are now recomputed.
   auto stage0_bwd_root = stage0_bwd->to_apply()->root_instruction();
   VLOG(0) << stage0_bwd->to_apply()->ToString();
-  HloInstruction* recomputation_checkpoint;
+  HloInstruction* checkpoint3;
+  HloInstruction* subtract;
   EXPECT_TRUE(Match(
       stage0_bwd_root,
-      m::Tuple(m::Subtract(m::Op(&recomputation_checkpoint), m::Parameter()))));
-  // The recomputation checkpoint is not converted to a recomputation input
-  // because it's used by the root in the forward stage.
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RecomputationCheckpoint,
-                                  recomputation_checkpoint));
+      m::Tuple(m::Subtract(m::Op(&subtract),
+                           m::Add(m::Parameter(), m::Op(&checkpoint3))))));
+  // checkpoint3 is converted to a RecomputationInput even though it's a stage
+  // output since it has a non-root user.
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RecomputationInput, checkpoint3));
+
+  // checkpoint1 isn't converted to a RecomputationInput because it's
+  // checkpointing a parameter.
+  HloInstruction* checkpoint1;
   EXPECT_TRUE(Match(
-      recomputation_checkpoint,
-      m::CustomCall(m::Add(m::Parameter(), m::Op(&recomputation_checkpoint)))));
-  // The recomputation checkpoint is not converted to a recomputation input
-  // because it's checkpointing a parameter.
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RecomputationCheckpoint,
-                                  recomputation_checkpoint));
-  EXPECT_TRUE(Match(recomputation_checkpoint, m::CustomCall(m::Parameter())));
+      checkpoint3, m::CustomCall(m::Parameter(),
+                                 m::Add(m::Parameter(), m::Op(&checkpoint1)))));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::RecomputationCheckpoint, checkpoint1));
+
+  // checkpoint2 isn't converted to a RecomputationInput because its only a
+  // stage output.
+  HloInstruction* checkpoint2;
+  EXPECT_TRUE(
+      Match(subtract, m::Subtract(m::Op(&checkpoint2), m::Parameter())));
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::RecomputationCheckpoint, checkpoint2));
 
   EXPECT_TRUE(RecomputationCheckpointRemover().Run(module.get()).ValueOrDie());
 
   // It has been removed now.
-  EXPECT_TRUE(Match(stage0_bwd_root,
-                    m::Tuple(m::Subtract(m::Add(m::Parameter(), m::Parameter()),
-                                         m::Parameter()))));
+  EXPECT_TRUE(Match(
+      stage0_bwd_root,
+      m::Tuple(m::Subtract(
+          m::Subtract(m::Add(m::Parameter(), m::Parameter()), m::Parameter()),
+          m::Add(m::Parameter(),
+                 m::CustomCall(m::Parameter(),
+                               m::Add(m::Parameter(), m::Parameter())))))));
 }
 }  // namespace
 }  // namespace poplarplugin

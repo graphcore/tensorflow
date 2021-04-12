@@ -216,10 +216,11 @@ StatusOr<ClusterInfo> GetRecomputationCluster(HloInstruction* stage,
 
           // Store which instructions are checkpoints.
           if (IsRecomputationCheckpoint(inst)) {
-            const bool has_root_user = absl::c_count(inst->users(), root);
-            if (has_root_user) {
+            const bool only_root_user =
+                inst->users().size() == 1 && inst->users()[0] == root;
+            if (only_root_user) {
               VLOG(2) << "Skipping checkpoint " << inst->ToString()
-                      << " as it is a stage output.";
+                      << " as it is only a stage output.";
             } else if (inst->operand(0)->opcode() == HloOpcode::kParameter) {
               VLOG(2) << "Skipping checkpoint " << inst->ToString()
                       << " as it is a stage input.";
