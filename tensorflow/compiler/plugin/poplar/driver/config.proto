@@ -301,4 +301,7 @@ message IpuOptions {
 
   // Block size for triangular solve expander pass.
   int64 cholesky_block_size = 41;
+
+  // Group size for distributed batch norm.
+  int64 experimental_distributed_batch_norm_replica_group_size = 42;
 };
