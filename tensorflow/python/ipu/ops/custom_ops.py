@@ -25,12 +25,24 @@ from tensorflow.python.ipu.vertex_edsl import DefaultNameSource
 def codelet_expression_op(vertex_expression, *args):
   """Add a custom fused elementwise expression operation to the graph.
 
-  Note that no autograd is done on this fused operation because the autograd
-  code does not understand the internal structure of the fused codelet.
+  The automatic gradient calculation in TensorFlow does not have visibility
+  of the operations performed by this function and so this operation cannot
+  be used for training.
+
+  In the following example, the Python function ``my_custom_op()`` provides
+  the expression, and the arguments ``a``, ``b`` and ``c`` are the three
+  inputs from other parts of the TensorFlow graph.
+
+  .. code-block:: python
+
+    def my_custom_op(x, y, z):
+        return x * x + y * z
+
+    ipu.custom_ops.codelet_expression_op(my_custom_op, a, b, c)
 
   Args:
     vertex_expression: A Python function that defines the codelet expression.
-    args: Tensor inputs to the expression.
+    args: The tensor inputs to the expression.
 
   Returns:
    The Tensor which is a result of applying the elementwise operation
@@ -79,25 +91,26 @@ def precompiled_user_op(inputs,
 
   Args:
     inputs: The tensor inputs to the operation.
-    library_path: The path to the shared object that contains the functions
-      to build the Poplar operation in the graph.
-    gp_path: The path to the precompiled codelet file.
+    library_path: The path to the shared object file that contains the
+      functions to build the Poplar operation in the graph.
+    gp_path: The path to a precompiled codelet file, if you have one.
     outs: A dictionary describing the output tensor shapes and types.
-    name: The name of the operation.
-    op_name: The prefix of the functions inside the shard object file. This
+    name: The name of the operation in TensorFlow.
+    op_name: The prefix of the functions inside the shared object file. This
       defaults to 'Build'.
     separate_gradients:  When set to true, multiple gradient ops will be
       generated, one for each input. When false, a single gradient op will be
-      generated, which should produce the partial derivatives for all inputs.
-    inputs_with_gradients: When set, produce derivatives only for specified
-      inputs. List of input indices expected.
+      generated, which should produce the partial derivatives for all inputs
+      (or all inputs specified in `inputs_with_gradients`).
+    inputs_with_gradients: A list of input indices. If this is defined
+      then the op will only calculate derivatives for the specified inputs.
     attributes: An optional string object which is passed as an argument to the
-      Poplar function. Allows to specify function attributes which were not
+      build function. Allows you to specify function attributes which were not
       known at the compile time of the C++ Poplar function. Can be used to pass
-      a JSON or ProtoBuf serialized string to the Poplar function for an ease of
+      a JSON or ProtoBuf serialized string to the Poplar function for ease of
       use. See the documention for examples.
-    gradient_attributes: Same as `attribute`, however this is passed as the
-      `attribute` to the gradient operations (if training.)
+    gradient_attributes: The same as `attributes`, however this is passed as the
+      `attributes` argument to the gradient operation (if training).
 
   Returns:
     The array of tensor outputs.
@@ -169,17 +182,17 @@ def cpu_user_operation(inputs,
       to execute the operation.
     outs: A dictionary describing the output tensor shapes and types.
     name: The name of the operation.
-    op_name: The prefix of the functions inside the shard object file. This
+    op_name: The prefix of the functions inside the shared object file. This
       defaults to 'Callback'.
     separate_gradients:  When set to `True`, multiple gradient ops will be
       generated, one for each input. When `False`, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
-    inputs_with_gradients: When set, produce derivatives only for specified
-      inputs. List of input indices expected.
+    inputs_with_gradients: A list of input indices. If this is defined
+      then the op will only calculate derivatives for the specified inputs.
     attributes: An optional string object which is passed as an argument to the
-      Poplar function. Allows to specify function attributes which were not
+      Poplar function. Allows you to specify function attributes which were not
       known at the compile time of the C++ Poplar function. Can be used to pass
-      a JSON or ProtoBuf serialized string to the Poplar function for an ease of
+      a JSON or ProtoBuf serialized string to the Poplar function for ease of
       use. See the documention for examples.
     gradient_attributes: Same as `attribute`, however this is passed as the
       `attribute` to the gradient operations (if training.)
