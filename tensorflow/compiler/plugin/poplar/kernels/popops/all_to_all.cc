@@ -29,21 +29,16 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
 
   explicit PopopsAllGather(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("replication_factor", &replication_factor));
+                   ctx->GetAttr("replication_factor", &replica_group_size_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
-    // Just create the XLA instruction directly, we will catch this in the
-    // vistors and lower it to poplar from there. The last parameter, replica
-    // groups is ignored because for IPU we assume that we are always targeting
-    // all replicas likewise we ignore the split count.
-    //   ctx->SetOutput(0, xla::AllToAll(ctx->Input(0), split_dimension,
-    //                                    concat_dimension, 2, {}));
+    attribute_map_.AddAttribute("replica_group_size", replica_group_size_);
 
     // The output should be [replicationFactor][inputShape] shaped.
     const TensorShape input_shape = ctx->InputShape(0);
     TensorShape output_shape = ctx->InputShape(0);
-    output_shape.InsertDim(0, replication_factor);
+    output_shape.InsertDim(0, replica_group_size_);
 
     // Get the element type of the input
     xla::PrimitiveType input_type;
@@ -65,10 +60,7 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsAllGather);
 
-  // This replication factor refers to the factor passed by the user into the
-  // operation. It *should* be the same as the global replication factor but
-  // since it is raw user input it may, erroneously, not be.
-  tensorflow::int64 replication_factor;
+  tensorflow::int64 replica_group_size_;
 };
 
 REGISTER_XLA_OP(Name("IpuAllGather").Device(DEVICE_IPU_XLA_JIT),

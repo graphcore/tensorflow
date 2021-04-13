@@ -81,6 +81,21 @@ Changes to configuration API
     maps to the new value of ``MergeRemoteBuffersBehaviour.NO_MERGING``, however
     the docstring now correctly identifies the default value.
 
+Support for grouped collectives
+'''''''''''''''''''''''''''''''
+
+``tensorflow.python.ipu.ops.all_to_all_op.all_gather``
+``tensorflow.python.ipu.ops.reduce_scatter_op.reduce_scatter``
+
+  - The ``replication_factor`` can now be set to a value smaller than the
+    total number of replicas in the model, in which case the collective
+    operation will be performed within groups of the given size.
+
+``tensorflow.python.ipu.ops.cross_replica_ops.cross_replica_sum``
+
+  - A new optional argument ``replica_group_size`` is added for specifying
+    the number of replicas in each collective group. If not specified, there
+    is a single group containing all the replicas.
 
 Release 2.0
 ~~~~~~~~~~~

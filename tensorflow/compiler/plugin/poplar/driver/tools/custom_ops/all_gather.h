@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -28,7 +29,8 @@ namespace poplarplugin {
 class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
  public:
   explicit HloPoplarAllGatherInstruction(std::vector<HloInstruction*> inputs,
-                                         const Shape& output_shape);
+                                         const Shape& output_shape,
+                                         PoplarReplicaGroups replica_groups);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   bool AllocatingOutput() const override;
@@ -40,6 +42,8 @@ class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const override;
 
+  PoplarReplicaGroups GetPoplarReplicaGroups() const;
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -48,10 +52,13 @@ class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
+
+  PoplarReplicaGroups replica_groups_;
 };
 
 std::unique_ptr<HloInstruction> CreatePoplarAllGather(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape);
+    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    PoplarReplicaGroups replica_groups = {});
 
 }  // namespace poplarplugin
 }  // namespace xla

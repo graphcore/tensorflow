@@ -301,6 +301,28 @@ poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res) {
   return options;
 }
 
+StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
+                                        const CompilerResources& res) {
+  // We use ALL both if the group size is not set, and also if it is
+  // set equal to the total number of replicas. Using ALL in the
+  // latter case instead of CONSECUTIVE is more efficient and portable.
+  if (replica_groups.GroupSizeOr(res.replication_factor) ==
+      res.replication_factor) {
+    return gcl::CommGroup(gcl::CommGroupType::ALL, 0);
+  }
+
+  const auto replica_group_size = replica_groups.GroupSizeOrDie();
+  CHECK_NE(replica_group_size, 0);
+  if (res.replication_factor % replica_group_size != 0) {
+    return InvalidArgumentStrCat(
+        "The replica group size (got ", replica_group_size,
+        ") does not evenly divide the total number of replicas (got ",
+        res.replication_factor, ")");
+  }
+
+  return gcl::CommGroup(gcl::CommGroupType::CONSECUTIVE, replica_group_size);
+}
+
 StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
     const HloInstruction* inst, CompilerResources& res) {
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
