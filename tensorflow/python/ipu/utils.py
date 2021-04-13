@@ -442,7 +442,7 @@ def create_ipu_config(profiling=False,
   opts.disable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
-  opts.remote_buffer_merging_mode = threestate_pb2.THREESTATE_OFF
+  opts.remote_buffer_merging_mode = threestate_pb2.THREESTATE_UNDEFINED
 
   # Configure IpuOptions according to the passed arguments.
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
@@ -532,7 +532,7 @@ def set_optimization_options(
     max_inter_ipu_copies_buffer_size=0,
     max_send_recv_cluster_size=0,
     minimum_remote_tensor_size=128,
-    merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+    merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
     gather_simplifier=True,
     triangular_solve_expander_block_size=0,
     cholesky_block_size=0,
@@ -570,7 +570,7 @@ def set_optimization_options(
       of remote buffers can allow for more code re-use if the only difference
       between computations are the remote buffers being accessed. Must be a
       :py:class:`~tensorflow.python.ipu.utils.MergeRemoteBuffersBehaviour`.
-      Defaults to `MergeRemoteBuffersBehaviour.NO_MERGING`.
+      Defaults to `MergeRemoteBuffersBehaviour.IF_BENEFICIAL`.
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
