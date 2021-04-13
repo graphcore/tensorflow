@@ -77,9 +77,9 @@ Changes to configuration API
       - ``True``: ``MergeRemoteBuffersBehaviour.MERGE``
       - ``False``: ``MergeRemoteBuffersBehaviour.NO_MERGING``
       - ``None``: ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``
-    Note that the default value has not changed - the old value of ``False``
-    maps to the new value of ``MergeRemoteBuffersBehaviour.NO_MERGING``, however
-    the docstring now correctly identifies the default value.
+    The default value has also changed - the default is now
+    ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``, while before it was
+    ``False`` (disabled by default).
 
 Support for grouped collectives
 '''''''''''''''''''''''''''''''
