@@ -468,13 +468,13 @@ HloModule top
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
+  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
   %arg1 = f16[4] parameter(1)
-  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
+  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 2}\n"
   %arg2 = f16[4] parameter(2)
-  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\"}\n"
+  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_ADD\", \"replica_group_size\": 4}\n"
   %arg3 = f16[4] parameter(3)
-  %r3 = f16[4] custom-call(arg3), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_LOCAL\"}\n"
+  %r3 = f16[4] custom-call(arg3), custom_call_target="ReduceScatter", backend_config="{\"op\": \"COLLECTIVE_OP_LOCAL\", \"replica_group_size\": 4}\n"
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
 }
   )";
@@ -514,10 +514,12 @@ HloModule top
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
 
-  // There should be a single combined reduce scatter with op=ADD and one with
-  // op=LOCAL.
+  // There should be a three reduce scatters:
+  // - One combined with with op=ADD replica_group_size=2
+  // - One left alone with with op=ADD replica_group_size=4
+  // - One left alone with with op=LOCAL replica_group_size=4
   ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceScatter)),
-            2);
+            3);
 }
 
 TEST_F(CombineInstructionsTest, TestCombineSendToHost) {

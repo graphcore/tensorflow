@@ -28,7 +28,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       with session.Session() as s:
         t1 = random_ops.random_uniform([1000], dtype=dtypes.float32)
-        t2 = ipu.ops.cross_replica_ops.cross_replica_sum(t1, "crs")
+        t2 = ipu.ops.cross_replica_ops.cross_replica_sum(t1, name="crs")
         h1, h2 = s.run([t1, t2])
         self.assertEqual(list(h1), list(h2))
 

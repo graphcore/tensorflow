@@ -77,6 +77,12 @@ class AllGatherOp : public PoplarOpDef {
       return seq;
     }
 
+    const auto* all_gather_inst = Cast<HloPoplarAllGatherInstruction>(inst);
+    const auto replica_groups = all_gather_inst->GetPoplarReplicaGroups();
+    TF_ASSIGN_OR_RETURN(
+        const auto gcl_comm_group,
+        ToGclCommGroup(all_gather_inst->GetPoplarReplicaGroups(), res));
+
     // Keeps track of what types we have seen in a deterministic ordering.
     std::vector<poplar::Type> seen_types;
 
@@ -118,8 +124,8 @@ class AllGatherOp : public PoplarOpDef {
 
       // all gather the concatenated tensor.
       poplar::Tensor output =
-          gcl::allGather(GetMasterGraph(res), input, seq, {debug_info},
-                         GetReplicatedCollectiveOptions(res));
+          gcl::allGather(GetMasterGraph(res), input, seq, gcl_comm_group,
+                         {debug_info}, GetReplicatedCollectiveOptions(res));
 
       // Work out what each sub-tensor's element count is.
       std::vector<int64> element_count;

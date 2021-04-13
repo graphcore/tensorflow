@@ -363,6 +363,7 @@ cc_library(
         "driver/tools/ml_type_helper.cc",
         "driver/tools/offloading_util.cc",
         "driver/tools/pipeline_util.cc",
+        "driver/tools/poplar_replica_groups.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
@@ -551,6 +552,7 @@ cc_library(
         "driver/tools/ml_type_helper.h",
         "driver/tools/offloading_util.h",
         "driver/tools/pipeline_util.h",
+        "driver/tools/poplar_replica_groups.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/tensor_location.h",
         "driver/tools/tracepoint.h",
@@ -3011,6 +3013,18 @@ tf_cc_test(
 )
 
 tf_cc_test(
+    name = "poplar_replica_groups_test",
+    size = "small",
+    srcs = ["tests/poplar_replica_groups_test.cc"],
+    deps = [
+        ":poplar_lib",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
+tf_cc_test(
     name = "reorder_gradient_accumulation_pass_test",
     size = "small",
     srcs = [
@@ -5157,6 +5171,7 @@ test_suite(
         "pipeline_visitor_utils_test",
         "poplar_algebraic_simplifier_test",
         "poplar_executable_runner_test",
+        "poplar_replica_groups_test",
         "poprun_basic_test",
         "post_serialize_gradient_accumulation_test",
         "pre_compile_test",

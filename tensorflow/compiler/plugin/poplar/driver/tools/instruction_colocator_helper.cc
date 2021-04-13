@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "absl/memory/memory.h"
 #include "absl/types/optional.h"
+#include "google/protobuf/util/message_differencer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
@@ -233,8 +234,15 @@ class AllReduceColocatorHelper : public InstructionColocatorHelper {
  protected:
   bool CanColocateExtra(const HloInstruction* a,
                         const HloInstruction* b) const override {
-    // Make sure the same to_apply() computation is used.
-    return *a->to_apply() == *b->to_apply();
+    auto replica_group_cmp = [](const xla::ReplicaGroup& g1,
+                                const xla::ReplicaGroup& g2) {
+      return google::protobuf::util::MessageDifferencer::Equals(g1, g2);
+    };
+
+    // Make sure the same to_apply() computation and replica groups are used.
+    return *a->to_apply() == *b->to_apply() &&
+           absl::c_equal(a->replica_groups(), b->replica_groups(),
+                         replica_group_cmp);
   }
 };
 
@@ -271,7 +279,8 @@ class ReduceScatterColocatorHelper : public InstructionColocatorHelper {
     auto* ra = Cast<HloReduceScatterInstruction>(a);
     auto* rb = Cast<HloReduceScatterInstruction>(b);
 
-    return ra->GetCollectiveOperator() == rb->GetCollectiveOperator();
+    return ra->GetCollectiveOperator() == rb->GetCollectiveOperator() &&
+           ra->GetPoplarReplicaGroups() == rb->GetPoplarReplicaGroups();
   }
 };
 

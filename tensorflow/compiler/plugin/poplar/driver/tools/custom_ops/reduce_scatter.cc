@@ -28,9 +28,11 @@ namespace poplarplugin {
 
 HloReduceScatterInstruction::HloReduceScatterInstruction(
     const Shape shape, absl::Span<HloInstruction* const> inputs,
-    CollectiveOperator op)
-    : HloPoplarInstruction(shape, inputs, PoplarOp::ReduceScatter, op),
-      op_(op) {}
+    CollectiveOperator op, PoplarReplicaGroups replica_groups)
+    : HloPoplarInstruction(shape, inputs, PoplarOp::ReduceScatter, op,
+                           replica_groups),
+      op_(op),
+      replica_groups_(replica_groups) {}
 
 absl::flat_hash_set<int64> HloReduceScatterInstruction::AllocatingIndices()
     const {
@@ -56,17 +58,23 @@ HloPoplarBufferDescriptions HloReduceScatterInstruction::GetBufferDescriptions()
 
 bool HloReduceScatterInstruction::IsPopOpsElementwise() const { return false; }
 
+PoplarReplicaGroups HloReduceScatterInstruction::GetPoplarReplicaGroups()
+    const {
+  return replica_groups_;
+}
+
 std::unique_ptr<HloInstruction> CreateReduceScatter(
     const Shape& shape, absl::Span<HloInstruction* const> inputs,
-    CollectiveOperator op) {
-  return absl::make_unique<HloReduceScatterInstruction>(shape, inputs, op);
+    CollectiveOperator op, PoplarReplicaGroups replica_groups) {
+  return absl::make_unique<HloReduceScatterInstruction>(shape, inputs, op,
+                                                        replica_groups);
 }
 
 std::unique_ptr<HloInstruction>
 HloReduceScatterInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateReduceScatter(shape, operands, op_);
+  return CreateReduceScatter(shape, operands, op_, replica_groups_);
 }
 
 std::vector<std::string>
@@ -74,6 +82,7 @@ HloReduceScatterInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back(absl::StrCat("op=", CollectiveOperator_Name(op_)));
+  attributes.push_back("replica_groups=" + replica_groups_.ToString());
   return attributes;
 }
 
@@ -88,13 +97,22 @@ static HloPoplarInstructionFactory reduce_scatter_factory(
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+
       CollectiveOperator op;
       TF_ASSIGN_OR_RETURN(std::string op_string,
                           attribute_map.GetAttributeAsString("op"));
       if (!CollectiveOperator_Parse(op_string, &op)) {
         return InternalError("Failed to parse reduce-scatter `op` attribute.");
       }
-      return CreateReduceScatter(call->shape(), call->operands(), op);
+
+      TF_ASSIGN_OR_RETURN(
+          const auto replica_group_size,
+          attribute_map.GetAttributeAsInt64("replica_group_size"));
+      const auto replica_groups =
+          PoplarReplicaGroups::Consecutive(replica_group_size);
+
+      return CreateReduceScatter(call->shape(), call->operands(), op,
+                                 replica_groups);
     });
 
 }  // namespace

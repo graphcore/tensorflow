@@ -46,17 +46,26 @@ def all_to_all(x,
                                        name=name)
 
 
-def all_gather(x, replication_factor, name):
+def all_gather(x, replication_factor, name=None):
   """ Gather the data on all replicas to all other replicas. Each replica will
     have the exact same output.
 
     Args:
       x: The tensor to gather
-      replication_factor: The replication factor of the model.
+      replication_factor: The number of replicas in each collective group.
+        If less than the total number of replicas in the model, the replicas
+        are divided into consecutive groups of the given size, and the
+        collective operation is performed within each respective group.
+        If there are `N` total replicas denoted `{0, ... N-1}` and
+        `replication_factor` is `k`, then the groups are:
+        `{0, 1, ... k-1}, {k, ... 2k-1} ... {N-k-1, ... N-1}`.
+        Note that `N` must be evenly divisible by `k`, otherwise an exception
+        will be thrown during compilation.
       name: Optional op name.
 
     Returns:
-      A tensor of [num_replicas][x] with each replica having the same tensor.
+      A tensor of [replication_factor][x] with each replica in the same group
+      having the same tensor.
     """
   return gen_popops_ops.ipu_all_gather(x,
                                        replication_factor=replication_factor,
