@@ -1005,10 +1005,17 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     // Create a concatenated and flattened tensor of the inputs.
     auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
 
+    TF_ASSIGN_OR_RETURN(
+        const auto replica_groups,
+        PoplarReplicaGroups::FromXlaReplicaGroups(inst->replica_groups()));
+
+    TF_ASSIGN_OR_RETURN(const auto gcl_comm_group,
+                        ToGclCommGroup(replica_groups, res));
+
     // Replicated sum the concatenated tensor.
     gcl::allReduceInPlace(
         GetMasterGraph(res), flat_tensor, popops::CollectiveOperator::ADD, seq,
-        {debug_name_and_id}, GetReplicateAllReduceOptions(res));
+        gcl_comm_group, {debug_name_and_id}, GetReplicateAllReduceOptions(res));
   }
 
   for (int64 i = 0; i != flat_tensors.size(); ++i) {

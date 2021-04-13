@@ -94,6 +94,11 @@ class ReduceScatterOp : public PoplarOpDef {
     PoplarOpDefDebugInfo debug_info(debug_context, "ReduceScatterOp");
     poplar::program::Sequence seq({}, debug_info);
 
+    const auto* reduce_scatter_inst = Cast<HloReduceScatterInstruction>(inst);
+    const auto replica_groups = reduce_scatter_inst->GetPoplarReplicaGroups();
+    const auto replica_group_size =
+        replica_groups.GroupSizeOr(res.replication_factor);
+
     // Collect all the inputs.
     const int64 num_inputs = inst->operand_count();
     std::vector<poplar::Tensor> inputs(num_inputs);
@@ -111,17 +116,19 @@ class ReduceScatterOp : public PoplarOpDef {
     // Before: inputs = [[a0, a1, a2], [b0]] (per replica)
     // After: interleaved_input = [a0, a1, b0, a2, 0, 0] (per replica)
     poplar::Tensor interleaved_input =
-        InterleavePerReplica(graph, inputs, res.replication_factor);
+        InterleavePerReplica(graph, inputs, replica_group_size);
 
-    const HloReduceScatterInstruction* reduce_scatter_inst =
-        Cast<HloReduceScatterInstruction>(inst);
     TF_ASSIGN_OR_RETURN(auto op,
                         ToPoplarCollectiveOperator(
                             reduce_scatter_inst->GetCollectiveOperator()));
+
+    TF_ASSIGN_OR_RETURN(const auto gcl_comm_group,
+                        ToGclCommGroup(replica_groups, res));
+
     // Do the actual reduce scatter on the interleaved input.
     poplar::Tensor interleaved_output = gcl::reduceScatter(
-        graph, interleaved_input, op, seq, {debug_info, "ReduceScatter"},
-        GetReplicatedCollectiveOptions(res));
+        graph, interleaved_input, op, seq, gcl_comm_group,
+        {debug_info, "ReduceScatter"}, GetReplicatedCollectiveOptions(res));
 
     // Deinterleave output.
     // Before: interleaved_output = [sum(a0), sum(a1), sum(b0)] (on replica 1/2)
@@ -132,7 +139,7 @@ class ReduceScatterOp : public PoplarOpDef {
     int64 output_offset = 0;
     for (int64 i = 0; i < num_inputs; ++i) {
       const int64 replica_length =
-          PerReplicaLength(inputs[i].numElements(), res.replication_factor);
+          PerReplicaLength(inputs[i].numElements(), replica_group_size);
 
       poplar::Tensor output = interleaved_output.slice(
           output_offset, output_offset + replica_length);

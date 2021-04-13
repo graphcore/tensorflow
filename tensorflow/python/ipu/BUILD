@@ -1529,6 +1529,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "replication_grouped_collectives_test",
+    size = "large",
+    srcs = ["tests/replication_grouped_collectives_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 2,
+    tags = ["hw_poplar_test"],
+)
+
+tf_py_test(
     name = "sharded_and_replicated_test",
     size = "large",
     srcs = ["tests/sharded_and_replicated_test.py"],
@@ -1818,6 +1833,7 @@ test_suite(
         "replicated_seed_control_test",
         "replicated_stateful_gradient_accumulate_test",
         "replication_all_to_all_test",
+        "replication_grouped_collectives_test",
         "replication_normalise_test",
         "seed_control_test",
         "sequence_slice_test",

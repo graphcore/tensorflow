@@ -28,8 +28,11 @@ namespace poplarplugin {
 
 // Constructor.
 HloPoplarAllGatherInstruction::HloPoplarAllGatherInstruction(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape)
-    : HloPoplarInstruction(output_shape, inputs, PoplarOp::AllGather) {}
+    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    PoplarReplicaGroups replica_groups)
+    : HloPoplarInstruction(output_shape, inputs, PoplarOp::AllGather,
+                           replica_groups),
+      replica_groups_(replica_groups) {}
 
 absl::flat_hash_set<int64> HloPoplarAllGatherInstruction::AllocatingIndices()
     const {
@@ -57,23 +60,31 @@ bool HloPoplarAllGatherInstruction::IsPopOpsElementwise() const {
   return false;
 }
 
+PoplarReplicaGroups HloPoplarAllGatherInstruction::GetPoplarReplicaGroups()
+    const {
+  return replica_groups_;
+}
+
 // Creates an instance of a HloPoplarAllGatherInstruction
 std::unique_ptr<HloInstruction> CreatePoplarAllGather(
-    std::vector<HloInstruction*> inputs, const Shape& output_shape) {
-  return absl::make_unique<HloPoplarAllGatherInstruction>(inputs, output_shape);
+    std::vector<HloInstruction*> inputs, const Shape& output_shape,
+    PoplarReplicaGroups replica_groups) {
+  return absl::make_unique<HloPoplarAllGatherInstruction>(inputs, output_shape,
+                                                          replica_groups);
 }
 
 std::unique_ptr<HloInstruction>
 HloPoplarAllGatherInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreatePoplarAllGather({operands.begin(), operands.end()}, shape);
+  return CreatePoplarAllGather({operands.begin(), operands.end()}, shape,
+                               replica_groups_);
 }
 
 std::vector<std::string>
 HloPoplarAllGatherInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  return {"replica_groups=" + replica_groups_.ToString()};
 }
 
 namespace {
@@ -82,8 +93,17 @@ static HloPoplarInstructionFactory allgather_factory(
     PoplarOp::AllGather,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+
+      TF_ASSIGN_OR_RETURN(
+          const auto replica_group_size,
+          attribute_map.GetAttributeAsInt64("replica_group_size"));
+      const auto replica_groups =
+          PoplarReplicaGroups::Consecutive(replica_group_size);
+
       CHECK_EQ(call->operand_count(), 1);
-      return CreatePoplarAllGather({call->mutable_operand(0)}, call->shape());
+      return CreatePoplarAllGather({call->mutable_operand(0)}, call->shape(),
+                                   replica_groups);
     });
 
 }  // namespace

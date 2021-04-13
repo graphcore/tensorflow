@@ -19,6 +19,9 @@ from tensorflow.python.framework import ops
 
 
 @ops.RegisterGradient("IpuCrossReplicaSum")
-def _cross_replica_sum_grad(_, grads):
+def _cross_replica_sum_grad(op, grads):
   """Gradients for the IpuCrossReplicaSum op."""
-  return [gen_popops_ops.ipu_cross_replica_sum(grads)]
+  return [
+      gen_popops_ops.ipu_cross_replica_sum(
+          grads, replica_group_size=op.get_attr("replica_group_size"))
+  ]

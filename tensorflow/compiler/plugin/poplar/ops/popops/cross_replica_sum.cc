@@ -22,6 +22,7 @@ REGISTER_OP("IpuCrossReplicaSum")
     .Input("input: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("replica_group_size: int = 0")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 }  // namespace tensorflow
