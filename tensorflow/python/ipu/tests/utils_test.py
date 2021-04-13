@@ -89,7 +89,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     self.assertFalse(cfg.enable_matmul_combiner)
     self.assertEqual(cfg.remote_buffer_merging_mode,
-                     threestate_pb2.THREESTATE_OFF)
+                     threestate_pb2.THREESTATE_UNDEFINED)
     cfg = ipu.utils.set_optimization_options(
         cfg,
         combine_matmuls=True,
