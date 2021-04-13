@@ -25,6 +25,8 @@ The cache does not manage the files within the directory. It is your
 responsibility to delete files. No index is kept of the files, so they can be
 deleted without risk.
 
+.. _precompiling_executables:
+
 Pre-compiling executables
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -63,8 +65,8 @@ for a single IPU device (IPU version 2) and with remote buffers enabled, with
 the rest of the program unchanged.
 
 .. Note:: It is important to check whether the system you are pre-compiling for
-supports remote buffers as this is required for features such as optimizer state
-offloading.
+  supports remote buffers as this is required for features such as optimizer state
+  offloading.
 
 During the execution of the program, messages will appear with the information
 about what executables have been compiled and where they have been saved to.
@@ -84,9 +86,10 @@ your TensorFlow program were copied to and then run your TensorFlow program
 Unsupported Operations
 ######################
 
-TensorFlow programs which contain the following operations cannot be
+TensorFlow programs which contain the following cannot be
 pre-compiled:
 
-* Custom user operations for which ``is_hashable`` has not been set to ``True``.
+* Custom user operations for which ``is_hashable`` has not been set to ``True``
+  (see :ref:`custom_op_metadata`).
 
 * Programs containing ``tensorflow.python.ipu.scopes.outside_compilation_scope``.
