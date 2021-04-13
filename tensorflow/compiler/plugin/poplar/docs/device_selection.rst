@@ -8,11 +8,11 @@ devices, as described below.
 A Python context handler is available for setting up all appropriate scoping
 while creating the graph:
 
-.. literalinclude:: tutorial_sharding.py
-  :language: python
+.. code-block:: python
   :linenos:
-  :start-at: # Create the IPU section of the graph
-  :end-at: result = ipu.ipu_compiler.compile
+
+  with ipu_scope("/device:IPU:0"):
+    xla_result = ipu.ipu_compiler.compile(my_net, [x_data, y_data, p_angle])
 
 For very simple graphs, it is sufficient to use the IPU scope to define the
 parts of the graph which will be compiled.  For most graphs, the function
@@ -76,13 +76,15 @@ For more examples, see the documentation in :ref:`api-section`.
 
 Once the hardware structure has been specified, the API call
 ``ipu.utils.configure_ipu_system`` must be used to attach to and initialise the
-hardware.
+hardware:
 
-.. literalinclude:: tutorial_sharding.py
+.. code-block:: python
   :linenos:
-  :language: python
-  :start-at: # Configure the IPU system
-  :end-at: ipu.utils.configure_ipu_system
+
+  cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
+  cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+  cfg = ipu.utils.auto_select_ipus(cfg, NUM_IPUS)
+  ipu.utils.configure_ipu_system(cfg)
 
 
 
