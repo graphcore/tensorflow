@@ -640,19 +640,40 @@ def set_optimization_options(
   return opts
 
 
-def set_norm_options(opts, use_stable_statistics=False):
-  """Set the IPU options related to norms.
+def set_norm_options(opts,
+                     use_stable_statistics=False,
+                     experimental_distributed_batch_norm_replica_group_size=1):
+  """Set the IPU options related to normalisation operations. Note that these
+  options will be applied to all normalisation operations encountered
+  (Fused Batch Norm, IPU Specific Group Norm, IPU Specific Layer Norm and IPU
+  Specific Instance Norm).
 
   Args:
     use_stable_statistics: If True, computes the mean first and subtracts
       the activations by it before computing the variance. The
       implementation with this flag set to True is slower than when set
       to False.
+    experimental_distributed_batch_norm_replica_group_size: When executing
+      training fused batch norm operations, this option specifies how many
+      replicas to aggregate the batch statistics across.
+      For example if a model is being executed across four replicas and this
+      option is set to two, replicas 0 and 1 will be grouped together and
+      replicas 2 and 3 will be grouped together and the batch norm statistics
+      will be synchronously all-reduced every time the layer is executed
+      (including any recomputation) across the replicas within a group.
+      This option should not be used when using model parallelism (pipelining)
+      and it is not supported with I/O tiles.
+      This option is experimental and may be removed with short/no notice.
 
   Returns:
     The IpuOptions configuration protobuf.
   """
+  if experimental_distributed_batch_norm_replica_group_size < 1:
+    raise ValueError("experimental_distributed_batch_norm_replica_group_size"
+                     "needs to be at least 1.")
   opts.use_stable_norm_statistics = use_stable_statistics
+  opts.experimental_distributed_batch_norm_replica_group_size = \
+    experimental_distributed_batch_norm_replica_group_size
 
   return opts
 

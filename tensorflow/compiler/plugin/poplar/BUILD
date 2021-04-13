@@ -3796,6 +3796,27 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "distributed_batch_norm_test",
+    size = "large",
+    srcs = ["tests/distributed_batch_norm_test.py"],
+    enabled_backends = ["poplar"],
+    shard_count = 2,
+    tags = ["hw_poplar_test"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 xla_test(
     name = "replicated_resource_update_elementwise_clustering_test",
     srcs = ["tests/replicated_resource_update_elementwise_clustering_test.cc"],
@@ -5041,6 +5062,7 @@ test_suite(
         "deferred_visitor_test",
         "dependency_replacer_test",
         "device_connection_test",
+        "distributed_batch_norm_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
         "dynamic_slice_test",

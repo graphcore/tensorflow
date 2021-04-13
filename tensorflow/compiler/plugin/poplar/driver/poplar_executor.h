@@ -493,6 +493,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.use_stable_norm_statistics();
   }
 
+  int64 ExperimentalDistributedBatchNormReplicaGroupSize() const {
+    return current_config_
+        .experimental_distributed_batch_norm_replica_group_size();
+  }
+
   bool SupportsRemoteBuffers() const;
 
   int64 GetNumIoTiles() const { return current_config_.num_io_tiles(); }

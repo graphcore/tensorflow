@@ -1225,6 +1225,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetSchedulerSelection(),
       poplar_executor->RecomputationEnabled(),
       poplar_executor->UseStableNormStatistics(),
+      poplar_executor->ExperimentalDistributedBatchNormReplicaGroupSize(),
       poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->GetCholeskyBlockSize(),
