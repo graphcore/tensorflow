@@ -1193,6 +1193,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     shard_count = 16,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
