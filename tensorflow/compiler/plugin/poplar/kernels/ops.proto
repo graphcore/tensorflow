@@ -101,6 +101,7 @@ enum PoplarOp {
   SequenceSliceUnpack = 97;
   MaxAndArgMax = 98;
   MinAndArgMin = 99;
+  BatchNormStatistics = 100;
   
   // Supported Fusions.
   Conv_biasadd = 200;

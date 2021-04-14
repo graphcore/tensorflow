@@ -659,10 +659,15 @@ def set_norm_options(opts,
       For example if a model is being executed across four replicas and this
       option is set to two, replicas 0 and 1 will be grouped together and
       replicas 2 and 3 will be grouped together and the batch norm statistics
-      will be synchronously all-reduced every time the layer is executed
-      (including any recomputation) across the replicas within a group.
+      will be synchronously all-reduced every time the layer is executed across
+      the replicas within a group.
       This option should not be used when using model parallelism (pipelining)
-      and it is not supported with I/O tiles.
+      across multiple IPUs and it is not supported with I/O tiles.
+      When recomputation is enabled and the training fused batch norm operation
+      is recomputed, the statistics will have to be all-reduced again, unless
+      the
+      `pipelining_ops.RecomputationMode.RecomputeAndBackpropagateInterleaved`
+      recomputation mode is used.
       This option is experimental and may be removed with short/no notice.
 
   Returns:

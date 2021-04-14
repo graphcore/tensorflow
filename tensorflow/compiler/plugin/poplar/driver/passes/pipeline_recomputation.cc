@@ -365,6 +365,9 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
                         });
       new_inst = pipeline_comp->AddInstruction(
           old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+      OpMetadata metadata = new_inst->metadata();
+      metadata.set_op_name(metadata.op_name() + "/Recomputed");
+      new_inst->set_metadata(metadata);
     }
 
     context.MapInstruction(old_inst, new_inst);
@@ -396,29 +399,37 @@ Status AddClusterToBackwardStage(HloInstruction* const fwd_stage,
                                      bwd_stage, to_lower, replacements));
   return Status::OK();
 }
-}  // namespace
 
-PipelineRecomputation::PipelineRecomputation(bool allow_recomputation)
-    : allow_recomputation_(allow_recomputation) {}
+// Helper struct for storing the information about the pipeline stage for
+// recomputation.
+struct PipelineStageRecomputationInfo {
+  HloInstruction* fwd_stage;
+  HloInstruction* bwd_stage;
+  int64 stage_id;
+  bool is_last_stage;
+  OutputToInputInfo oi_info;
+  ClusterInfo cluster_info;
+};
 
-StatusOr<bool> PipelineRecomputation::RecomputePipeline(
+// Function which finds all the pipeline stages and their clusters to recompute.
+StatusOr<std::vector<PipelineStageRecomputationInfo>> GetRecomputationInfos(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
   TF_RETURN_IF_ERROR(FixRootInstructions(stages));
 
+  std::vector<PipelineStageRecomputationInfo> stage_recomputation_infos;
   // Do not perform recomputation if there are no backward stages.
   if (stages.backward.empty()) {
-    return false;
+    return stage_recomputation_infos;
   }
 
-  bool changed = false;
   // Go through all the forward stages.
   const int64 num_stages = static_cast<int64>(stages.forward.size());
   for (int64 stage_id = 0; stage_id != num_stages; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
-    const bool last_stage = stage_id == num_stages - 1;
+    const bool is_last_stage = stage_id == num_stages - 1;
 
     // Find all the forward outputs used by the backward pass.
     TF_ASSIGN_OR_RETURN(OutputToInputInfo oi_info,
@@ -434,7 +445,33 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     // checkpoint.
     TF_ASSIGN_OR_RETURN(
         ClusterInfo cluster_info,
-        GetRecomputationCluster(fwd_stage, oi_info, last_stage));
+        GetRecomputationCluster(fwd_stage, oi_info, is_last_stage));
+
+    stage_recomputation_infos.push_back(PipelineStageRecomputationInfo{
+        fwd_stage, bwd_stage, stage_id, is_last_stage, oi_info, cluster_info});
+  }
+
+  return stage_recomputation_infos;
+}
+}  // namespace
+
+PipelineRecomputation::PipelineRecomputation(bool allow_recomputation)
+    : allow_recomputation_(allow_recomputation) {}
+
+StatusOr<bool> PipelineRecomputation::RecomputePipeline(
+    HloInstruction* pipeline_op) {
+  TF_ASSIGN_OR_RETURN(auto stage_recomputation_infos,
+                      GetRecomputationInfos(pipeline_op));
+
+  bool changed = false;
+  for (PipelineStageRecomputationInfo& stage_recomputation_info :
+       stage_recomputation_infos) {
+    HloInstruction* fwd_stage = stage_recomputation_info.fwd_stage;
+    HloInstruction* bwd_stage = stage_recomputation_info.bwd_stage;
+    const int64 stage_id = stage_recomputation_info.stage_id;
+    const bool is_last_stage = stage_recomputation_info.is_last_stage;
+    const OutputToInputInfo& oi_info = stage_recomputation_info.oi_info;
+    const ClusterInfo& cluster_info = stage_recomputation_info.cluster_info;
 
     if (cluster_info.instructions.empty()) {
       if (cluster_info.recomputation_checkpoints.size()) {
@@ -442,7 +479,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
                   << stage_id
                   << ", however could not find any operations which can be "
                      "recomputed.";
-      } else if (!last_stage) {
+      } else if (!is_last_stage) {
         LOG(INFO) << "Cannot recompute pipeline stage " << stage_id << " ("
                   << fwd_stage->ToString() << ")";
       }
@@ -458,7 +495,36 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
         AddClusterToBackwardStage(fwd_stage, bwd_stage, cluster_info, oi_info));
     changed = true;
   }
+
   return changed;
+}
+
+StatusOr<std::vector<HloInstruction*>>
+PipelineRecomputation::GetInstructionsToRecompute(HloModule* module) {
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
+  std::vector<HloInstruction*> instructions_to_recompute;
+
+  for (HloInstruction* pipeline_op : pipeline_ops) {
+    TF_ASSIGN_OR_RETURN(const auto recomputation_mode,
+                        GetPipelineRecomputationMode(pipeline_op));
+    if (recomputation_mode != PoplarBackendConfig::CallConfig::PipelineConfig::
+                                  Recompute_and_backpropagate_interleaved) {
+      continue;
+    }
+
+    TF_ASSIGN_OR_RETURN(auto stage_recomputation_infos,
+                        GetRecomputationInfos(pipeline_op));
+    for (PipelineStageRecomputationInfo& stage_recomputation_info :
+         stage_recomputation_infos) {
+      const ClusterInfo& cluster_info = stage_recomputation_info.cluster_info;
+      instructions_to_recompute.insert(instructions_to_recompute.end(),
+                                       cluster_info.instructions.begin(),
+                                       cluster_info.instructions.end());
+    }
+  }
+
+  return instructions_to_recompute;
 }
 
 StatusOr<bool> PipelineRecomputation::Run(HloModule* module) {
