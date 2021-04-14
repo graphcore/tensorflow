@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RECOMPUTATION_H_
 
+#include <vector>
+
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -35,6 +37,10 @@ class PipelineRecomputation : public HloModulePass {
   absl::string_view name() const override { return "pipeline-recomputation"; }
 
   StatusOr<bool> Run(HloModule* module) override;
+
+  // Find all the instructions which will be recomputed by this pass runs.
+  static StatusOr<std::vector<HloInstruction*>> GetInstructionsToRecompute(
+      HloModule* module);
 
  private:
   // Recompute a pipeline.

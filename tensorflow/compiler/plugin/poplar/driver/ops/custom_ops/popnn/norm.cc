@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -79,34 +80,55 @@ StatusOr<NormOptions> GetNormOptions(const HloInstruction* inst) {
                          norm_inst->epsilon()};
     }
     default: {
-      auto norm_inst = Cast<HloNormInstruction>(inst);
+      if (IsPoplarInstruction(PoplarOp::GroupNormInference, inst) ||
+          IsPoplarInstruction(PoplarOp::GroupNormTraining, inst) ||
+          IsPoplarInstruction(PoplarOp::GroupNormGrad, inst) ||
+          IsPoplarInstruction(PoplarOp::GroupNormStatistics, inst)) {
+        const auto* inst_gn = Cast<HloGroupNormBaseInstruction>(inst);
 
-      auto optional_feature_index =
-          convert_scalar<uint32>(norm_inst->feature_index());
-      if (!optional_feature_index) {
-        return xla::FailedPrecondition(
-            "Norm - Feature index cannot be interpreted as an unsigned "
-            "integer.");
+        auto optional_feature_index =
+            convert_scalar<uint32>(inst_gn->feature_index());
+        if (!optional_feature_index) {
+          return xla::FailedPrecondition(
+              "Norm - Feature index cannot be interpreted as an unsigned "
+              "integer.");
+        }
+        const auto feature_index = *optional_feature_index;
+
+        auto optional_num_groups =
+            convert_scalar<uint32>(inst_gn->num_groups());
+        if (!optional_num_groups) {
+          return xla::FailedPrecondition(
+              "Norm - Num groups cannot be interpreted as an unsigned "
+              "integer.");
+        }
+        const auto num_groups = *optional_num_groups;
+
+        // Build a poplar::OptionFlags instance and indicate if channel
+        // grouping is to be used.
+        poplar::OptionFlags flags;
+        const auto scg = inst_gn->strided_channel_grouping() ? "true" : "false";
+        flags.set("groupNormStridedChannelGrouping", scg);
+
+        return NormOptions{NormType::GroupNorm, feature_index, num_groups,
+                           inst_gn->epsilon(), flags};
+
+      } else {
+        CHECK(IsPoplarInstruction(PoplarOp::BatchNormStatistics, inst));
+        const auto* norm_inst = Cast<HloBatchNormStatsInstruction>(inst);
+
+        auto optional_feature_index =
+            convert_scalar<uint32>(norm_inst->feature_index());
+        if (!optional_feature_index) {
+          return xla::FailedPrecondition(
+              "Norm - Feature index cannot be interpreted as an unsigned "
+              "integer.");
+        }
+        const auto feature_index = *optional_feature_index;
+
+        return NormOptions{NormType::BatchNorm, feature_index, absl::nullopt,
+                           norm_inst->epsilon()};
       }
-      const auto feature_index = *optional_feature_index;
-
-      auto optional_num_groups =
-          convert_scalar<uint32>(norm_inst->num_groups());
-      if (!optional_num_groups) {
-        return xla::FailedPrecondition(
-            "Norm - Num groups cannot be interpreted as an unsigned integer.");
-      }
-      const auto num_groups = *optional_num_groups;
-
-      // Build a poplar::OptionFlags instance and indicate if channel
-      // grouping is to be used.
-      poplar::OptionFlags flags;
-      const auto* inst_gn = Cast<HloGroupNormBaseInstruction>(inst);
-      const auto scg = inst_gn->strided_channel_grouping() ? "true" : "false";
-      flags.set("groupNormStridedChannelGrouping", scg);
-
-      return NormOptions{NormType::GroupNorm, feature_index, num_groups,
-                         norm_inst->epsilon(), flags};
     }
   }
 }
@@ -740,39 +762,58 @@ class NormStatisticsOp : public PoplarOpDef {
       return seq;
     }
 
+    auto& main_graph = GetMasterGraph(res);
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, debug_name_and_id, norm_opts,
-                 use_stable_statistics = res.use_stable_norm_statistics](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) {
-      poplar::Tensor operand = args[0];
-      // Move the channels.
-      operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
+    auto func =
+        [&main_graph, &graph, debug_name_and_id, norm_opts,
+         use_stable_statistics = res.use_stable_norm_statistics,
+         replica_group_size =
+             res.experimental_distributed_batch_norm_replica_group_size](
+            std::vector<poplar::Tensor>& args,
+            poplar::program::Sequence& prog) {
+          poplar::Tensor operand = args[0];
+          // Move the channels.
+          operand = ShuffleNormInputToPoplar(operand, norm_opts.feature_index);
 
-      switch (norm_opts.type) {
-        case NormType::BatchNorm: {
-          poplar::Tensor inv_sd;
-          std::tie(args[1], inv_sd) = popnn::bn::batchNormStatistics(
-              graph, operand, norm_opts.epsilon, prog,
-              /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_name_and_id});
-          // For batch norm variance_or_inv_std_dev is variance, so we need to
-          // convert it.
-          args[2] = ConvertInvStdDevToVariance(graph, inv_sd, norm_opts.epsilon,
-                                               prog, {debug_name_and_id});
-          break;
-        }
-        case NormType::GroupNorm: {
-          // For group norm variance_or_inv_std_dev is inv_std_dev, so we
-          // don't need to convert it.
-          std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
-              graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
-              /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
-          break;
-        }
-      }
-    };
+          switch (norm_opts.type) {
+            case NormType::BatchNorm: {
+              poplar::Tensor inv_sd;
+
+              if (replica_group_size > 1) {
+                std::tie(args[1], inv_sd) =
+                    popnn::bn::distributedBatchNormStatistics(
+                        main_graph, operand, norm_opts.epsilon, prog,
+                        /*unbiasedVarEstimate=*/false,
+                        GetDistributedNormReduceCallback(
+                            "DistributedBatchNormStatistics"),
+                        CalculateNormBatchSize(operand, replica_group_size),
+                        use_stable_statistics, poplar::FLOAT,
+                        {debug_name_and_id});
+              } else {
+                std::tie(args[1], inv_sd) = popnn::bn::batchNormStatistics(
+                    graph, operand, norm_opts.epsilon, prog,
+                    /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                    poplar::FLOAT, {debug_name_and_id});
+              }
+
+              // For batch norm variance_or_inv_std_dev is variance, so we need
+              // to convert it.
+              args[2] = ConvertInvStdDevToVariance(
+                  graph, inv_sd, norm_opts.epsilon, prog, {debug_name_and_id});
+              break;
+            }
+            case NormType::GroupNorm: {
+              // For group norm variance_or_inv_std_dev is inv_std_dev, so we
+              // don't need to convert it.
+              std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
+                  graph, operand, norm_opts.epsilon, prog,
+                  *norm_opts.num_groups,
+                  /*unbiasedVarEstimate=*/false, use_stable_statistics,
+                  poplar::FLOAT, {debug_name_and_id}, norm_opts.flags);
+              break;
+            }
+          }
+        };
     poplar::Tensor mean, variance_or_inv_std_dev;
     std::vector<poplar::Tensor> args = {arg_operand, mean,
                                         variance_or_inv_std_dev};
@@ -791,6 +832,7 @@ class NormStatisticsOp : public PoplarOpDef {
   }
 };
 REGISTER_POPLAR_OP(GroupNormStatistics, NormStatisticsOp);
+REGISTER_POPLAR_OP(BatchNormStatistics, NormStatisticsOp);
 
 }  // namespace
 }  // namespace poplarplugin

@@ -1183,6 +1183,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/pipelining_sequential_recomputation_test.py"],
     shard_count = 16,
+    tags = ["hw_poplar_test"],
     deps = [
         ":ipu_lib",
         ":pipelining_test_util",

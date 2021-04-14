@@ -13,6 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
+
+#include <string>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
@@ -20,14 +24,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-int32 HloNormInstruction::num_groups() const { return num_groups_; }
 int32 HloNormInstruction::feature_index() const { return feature_index_; }
 float HloNormInstruction::epsilon() const { return epsilon_; }
 
 std::vector<std::string> HloNormInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
-  attributes.push_back("num_groups=" + std::to_string(num_groups_));
   attributes.push_back("epsilon=" + std::to_string(epsilon_));
   attributes.push_back("feature_index=" + std::to_string(feature_index_));
 
@@ -38,10 +40,24 @@ HloGroupNormBaseInstruction::HloGroupNormBaseInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op,
     int32 num_groups, bool strided_channel_grouping, float epsilon,
     int feature_index)
-    : HloNormInstruction(shape, operands, op, num_groups, epsilon,
-                         feature_index, strided_channel_grouping),
+    : HloNormInstruction(shape, operands, op, epsilon, feature_index,
+                         strided_channel_grouping, num_groups),
+      num_groups_(num_groups),
       strided_channel_grouping_(strided_channel_grouping) {}
 
+std::vector<std::string>
+HloGroupNormBaseInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes =
+      HloNormInstruction::ExtraPoplarAttributesToStringImpl(options);
+  attributes.push_back("num_groups=" + std::to_string(num_groups_));
+  attributes.push_back("strided_channel_grouping=" +
+                       std::to_string(strided_channel_grouping_));
+
+  return attributes;
+}
+
+int32 HloGroupNormBaseInstruction::num_groups() const { return num_groups_; }
 bool HloGroupNormBaseInstruction::strided_channel_grouping() const {
   return strided_channel_grouping_;
 }

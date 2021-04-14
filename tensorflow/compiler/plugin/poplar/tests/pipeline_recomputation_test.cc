@@ -82,8 +82,8 @@ ENTRY e {
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineRecomputationTest, TestRecomputation) {
-  std::string hlo = R"(
+std::string GetRecomputationHlo() {
+  return R"(
 HloModule top
 
 stage_0_fwd {
@@ -99,7 +99,8 @@ stage_0_fwd {
 stage_1_fwd {
   in1 = f32[1,4,4,2] parameter(0)
   in2 = f32[1,4,4,2] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1, in2)
+  stage_1_in12 = f32[1,4,4,2] add(in2, in1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_1_in12, in2)
 }
 
 stage_1_bwd {
@@ -150,9 +151,12 @@ ENTRY e {
   ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":2}}}"
 }
 )";
+}
+
+TEST_F(PipelineRecomputationTest, TestRecomputation) {
   auto config = GetModuleConfigForTest();
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetRecomputationHlo(), config));
 
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   PipelineRecomputation recomputation(true);
@@ -194,6 +198,18 @@ ENTRY e {
   EXPECT_TRUE(
       Match(stage0_bwd_root,
             m::Tuple(m::Parameter(0), m::Add(m::Parameter(), m::Parameter()))));
+}
+
+TEST_F(PipelineRecomputationTest, TestGetInstructionsToRecompute) {
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetRecomputationHlo(), config));
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto insts,
+      PipelineRecomputation::GetInstructionsToRecompute(module.get()));
+  HloInstruction* in12 = FindInstruction(module.get(), "in12");
+  EXPECT_THAT(insts, ::testing::ElementsAre(in12));
 }
 
 TEST_F(PipelineRecomputationTest, TestRecomputation2) {
@@ -734,7 +750,7 @@ ENTRY e {
 
   // Check that the adds are now recomputed.
   auto stage0_bwd_root = stage0_bwd->to_apply()->root_instruction();
-  VLOG(0) << stage0_bwd->to_apply()->ToString();
+
   HloInstruction* checkpoint3;
   HloInstruction* subtract;
   EXPECT_TRUE(Match(

@@ -184,6 +184,7 @@ cc_library(
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dead_control_dependencies_elimination.cc",
         "driver/passes/dependency_replacer.cc",
+        "driver/passes/distributed_batch_norm_decomposer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
         "driver/passes/elementwise_simplifier.cc",
         "driver/passes/embeddings_gradient_optimizer.cc",
@@ -281,6 +282,7 @@ cc_library(
         "driver/tools/custom_ops/arg_min_max.cc",
         "driver/tools/custom_ops/all_gather.cc",
         "driver/tools/custom_ops/assert.cc",
+        "driver/tools/custom_ops/batch_norm_stats.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -372,6 +374,7 @@ cc_library(
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dead_control_dependencies_elimination.h",
         "driver/passes/dependency_replacer.h",
+        "driver/passes/distributed_batch_norm_decomposer.h",
         "driver/passes/elementwise_broadcast_converter.h",
         "driver/passes/elementwise_simplifier.h",
         "driver/passes/embeddings_gradient_optimizer.h",
@@ -3445,6 +3448,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "distributed_batch_norm_decomposer_test",
+    srcs = ["tests/distributed_batch_norm_decomposer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     testonly = 1,
@@ -5218,6 +5234,7 @@ test_suite(
         "deferred_visitor_test",
         "dependency_replacer_test",
         "device_connection_test",
+        "distributed_batch_norm_decomposer_test",
         "distributed_batch_norm_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
