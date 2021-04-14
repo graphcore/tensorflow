@@ -35,7 +35,15 @@ def reduce_scatter(x, replication_factor, op='COLLECTIVE_OP_ADD', name=None):
 
   Args:
     x: The input `Tensor`. Must have rank 1.
-    replication_factor: The replication factor of the model.
+    replication_factor: The number of replicas in each collective group.
+      If less than the total number of replicas in the model, the replicas
+      are divided into consecutive groups of the given size, and the
+      collective operation is performed within each respective group.
+      If there are `N` total replicas denoted `{0, ... N-1}` and
+      `replication_factor` is `k`, then the groups are:
+      `{0, 1, ... k-1}, {k, ... 2k-1} ... {N-k-1, ... N-1}`.
+      Note that `N` must be evenly divisible by `k`, otherwise an exception
+      will be thrown during compilation.
     op: Reduce operation, valid ops are: COLLECTIVE_OP_ADD,
     COLLECTIVE_OP_MUL, COLLECTIVE_OP_MIN, COLLECTIVE_OP_MAX,
     COLLECTIVE_OP_LOGICAL_AND, COLLECTIVE_OP_LOGICAL_OR,

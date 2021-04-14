@@ -13,9 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 
 namespace tensorflow {
@@ -24,11 +24,24 @@ class PopopsCrossReplicaSumOp : public XlaOpKernel {
  public:
   using XlaOpKernel::XlaOpKernel;
 
+  explicit PopopsCrossReplicaSumOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("replica_group_size", &replica_group_size_));
+  }
+
   void Compile(XlaOpKernelContext* ctx) override {
-    ctx->SetOutput(0, xla::CrossReplicaSum(ctx->Input(0)));
+    const auto replica_groups =
+        xla::poplarplugin::PoplarReplicaGroups::Consecutive(
+            replica_group_size_);
+
+    ctx->SetOutput(0, xla::CrossReplicaSum(
+                          ctx->Input(0), replica_groups.ToXlaReplicaGroups()));
   }
 
  private:
+  int64 replica_group_size_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsCrossReplicaSumOp);
 };
 

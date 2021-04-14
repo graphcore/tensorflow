@@ -32,19 +32,33 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-using IoTilesPlacerTest = HloTestBase;
+class TestRemoteParameterLoad : public HloTestBase,
+                                public ::testing::WithParamInterface<bool> {};
 
-TEST_F(IoTilesPlacerTest, TestRemoteParameterLoad) {
+INSTANTIATE_TEST_SUITE_P(TestRemoteParameterLoadCases, TestRemoteParameterLoad,
+                         ::testing::ValuesIn(std::vector<bool>{true, false}));
+
+class TestInfeedGtes : public HloTestBase,
+                       public ::testing::WithParamInterface<bool> {};
+
+INSTANTIATE_TEST_SUITE_P(TestInfeedGtesCases, TestInfeedGtes,
+                         ::testing::ValuesIn(std::vector<bool>{true, false}));
+
+TEST_P(TestRemoteParameterLoad, DoTest) {
+  const bool fits_on_io_tiles = GetParam();
   const auto hlo_string = R"(
 HloModule top
 
 ENTRY top {
-  arg1 = f32[] parameter(0)
-  arg2 = f32[] parameter(1)
-  load = f32[] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
-  ROOT mul = f32[] multiply(load, arg2)
+  arg1 = f32[4] parameter(0)
+  arg2 = f32[4] parameter(1)
+  load = f32[4] custom-call(arg1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":1}\n"
+  ROOT mul = f32[4] multiply(load, arg2)
 }
   )";
+
+  const int64 num_io_tiles = 1;
+  const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
@@ -56,29 +70,38 @@ ENTRY top {
 
   EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
-  EXPECT_FALSE(IoTilesPlacer(/*enabled=*/false).Run(module).ValueOrDie());
+  EXPECT_FALSE(
+      IoTilesPlacer(/*enabled=*/false, num_io_tiles, bytes_per_io_tile, 0.5)
+          .Run(module)
+          .ValueOrDie());
 
-  EXPECT_TRUE(IoTilesPlacer(/*enabled=*/true).Run(module).ValueOrDie());
+  EXPECT_EQ(
+      IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile, 0.5)
+          .Run(module)
+          .ValueOrDie(),
+      fits_on_io_tiles);
 
   const auto* mul = module->entry_computation()->root_instruction();
   const auto* load = mul->operand(0);
 
   EXPECT_EQ(GetTileset(mul).ValueOrDie(), TILESET_COMPUTE_TILES);
-  EXPECT_EQ(GetTileset(load).ValueOrDie(), TILESET_IO_TILES);
+  EXPECT_EQ(GetTileset(load).ValueOrDie(),
+            fits_on_io_tiles ? TILESET_IO_TILES : TILESET_COMPUTE_TILES);
 }
 
-TEST_F(IoTilesPlacerTest, TestInfeedGtes) {
+TEST_P(TestInfeedGtes, DoTest) {
+  const bool fits_on_io_tiles = GetParam();
   const auto hlo_string = R"(
-HloModule top
+  HloModule top
 
-ENTRY top {
-  after-all = token[] after-all()
-  infeed = ((f16[]), token[]) infeed(after-all)
-  gte = (f16[]) get-tuple-element(infeed), index=0
-  gte0 = f16[] get-tuple-element(gte), index=0
-  ROOT mul = f16[] multiply(gte0, gte0)
-}
-  )";
+  ENTRY top {
+    after-all = token[] after-all()
+    infeed = ((f16[]), token[]) infeed(after-all)
+    gte = (f16[]) get-tuple-element(infeed), index=0
+    gte0 = f16[] get-tuple-element(gte), index=0
+    ROOT mul = f16[] multiply(gte0, gte0)
+  }
+    )";
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
@@ -88,15 +111,25 @@ ENTRY top {
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  EXPECT_TRUE(IoTilesPlacer(/*enabled=*/true).Run(module).ValueOrDie());
+  const int64 num_io_tiles = 1;
+  const int64 bytes_per_io_tile = fits_on_io_tiles ? 1024 : 4;
+
+  EXPECT_EQ(
+      IoTilesPlacer(/*enabled=*/true, num_io_tiles, bytes_per_io_tile, 0.5)
+          .Run(module)
+          .ValueOrDie(),
+      fits_on_io_tiles);
 
   const auto* mul = module->entry_computation()->root_instruction();
   const auto* gte0 = mul->operand(0);
   const auto* gte = gte0->operand(0);
 
+  const auto expected_tiles =
+      fits_on_io_tiles ? TILESET_IO_TILES : TILESET_COMPUTE_TILES;
+
   EXPECT_EQ(GetTileset(mul).ValueOrDie(), TILESET_COMPUTE_TILES);
-  EXPECT_EQ(GetTileset(gte0).ValueOrDie(), TILESET_IO_TILES);
-  EXPECT_EQ(GetTileset(gte).ValueOrDie(), TILESET_IO_TILES);
+  EXPECT_EQ(GetTileset(gte0).ValueOrDie(), expected_tiles);
+  EXPECT_EQ(GetTileset(gte).ValueOrDie(), expected_tiles);
 }
 
 }  // namespace

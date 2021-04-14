@@ -28,7 +28,7 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
 
   explicit PopopsReduceScatter(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("replication_factor", &replication_factor_));
+                   ctx->GetAttr("replication_factor", &replica_group_size_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("op", &op_));
   }
 
@@ -38,10 +38,11 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
                 errors::InvalidArgument("Input must be vector"));
 
     attribute_map_.AddAttribute("op", op_);
+    attribute_map_.AddAttribute("replica_group_size", replica_group_size_);
 
     const int64 input_length = input_shape.dim_size(0);
     const int64 output_length =
-        MathUtil::CeilOfRatio<int64>(input_length, replication_factor_);
+        MathUtil::CeilOfRatio<int64>(input_length, replica_group_size_);
 
     TensorShape output_shape;
     output_shape.AddDim(output_length);
@@ -63,10 +64,7 @@ class PopopsReduceScatter : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsReduceScatter);
 
-  // This replication factor refers to the factor passed by the user into the
-  // operation. It *should* be the same as the global replication factor but
-  // since it is raw user input it may, erroneously, not be.
-  int64 replication_factor_;
+  int64 replica_group_size_;
   std::string op_;
 };
 

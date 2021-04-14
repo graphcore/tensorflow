@@ -19,6 +19,7 @@ limitations under the License.
  * These functions are related to poplar, and cannot be used within the
  * optimizers target in the BUILD file.
  */
+#include <gcl/Collectives.hpp>
 #include <poplar/Program.hpp>
 #include <poplar/exceptions.hpp>
 #include <poplin/Convolution.hpp>
@@ -34,6 +35,7 @@ limitations under the License.
 #include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -112,6 +114,9 @@ poplar::OptionFlags GetReplicatedCollectiveOptions(
     const CompilerResources& res);
 
 poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res);
+
+StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
+                                        const CompilerResources& res);
 
 /* Optimization tests */
 
