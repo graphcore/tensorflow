@@ -28,7 +28,9 @@ namespace poplarplugin {
 
 HloSendRecvBarrierInstruction::HloSendRecvBarrierInstruction()
     : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {},
-                           PoplarOp::SendRecvBarrier) {}
+                           PoplarOp::SendRecvBarrier) {
+  set_custom_call_has_side_effect(true);
+}
 
 absl::flat_hash_set<int64> HloSendRecvBarrierInstruction::AllocatingIndices()
     const {

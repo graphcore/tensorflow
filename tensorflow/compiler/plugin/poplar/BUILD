@@ -203,6 +203,7 @@ cc_library(
         "driver/passes/convolution_classifier.cc",
         "driver/passes/copy_inserter.cc",
         "driver/passes/custom_op_replacer.cc",
+        "driver/passes/dead_control_dependencies_elimination.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
         "driver/passes/elementwise_simplifier.cc",
@@ -390,6 +391,7 @@ cc_library(
         "driver/passes/convolution_classifier.h",
         "driver/passes/copy_inserter.h",
         "driver/passes/custom_op_replacer.h",
+        "driver/passes/dead_control_dependencies_elimination.h",
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
         "driver/passes/elementwise_simplifier.h",
@@ -3928,6 +3930,18 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "dead_control_dependencies_elimination_test",
+    srcs = ["tests/dead_control_dependencies_elimination_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
@@ -5072,6 +5086,7 @@ test_suite(
         "copy_inserter_test",
         "create_buffer_test",
         "data_initializer_test",
+        "dead_control_dependencies_elimination_test",
         "debug_info_test",
         "deferred_visitor_test",
         "dependency_replacer_test",
