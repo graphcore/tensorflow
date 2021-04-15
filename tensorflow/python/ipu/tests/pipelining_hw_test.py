@@ -95,11 +95,11 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         sc = x
 
         with variable_scope.variable_scope(name + "/" + str(i) + "/1"):
-          x = conv(x, 3, stride, out_filters)
+          x = conv(x, 3, stride, out_filters, 'conv_1')
           x = nn.relu(x)
 
         with variable_scope.variable_scope(name + "/" + str(i) + "/2"):
-          x = conv(x, 3, 1, out_filters)
+          x = conv(x, 3, 1, out_filters, 'conv_2')
 
           # shortcut
           if stride != 1:
@@ -123,12 +123,13 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
     def max_pool(x, ksize=3, stride=2):
       return layers.MaxPooling2D(ksize, stride, padding='SAME')(x)
 
-    def conv(x, ksize, stride, filters_out):
+    def conv(x, ksize, stride, filters_out, name=None):
       return layers.Conv2D(
           filters_out,
           ksize,
           stride,
           'SAME',
+          name=name,
           kernel_initializer=init_ops.constant_initializer(0.1),
           bias_initializer=init_ops.constant_initializer(0.0))(x)
 

@@ -49,6 +49,24 @@ def get_num_ipus(device_mapping):
   return int(math.pow(2, math.ceil(math.log2(min_ipus))))
 
 
+def _get_vars(session, scope):
+  # The reason for that is what looks like a bug in tensorflow slot variable creation code.
+  # Instead of using variable name as an fully qualified name, it appends it to the current
+  # scope. This ends up with scope/scope/var/slot naming.
+  double_scope = scope + "/" + scope
+  global_vars = variables.global_variables(scope=scope)
+  values = session.run(global_vars)
+  result = {}
+  for var, value in zip(global_vars, values):
+    name = var.name
+    if name.startswith(double_scope):
+      name = name[len(double_scope) + 1:]
+    elif name.startswith(scope):
+      name = name[len(scope) + 1:]
+    result[name] = value
+  return result
+
+
 class PipelineTester(object):
   @staticmethod
   def _cpu_with_grad_accum(test_wrapper, stages, inputs_fn, input_values,
@@ -136,7 +154,8 @@ class PipelineTester(object):
       replication_factor=1,
       merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
       replicated_optimizer_state_sharding=False,
-      minimum_remote_tensor_size=128):
+      minimum_remote_tensor_size=128,
+      return_vars=False):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -147,38 +166,38 @@ class PipelineTester(object):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
           next_feed_id(), replication_factor=replication_factor)
 
-      with variable_scope.variable_scope("ipu_sharded",
-                                         use_resource=True,
-                                         reuse=False):
-        if device_mapping is None:
-          device_mapping = range(len(stages))
+      if device_mapping is None:
+        device_mapping = range(len(stages))
 
-        def pipeline(*args):
-          outputs = args
-          for i, stage in zip(device_mapping, stages):
-            with scopes.ipu_shard(i):
-              outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
-          enqueue_op = outfeed_queue.enqueue(outputs)
-          outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
-          outs.append(enqueue_op)
-          if optimizer:
-            if replication_factor > 1:
-              opt = \
-                gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
-                    optimizer,
-                    num_batches_to_accumulate,
-                    replicated_optimizer_state_sharding=replicated_optimizer_state_sharding) # pylint: disable=line-too-long
-            else:
-              opt = \
-                gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-                    optimizer,
-                    num_batches_to_accumulate,
-                    replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)# pylint: disable=line-too-long
+      def pipeline(*args):
+        outputs = args
+        for i, stage in zip(device_mapping, stages):
+          with scopes.ipu_shard(i):
+            outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
+        enqueue_op = outfeed_queue.enqueue(outputs)
+        outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
+        outs.append(enqueue_op)
+        if optimizer:
+          if replication_factor > 1:
+            opt = \
+              gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
+                  optimizer,
+                  num_batches_to_accumulate,
+                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding) # pylint: disable=line-too-long
+          else:
+            opt = \
+              gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+                  optimizer,
+                  num_batches_to_accumulate,
+                  replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)# pylint: disable=line-too-long
 
-            outs.append(opt.minimize(outputs))
-          return outs
+          outs.append(opt.minimize(outputs))
+        return outs
 
-        def my_net(*args):
+      def my_net(*args):
+        with variable_scope.variable_scope("ipu_sharded",
+                                           use_resource=True,
+                                           reuse=False):
           return loops.repeat(num_batches_to_accumulate,
                               pipeline,
                               inputs=args,
@@ -218,7 +237,10 @@ class PipelineTester(object):
       for _ in range(repeat_count):
         session.run(compiled_model_pipeline,
                     feed_dict=dict(zip(inputs, input_values)))
-      return session.run(outfeed_op)
+      outs = session.run(outfeed_op)
+      if return_vars:
+        return outs, _get_vars(session, "ipu_sharded")
+      return outs
 
   @staticmethod
   def pipeline_on_ipu(
@@ -242,7 +264,8 @@ class PipelineTester(object):
       offload_activations=None,
       merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
       replicated_optimizer_state_sharding=False,
-      minimum_remote_tensor_size=128):
+      minimum_remote_tensor_size=128,
+      return_vars=False):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -253,19 +276,19 @@ class PipelineTester(object):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
           next_feed_id(), replication_factor=replication_factor)
 
-      with variable_scope.variable_scope("ipu", use_resource=True,
-                                         reuse=False):
+      def opt_fn(loss):
+        if replication_factor > 1:
+          opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
+        else:
+          opt = optimizer
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-        def opt_fn(loss):
-          if replication_factor > 1:
-            opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
-          else:
-            opt = optimizer
-          return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+      optimizer_function = opt_fn if optimizer else None
 
-        optimizer_function = opt_fn if optimizer else None
-
-        def my_net(*args):
+      def my_net(*args):
+        with variable_scope.variable_scope("ipu",
+                                           use_resource=True,
+                                           reuse=False):
           return pipelining_ops.pipeline(
               stages,
               gradient_accumulation_count,
@@ -330,6 +353,8 @@ class PipelineTester(object):
       out = out[0] if optimizer else out
       if return_report:
         return out, report
+      elif return_vars:
+        return out, _get_vars(session, "ipu")
       return out
 
   @staticmethod
@@ -388,6 +413,7 @@ class PipelineTester(object):
 
     if return_report:
       return report
+    return None
 
   @staticmethod
   def compare_pipeline_to_sharding(
@@ -415,20 +441,48 @@ class PipelineTester(object):
       assert device_mapping is None
       device_mapping = [0] * len(stages)
 
-    pipeline_losses = PipelineTester.pipeline_on_ipu(
-        stages, inputs_fn, input_values, repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, test_wrapper,
-        expected_max_tile_memory, recomp, schedule, device_mapping,
-        batch_serialization_iterations, recomputation_mode, number_of_io_tiles,
-        False, replication_factor, offload_activations, merge_remote_buffers,
-        replicated_optimizer_state_sharding, minimum_remote_tensor_size)
+    pipeline_losses, pipeline_vars = PipelineTester.pipeline_on_ipu(
+        stages,
+        inputs_fn,
+        input_values,
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        test_wrapper,
+        expected_max_tile_memory,
+        recomp,
+        schedule,
+        device_mapping,
+        batch_serialization_iterations,
+        recomputation_mode,
+        number_of_io_tiles,
+        False,
+        replication_factor,
+        offload_activations,
+        merge_remote_buffers,
+        replicated_optimizer_state_sharding,
+        minimum_remote_tensor_size,
+        return_vars=True)
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
-    sharded_losses = PipelineTester._sharded_on_ipu(
-        stages, inputs_fn, input_values, repeat_count,
-        num_batches_to_accumulate, dataset_fn, optimizer, test_wrapper, recomp,
-        device_mapping, number_of_io_tiles, replication_factor,
-        merge_remote_buffers, replicated_optimizer_state_sharding,
-        minimum_remote_tensor_size)
+    sharded_losses, sharded_vars = PipelineTester._sharded_on_ipu(
+        stages,
+        inputs_fn,
+        input_values,
+        repeat_count,
+        num_batches_to_accumulate,
+        dataset_fn,
+        optimizer,
+        test_wrapper,
+        recomp,
+        device_mapping,
+        number_of_io_tiles,
+        replication_factor,
+        merge_remote_buffers,
+        replicated_optimizer_state_sharding,
+        minimum_remote_tensor_size,
+        return_vars=True)
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
+    test_wrapper.assertAllClose(sharded_vars, pipeline_vars)
