@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
 #include <algorithm>
+#include <queue>
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
@@ -869,6 +870,58 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
     }
   }
   return duplicate_operands;
+}
+
+/**
+ * When using IO tiles we count the final users after the inter-tileset-copies.
+ */
+int64 InfeedUserCount(const HloInstruction* infeed, bool use_io_tiles) {
+  CHECK_EQ(infeed->opcode(), HloOpcode::kInfeed);
+  CHECK_EQ(infeed->user_count(), 1);
+
+  // Not using IO tiles, so just count the gte users.
+  if (!use_io_tiles) {
+    return infeed->users()[0]->user_count();
+  }
+
+  // We are using IO tiles, so we'll traverse the graph until we meet
+  // instructions that are not part of the IO tile tuple pack/unpack.
+  absl::flat_hash_set<const HloInstruction*> users;
+  std::queue<const HloInstruction*> queue;
+  queue.push(infeed);
+
+  // Predicate to test whether an instruction is a possible user or not.
+  auto is_user = [](const HloInstruction* inst) -> bool {
+    switch (inst->opcode()) {
+      case HloOpcode::kInfeed:
+      case HloOpcode::kGetTupleElement:
+      case HloOpcode::kTuple:
+        return false;
+      case HloOpcode::kCustomCall:
+        return !IsPoplarInstruction(PoplarOp::InterTilesetCopy, inst);
+      default:
+        return true;
+    }
+  };
+
+  // Breadth-first search from the infeed until we have met a user at each leaf.
+  while (!queue.empty()) {
+    const HloInstruction* inst = queue.front();
+    queue.pop();
+
+    // Add a user to the user set.
+    if (is_user(inst)) {
+      users.insert(inst);
+    } else {
+      // Otherwise add all the user's users to the queue.
+      for (auto user : inst->users()) {
+        queue.push(user);
+      }
+    }
+  }
+
+  // The actual number of users is the number of elements in the hash set.
+  return users.size();
 }
 }  // namespace
 
@@ -1896,7 +1949,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         }
 
         // * or, when recomputing, the GTE has more than two users,
-        if (allow_recomputation_ && user->user_count() > 2) {
+        if (allow_recomputation_ &&
+            (InfeedUserCount(inst, use_io_tiles_) > 2)) {
           return true;
         }
 
