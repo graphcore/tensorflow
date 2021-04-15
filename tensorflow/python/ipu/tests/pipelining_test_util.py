@@ -65,10 +65,10 @@ class PipelineTester(object):
         def pipeline(*args):
           # TF2 replacement for: iterator = dataset.make_one_shot_iterator()
           iterator = compat_v1_data.make_one_shot_iterator(dataset)
-          next_example, next_label = iterator.get_next()
+          nexts = iterator.get_next()
           outputs = functional_ops._convert_to_list(args)  # pylint: disable=W0212
-          outputs.append(next_example)
-          outputs.append(next_label)
+          for n in nexts:
+            outputs.append(n)
           for stage in stages:
             outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
           return outputs
