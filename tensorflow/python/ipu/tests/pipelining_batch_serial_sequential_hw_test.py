@@ -96,10 +96,11 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
     def max_pool(x, ksize=2, stride=None):
       return layers.MaxPooling2D(ksize, stride, padding='SAME')(x)
 
-    def conv(x, filters_out, ksize):
+    def conv(x, filters_out, ksize, name=None):
       return layers.Conv2D(
           filters_out,
           ksize,
+          name=name,
           padding='SAME',
           kernel_initializer=init_ops.constant_initializer(0.1),
           bias_initializer=init_ops.constant_initializer(0.0))(x)
@@ -113,11 +114,11 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
 
     def stage2(x, label):
       with variable_scope.variable_scope("stage2", use_resource=True):
-        x = conv(x, 16, 3)
+        x = conv(x, 16, 3, name="conv1")
         x = nn.relu(x)
         x = max_pool(x)
 
-        x = conv(x, 32, 3)
+        x = conv(x, 32, 3, name="conv2")
         x = nn.relu(x)
         x = max_pool(x)
         return x, label
