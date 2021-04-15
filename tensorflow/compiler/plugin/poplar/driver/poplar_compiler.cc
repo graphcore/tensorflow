@@ -60,6 +60,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/conv_bwd_input_to_fwd_weights_transpose.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/dead_control_dependencies_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_simplifier.h"
@@ -1432,6 +1433,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<InterTilesetCopyInserter>();
     pipeline.AddPass<TupleSimplifier>(true);
     pipeline.AddPass<FixRootInstructionsPass>();
+    pipeline.AddPass<DeadControlDependenciesElimination>();
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
     pipeline.AddPass<CopyInserter>();
@@ -1451,6 +1453,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<FlattenCallGraph>();
     }
+    pipeline.AddPass<DeadControlDependenciesElimination>();
     pipeline.AddPass<HloDCE>();
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.
