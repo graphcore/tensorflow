@@ -1472,16 +1472,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(res)
 
   @test_util.deprecated_graph_mode_only
-  def testOutfeedDeleteBeforeExecuteShouldRaiseException(self):
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        "delete_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-    delete_op = outfeed_queue.deleter
-    with session_lib.Session() as sess:
-      with self.assertRaisesRegex(errors_impl.NotFoundError,
-                                  "Outfeed with id='delete_name'"):
-        sess.run(delete_op)
-
-  @test_util.deprecated_graph_mode_only
   def testOutfeedNameCanBeReusedAfterDeletion(self):
     for _ in range(2):
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
@@ -1519,11 +1509,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertEqual(2.0, sess.run(dequeue2))
 
       sess.run(outfeed_queue1.deleter)
-
-      # Can only deregister it once
-      with self.assertRaisesRegex(errors.NotFoundError,
-                                  "Outfeed with id='reuse_name'"):
-        sess.run(outfeed_queue2.deleter)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNameCannotBeReusedWithDifferentShape(self):

@@ -644,6 +644,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
+  bool HasOutfeed(const std::string& feed_id) const;
   Status DeleteOutfeed(const std::string& feed_id);
 
   class HostEmbeddingInterface_ {
@@ -1033,7 +1034,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
       infeed_iterators_;
 
-  std::mutex outfeeds_mutex_;
+  mutable std::mutex outfeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
       outfeed_contexts_ GUARDED_BY(outfeeds_mutex_);
 
