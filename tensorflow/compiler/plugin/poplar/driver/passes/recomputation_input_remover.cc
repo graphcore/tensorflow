@@ -142,6 +142,9 @@ StatusOr<bool> HandleComputation(HloComputation* const comp) {
 }  // namespace
 
 StatusOr<bool> RecomputationInputRemover::Run(HloModule* module) {
+  VLOG(2) << "Before RecomputationInputRemover:";
+  XLA_VLOG_LINES(2, module->ToString());
+
   bool changed = false;
   for (auto comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
@@ -151,6 +154,12 @@ StatusOr<bool> RecomputationInputRemover::Run(HloModule* module) {
     changed |= changed_comp;
   }
 
+  if (changed) {
+    VLOG(2) << "After RecomputationInputRemover:";
+    XLA_VLOG_LINES(2, module->ToString());
+  } else {
+    VLOG(2) << "No changes were made.";
+  }
   return changed;
 }
 

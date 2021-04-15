@@ -43,7 +43,7 @@ class Dropout(Layer):
       be used to seed the random number generator that generates the dropout
       mask.
   """
-  def __init__(self, rate=0.5, noise_shape=None, seed=None, **kwargs):
+  def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
     super(Dropout, self).__init__(**kwargs)
     self.built = False
     self.seed = seed

@@ -117,6 +117,7 @@ py_library(
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
+        "keras/layers/recomputation.py",
         "keras/layers/rnn.py",
         "loops.py",
         "ops/all_to_all_op.py",
