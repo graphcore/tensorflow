@@ -1342,11 +1342,10 @@ def set_ipu_connection_type(opts,
                             connection_type=DeviceConnectionType.ALWAYS,
                             ipu_version="",
                             enable_remote_buffers=False):
-  """ Configure when to attach to the device. For example, you can use
-      this to compile and cache a program without attaching to an IPU,
-      and then later run on a real IPU device without recompiling.
-      Setting the connection type doesn't impact the ability to profile
-      a model.
+  """Configure when to attach to the device. For example, you can use this to
+  compile and cache a program without attaching to an IPU, and then later run
+  on a real IPU device without recompiling. Setting the connection type doesn't
+  impact the ability to profile a model.
 
   .. code-block:: python
 
