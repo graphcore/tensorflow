@@ -280,6 +280,11 @@ T Permute(const T& in, const std::vector<int64>& permutation) {
   }
   return out;
 }
+
+// Deterministically return the list of unreachable roots within the given
+// computation.
+std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

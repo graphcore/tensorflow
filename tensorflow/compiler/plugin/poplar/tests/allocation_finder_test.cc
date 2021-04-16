@@ -4561,9 +4561,6 @@ ENTRY top {
   FuseOpsLate fol(annotations);
   EXPECT_TRUE(fol.Run(module0).ValueOrDie());
 
-  ElementwiseBroadcastConverter ebc;
-  EXPECT_TRUE(ebc.Run(module0).ValueOrDie());
-
   const auto* root = module0->entry_computation()->root_instruction();
   const auto* div = root;
   const auto* add = div->operand(0);
