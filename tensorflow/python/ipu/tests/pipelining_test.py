@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+from functools import partial
 import numpy as np
 
 from tensorflow.keras import layers
@@ -1294,6 +1295,67 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       # There should be 2 GA-adds. One for the weight and one for the outfeed.
       ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
       report.assert_compute_sets_contain_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedAccumulatedTrainingSetDtype(self):
+    """
+    Tests accumulating a float16 loss, setting the accumulator dtype to float32
+    to avoid overflow.
+    """
+    with tu.ipu_session() as sess:
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+      outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue("__feed14")
+
+      def my_net(dtype, x):
+        w_name = 'w1' if not dtype else 'w'
+        outfeed = outfeed_queue if not dtype else outfeed_queue2
+
+        def stage1(x):
+          with variable_scope.variable_scope("stage1", use_resource=True):
+            w = variable_scope.get_variable(name=w_name, initializer=1.0)
+            return w * x
+
+        def identity(x):
+          return math_ops.cast(x + 10000, np.float16)
+
+        def optimizer_function(x):
+          opt = gradient_descent.GradientDescentOptimizer(0.01)
+          loss = x + 1.0
+          return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+        return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                       gradient_accumulation_count=8,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed,
+                                       optimizer_function=optimizer_function,
+                                       accumulate_outfeed=True,
+                                       accumulate_outfeed_dtype=dtype)
+
+      with ops.device("/device:IPU:0"):
+        pipeline_16 = ipu_compiler.compile(partial(my_net, None), inputs=[1.0])
+        pipeline_32 = ipu_compiler.compile(partial(my_net, np.float32),
+                                           inputs=[1.0])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.set_ipu_model_options(cfg,
+                                        compile_ipu_code=True,
+                                        tiles_per_ipu=128)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+      outfed2 = outfeed_queue2.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      sess.run(pipeline_16)
+      # Buffer overflows float16
+      val = sess.run(outfed)[0]
+      self.assertTrue(val > np.finfo(np.float16).max
+                      or val < np.finfo(np.float16).min)
+      sess.run(pipeline_32)
+      # '1' is accumulated 8 times, + 24 ga count * 10000 addition to the loss
+      self.assertAllEqual([[240008]], sess.run(outfed2))
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTrainingMultipleOutputs(self):
