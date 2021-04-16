@@ -3230,6 +3230,12 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
   return Status::OK();
 }
 
+bool PoplarExecutor::HasOutfeed(const std::string& feed_id) const {
+  std::unique_lock<std::mutex> outfeeds_lock(outfeeds_mutex_);
+
+  return outfeed_contexts_.contains(feed_id);
+}
+
 Status PoplarExecutor::DeleteOutfeed(const std::string& feed_id) {
   std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
 

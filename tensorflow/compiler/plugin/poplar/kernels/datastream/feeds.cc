@@ -428,7 +428,12 @@ class IPUDeleteOutfeedOp : public OpKernel {
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
 
-    OP_REQUIRES_OK(ctx, poplar_executor->DeleteOutfeed(feed_id_));
+    if (poplar_executor->HasOutfeed(feed_id_)) {
+      OP_REQUIRES_OK(ctx, poplar_executor->DeleteOutfeed(feed_id_));
+    } else {
+      VLOG(2) << "Can't delete Outfeed '" << feed_id_
+              << "' as it doesn't exist.";
+    }
   }
 
  private:
