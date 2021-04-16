@@ -1076,7 +1076,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/pipelining_test.py"],
     # Shard count needs to match the number of tests.
-    shard_count = 35,
+    shard_count = 36,
     deps = [
         ":ipu_lib",
         ":pipelining_test_util",

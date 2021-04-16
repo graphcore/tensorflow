@@ -41,6 +41,7 @@ class IPUPipelineEstimatorSpec(
         'eval_metrics_fn',
         'optimizer_function',
         'device_mapping',
+        'loss_accumulator_dtype',
         'pipeline_op_kwargs',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
@@ -62,6 +63,7 @@ class IPUPipelineEstimatorSpec(
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
+              loss_accumulator_dtype=None,
               **pipeline_op_kwargs):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
@@ -102,6 +104,10 @@ class IPUPipelineEstimatorSpec(
         in order to generate the back-propagation and weight-update parts of the
         model suitable for training.
       device_mapping: optional stage to IPU mapping override.
+      loss_accumulator_dtype: When training, the loss is accumulated during
+        pipeline execution onto a buffer. Use this to set the data type of the
+        buffer to, for example, avoid overflow. By default (`None`), the buffer
+        is the same data type as the loss.
       pipeline_op_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`.
 
@@ -140,6 +146,7 @@ class IPUPipelineEstimatorSpec(
         count_gradient_accumulation_as_iterations,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
+        loss_accumulator_dtype=loss_accumulator_dtype,
         pipeline_op_kwargs=pipeline_op_kwargs)
 
 
@@ -203,6 +210,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           device_mapping=spec.device_mapping,
           outfeed_loss=True,
           accumulate_outfeed=True,
+          accumulate_outfeed_dtype=spec.loss_accumulator_dtype,
           name="ipu_pipeline_estimator_train",
           **spec.pipeline_op_kwargs)
 
