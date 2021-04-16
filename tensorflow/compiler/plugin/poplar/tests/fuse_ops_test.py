@@ -1189,6 +1189,31 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'Sum/fusion*/Reduce']
+      report.assert_all_compute_sets_and_list(ok)
+
+  def testSquareSumHalfs(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [2], name="a")
+        c = math_ops.reduce_mean(pa * pa)
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      # These values are too big to for float16 when squared and summed
+      # but since the squaring and summation happen in float32 we should
+      # get back a valid f16 value (if the fusion has worked).
+      fd = {pa: [2**8, 2]}
+      result = sess.run(c, fd)
+      self.assertAllClose(result, np.float16(32770.0))
+
+      report.parse_log(assert_len=4)
+
+      ok = [
+          '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply*/Multiply',
+          'Mean/convert*/Cast', 'copy*_host-exchange-local-copy-*/OnTileCopy-*'
+      ]
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionWithReverseWeights(self):
     with self.session() as sess:
