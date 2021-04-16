@@ -945,7 +945,9 @@ StatusOr<bool> HloMatcher::FindMatch(HloComputation* computation,
   std::set<HloInstruction*> visited;
 
   // Traverse from root
-  to_visit.push_back(computation->root_instruction());
+  to_visit = FindUnreachableRoots(computation);
+  // Visit the root instruction first
+  to_visit.insert(to_visit.begin(), computation->root_instruction());
   while (!to_visit.empty()) {
     HloInstruction* inst = to_visit.back();
     to_visit.pop_back();
