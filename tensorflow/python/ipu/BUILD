@@ -102,6 +102,7 @@ py_library(
     name = "ipu_lib",
     srcs = [
         "__init__.py",
+        "config.py",
         "dataset_benchmark.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -164,6 +165,20 @@ py_library(
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
     ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_lib"]),
+)
+
+tf_py_test(
+    name = "config_test",
+    size = "small",
+    srcs = ["tests/config_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
 )
 
 tf_py_test(
@@ -1456,6 +1471,7 @@ test_suite(
     tests = [
         "augru_test",
         "candidate_sampler_test",
+        "config_test",
         "dataset_benchmark_test",
         "dataset_ops_test",
         "dropout_hw_test",
