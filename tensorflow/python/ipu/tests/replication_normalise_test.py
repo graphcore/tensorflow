@@ -43,10 +43,12 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       self.assertAllClose(res, np.full([1, 4, 4, 2], 0.5))
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed',
-          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
+          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   @tu.test_uses_ipus(num_ipus=2)
@@ -67,12 +69,14 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
       self.assertAllClose(res, np.full([1, 4, 4, 2], 1.5))
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Divide',
+          'IpuReplicationNormalise/replication-normalise*/replication_normalise/Op/Mul',
           'add/add*/Add',
           '[cC]opy_',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
 
