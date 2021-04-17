@@ -340,6 +340,10 @@ MatrixTest.GetMatrixDiagonal_S64 POPLAR // Don't support int64 reduction.
 
 SortingTest.TopKFullSortWithDuplicates POPLAR // T9438 Requires stable sort.
 SortingTest.TopKFullSortWithDuplicates2Partitions POPLAR // T9438 Requires stable sort.
+ExecutionTest.DynamicReshapeDoubleDynamicDimensions POPLAR // T9438 Requires stable sort.
+
+ExecutionTest.DynamicSort POPLAR // Unsupported sort computation.
+ExecutionTest.DynamicTupleSort POPLAR // Unsupported sort computation.
 
 MathExhaustiveTest POPLAR // Precision errors
 

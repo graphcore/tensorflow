@@ -79,6 +79,7 @@ REGISTER_HLO_OP(kExpm1, UnaryElementwiseOp);
 REGISTER_HLO_OP(kFloor, UnaryElementwiseOp);
 REGISTER_HLO_OP(kImag, UnaryElementwiseOp);
 REGISTER_HLO_OP(kIsFinite, UnaryElementwiseOp);
+REGISTER_HLO_OP(kLogistic, UnaryElementwiseOp);
 REGISTER_HLO_OP(kLog, UnaryElementwiseOp);
 REGISTER_HLO_OP(kLog1p, UnaryElementwiseOp);
 REGISTER_HLO_OP(kNot, UnaryElementwiseOp);

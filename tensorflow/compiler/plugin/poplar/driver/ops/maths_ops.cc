@@ -77,6 +77,8 @@ StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction* inst) {
       return popops::expr::UnaryOpType::EXPONENT_MINUS_ONE;
     case HloOpcode::kFloor:
       return popops::expr::UnaryOpType::FLOOR;
+    case HloOpcode::kLogistic:
+      return popops::expr::UnaryOpType::SIGMOID;
     case HloOpcode::kLog:
       return popops::expr::UnaryOpType::LOGARITHM;
     case HloOpcode::kLog1p:

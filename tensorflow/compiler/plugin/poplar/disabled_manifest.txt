@@ -119,3 +119,4 @@ MatrixDiagPartTest.testPadding # need popops::reduce(OR, int)
 MatrixDiagPartTest.testSingleMatrix # need popops::reduce(OR, int)
 SLogDetOpTest # Need to register LogMatrixDeterminant op
 TridiagonalSolveOpsTest # need to register TridiagonalSolve op
+StatefulRandomOpsTest # T37613 - Need to support kRngBitGenerator

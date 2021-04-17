@@ -47,7 +47,8 @@ def xla_device():
       if d.device_type == device_type:
         return d
     return None
-  d = find_type("TPU") or find_type("XLA_GPU") or find_type("XLA_CPU")
+  d = (find_type("IPU") or find_type("TPU") or find_type("XLA_GPU")
+       or find_type("XLA_CPU"))
   if d is None:
     raise ValueError(
         "Can't find any XLA device. Available devices:\n%s" % devices)

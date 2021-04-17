@@ -387,6 +387,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kExp:
     case HloOpcode::kExpm1:
     case HloOpcode::kFloor:
+    case HloOpcode::kLogistic:
     case HloOpcode::kLog1p:
     case HloOpcode::kLog:
     case HloOpcode::kNegate:
@@ -671,6 +672,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kReduce:
     case HloOpcode::kReducePrecision:
     case HloOpcode::kReduceWindow:
+    case HloOpcode::kRngBitGenerator:
     case HloOpcode::kRng:
     case HloOpcode::kSelectAndScatter:
     case HloOpcode::kTriangularSolve:

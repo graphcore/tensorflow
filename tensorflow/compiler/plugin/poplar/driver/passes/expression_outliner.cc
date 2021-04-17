@@ -41,6 +41,7 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kExpm1:
     case HloOpcode::kFloor:
     case HloOpcode::kIsFinite:
+    case HloOpcode::kLogistic:
     case HloOpcode::kLog:
     case HloOpcode::kLog1p:
     case HloOpcode::kNot:
