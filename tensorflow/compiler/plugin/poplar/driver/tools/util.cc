@@ -854,5 +854,18 @@ StatusOr<Tileset> GetTileset(const HloInstruction* inst) {
   return backend_config.tileset();
 }
 
+std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation) {
+  std::vector<HloInstruction*> unreachable_roots;
+  for (auto* instruction : computation->MakeInstructionPostOrder()) {
+    if (instruction->user_count() == 0 &&
+        instruction->control_successors().empty() &&
+        instruction != computation->root_instruction()) {
+      unreachable_roots.push_back(instruction);
+    }
+  }
+
+  return unreachable_roots;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
