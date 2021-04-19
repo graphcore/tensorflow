@@ -1182,7 +1182,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       report.parse_log()
       report.assert_each_tile_memory_is_less_than(4234, tolerance=0.1)
-      report.assert_total_tile_memory(373536, tolerance=0.1)
+      report.assert_total_tile_memory(333745, tolerance=0.1)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
@@ -1238,7 +1238,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       report.parse_log()
       report.assert_each_tile_memory_is_less_than(4234, tolerance=0.1)
-      report.assert_total_tile_memory(373536, tolerance=0.1)
+      report.assert_total_tile_memory(333745, tolerance=0.1)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
