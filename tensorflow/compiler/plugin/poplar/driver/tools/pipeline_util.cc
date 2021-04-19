@@ -1940,11 +1940,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         }
 
         // * or, when not recomputing, the GTE doesn't have a single user,
-        auto isnt_gte = [](const HloInstruction* gte_user) -> bool {
-          return gte_user->opcode() != HloOpcode::kGetTupleElement;
-        };
-        if (!allow_recomputation_ &&
-            absl::c_count_if(user->users(), isnt_gte) > 1) {
+        if (!allow_recomputation_ && InfeedUserCount(inst, use_io_tiles_) > 1) {
           return true;
         }
 

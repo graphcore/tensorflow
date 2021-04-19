@@ -512,6 +512,72 @@ class PipeliningGroupedOverlapTest(test_util.TensorFlowTestCase,
         device_mapping=[0, 1, 0, 2, 0],
         number_of_io_tiles=number_of_io_tiles)
 
+  @parameterized.parameters([0, 32])
+  @test_util.deprecated_graph_mode_only
+  def testPipelineThreeInput(self, number_of_io_tiles):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32), value[1][1]
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    gradient_accumulation_count = 24
+    repeat_count = 2
+    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def get_weight(name):
+      return variable_scope.get_variable(
+          name,
+          shape=[4, 4],
+          dtype=np.float32,
+          initializer=init_ops.ones_initializer())
+
+    def get_stage(x):
+      w0 = get_weight("w0")
+      w1 = get_weight("w1")
+      x = math_ops.matmul(x, w0)
+      x = nn.relu(x)
+      x = math_ops.matmul(x, w1)
+      x = nn.relu(x)
+      return x
+
+    def stage1(x, label, scale):
+      with variable_scope.variable_scope("s1", use_resource=True):
+        return get_stage(x) * scale[0], label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("s2", use_resource=True):
+        return get_stage(x), label
+
+    def stage3(x, label):
+      logits = math_ops.reduce_mean(x, axis=[1])
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                      labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3],
+        inputs_fn, [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        number_of_io_tiles=number_of_io_tiles)
+
 
 if __name__ == "__main__":
   googletest.main()
