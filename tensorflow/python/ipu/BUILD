@@ -206,6 +206,7 @@ tf_py_test(
     name = "io_tiles_test",
     size = "medium",
     srcs = ["tests/io_tiles_test.py"],
+    shard_count = 3,  # as can't have differing config in same process
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -213,7 +214,6 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
     ],
-    shard_count = 3,  # as can't have differing config in same process
 )
 
 tf_py_test(
@@ -347,15 +347,15 @@ tf_py_test(
     name = "keras_pipeline_recomputation_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_recomputation_test.py"],
-    additional_deps = [
-        ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python/keras:layers",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework_test_lib",
-    ],
     shard_count = 2,
     tags = ["isolated_poplar_tests"],
+    deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
+    ],
 )
 
 tf_py_test(
@@ -367,7 +367,7 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
 )
@@ -523,7 +523,7 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras",
         "//third_party/py/numpy",
     ],
 )
@@ -1548,15 +1548,15 @@ tf_py_test(
     name = "replication_grouped_collectives_test",
     size = "large",
     srcs = ["tests/replication_grouped_collectives_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-    ],
     shard_count = 2,
     tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
 )
 
 tf_py_test(

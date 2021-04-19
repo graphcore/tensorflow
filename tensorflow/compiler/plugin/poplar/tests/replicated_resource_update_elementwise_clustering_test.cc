@@ -118,7 +118,7 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m) {
     arg3 = f32[$N,$M] parameter(3)
     add.1 = f32[$N,$M] add(input, arg0)
     add.2 = f32[$N,$M] add(input, arg1)
-    call = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) call(add.1, add.2, arg2, arg3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    call = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) call(add.1, add.2, arg2, arg3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
     gte0 = f32[$N,$M] get-tuple-element(call), index=0
     gte1 = f32[$N,$M] get-tuple-element(call), index=1
     gte2 = f32[$N,$M] get-tuple-element(call), index=2
@@ -437,7 +437,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     add.1 = f16[128] add(input, l.arg0)
     add.2 = f16[128] add(add.1, l.arg1)
 
-    call = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
+    call = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     gte2 = f16[128] get-tuple-element(call), index=2
@@ -557,7 +557,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg2 = f16[] parameter(2)
 
     add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128]) call(add.1, arg0, arg1, arg2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1, arg2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     ROOT r = (f16[128],f16[128],f16[]) tuple(gte0, gte1, arg2)
@@ -753,7 +753,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg2 = f16[] parameter(2)
 
     add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128],f16[]) call(add.1, arg0, arg1, arg2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
+    call = (f16[128],f16[128],f16[]) call(add.1, arg0, arg1, arg2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     gte2 = f16[] get-tuple-element(call), index=2
@@ -951,7 +951,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     arg1 = f16[128] parameter(1)
 
     add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"%s\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
@@ -1145,7 +1145,7 @@ std::string GetHlo(bool partition_offloaded_variables,
     add.1 = $element_type$shape add(input, arg0)
     call = ($element_type$shape,$remote_buffer_element_type$shape)
     call(add.1, arg0, arg1), to_apply=resource_update,
-    frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate},
+    frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"},
     backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\",
     \"partitionOffloadedVariables\":\"$partition_offloaded_variables\"}}}" gte0 =
     $element_type$shape get-tuple-element(call), index=0 gte1 =
