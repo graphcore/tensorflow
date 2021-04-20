@@ -291,7 +291,7 @@ tf_py_test(
     name = "embedding_lookup_test",
     size = "large",
     srcs = ["tests/embedding_lookup_test.py"],
-    shard_count = 5,
+    shard_count = 12,
     tags = ["hw_poplar_test"],
     deps = [
         ":ipu_grad_ops_lib",
