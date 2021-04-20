@@ -369,8 +369,10 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
                          mode,
                          run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
-    accumulate_outfeed = (run_loop_kwargs or {}).get("accumulate_outfeed",
-                                                     False)
+    run_loop_kwargs = run_loop_kwargs or {}
+    accumulate_outfeed = run_loop_kwargs.get("accumulate_outfeed", False)
+    accumulate_outfeed_dtype = run_loop_kwargs.get("accumulate_outfeed_dtype",
+                                                   None)
 
     # Plain functions to build a stage
     def call_inference_stage(stage_id, inputs):
@@ -453,6 +455,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
         accumulate_outfeed=accumulate_outfeed,
+        accumulate_outfeed_dtype=accumulate_outfeed_dtype,
         name=self.name)
 
     return pipeline.outputs
@@ -472,6 +475,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
           steps_per_run=None,
           prefetch_depth=None,
           accumulate_outfeed=False,
+          accumulate_outfeed_dtype=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Sequential `fit` method.
@@ -583,13 +587,51 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         available and enqueued at the end of pipeline execution, reducing
         the amount of host <-> device communication. The accumulated metrics are
         normalised by the `gradient_accumulation_count`.
+      accumulate_outfeed_dtype: The data type used for the outfeed accumulation
+        buffers. One of:
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`. Allows
+          specifying the accumulator type on a per-variable basis. Variables
+          given to this callable will be called "PipelineStage:0",
+          "PipelineStage:1", etc. The loss is the first output, then the
+          metrics are the consequent outputs, in the order they were
+          specified. For example:
+
+          .. code-block:: python
+
+            # Compile the model with MSE loss and two metrics.
+            model.compile(opt, loss='mse', metrics=['mse', 'accuracy'])
+
+            def accumulator_dtype_fn(var):
+              # The MSE loss is the first output.
+              if var.name == "PipelineStage:0":
+                return tf.float16
+              # The metrics are "PipelineStage:1" and "PipelineStage:2"
+              # respectively.
+              if var.name == "PipelineStage:1":
+                # Accumulate the MSE metric in float32
+                return tf.float32
+              if var.name == "PipelineStage:2":
+                # Accumulate the accuracy in float16
+                return tf.float16
+              return tf.float32
+
+            model.fit(...
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=accumulator_dtype_fn)
+
     Returns:
       A `History` object. Its `History.history` attribute is a record of
       training loss values and metrics values at successive epochs.
     Raises:
       ValueError: if there are invalid arguments.
     """
-    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    run_loop_kwargs = {
+        "accumulate_outfeed": accumulate_outfeed,
+        "accumulate_outfeed_dtype": accumulate_outfeed_dtype
+    }
     kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().fit(x,
                        y,
@@ -615,6 +657,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
                steps_per_run=None,
                prefetch_depth=None,
                accumulate_outfeed=False,
+               accumulate_outfeed_dtype=None,
                **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
     """
     This provides equivalent functionality to the Keras Sequential `evaluate`
@@ -699,6 +742,41 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
         available and enqueued at the end of pipeline execution, reducing
         the amount of host <-> device communication. The accumulated metrics are
         normalised by the `gradient_accumulation_count`.
+      accumulate_outfeed_dtype: The data type used for the outfeed accumulation
+        buffers. One of:
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`. Allows
+          specifying the accumulator type on a per-variable basis. Variables
+          given to this callable will be called "PipelineStage:0",
+          "PipelineStage:1", etc. The loss is the first output, then the
+          metrics are the consequent outputs, in the order they were
+          specified. For example:
+
+          .. code-block:: python
+
+            # Compile the model with MSE loss and two metrics.
+            model.compile(opt, loss='mse', metrics=['mse', 'accuracy'])
+
+            def accumulator_dtype_fn(var):
+              # The MSE loss is the first output.
+              if var.name == "PipelineStage:0":
+                return tf.float16
+              # The metrics are "PipelineStage:1" and "PipelineStage:2"
+              # respectively.
+              if var.name == "PipelineStage:1":
+                # Accumulate the MSE metric in float32
+                return tf.float32
+              if var.name == "PipelineStage:2":
+                # Accumulate the accuracy in float16
+                return tf.float16
+              return tf.float32
+
+            model.fit(...
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=accumulator_dtype_fn)
+
     Returns:
       Scalar test loss (if the model has a single output and no metrics) or list
       of scalars (if the model has multiple outputs and/or metrics). The
@@ -707,7 +785,10 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
     Raises:
       ValueError: if there are invalid arguments.
     """
-    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    run_loop_kwargs = {
+        "accumulate_outfeed": accumulate_outfeed,
+        "accumulate_outfeed_dtype": accumulate_outfeed_dtype
+    }
     kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().evaluate(x,
                             y,
@@ -1250,8 +1331,10 @@ class PipelineModel(ipu_model.Model):
                          mode,
                          run_loop_kwargs=None):
     training = mode == ModeKeys.TRAIN
-    accumulate_outfeed = (run_loop_kwargs or {}).get("accumulate_outfeed",
-                                                     False)
+    run_loop_kwargs = run_loop_kwargs or {}
+    accumulate_outfeed = run_loop_kwargs.get("accumulate_outfeed", False)
+    accumulate_outfeed_dtype = run_loop_kwargs.get("accumulate_outfeed_dtype",
+                                                   None)
 
     # Dictionary mapping reference tensors to computed tensors.
     tensor_dict = OrderedDict()
@@ -1357,6 +1440,7 @@ class PipelineModel(ipu_model.Model):
         replicated_weight_sharding=self.replicated_weight_sharding,
         offload_weights=self.offload_weights,
         accumulate_outfeed=accumulate_outfeed,
+        accumulate_outfeed_dtype=accumulate_outfeed_dtype,
         name=self.name)
 
     return pipeline.outputs
@@ -1425,6 +1509,7 @@ class PipelineModel(ipu_model.Model):
           steps_per_run=None,
           prefetch_depth=None,
           accumulate_outfeed=False,
+          accumulate_outfeed_dtype=None,
           **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Model `fit` method.
@@ -1536,13 +1621,51 @@ class PipelineModel(ipu_model.Model):
         available and enqueued at the end of pipeline execution, reducing
         the amount of host <-> device communication. The accumulated metrics are
         normalised by the `gradient_accumulation_count`.
+      accumulate_outfeed_dtype: The data type used for the outfeed accumulation
+        buffers. One of:
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`. Allows
+          specifying the accumulator type on a per-variable basis. Variables
+          given to this callable will be called "PipelineStage:0",
+          "PipelineStage:1", etc. The loss is the first output, then the
+          metrics are the consequent outputs, in the order they were
+          specified. For example:
+
+          .. code-block:: python
+
+            # Compile the model with MSE loss and two metrics.
+            model.compile(opt, loss='mse', metrics=['mse', 'accuracy'])
+
+            def accumulator_dtype_fn(var):
+              # The MSE loss is the first output.
+              if var.name == "PipelineStage:0":
+                return tf.float16
+              # The metrics are "PipelineStage:1" and "PipelineStage:2"
+              # respectively.
+              if var.name == "PipelineStage:1":
+                # Accumulate the MSE metric in float32
+                return tf.float32
+              if var.name == "PipelineStage:2":
+                # Accumulate the accuracy in float16
+                return tf.float16
+              return tf.float32
+
+            model.fit(...
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=accumulator_dtype_fn)
+
     Returns:
       A `History` object. Its `History.history` attribute is a record of
       training loss values and metrics values at successive epochs.
     Raises:
       ValueError: if there are invalid arguments.
     """
-    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    run_loop_kwargs = {
+        "accumulate_outfeed": accumulate_outfeed,
+        "accumulate_outfeed_dtype": accumulate_outfeed_dtype
+    }
     kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().fit(x,
                        y,
@@ -1568,6 +1691,7 @@ class PipelineModel(ipu_model.Model):
                steps_per_run=None,
                prefetch_depth=None,
                accumulate_outfeed=False,
+               accumulate_outfeed_dtype=None,
                **kwargs):  # pylint: disable=useless-super-delegation
     """
     This provides equivalent functionality to the Keras Model `evaluate`
@@ -1652,6 +1776,41 @@ class PipelineModel(ipu_model.Model):
         available and enqueued at the end of pipeline execution, reducing
         the amount of host <-> device communication. The accumulated metrics are
         normalised by the `gradient_accumulation_count`.
+      accumulate_outfeed_dtype: The data type used for the outfeed accumulation
+        buffers. One of:
+
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`. Allows
+          specifying the accumulator type on a per-variable basis. Variables
+          given to this callable will be called `PipelineStage:0`,
+          `PipelineStage:1`, etc. The loss is the first output, then the
+          metrics are the consequent outputs, in the order they were
+          specified. For example:
+
+          .. code-block:: python
+
+            # Compile the model with MSE loss and two metrics.
+            model.compile(opt, loss='mse', metrics=['mse', 'accuracy'])
+
+            def accumulator_dtype_fn(var):
+              # The MSE loss is the first output.
+              if var.name == "PipelineStage:0":
+                return tf.float16
+              # The metrics are "PipelineStage:1" and "PipelineStage:2"
+              # respectively.
+              if var.name == "PipelineStage:1":
+                # Accumulate the MSE metric in float32
+                return tf.float32
+              if var.name == "PipelineStage:2":
+                # Accumulate the accuracy in float16
+                return tf.float16
+              return tf.float32
+
+            model.fit(...
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=accumulator_dtype_fn)
+
     Returns:
       Scalar test loss (if the model has a single output and no metrics) or list
       of scalars (if the model has multiple outputs and/or metrics). The
@@ -1660,7 +1819,10 @@ class PipelineModel(ipu_model.Model):
     Raises:
       ValueError: if there are invalid arguments.
     """
-    run_loop_kwargs = {"accumulate_outfeed": accumulate_outfeed}
+    run_loop_kwargs = {
+        "accumulate_outfeed": accumulate_outfeed,
+        "accumulate_outfeed_dtype": accumulate_outfeed_dtype
+    }
     kwargs["run_loop_kwargs"] = run_loop_kwargs
     return super().evaluate(x,
                             y,
