@@ -59,7 +59,9 @@ struct SerializeGradientAccumulationTest
 INSTANTIATE_TEST_SUITE_P(
     SerializeGradientAccumulationTestCases, SerializeGradientAccumulationTest,
     ::testing::Values(SerializeGradientAccumulationTestSpec{F32, F32},
-                      SerializeGradientAccumulationTestSpec{F16, F32}));
+                      SerializeGradientAccumulationTestSpec{F16, F32},
+                      SerializeGradientAccumulationTestSpec{F16, F16},
+                      SerializeGradientAccumulationTestSpec{F32, F16}));
 
 string ReplaceParams(absl::string_view s,
                      const SerializeGradientAccumulationTestSpec& spec) {
