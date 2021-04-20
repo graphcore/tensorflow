@@ -259,7 +259,9 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
           // Normalize it - we normalize after the all reduce otherwise we risk
           // the gradients becoming zeros.
           popops::mapInPlace(
-              graph, pe::Divide(pe::_1, pe::Const(res.replication_factor)),
+              graph,
+              pe::_1 *
+                  pe::Const(1.f / static_cast<float>(res.replication_factor)),
               {output}, if_true, {debug_info, "NormalizeAccumulator"});
 
           // Copy the normalized output into accumulator.

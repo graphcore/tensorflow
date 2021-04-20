@@ -835,7 +835,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
       : queue_(queue), num_bytes_(num_bytes), look_ahead_(0) {}
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
-    tensorflow::TensorBuffer* buffer;
+    tensorflow::TensorBuffer* buffer = nullptr;
     // Try to get a value from the queue.
     if (queue_->TryPop(buffer, look_ahead_)) {
       std::memcpy(dest, buffer->data(), num_bytes_);
@@ -847,7 +847,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
   }
 
   void fetch(void* dest) noexcept override {
-    tensorflow::TensorBuffer* buffer;
+    tensorflow::TensorBuffer* buffer = nullptr;
     if (!queue_->BlockPop(buffer, look_ahead_)) {
       LOG(FATAL) << "Infeed dataset iterator out of range. Are you trying to "
                  << "dequeue more elements than are in the dataset?";
@@ -859,7 +859,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
   void complete() noexcept override {
     queue_->AdvanceReadPosition();
-    look_ahead_--;
+    CHECK_GE(look_ahead_--, 1);
   }
 
  private:

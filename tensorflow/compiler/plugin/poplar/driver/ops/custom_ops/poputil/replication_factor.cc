@@ -70,9 +70,10 @@ class ReplicationNormaliseOp : public PoplarOpDef {
     poplar::Tensor inout = inputs[0][0];
 
     if (res.replication_factor > 1) {
-      popops::mapInPlace(graph,
-                         pe::Divide(pe::_1, pe::Const(res.replication_factor)),
-                         {inout}, seq, {debug_info, "replication_normalise"});
+      popops::mapInPlace(
+          graph,
+          pe::_1 * pe::Const(1.f / static_cast<float>(res.replication_factor)),
+          {inout}, seq, {debug_info, "replication_normalise"});
     }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, inout));

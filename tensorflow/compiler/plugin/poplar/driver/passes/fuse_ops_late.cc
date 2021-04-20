@@ -479,6 +479,22 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })),
 
+  // Reduce sum a squared input, where the operand being squared is of
+  // type F16 and the accumulation operand is of type F32.
+  HloMatcherPattern(
+    PatternType("reduction_square_add"),
+    PatternMetaTarget(0),
+    PatternInputs({3, 4}),
+    PatternOutputs({0}),
+    Pattern({
+      // NOLINTNEXTLINE
+      {HloOpcode::kReduce, NodeOperands({1, 4}), IsReduceAdd},
+      {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
+      {HloOpcode::kMultiply, NodeOperands({3, 3})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
+    })),
+
   // Reduction from FP16 to F32.
   HloMatcherPattern(
     PatternType("reduction_fp16_input"),

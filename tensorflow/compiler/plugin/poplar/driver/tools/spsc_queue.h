@@ -66,7 +66,7 @@ class SPSCQueue {
    */
   explicit SPSCQueue(T init, std::function<void(T&)> post_apply)
       : push_count_(0), pop_count_(0), post_apply_(post_apply) {
-    assert(post_apply);
+    CHECK(post_apply);
     std::fill(buffer_.begin(), buffer_.end(), init);
   }
 
@@ -97,7 +97,7 @@ class SPSCQueue {
    *       (i.e. IsFull() == false) and it does not advance the write position.
    */
   inline void Push(const T& item) {
-    assert(!IsFull(0));
+    CHECK(!IsFull(0));
 
     const std::size_t push_count =
         std::atomic_load_explicit(&push_count_, std::memory_order_relaxed) %
@@ -159,8 +159,8 @@ class SPSCQueue {
    * position.
    */
   inline void Pop(T& item, std::size_t look_ahead = 0) {
-    assert(!IsEmpty());
-    assert(HasLookAhead(look_ahead));
+    CHECK(!IsEmpty());
+    CHECK(HasLookAhead(look_ahead));
 
     item = buffer_[(pop_count_ + look_ahead) % Capacity];
   }
@@ -230,6 +230,8 @@ class SPSCQueue {
    * false.
    */
   inline bool HasLookAhead(std::size_t look_ahead) const {
+    CHECK(look_ahead < Capacity);
+
     const std::size_t push_count =
         std::atomic_load_explicit(&push_count_, std::memory_order_consume);
     const std::size_t pop_count =
