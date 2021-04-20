@@ -609,16 +609,13 @@ StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
     return 0;
   }
 
-  constexpr int kNumIoTilesMinValue = 32;
   constexpr int kNumIoTilesMaxValue = 192;
-  constexpr int kNumIoTilesMultiple = 2;
 
-  if (value < kNumIoTilesMinValue || value > kNumIoTilesMaxValue ||
-      value % kNumIoTilesMultiple != 0) {
+  if (value > kNumIoTilesMaxValue) {
     return InvalidArgument(
         "%d is an invalid number of IO tiles. The number of IO tiles must be "
-        "in the range [%d, %d] and divisible by %d",
-        value, kNumIoTilesMinValue, kNumIoTilesMaxValue, kNumIoTilesMultiple);
+        "in the range [0, %d].",
+        value, kNumIoTilesMaxValue);
   }
 
   return value;
@@ -657,7 +654,7 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
     return absl::nullopt;
   }
 
-  LOG(INFO) << "Reserving " << num_io_tiles << " IO tiles on each IPU.";
+  LOG(INFO) << "Reserving " << num_io_tiles << " IO tile(s) on each IPU.";
 
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
