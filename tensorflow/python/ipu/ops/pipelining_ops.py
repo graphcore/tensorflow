@@ -407,10 +407,11 @@ def pipeline(computational_stages,
       be executed.
     gradient_accumulation_dtype: The data type used for the gradient
       accumulation buffer. One of:
-        - `None`: Use an accumulator of the same type as the variable type.
-        - A `DType`: Use this type for all the accumulators.
-        - A callable that takes the variable and returns a `DType`: Allows
-          specifying the accumulator type on a per-variable basis.
+
+      - `None`: Use an accumulator of the same type as the variable type.
+      - A `DType`: Use this type for all the accumulators.
+      - A callable that takes the variable and returns a `DType`: Allows
+        specifying the accumulator type on a per-variable basis.
 
       The gradients passed to `Optimizer.apply_gradients` will have the dtype
       requested here. If that dtype is different from the variable dtype
@@ -526,10 +527,11 @@ def pipeline(computational_stages,
       (see :class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedMode`).
     accumulate_outfeed_dtype: The data type used for the outfeed accumulation
       buffers. One of:
-        - `None`: Use an accumulator of the same type as the variable type.
-        - A `DType`: Use this type for all the accumulators.
-        - A callable that takes the variable and returns a `DType`: Allows
-          specifying the accumulator type on a per-variable basis.
+
+      - `None`: Use an accumulator of the same type as the variable type.
+      - A `DType`: Use this type for all the accumulators.
+      - A callable that takes the variable and returns a `DType`: Allows
+        specifying the accumulator type on a per-variable basis.
     name: name of this pipeline.
 
   Returns:
