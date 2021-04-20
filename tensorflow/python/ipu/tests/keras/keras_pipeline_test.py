@@ -690,6 +690,72 @@ class IPUPipelineTest(test.TestCase):
       self.assertAllClose(history, history_acc)
 
   @test_util.run_v2_only
+  def testFitAccumulateOutfeedSetDtype(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      input_layer = keras.layers.Input(shape=(32))
+      x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
+
+      # Add 100000 to make the loss too large for fp16.
+      with ipu.keras.PipelineStage(1):
+        x = keras.layers.Lambda(
+            lambda x: math_ops.cast(x + 100000, np.float16))(x)
+
+      m = ipu.keras.PipelineModel(inputs=input_layer,
+                                  outputs=x,
+                                  gradient_accumulation_count=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
+      m.compile(opt,
+                loss='mse',
+                metrics=[
+                    keras.metrics.MeanAbsoluteError(),
+                    keras.metrics.RootMeanSquaredError()
+                ])
+
+      # With default types, only MSE loss overflows.
+      history = m.fit(test_dataset(),
+                      steps_per_epoch=10,
+                      epochs=1,
+                      accumulate_outfeed=True)
+      self.assertEqual(history.history['loss'], [np.inf])
+      self.assertAllClose(history.history['mean_absolute_error'],
+                          [100003.8906])
+      self.assertAllClose(history.history['root_mean_squared_error'],
+                          [100003.8828])
+
+      # Also accumulate the two metrics in fp16 and check they overflow too.
+      def fp16metrics(var):
+        if "PipelineStage:1" in var.name or "PipelineStage:2" in var.name:
+          return np.float16
+        return var.dtype
+
+      history = m.fit(test_dataset(),
+                      steps_per_epoch=10,
+                      epochs=1,
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=fp16metrics)
+      self.assertAllEqual(history.history['loss'], [np.inf])
+      self.assertAllEqual(history.history['mean_absolute_error'], [np.inf])
+      self.assertAllClose(history.history['root_mean_squared_error'], [np.inf])
+
+      # Accumulate everything in fp32 and check nothing overflows.
+      history = m.fit(test_dataset(),
+                      steps_per_epoch=10,
+                      epochs=1,
+                      accumulate_outfeed=True,
+                      accumulate_outfeed_dtype=np.float32)
+
+      self.assertAllClose(history.history['loss'], [9999958698.6667])
+      self.assertAllClose(history.history['mean_absolute_error'], [99999.7969])
+      self.assertAllClose(history.history['root_mean_squared_error'],
+                          [99999.7656])
+
+  @test_util.run_v2_only
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
