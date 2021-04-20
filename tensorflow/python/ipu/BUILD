@@ -298,7 +298,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
-    shard_count = 5,
+    shard_count = 12,
     tags = ["hw_poplar_test"],
 )
 

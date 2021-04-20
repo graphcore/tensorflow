@@ -45,6 +45,15 @@ StatusOr<poplar::Tensor> CreateInputTensor(
                                        {0}, {1}, plan, {}, {debug_name_and_id});
 }
 
+StatusOr<poplar::Tensor> CreateReallocatedInputTensor(
+    poplar::Graph& graph, const popops::SlicePlan& plan,
+    const poplar::Tensor& tensor,
+    const poplar::DebugNameAndId& debug_name_and_id) {
+  return popops::createSliceableTensor(graph, tensor.elementType(),
+                                       tensor.shape(), {0}, {1}, plan, {},
+                                       debug_name_and_id);
+}
+
 StatusOr<poplar::Tensor> CreateUpdatesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
     const Shape& xla_input_shape, const Shape& xla_updates_shape,
@@ -78,13 +87,25 @@ class MultiSliceOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 1, seq, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
+    // Check whether the plan was use to allocate the input tensor.
+    // If it was not then we need to allocate a new input tensor.
+    TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
+    if (!plan_used) {
+      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+              << " because it was not allocated using the slice plan.";
+      // Create a copy of the input and allocate it using the plan.
+      poplar::Tensor original_input = input;
+      TF_ASSIGN_OR_RETURN(
+          input, CreateReallocatedInputTensor(
+                     graph, *plan, input, {debug_info, "inputReallocated"}));
+      seq.add(
+          poplar::program::Copy(original_input, input, false, {debug_info}));
+    }
 
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, use_plan ? *plan : popops::SlicePlan{}, {},
-        {debug_info, "output"});
+        {1}, seq, *plan, {}, {debug_info, "output"});
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
     // Unflatten the output:
@@ -243,11 +264,30 @@ class MultiUpdateOp : public PoplarOpDef {
         FindInstructionInput(tensor_map, res, inst, 2, prog, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
+    // Check whether the plan was use to allocate the input tensor.
+    // If it was not then we need to allocate a new input tensor.
+    TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
+    poplar::Tensor operand_reallocated;
+    if (!plan_used) {
+      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+              << " because it was not allocated using the slice plan.";
+      // Create a copy of the input and allocate it using the plan.
+      TF_ASSIGN_OR_RETURN(
+          operand_reallocated,
+          CreateReallocatedInputTensor(graph, *plan, operand,
+                                       {debug_info, "inputReallocated"}));
+      prog.add(poplar::program::Copy(operand, operand_reallocated, false,
+                                     {debug_info}));
+    }
     TF_RETURN_IF_ERROR(MultiUpdateInternal(
-        graph, use_plan ? *plan : popops::SlicePlan{}, operand, indices,
+        graph, *plan, plan_used ? operand : operand_reallocated, indices,
         updates, prog, multi_update, UpdateMode::Replace, {debug_info}));
 
+    if (!plan_used) {
+      // Copy the results back into the original input tensor.
+      prog.add(poplar::program::Copy(operand_reallocated, operand, false,
+                                     {debug_info}));
+    }
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
     return prog;
@@ -313,12 +353,31 @@ class MultiUpdateAddOp : public MultiUpdateOp {
         FindInstructionInput(tensor_map, res, inst, 3, prog, {debug_info}));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_ASSIGN_OR_RETURN(bool use_plan, SlicePlanHasAllocation(res, inst));
+    // Check whether the plan was use to allocate the input tensor.
+    // If it was not then we need to allocate a new input tensor.
+    TF_ASSIGN_OR_RETURN(bool plan_used, SlicePlanHasAllocation(res, inst));
+    poplar::Tensor operand_reallocated;
+    if (!plan_used) {
+      VLOG(1) << "Creating a new tensor for input 0 of " << inst->name()
+              << " because it was not allocated using the slice plan.";
+      // Create a copy of the input and allocate it using the plan.
+      TF_ASSIGN_OR_RETURN(
+          operand_reallocated,
+          CreateReallocatedInputTensor(graph, *plan, operand,
+                                       {debug_info, "inputReallocated"}));
+      prog.add(poplar::program::Copy(operand, operand_reallocated, false,
+                                     {debug_info}));
+    }
+    TF_RETURN_IF_ERROR(MultiUpdateInternal(
+        graph, *plan, plan_used ? operand : operand_reallocated, indices,
+        updates, prog, multi_update_add, UpdateMode::Accumulate, {debug_info},
+        scale));
 
-    TF_RETURN_IF_ERROR(
-        MultiUpdateInternal(graph, use_plan ? *plan : popops::SlicePlan{},
-                            operand, indices, updates, prog, multi_update_add,
-                            UpdateMode::Accumulate, {debug_info}, scale));
+    if (!plan_used) {
+      // Copy the results back into the original input tensor.
+      prog.add(poplar::program::Copy(operand_reallocated, operand, false,
+                                     {debug_info}));
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
     return prog;
