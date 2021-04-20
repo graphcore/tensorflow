@@ -44,7 +44,7 @@ disable_v2_behavior()
 
 class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
                                          parameterized.TestCase):
-  @parameterized.parameters([0, 32])
+  @parameterized.parameters([0, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 32])
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, number_of_io_tiles):
     if utils.running_on_ipu_model():
