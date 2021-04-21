@@ -62,6 +62,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dead_control_dependencies_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/distributed_batch_norm_decomposer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
@@ -608,16 +609,13 @@ StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
     return 0;
   }
 
-  constexpr int kNumIoTilesMinValue = 32;
   constexpr int kNumIoTilesMaxValue = 192;
-  constexpr int kNumIoTilesMultiple = 2;
 
-  if (value < kNumIoTilesMinValue || value > kNumIoTilesMaxValue ||
-      value % kNumIoTilesMultiple != 0) {
+  if (value > kNumIoTilesMaxValue) {
     return InvalidArgument(
         "%d is an invalid number of IO tiles. The number of IO tiles must be "
-        "in the range [%d, %d] and divisible by %d",
-        value, kNumIoTilesMinValue, kNumIoTilesMaxValue, kNumIoTilesMultiple);
+        "in the range [0, %d].",
+        value, kNumIoTilesMaxValue);
   }
 
   return value;
@@ -656,7 +654,7 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
     return absl::nullopt;
   }
 
-  LOG(INFO) << "Reserving " << num_io_tiles << " IO tiles on each IPU.";
+  LOG(INFO) << "Reserving " << num_io_tiles << " IO tile(s) on each IPU.";
 
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
@@ -1286,9 +1284,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.enable_fast_math);
     pipeline.AddPass<ZeroSizedHloElimination>();
     pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<DistributedBatchNormDecomposer>(
+        resources.recomputation_enabled,
+        resources.experimental_distributed_batch_norm_replica_group_size);
     pipeline.AddPass<HloPassFix<SeedHoisting>>();
-    pipeline.AddPass<PipelineRecomputation>(
-        poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<PipelineRecomputation>(resources.recomputation_enabled);
     pipeline.AddPass<RecomputationCheckpointRemover>();
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<PipelineTupleRemover>();
@@ -1397,10 +1397,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<RecomputationInputRemover>();
-    pipeline.AddPass<RecomputeInstructions>(
-        poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
 
-    if (poplar_executor->RecomputationEnabled()) {
+    if (resources.recomputation_enabled) {
       if (UsesRecomputationSuggestions(module.get())) {
         LOG(INFO) << "Detected SuggestRecompute operation - this will be "
                      "removed in release 2.2";
@@ -1449,9 +1448,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<ConvBwdInputToFwdWeightsTranspose>();
     pipeline.AddPass<PipelineRecomputationStageInserter>(
-        poplar_executor->RecomputationEnabled(),
-        resources.remote_memory_supported);
-    if (poplar_executor->RecomputationEnabled()) {
+        resources.recomputation_enabled, resources.remote_memory_supported);
+    if (resources.recomputation_enabled) {
       pipeline.AddPass<FlattenCallGraph>();
     }
     pipeline.AddPass<DeadControlDependenciesElimination>();
@@ -1464,7 +1462,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     //   pipeline.AddPass<ConstantNaN>();
     // }
 
-    pipeline.AddPass<PipelineVerifier>(poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<PipelineVerifier>(resources.recomputation_enabled);
     pipeline.AddPass<GradientAccumulationVerifier>(
         resources.replication_factor);
     if (resources.information.max_all_reduce_buffer_size > 0 ||

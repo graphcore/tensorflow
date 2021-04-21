@@ -24,10 +24,14 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
+from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
@@ -37,6 +41,7 @@ disable_v2_behavior()
 
 
 class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
     def dataset_fn():
@@ -93,6 +98,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         gradient_accumulation_count, dataset_fn, optimizer, self, 13936, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
     # Resnet like network.
@@ -194,6 +200,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         gradient_accumulation_count, dataset_fn, optimizer, self, 36502, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
     if utils.running_on_ipu_model():
@@ -247,6 +254,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         gradient_accumulation_count, dataset_fn, optimizer, self, 13681, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
     if utils.running_on_ipu_model():
@@ -308,6 +316,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         gradient_accumulation_count, dataset_fn, optimizer, self, 10760, True,
         pipelining_ops.PipelineSchedule.Sequential)
 
+  @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
     def dataset_fn():
@@ -356,6 +365,101 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
         gradient_accumulation_count, dataset_fn, optimizer, self, 6328, True,
         pipelining_ops.PipelineSchedule.Sequential)
+
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def testDistributedBatchNorm(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(128, shape=[1, 1, 1])
+      dataset = dataset.batch(batch_size=1, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value
+        label = value[0][0][0][0]
+        return img, label
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 8
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        y = layers.Conv2D(
+            2,
+            1,
+            use_bias=True,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5),
+            name='conv1')(img)
+        return y, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        x = layers.BatchNormalization()(x, training=True)
+        x = x * x
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("stage4", use_resource=True):
+        return math_ops.reduce_sum(x) + label
+
+    def opt_fn(loss):
+      return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+        dataset_fn(),
+        "infeed_test_distributed_batch_norm",
+        replication_factor=2)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+        "outfeed_test_distributed_batch_norm", replication_factor=2)
+
+    def my_net():
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          gradient_accumulation_count,
+          repeat_count=repeat_count,
+          optimizer_function=opt_fn,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential,
+          device_mapping=[0] * 3)
+
+    with self.test_session() as session:
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=[])
+
+      cfg = utils.create_ipu_config(profiling=True,
+                                    profile_execution=True,
+                                    disable_graph_outlining=True)
+      cfg = utils.auto_select_ipus(cfg, 2)
+      cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
+      cfg = utils.set_norm_options(
+          cfg, experimental_distributed_batch_norm_replica_group_size=2)
+      cfg = tu.add_hw_ci_connection_options(cfg)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+      report = tu.ReportJSON(self, session, configure_device=False)
+
+      session.run(variables.global_variables_initializer())
+      session.run(infeed_queue.initializer)
+      report.reset()
+
+      session.run(compiled_model_pipeline)
+
+      report.parse_log()
+
+      # Check that there is no compute set for recomputed stats.
+      # pylint: disable=line-too-long
+      bad = [
+          'stage2/batch_normalization/FusedBatchNorm*/Recomputed/batch-norm-statistics*'
+      ]
+      # pylint: enable=line-too-long
+
+      report.assert_compute_sets_not_in_blacklist(bad)
 
 
 if __name__ == "__main__":

@@ -218,6 +218,7 @@ def pipeline(computational_stages,
              continuous_weight_updates=False,
              outfeed_loss=False,
              accumulate_outfeed=False,
+             accumulate_outfeed_dtype=None,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -523,6 +524,12 @@ def pipeline(computational_stages,
       end of pipeline execution. To use this option, the provided
       `outfeed_queue` must be in the `IPUOutfeedMode` ALL mode
       (see :class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedMode`).
+    accumulate_outfeed_dtype: The data type used for the outfeed accumulation
+      buffers. One of:
+        - `None`: Use an accumulator of the same type as the variable type.
+        - A `DType`: Use this type for all the accumulators.
+        - A callable that takes the variable and returns a `DType`: Allows
+          specifying the accumulator type on a per-variable basis.
     name: name of this pipeline.
 
   Returns:
@@ -721,9 +728,12 @@ def pipeline(computational_stages,
       else:
         tensors = functional_ops._convert_to_list(tensor_or_tensors)  # pylint: disable=protected-access
         for tensor in tensors:
+          # Find the data type for the outfeed accumulator.
+          dtype = op_util.get_accumulator_dtype(tensor,
+                                                accumulate_outfeed_dtype)
           # Create a new tensor for the accumulator buffer.
           acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
-              shape=tensor.shape, output_type=tensor.dtype)
+              shape=tensor.shape, output_type=dtype)
           acc = gen_poputil_ops.gradient_accumulator_add(acc, tensor)
           sink = gen_poputil_ops.gradient_accumulator_sink(
               acc, num_mini_batches=gradient_accumulation_count)

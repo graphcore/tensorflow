@@ -16,7 +16,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_NORM_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_NORM_H_
 
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
@@ -28,15 +31,12 @@ class HloNormInstruction : public HloPoplarInstruction {
   template <typename... Args>
   HloNormInstruction(const Shape& shape,
                      absl::Span<HloInstruction* const> operands, PoplarOp op,
-                     int32 num_groups, float epsilon, int feature_index,
-                     Args&&... attributes)
-      : HloPoplarInstruction(shape, operands, op, num_groups, epsilon,
-                             feature_index, std::forward<Args>(attributes)...),
-        num_groups_(num_groups),
+                     float epsilon, int feature_index, Args&&... attributes)
+      : HloPoplarInstruction(shape, operands, op, epsilon, feature_index,
+                             std::forward<Args>(attributes)...),
         epsilon_(epsilon),
         feature_index_(feature_index) {}
 
-  int32 num_groups() const;
   float epsilon() const;
   int feature_index() const;
 
@@ -45,9 +45,8 @@ class HloNormInstruction : public HloPoplarInstruction {
       const HloPrintOptions& options) const override;
 
  private:
-  int32 num_groups_;
-  float epsilon_;
-  int feature_index_;
+  const float epsilon_;
+  const int feature_index_;
 };
 
 class HloGroupNormBaseInstruction : public HloNormInstruction {
@@ -57,10 +56,16 @@ class HloGroupNormBaseInstruction : public HloNormInstruction {
       PoplarOp op, int32 num_groups, bool strided_channel_grouping,
       float epsilon, int feature_index);
 
+  int32 num_groups() const;
   bool strided_channel_grouping() const;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
-  bool strided_channel_grouping_;
+  const int32 num_groups_;
+  const bool strided_channel_grouping_;
 };
 
 class HloGroupNormInstruction : public HloGroupNormBaseInstruction {
@@ -191,6 +196,29 @@ class HloGroupNormStatsInstruction : public HloGroupNormBaseInstruction {
 std::unique_ptr<HloInstruction> CreateGroupNormStats(
     const Shape& shape, HloInstruction* const operand, int32 num_groups,
     bool strided_channel_grouping, float epsilon, int feature_index);
+
+class HloBatchNormStatsInstruction : public HloNormInstruction {
+ public:
+  explicit HloBatchNormStatsInstruction(const Shape& shape,
+                                        HloInstruction* const operand,
+                                        float epsilon, int feature_index);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  bool IsPopOpsElementwise() const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateBatchNormStats(
+    const Shape& shape, HloInstruction* const operand, float epsilon,
+    int feature_index);
 
 }  // namespace poplarplugin
 }  // namespace xla

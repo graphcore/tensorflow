@@ -346,6 +346,128 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
             r"dimension of params \(2000\)."):
           ipu.ipu_compiler.compile(body, inputs=[table, indices])
 
+  @tu.skip_on_hw
+  @test_util.deprecated_graph_mode_only
+  def testReallocationInGradientWhenInputAllocatedForMatmul(self):
+    # Tests the behaviour when the input is allocated for a different op.
+    # The input should be cloned into a correctly mapped tensor, to avoid
+    # memory spikes.
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float32, shape=[16, 16])
+        updates = array_ops.placeholder(np.float32, shape=[1024, 16])
+        indices = array_ops.placeholder(np.int32, shape=[1024])
+
+      report = tu.ReportJSON(self, sess)
+
+      def model(x, updates, indices):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          lhs = variable_scope.get_variable(
+              "lhs",
+              shape=[1024, 16],
+              dtype=np.float32,
+              initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(lhs, x)
+        return gen_popops_ops.ipu_multi_update_add(x,
+                                                   updates=updates,
+                                                   indices=indices,
+                                                   scale=1)
+
+      with ops.device("/device:IPU:0"):
+        result = ipu.ipu_compiler.compile(model, inputs=[x, updates, indices])
+
+      fd = {
+          x: np.random.rand(*x.shape),
+          updates: np.random.rand(*updates.shape),
+          indices: np.random.randint(1024, size=indices.shape),
+      }
+
+      sess.run(variables.global_variables_initializer())
+
+      report.reset()
+      sess.run(result, feed_dict=fd)
+      report.parse_log()
+
+      # Large memory spikes are generated when the input for a MultiUpdateAdd
+      # is not mapped in the scheme expected by poplibs.
+      report.assert_max_tile_memory(2492)
+
+  @tu.skip_on_hw
+  @test_util.deprecated_graph_mode_only
+  def testOutputWhenInputAllocatedForAnotherOp(self):
+    # Tests the output values for the code path where the input is allocated
+    # for a different op. In this path the input is cloned into a correctly
+    # mapped tensor.
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float32, shape=[4, 4])
+        indices = array_ops.placeholder(np.int32, shape=[8])
+
+      def model(x, indices):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          lhs = variable_scope.get_variable(
+              "lhs",
+              shape=[8, 4],
+              dtype=np.float32,
+              initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(lhs, x)
+        gen_popops_ops.ipu_multi_slice(x, indices)
+        return x
+
+      with ops.device("/device:IPU:0"):
+        result, = ipu.ipu_compiler.compile(model, inputs=[x, indices])
+
+      fd = {
+          x: [[0, 1, 2, 3], [2, 3, 4, 5], [4, 5, 6, 7], [6, 7, 8, 9]],
+          indices: list(range(8)),
+      }
+
+      sess.run(variables.global_variables_initializer())
+
+      out = sess.run(result, feed_dict=fd)
+      self.assertAllClose(out, [[12, 16, 20, 24]] * 8)
+
+  @tu.skip_on_hw
+  @test_util.deprecated_graph_mode_only
+  def testGradientOutputWhenInputAllocatedForAnotherOp(self):
+    # Tests the output values for the code path where the input is allocated
+    # for a different op. In this path the input is cloned into a correctly
+    # mapped tensor, and output is copied back to the original input tensor.
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float32, shape=[4, 4])
+        updates = array_ops.placeholder(np.float32, shape=[8, 4])
+        indices = array_ops.placeholder(np.int32, shape=[8])
+        scale = 5
+
+      def model(x, updates, indices):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          lhs = variable_scope.get_variable(
+              "lhs",
+              shape=[8, 4],
+              dtype=np.float32,
+              initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(lhs, x)
+        return gen_popops_ops.ipu_multi_update_add(x,
+                                                   updates=updates,
+                                                   indices=indices,
+                                                   scale=scale)
+
+      with ops.device("/device:IPU:0"):
+        result, = ipu.ipu_compiler.compile(model, inputs=[x, updates, indices])
+
+      fd = {
+          x: np.zeros(x.shape),
+          indices: list(reversed(range(8))),
+          updates: np.random.rand(*updates.shape),
+      }
+
+      sess.run(variables.global_variables_initializer())
+
+      out = sess.run(result, feed_dict=fd)
+      expected_out = np.flip(fd[updates], axis=0) * scale
+      self.assertAllClose(out, expected_out)
+
 
 if __name__ == "__main__":
   googletest.main()
