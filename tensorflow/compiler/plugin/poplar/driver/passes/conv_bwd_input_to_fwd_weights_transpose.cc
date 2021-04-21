@@ -95,6 +95,9 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
       inst_conv_with_reverse->fused_instructions_computation()
           ->root_instruction();
 
+  TF_RETURN_IF_ERROR(
+      conv_input->AddControlDependencyTo(weights_transpose_flip));
+
   HloInstruction* conv_fwd =
       comp->AddInstruction(HloInstruction::CreateConvolve(
           inst_conv_with_reverse->shape(), conv_input, weights_transpose_flip,
