@@ -175,6 +175,8 @@ TEST_P(ConvBwdInputToFwdWeightsTransposeTest, DoTest) {
   HloInstruction* inst_wt = insts_wt.at(0);
   EXPECT_EQ(inst_wt->users().size(), 1);
   HloInstruction* fwd_conv = inst_wt->users()[0];
+  EXPECT_THAT(fwd_conv->operand(0)->control_successors(),
+              ::testing::Contains(inst_wt));
   TF_ASSERT_OK_AND_ASSIGN(auto fwd_dims, GetConvolutionDims(fwd_conv));
   EXPECT_TRUE(
       ForwardBackwardConvolutionDimensionNumbersMatch(fwd_dims, bwd_dims));
