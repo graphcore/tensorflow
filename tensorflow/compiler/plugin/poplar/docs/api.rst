@@ -191,6 +191,10 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.image_ops
+  :members:
+  :imported-members:
+
 .. automodule:: tensorflow.python.ipu.internal_ops
   :members: print_tensor
   :imported-members:
