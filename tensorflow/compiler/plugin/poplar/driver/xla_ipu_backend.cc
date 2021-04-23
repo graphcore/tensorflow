@@ -82,6 +82,10 @@ static bool OpFilter(KernelDef* kdef) {
     AddDtypeToKernelDefConstraint("output_types", DT_UINT8, kdef);
   }
 
+  if (kdef->op() == "NormaliseImage") {
+    AddDtypeToKernelDefConstraint("Tin", DT_UINT8, kdef);
+  }
+
   return true;
 }
 

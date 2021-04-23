@@ -16,6 +16,7 @@ py_library(
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
+        "ops/image_ops.py",
         "ops/internal_ops.py",
         "ops/math_ops.py",
         "ops/nn_ops.py",
@@ -136,6 +137,7 @@ py_library(
         "ops/embedding_ops.py",
         "ops/experimental/popfloat_cast_to_gfloat.py",
         "ops/functional_ops.py",
+        "ops/image_ops.py",
         "ops/internal_ops.py",
         "ops/math_ops.py",
         "ops/nn_ops.py",
@@ -1338,6 +1340,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "image_ops_test",
+    size = "medium",
+    srcs = ["tests/image_ops_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "multi_conv_test",
     size = "large",
     srcs = ["tests/multi_conv_test.py"],
@@ -1787,6 +1802,7 @@ test_suite(
         "group_conv_test",
         "host_embedding_lookup_ga_test",
         "host_embedding_lookup_test",
+        "image_ops_test",
         "infeed_outfeed_overlap_test",
         "infeed_outfeed_test",
         "io_tiles_test",
