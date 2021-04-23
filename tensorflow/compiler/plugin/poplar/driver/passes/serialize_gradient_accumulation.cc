@@ -54,9 +54,12 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
   const PrimitiveType accumulator_type = accumulator->shape().element_type();
   CHECK(primitive_util::IsFloatingPointType(accumulator_type));
 
-  TF_ASSIGN_OR_RETURN(
-      HloInstruction * add,
-      MakeBinaryHlo(HloOpcode::kAdd, accumulator, to_serialize));
+  // The accumulator type may be lower precision than the Add output, but
+  // MakeBinaryHlo chooses the higher precision type as the output, so create
+  // the Add op manually with the accumulator type.
+  HloInstruction* add = comp->AddInstruction(HloInstruction::CreateBinary(
+      accumulator->shape(), HloOpcode::kAdd, accumulator, to_serialize));
+
   CHECK_EQ(add->shape().element_type(), accumulator_type) << add->ToString();
   inst->SetupDerivedInstruction(add);
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, add));
