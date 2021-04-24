@@ -15,18 +15,20 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 
+#include <set>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
+#include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/service/hlo_reachability.h"
-
-#include <set>
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -459,6 +461,23 @@ struct ConvNormMatcher : public Matcher {
   }
 };
 
+StatusOr<absl::flat_hash_set<HloComputation*>> GetComputationsToSkip(
+    HloModule* module) {
+  // Pipelining has its own recomputation methods - prevent this pass from
+  // interefering.
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  absl::flat_hash_set<HloComputation*> computations_to_skip;
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
+  for (HloInstruction* pipeline_op : pipeline_ops) {
+    TF_ASSIGN_OR_RETURN(
+        absl::flat_hash_set<HloComputation*> pipeline_comps,
+        GetAllComputationsCalledBy(pipeline_op, call_graph.get()));
+    computations_to_skip.insert(pipeline_comps.begin(), pipeline_comps.end());
+  }
+
+  return computations_to_skip;
+}
 }  // namespace
 
 RecomputeInstructions::RecomputeInstructions(bool allow_recompute)
@@ -473,6 +492,9 @@ StatusOr<bool> RecomputeInstructions::Run(HloModule* module) {
   std::list<std::unique_ptr<Replacer>> replacers;
   std::list<HloComputation*> changed_comps;
 
+  TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> computations_to_skip,
+                      GetComputationsToSkip(module));
+
   const std::array<std::unique_ptr<Matcher>, 2> matchers{
       // Try catch the cases of Conv->Norm->Non-Linearity that we can.
       absl::make_unique<ConvNormNLMatcher>(),
@@ -481,7 +503,8 @@ StatusOr<bool> RecomputeInstructions::Run(HloModule* module) {
       absl::make_unique<ConvNormMatcher>()};
 
   for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp) || comp->instruction_count() < 4) {
+    if (IsPopOpsFusion(comp) || comp->instruction_count() < 4 ||
+        computations_to_skip.contains(comp)) {
       continue;
     }
 
