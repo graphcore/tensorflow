@@ -217,6 +217,49 @@ TEST_F(RecomputeCastsTest, CastsAreLastProcessedOperand) {
   }
 }
 
+TEST_F(RecomputeCastsTest, TestTwoCastsSameOp) {
+  const std::string hlo =
+      R"(
+HloModule main
+
+ENTRY main {
+  a = f16[] parameter(0)
+  b = f16[] parameter(1)
+  cast1 = f32[] convert(a)
+  cast2 = f32[] convert(b)
+  add1 = f32[] add(cast1, cast2)
+  log = f32[] log(add1)
+  add2 = f32[] add(cast1, cast2), control-predecessors={log}
+  ROOT root = f32[] add(log, add2)
+}
+)";
+
+  SetUpModule(hlo);
+
+  pipeline_.AddPass<RecomputeCasts>();
+  ASSERT_TRUE(pipeline_.Run(module_).ValueOrDie());
+
+  auto a = FindInstruction(module_, "a");
+  auto b = FindInstruction(module_, "b");
+  auto add1 = FindInstruction(module_, "add1");
+  auto add2 = FindInstruction(module_, "add2");
+
+  auto cast1_0 = add1->operand(0);
+  EXPECT_THAT(cast1_0->operands(), ::testing::ElementsAre(a));
+  auto cast1_1 = add2->operand(0);
+  EXPECT_THAT(cast1_1->operands(), ::testing::ElementsAre(a));
+
+  auto cast2_0 = add1->operand(1);
+  EXPECT_THAT(cast2_0->operands(), ::testing::ElementsAre(b));
+  auto cast2_1 = add2->operand(1);
+  EXPECT_THAT(cast2_1->operands(), ::testing::ElementsAre(b));
+
+  EXPECT_THAT(cast1_0->control_predecessors(), ::testing::ElementsAre());
+  EXPECT_THAT(cast2_0->control_predecessors(), ::testing::ElementsAre(cast1_0));
+  EXPECT_THAT(cast1_1->control_predecessors(), ::testing::ElementsAre(cast2_0));
+  EXPECT_THAT(cast2_1->control_predecessors(), ::testing::ElementsAre(cast1_1));
+}
+
 struct BlockedRecomputeCastTest : RecomputeCastsTest,
                                   ::testing::WithParamInterface<std::string> {
   void SetUp() override { SetUpModule(GetParam()); }

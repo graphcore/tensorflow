@@ -15,10 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_casts.h"
 
-#include "tensorflow/compiler/xla/service/call_graph.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_reachability.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -46,6 +46,9 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> FindResourceUpdateCallees(
 }  // namespace
 
 StatusOr<bool> RecomputeCasts::Run(HloModule* module) {
+  VLOG(2) << "Before RecomputeCasts:";
+  XLA_VLOG_LINES(2, module->ToString());
+
   bool made_recomputations = false;
 
   TF_ASSIGN_OR_RETURN(const auto resource_update_computations,
@@ -61,7 +64,9 @@ StatusOr<bool> RecomputeCasts::Run(HloModule* module) {
     for (auto inst : comp->MakeInstructionPostOrder()) {
       const auto parameter_cast =
           inst->opcode() == HloOpcode::kConvert &&
-          inst->operand(0)->opcode() == HloOpcode::kParameter;
+          inst->operand(0)->opcode() == HloOpcode::kParameter &&
+          inst->user_count() > 1;
+
       if (parameter_cast) {
         TF_RETURN_IF_ERROR(SetupRecomputation(comp, inst));
         made_recomputations = true;
@@ -69,33 +74,45 @@ StatusOr<bool> RecomputeCasts::Run(HloModule* module) {
     }
   }
 
-  return {made_recomputations};
+  if (made_recomputations) {
+    VLOG(2) << "After RecomputeCasts:";
+    XLA_VLOG_LINES(2, module->ToString());
+  } else {
+    VLOG(2) << "No changes were made.";
+  }
+
+  return made_recomputations;
 }
 
 Status RecomputeCasts::SetupRecomputation(HloComputation* comp,
                                           HloInstruction* inst) {
+  VLOG(2) << "Recomputing " << inst->ToString();
   auto users = inst->users();
   for (auto i = 0; i < users.size(); ++i) {
     auto user = users[i];
     auto replacement = comp->AddInstruction(inst->Clone());
     inst->SetupDerivedInstruction(replacement);
+    auto reachability_map = HloReachabilityMap::Build(comp);
 
-    absl::flat_hash_set<HloInstruction*> predecessor_operands;
     for (auto operand : user->operands()) {
-      if (operand != inst) {
-        predecessor_operands.insert(operand);
+      if (operand != inst &&
+          !reachability_map->IsReachable(replacement, operand)) {
         TF_RETURN_IF_ERROR(operand->AddControlDependencyTo(replacement));
+        reachability_map->UpdateReachabilityThroughInstruction(replacement);
       }
     }
+
     for (auto predecessor : inst->control_predecessors()) {
-      TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(replacement));
+      if (!reachability_map->IsReachable(replacement, predecessor)) {
+        TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(replacement));
+        reachability_map->UpdateReachabilityThroughInstruction(replacement);
+      }
     }
+
     for (auto successor : inst->control_successors()) {
-      // Prevent cycles of the form predecessor -> clone -> predecessor from
-      // being introduced.
-      const auto introduces_cycle = predecessor_operands.contains(successor);
-      if (!introduces_cycle) {
+      if (!reachability_map->IsReachable(successor, replacement)) {
         TF_RETURN_IF_ERROR(replacement->AddControlDependencyTo(successor));
+        reachability_map->UpdateReachabilityThroughInstruction(successor);
       }
     }
 
