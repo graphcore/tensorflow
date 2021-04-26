@@ -53,7 +53,6 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import deprecation
 
 
 class SelectionOrder(Enum):
@@ -318,11 +317,6 @@ def running_on_ipu_model():
   return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
 
 
-@deprecation.deprecated_args(
-    None,
-    "disable_graph_convolution_caching is deprecated and it has no effect. "
-    "Use disable_graph_outlining instead.",
-    "disable_graph_convolution_caching")
 def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
@@ -335,7 +329,6 @@ def create_ipu_config(profiling=False,
                       scheduler_selection=SchedulingAlgorithm.CHOOSE_BEST,
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
-                      disable_graph_convolution_caching=False,
                       disable_graph_outlining=False,
                       max_scheduler_lookahead_depth=5,
                       max_scheduler_search_space_size=64,

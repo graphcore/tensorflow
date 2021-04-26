@@ -311,8 +311,5 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 Sharding
 ^^^^^^^^
 
-.. automodule:: tensorflow.python.ipu.autoshard
-  :members:
-
 .. automodule:: tensorflow.python.ipu.sharding
   :members:

@@ -23,5 +23,3 @@ from tensorflow.python.ipu.keras.pipeline import PipelineModel
 from tensorflow.python.ipu.keras.pipeline import PipelineSequential
 from tensorflow.python.ipu.keras.pipeline import PipelineStage
 from tensorflow.python.ipu.keras.losses import CTCLoss
-# deprecated
-from tensorflow.python.ipu.keras.pipeline import SequentialPipelineModel

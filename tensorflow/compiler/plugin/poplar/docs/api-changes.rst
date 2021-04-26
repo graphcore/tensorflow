@@ -22,6 +22,67 @@ release.
   - The output shape has changed to have the `replication_factor` as the
     outermost instead of innermost dimension, matching the documentation.
 
+``tensorflow.python.ipu.utils``
+
+  - Removed ``report_options`` parameter from ``set_report_options``.
+
+    Use ``graph_options`` and ``execution_options`` parameters instead.
+
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+
+  - Removed ``allow_stateful_recompute`` parameter from
+    ``set_recomputation_options``.
+
+    Pipelining recomputation will recompute all the non-stateful operations when
+    recomputation is enabled.
+
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+
+  - Removed ``num_io_tiles`` from ``set_gcl_options``.
+
+    Use the ``set_io_tile_options`` instead.
+
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+
+IPUPipelineEstimator change
+'''''''''''''''''''''''''''
+
+The definition for ``iterations_per_loop`` has changed. Previously the number of
+iterations was defined as the number of weight updates performed. The new
+definition is the number of mini-batches consumed, which makes it consistent
+with the IPUEstimator when using gradient accumulation.
+
+The argument ``count_gradient_accumulation_as_iterations=True`` was previously
+required to use this new definition. That parameter has now been removed and
+the new definition is always used.
+
+Autosharding removed
+'''''''''''''''''''''''
+
+Autosharding has been removed. You should now use alternative execution modes
+such as pipelining instead.
+
+IPU config change
+'''''''''''''''''
+
+The ``disable_graph_convolution_caching`` parameter for ``create_ipu_config``
+(from ``tensorflow.python.ipu.utils``) has been removed.
+
+The ``disable_graph_outlining`` parameter must be used instead.
+
+IPU Keras changes [TensorFlow 2]
+''''''''''''''''''''''''''''''''
+
+The ``SequentialPipelineModel`` alias for ``PipelineSequential`` has been
+removed.
+
+In the constructors of ``ipu.keras.Model`` and ``ipu.keras.Sequential``,
+the alias ``accumulation_count`` for the ``gradient_accumulation_count``
+parameter has been removed.
+
+Similarly, the alias ``accumulation_dtype`` for ``gradient_accumulation_dtype``
+has been removed.
+
 Non-breaking changes
 ____________________
 
