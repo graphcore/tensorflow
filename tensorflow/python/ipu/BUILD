@@ -124,6 +124,10 @@ py_library(
         "keras/losses/__init__.py",
         "keras/losses/ctc.py",
         "keras/model.py",
+        "keras/optimizers/__init__.py",
+        "keras/optimizers/cross_replica_optimizer.py",
+        "keras/optimizers/ipu_wrappers.py",
+        "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
         "loops.py",
         "ops/all_to_all_op.py",
@@ -510,6 +514,20 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
         "//third_party/py/numpy",
+    ],
+)
+
+tf_py_test(
+    name = "keras_v2_optimizers",
+    size = "large",
+    srcs = ["tests/keras/keras_v2_optimizers.py"],
+    shard_count = 4,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/python/keras:layers",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
     ],
 )
 
@@ -1803,6 +1821,7 @@ test_suite(
         "keras_sequential_pipeline_test",
         "keras_sequential_replication_test",
         "keras_synthetic_data_test",
+        "keras_v2_optimizers",
         "map_gradient_optimizer_test",
         "math_layers_test",
         "math_ops_test",

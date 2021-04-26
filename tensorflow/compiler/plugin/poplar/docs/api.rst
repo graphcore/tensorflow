@@ -162,6 +162,15 @@ Keras losses
   :members: CTCLoss
   :imported-members: CTCLoss
 
+.. _keras-optimizers-api:
+
+Keras optimizers
+^^^^^^^^^^^^^^^^
+
+.. automodule:: tensorflow.python.ipu.keras.optimizers
+  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer
+  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer
+
 .. _operators-api:
 
 Operators

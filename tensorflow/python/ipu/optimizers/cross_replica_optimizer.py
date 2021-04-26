@@ -21,6 +21,22 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import optimizer
+from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
+
+
+def apply_cross_replica_op_single(grad, var):
+  if grad is None:
+    return (grad, var)
+  with ops.colocate_with(grad):
+    return (gen_poputil_ops.ipu_replication_normalise(
+        cross_replica_ops.cross_replica_sum(grad)), var)
+
+
+def apply_cross_replica_op(grads_and_vars):
+  summed_grads_and_vars = []
+  for (grad, var) in grads_and_vars:
+    summed_grads_and_vars.append(apply_cross_replica_op_single(grad, var))
+  return summed_grads_and_vars
 
 
 class CrossReplicaOptimizer(optimizer.Optimizer):
@@ -33,6 +49,11 @@ class CrossReplicaOptimizer(optimizer.Optimizer):
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaOptimizer".
     """
+
+    if isinstance(opt, OptimizerV2):
+      raise ValueError("Should use optimizer in "
+                       "ipu.keras.optimizers.CrossReplicaOptimizer "
+                       "to wrap V2 optimizers")
 
     super(CrossReplicaOptimizer, self).__init__(False, name)
     self._opt = opt
@@ -80,15 +101,7 @@ class CrossReplicaOptimizer(optimizer.Optimizer):
     Raises:
       ValueError: If the grads_and_vars is malformed.
     """
-    summed_grads_and_vars = []
-    for (grad, var) in grads_and_vars:
-      if grad is None:
-        summed_grads_and_vars.append((grad, var))
-      else:
-        with ops.colocate_with(grad):
-          summed_grads_and_vars.append(
-              (gen_poputil_ops.ipu_replication_normalise(
-                  cross_replica_ops.cross_replica_sum(grad)), var))
+    summed_grads_and_vars = apply_cross_replica_op(grads_and_vars)
     return self._opt.apply_gradients(summed_grads_and_vars, global_step, name)
 
   def get_slot(self, *args, **kwargs):
