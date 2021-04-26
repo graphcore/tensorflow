@@ -26,10 +26,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
-#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -162,7 +160,6 @@ ENTRY main {
   EXPECT_TRUE(RemoteBufferMerger(resources->annotations, THREESTATE_ON)
                   .Run(module.get())
                   .ValueOrDie());
-  EXPECT_TRUE(HloTrivialScheduler().Run(module.get()).ValueOrDie());
 
   // Check that there is only one buffer name now.
   absl::flat_hash_set<std::string> buffer_names;
@@ -172,21 +169,11 @@ ENTRY main {
   ASSERT_EQ(buffer_names.size(), 1);
 
   const std::string buffer_name = *std::begin(buffer_names);
-  auto entry = module->entry_computation();
-  auto order = module->schedule().sequence(entry).instructions();
-  EntryVisitor visitor(*resources.get(), entry);
 
-  TF_ASSERT_OK(entry->AcceptOrdered(&visitor, order));
-
+  TF_ASSERT_OK_AND_ASSIGN(auto engine, Compile(*resources, module.get()));
   // Check that only two computations have been compiled - entry and one of the
   // comps.
   CHECK_EQ(resources->tensor_maps.size(), 2);
-
-  poplar::program::Sequence main_program;
-  main_program.add(resources->preamble_sequence);
-  main_program.add(visitor.GetSequenceAndInitializeCounters());
-
-  poplar::Engine engine(*resources->main_graph, main_program);
 
   // Run on the device.
   engine.load(device);
