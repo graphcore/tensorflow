@@ -72,8 +72,7 @@ def model_fn(mode, params):
       computational_stages=[stage1, stage2],
       optimizer_function=optimizer_function,
       eval_metrics_fn=eval_metrics_fn,
-      gradient_accumulation_count=params["gradient_accumulation_count"],
-      count_gradient_accumulation_as_iterations=True)
+      gradient_accumulation_count=params["gradient_accumulation_count"])
 
 
 def parse_args():

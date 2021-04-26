@@ -936,19 +936,7 @@ class IPUSequential(_IpuModelBase):
           be done by using a custom optimizer.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
-        accumulation_count: Deprecated (renamed to gradient_accumulation_count).
-        accumulation_dtype: Deprecated (renamed to gradient_accumulation_dtype).
     """
-
-    # We can use deprecated_args here instead, but IPUModel can't use it, so
-    # we do the same as IPUModel for consistency.
-    gradient_accumulation_count = _handle_renamed_arg(
-        accumulation_count, gradient_accumulation_count, "accumulation_count",
-        "gradient_accumulation_count", lambda arg: arg > 1)
-
-    gradient_accumulation_dtype = _handle_renamed_arg(
-        accumulation_dtype, gradient_accumulation_dtype, "accumulation_dtype",
-        "gradient_accumulation_dtype", lambda arg: arg)
 
     super().__init__(gradient_accumulation_count=gradient_accumulation_count,
                      shard_count=1,
@@ -1525,17 +1513,7 @@ class IPUModel(_IpuModelBase):
           be done by using a custom optimizer.
         layer_replacement: If enabled (True), Keras layers will be substituted
           with IPU Keras implementations, when possible.
-        accumulation_count: Deprecated (renamed to gradient_accumulation_count).
-        accumulation_dtype: Deprecated (renamed to gradient_accumulation_dtype).
     """
-    # We can't use deprecated_args because it doesn't handle the *args well
-    gradient_accumulation_count = _handle_renamed_arg(
-        accumulation_count, gradient_accumulation_count, "accumulation_count",
-        "gradient_accumulation_count", lambda arg: arg > 1)
-
-    gradient_accumulation_dtype = _handle_renamed_arg(
-        accumulation_dtype, gradient_accumulation_dtype, "accumulation_dtype",
-        "gradient_accumulation_dtype", lambda arg: arg)
 
     super().__init__(gradient_accumulation_count=gradient_accumulation_count,
                      shard_count=1,

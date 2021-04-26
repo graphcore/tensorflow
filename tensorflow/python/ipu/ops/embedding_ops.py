@@ -28,7 +28,6 @@ from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.util import deprecation
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.eager import context

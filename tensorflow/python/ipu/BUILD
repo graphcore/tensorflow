@@ -101,8 +101,6 @@ py_library(
     name = "ipu_lib",
     srcs = [
         "__init__.py",
-        "autoshard.py",
-        "autoshard_cnn.py",
         "dataset_benchmark.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -172,19 +170,6 @@ py_library(
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
     ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_lib"]),
-)
-
-tf_py_test(
-    name = "autoshard_cnn_test",
-    size = "medium",
-    srcs = ["tests/autoshard_cnn_test.py"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
 )
 
 tf_py_test(
@@ -1768,7 +1753,6 @@ tf_py_test(
 test_suite(
     name = "all_tests",
     tests = [
-        "autoshard_cnn_test",
         "candidate_sampler_test",
         "dataset_benchmark_test",
         "dataset_ops_test",

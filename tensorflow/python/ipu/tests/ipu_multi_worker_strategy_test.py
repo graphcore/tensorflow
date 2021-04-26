@@ -872,8 +872,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     with strategy.scope():
 
       x = per_worker_x[task_id]
-      features = [x] * gradient_accumulation_count * num_iterations
-      labels = [y] * gradient_accumulation_count * num_iterations
+      features = [x] * num_iterations * gradient_accumulation_count
+      labels = [y] * num_iterations * gradient_accumulation_count
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
@@ -1138,6 +1138,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     initial_w1 = 2.0
     learning_rate = 0.5
     gradient_accumulation_count = 4
+    num_steps = num_iterations * gradient_accumulation_count
 
     def my_model_fn(mode):
       def stage1(feature, label):
@@ -1171,8 +1172,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       self.assertEqual(task_id, input_context.input_pipeline_id)
 
       x = per_worker_x[task_id]
-      features = [x] * gradient_accumulation_count * num_iterations
-      labels = [y] * gradient_accumulation_count * num_iterations
+      features = [x] * num_steps
+      labels = [y] * num_steps
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
       return dataset
@@ -1188,7 +1189,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         train_distribute=strategy,
         save_summary_steps=1,
         ipu_run_config=ipu_run_config.IPURunConfig(
-            num_shards=num_ipus_in_pipeline, ipu_options=ipu_options))
+            iterations_per_loop=gradient_accumulation_count,
+            num_shards=num_ipus_in_pipeline,
+            ipu_options=ipu_options))
 
     estimator = ipu_pipeline_estimator.IPUPipelineEstimator(
         model_fn=my_model_fn, config=config)
@@ -1196,8 +1199,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     estimator_lib.train_and_evaluate(
         estimator,
         train_spec=estimator_lib.TrainSpec(input_fn=my_input_fn,
-                                           max_steps=num_iterations),
-        eval_spec=estimator_lib.EvalSpec(input_fn=my_input_fn))
+                                           max_steps=num_steps),
+        eval_spec=estimator_lib.EvalSpec(input_fn=my_input_fn,
+                                         steps=num_steps))
 
     expected_w0 = initial_w0
     expected_w1 = initial_w1
@@ -1221,8 +1225,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
     # Only the chief worker has the checkpoint to read the variables from.
     if task_id == 0:
-      self.assertEqual(num_iterations,
-                       estimator.get_variable_value("global_step"))
+      self.assertEqual(num_steps, estimator.get_variable_value("global_step"))
       self.assertEqual(expected_w0, estimator.get_variable_value("w0"))
       self.assertEqual(expected_w1, estimator.get_variable_value("w1"))
 

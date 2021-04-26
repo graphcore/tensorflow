@@ -26,7 +26,6 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.util import deprecation
 from tensorflow.python.util import function_utils
 
 _HOST_DEVICE = ipu_estimator._HOST_DEVICE  # pylint: disable=protected-access
@@ -37,7 +36,6 @@ class IPUPipelineEstimatorSpec(
         'mode',
         'computational_stages',
         'gradient_accumulation_count',
-        'count_gradient_accumulation_as_iterations',
         'eval_metrics_fn',
         'optimizer_function',
         'device_mapping',
@@ -46,20 +44,10 @@ class IPUPipelineEstimatorSpec(
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
-  @deprecation.deprecated_arg_values(
-      None,
-      "You are using the deprecated definition of `iterations_per_loop` with "
-      "the IPUPipelineEstimator, where the number of iterations is defined as "
-      "the number of weight updates performed. The new definition is the "
-      "number of mini-batches consumed, which makes it consistent with the "
-      "IPUEstimator when using gradient accumulation. Switch to the new "
-      "definition by setting `count_gradient_accumulation_as_iterations=True`.",
-      count_gradient_accumulation_as_iterations=False)
   def __new__(cls,
               mode,
               computational_stages,
               gradient_accumulation_count=None,
-              count_gradient_accumulation_as_iterations=False,
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
@@ -87,13 +75,6 @@ class IPUPipelineEstimatorSpec(
         outputs of the previous pipeline state as its inputs.
       gradient_accumulation_count: the number of times each pipeline stage will
         be executed.
-      count_gradient_accumulation_as_iterations: Whether to count gradient
-        accumulation as iterations for `iterations_per_loop`. If False,
-        the deprecated behaviour is used, where `iterations_per_loop` gives
-        the number of weight updates to perform per loop. If True, it instead
-        gives the number of mini-batches consumed per loop (per replica). The
-        latter behaviour is consistent with the IPUEstimator and will be the
-        only supported behaviour in the future.
       eval_metrics_fn: a Python function which takes the output of the
         last computational stage as parameters and returns a dict of evaluation
         metrics. The dict must contain a a loss tensor value with the key
@@ -142,8 +123,6 @@ class IPUPipelineEstimatorSpec(
         computational_stages=computational_stages,
         eval_metrics_fn=eval_metrics_fn,
         gradient_accumulation_count=gradient_accumulation_count,
-        count_gradient_accumulation_as_iterations=
-        count_gradient_accumulation_as_iterations,
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         loss_accumulator_dtype=loss_accumulator_dtype,
@@ -170,10 +149,6 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
 
   def _calc_repeat_count(self, spec):
     iterations_per_loop = self._config.ipu_run_config.iterations_per_loop
-
-    if not spec.count_gradient_accumulation_as_iterations:
-      # Deprecated behaviour.
-      return iterations_per_loop
 
     if iterations_per_loop < spec.gradient_accumulation_count:
       raise ValueError(
