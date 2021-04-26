@@ -959,11 +959,7 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
                                                     num_replicas,
                                                     "predict_batch_size")
 
-    is_distributed = config._train_distribute or config._eval_distribute  # pylint: disable=protected-access
-    if is_distributed and config.ipu_run_config.iterations_per_loop > 1:
-      raise NotImplementedError(
-          "iterations_per_loop > 1 (got {}) not supported with distribution".
-          format(config.ipu_run_config.iterations_per_loop))
+    self._validate_config(config)
 
     super().__init__(model_fn=model_fn,
                      model_dir=model_dir,
@@ -1044,6 +1040,13 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       raise ValueError(
           "steps ({}) must be a multiple of iterations_per_loop ({})".format(
               steps, iterations_per_loop))
+
+  def _validate_config(self, config):
+    is_distributed = config._train_distribute or config._eval_distribute  # pylint: disable=protected-access
+    if is_distributed and config.ipu_run_config.iterations_per_loop > 1:
+      raise NotImplementedError(
+          "iterations_per_loop > 1 (got {}) not supported with distribution".
+          format(config.ipu_run_config.iterations_per_loop))
 
   def _create_global_step(self, graph):
     # Overridden to make sure it is a resource variable and placed on the host,

@@ -416,3 +416,8 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
                      config=config,
                      params=params,
                      warm_start_from=warm_start_from)
+
+  # Override base validation to allow iterations_per_loop > 1 with
+  # distribution, as IPUPipelineEstimator does not have that limitation.
+  def _validate_config(self, config):
+    pass
