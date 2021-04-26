@@ -52,6 +52,8 @@ from tensorflow.python.keras.engine import node as node_module
 from tensorflow.python.keras.engine import training as keras_training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
+from tensorflow.python.ipu.keras.optimizers import _KerasOptimizerWrapper
+from tensorflow.python.ipu.keras.optimizers import _TensorflowOptimizerWrapper
 from tensorflow.python.keras.utils import generic_utils
 from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
@@ -159,77 +161,6 @@ def _handle_renamed_arg(old_arg, new_arg, old_arg_name, new_arg_name,
                        " cannot be used together.")
     return old_arg
   return new_arg
-
-
-class _TensorflowOptimizerWrapper(Optimizer):
-  """A class which wraps a standard TensorFlow optimizer, giving it a TF
-  optimizer interface, but generating gradients against the Keras Model.
-  """
-  def __init__(self, model, opt):
-    super(_TensorflowOptimizerWrapper, self).__init__(use_locking=False,
-                                                      name="optimizer_shim")
-    self._model = model
-    self._optimizer = opt
-
-  def compute_gradients(self,
-                        loss,
-                        var_list=None,
-                        gate_gradients=Optimizer.GATE_OP,
-                        aggregation_method=None,
-                        colocate_gradients_with_ops=False,
-                        grad_loss=None):
-    return self._optimizer.compute_gradients(loss,
-                                             self._model.trainable_weights)
-
-  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-    return self._optimizer.apply_gradients(grads_and_vars, global_step, name)
-
-  def _apply_sparse(self, grad, var):
-    raise NotImplementedError()
-
-  def _apply_dense(self, grad, var):
-    raise NotImplementedError()
-
-  def _resource_apply_dense(self, grad, handle):
-    raise NotImplementedError()
-
-  def _resource_apply_sparse(self, grad, handle, indices):
-    raise NotImplementedError()
-
-
-class _KerasOptimizerWrapper(Optimizer):
-  """A class which wraps a Keras optimizer, giving it ia TF optimizer interface.
-  """
-  def __init__(self, model, opt):
-    super(_KerasOptimizerWrapper, self).__init__(use_locking=False,
-                                                 name="optimizer_shim")
-    self._model = model
-    self._optimizer = opt
-
-  def compute_gradients(self,
-                        loss,
-                        var_list=None,
-                        gate_gradients=Optimizer.GATE_OP,
-                        aggregation_method=None,
-                        colocate_gradients_with_ops=False,
-                        grad_loss=None):
-    grads = self._optimizer.get_gradients(loss, self._model.trainable_weights)
-    return zip(grads, self._model.trainable_weights)
-
-  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-    return self._optimizer.apply_gradients(grads_and_vars)
-
-  def _apply_sparse(self, grad, var):
-    raise NotImplementedError()
-
-  def _apply_dense(self, grad, var):
-    raise NotImplementedError()
-
-  def _resource_apply_dense(self, grad, handle):
-    raise NotImplementedError()
-
-  def _resource_apply_sparse(self, grad, handle, indices):
-    raise NotImplementedError()
 
 
 class _IpuModelBase(KerasModel):

@@ -20,6 +20,7 @@ Optimizer wrapper for sharded graphs
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import sharding
 from tensorflow.python.training import optimizer
+from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 
 
 class ShardedOptimizer(optimizer.Optimizer):
@@ -29,6 +30,9 @@ class ShardedOptimizer(optimizer.Optimizer):
     Args:
       optimizer: The optimizer to wrap.
     """
+    if isinstance(optimizer, OptimizerV2):
+      raise ValueError("Should use optimizers in ipu.keras.optimizers "
+                       "to wrap V2 optimizers")
 
     super(ShardedOptimizer, self).__init__(False, name="ShardedOptimizer")
     self._optimizer = optimizer

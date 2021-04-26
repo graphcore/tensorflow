@@ -26,6 +26,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 
 
 class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=abstract-method
@@ -89,6 +90,11 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizerV2".
     """
+    if isinstance(opt, OptimizerV2):
+      raise ValueError("Should use optimizers in "
+                       "ipu.keras.optimizers.GradinetAccumulationOptimizer "
+                       "to wrap V2 optimizers")
+
     super().__init__(False, name)
     self._opt = opt
 
@@ -286,6 +292,12 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizerV2".
     """
 
+    if isinstance(opt, OptimizerV2):
+      raise ValueError("Should use combination of optimizers "
+                       "in ipu.keras.optimizers."
+                       "{CrossReplicaOptimizer/GradientAccumulationOptimizer} "
+                       "to wrap V2 optimizers")
+
     super().__init__(False, name)
 
     if num_mini_batches < 1:
@@ -394,6 +406,11 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizer".
     """
+
+    if isinstance(opt, OptimizerV2):
+      raise ValueError("Should use optimizers in "
+                       "ipu.keras.optimizers.GradientAccumulationOptimizer"
+                       "to wrap V2 optimizers")
 
     super(GradientAccumulationOptimizer, self).__init__(False, name)
     self._opt = opt
@@ -521,6 +538,12 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizer".
     """
+
+    if isinstance(opt, OptimizerV2):
+      raise ValueError("Should use combination of optimizers in "
+                       "ipu.keras.optimizers."
+                       "{CrossReplicaOptimizer/GradientAccumulationOptimizer} "
+                       "to wrap V2 optimizers")
 
     super(CrossReplicaGradientAccumulationOptimizer,
           self).__init__(False, name)

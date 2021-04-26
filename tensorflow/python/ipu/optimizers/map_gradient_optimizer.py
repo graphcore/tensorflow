@@ -18,6 +18,7 @@ Optimizer wrapper that modifies gradients before application
 """
 
 from tensorflow.python.training import optimizer
+from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 
 
 class MapGradientOptimizer(optimizer.Optimizer):
@@ -75,6 +76,10 @@ class MapGradientOptimizer(optimizer.Optimizer):
         variables which are provided by `wrapped_optimizer.compute_gradients()`.
     """
 
+    if isinstance(wrapped_optimizer, OptimizerV2):
+      raise ValueError("Should use optimizers in "
+                       "ipu.keras.optimizers.MapGradientOptimizer "
+                       "to wrap V2 optimizers")
     super(MapGradientOptimizer, self).__init__(False, name)
     self._wrapped_optimizer = wrapped_optimizer
     self._gradient_mapping_function = gradient_mapping_function
