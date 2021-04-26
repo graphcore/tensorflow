@@ -26,7 +26,6 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
-from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 
 

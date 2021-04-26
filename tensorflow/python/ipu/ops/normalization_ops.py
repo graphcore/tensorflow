@@ -22,7 +22,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
-from tensorflow.python.util import deprecation
 
 # This implementation is based on:
 # tensorflow/contrib/layers/python/layers/normalization.py

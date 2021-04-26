@@ -215,7 +215,6 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
             mode,
             computational_stages=[stage1, stage2],
             gradient_accumulation_count=gradient_accumulation_count,
-            count_gradient_accumulation_as_iterations=True,
             optimizer_function=optimizer_function)
 
       return model_fn
@@ -243,22 +242,17 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       combinations.combine(
           gradient_accumulation_count=[4, 8],
           num_weight_updates_per_loop=[1, 2],
-          count_gradient_accumulation_as_iterations=[False, True],
       ))
-  def testTrainWithAnalyticalGradientReference(
-      self, gradient_accumulation_count, num_weight_updates_per_loop,
-      count_gradient_accumulation_as_iterations):
+  def testTrainWithAnalyticalGradientReference(self,
+                                               gradient_accumulation_count,
+                                               num_weight_updates_per_loop):
     x = 1.5
     y = 1.0
     initial_w = 2.0
     learning_rate = 0.5
 
-    if count_gradient_accumulation_as_iterations:
-      iterations_per_loop = (gradient_accumulation_count *
-                             num_weight_updates_per_loop)
-    else:
-      # Deprecated behaviour.
-      iterations_per_loop = num_weight_updates_per_loop
+    iterations_per_loop = (gradient_accumulation_count *
+                           num_weight_updates_per_loop)
 
     def my_model_fn(mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -280,9 +274,7 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           mode,
           computational_stages=[stage1, stage2],
           optimizer_function=optimizer_function,
-          gradient_accumulation_count=gradient_accumulation_count,
-          count_gradient_accumulation_as_iterations=
-          count_gradient_accumulation_as_iterations)
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
       num_batches = gradient_accumulation_count * num_weight_updates_per_loop
@@ -320,10 +312,14 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
   @combinations.generate(
       combinations.combine(
           gradient_accumulation_count=[4, 8],
-          iterations_per_loop=[1, 2],
+          num_weight_updates_per_loop=[1, 2],
       ))
   def testPredictTensor(self, gradient_accumulation_count,
-                        iterations_per_loop):
+                        num_weight_updates_per_loop):
+
+    iterations_per_loop = (gradient_accumulation_count *
+                           num_weight_updates_per_loop)
+
     def my_model_fn(mode):
       self.assertEqual(model_fn_lib.ModeKeys.PREDICT, mode)
 
@@ -342,15 +338,14 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = np.arange(gradient_accumulation_count * iterations_per_loop,
-                           dtype=np.int32)
+      features = np.arange(iterations_per_loop, dtype=np.int32)
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
 
     estimator = IPUPipelineEstimator(model_fn=my_model_fn,
                                      config=_make_config(iterations_per_loop))
 
-    num_predictions = gradient_accumulation_count * iterations_per_loop
+    num_predictions = iterations_per_loop
     predictions = estimator.predict(input_fn=my_input_fn,
                                     num_predictions=num_predictions)
 
@@ -360,6 +355,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     del predictions  # Release generator resources.
 
   def testPredictTwoTensorsNotAllowed(self):
+    gradient_accumulation_count = 4
+
     def my_model_fn(mode):
       def stage1(features):
         w = variable_scope.get_variable("w", initializer=1)
@@ -370,15 +367,17 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         prediction = partial * partial
         return prediction, partial
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      gradient_accumulation_count=4)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
 
-    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=my_model_fn,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     with self.assertRaisesRegex(ValueError,
                                 "must return exactly one prediction tensor"):
@@ -405,8 +404,9 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
 
-    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=my_model_fn,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     predictions = estimator.predict(
         input_fn=my_input_fn, num_predictions=gradient_accumulation_count)
@@ -418,6 +418,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     del predictions  # Release generator resources.
 
   def testEvaluateMetricsMustBeDict(self):
+    gradient_accumulation_count = 4
+
     def model_fn_without_dict(mode):
       def stage1(features):
         return features * features
@@ -428,21 +430,26 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       def eval_metrics_fn(partial):
         return partial
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      eval_metrics_fn=eval_metrics_fn,
-                                      gradient_accumulation_count=4)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          eval_metrics_fn=eval_metrics_fn,
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
 
-    estimator = IPUPipelineEstimator(model_fn=model_fn_without_dict,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=model_fn_without_dict,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     with self.assertRaisesRegex(TypeError, "must return a dict"):
-      estimator.evaluate(input_fn=my_input_fn, steps=1)
+      estimator.evaluate(input_fn=my_input_fn,
+                         steps=gradient_accumulation_count)
 
   def testEvaluateMetricsMustContainLoss(self):
+    gradient_accumulation_count = 4
+
     def model_fn_without_loss(mode):
       def stage1(features):
         return features * features
@@ -453,24 +460,27 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
       def eval_metrics_fn(prediction):
         return {"prediction": metrics_impl.mean(prediction)}
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      eval_metrics_fn=eval_metrics_fn,
-                                      gradient_accumulation_count=4)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2],
+          eval_metrics_fn=eval_metrics_fn,
+          gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0]))
 
-    estimator = IPUPipelineEstimator(model_fn=model_fn_without_loss,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=model_fn_without_loss,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     with self.assertRaisesRegex(KeyError, "must contain 'loss'"):
-      estimator.evaluate(input_fn=my_input_fn, steps=1)
+      estimator.evaluate(input_fn=my_input_fn,
+                         steps=gradient_accumulation_count)
 
   @combinations.generate(combinations.combine(arg_type=[list, dict]))
   def testEvaluate(self, arg_type):
     num_steps = 2
-    gradient_accumulation_count = 4
+    gradient_accumulation_count = 2
 
     def my_model_fn(mode):
       def stage1(features):
@@ -500,22 +510,22 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           eval_metrics_fn=eval_metrics_fn,
           gradient_accumulation_count=gradient_accumulation_count)
 
-    features = np.arange(gradient_accumulation_count * num_steps,
-                         dtype=np.float32)
+    features = np.arange(gradient_accumulation_count, dtype=np.float32)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
 
-    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=my_model_fn,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     metrics = estimator.evaluate(input_fn=my_input_fn, steps=num_steps)
     self.assertEqual(np.mean(features), metrics["mean"])
     self.assertEqual(np.mean(np.square(features)), metrics["loss"])
 
   def testEvaluateWithStagesMappedToSameIpu(self,
-                                            gradient_accumulation_count=6):
+                                            gradient_accumulation_count=3):
     def my_model_fn(mode):
       self.assertEqual(mode, model_fn_lib.ModeKeys.EVAL)
 
@@ -546,27 +556,31 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           eval_metrics_fn=eval_metrics_fn,
           gradient_accumulation_count=gradient_accumulation_count)
 
-    num_steps = 2
-    features = np.arange(gradient_accumulation_count * num_steps,
-                         dtype=np.float32)
+    num_steps = 3
+    features = np.arange(gradient_accumulation_count, dtype=np.float32)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(features)
       return dataset.batch(1, drop_remainder=True)
 
-    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
-                                     config=_make_config())
+    estimator = IPUPipelineEstimator(
+        model_fn=my_model_fn,
+        config=_make_config(iterations_per_loop=gradient_accumulation_count))
 
     metrics = estimator.evaluate(input_fn=my_input_fn, steps=num_steps)
     self.assertEqual(np.mean(features), metrics["mean"])
     self.assertEqual(np.mean(np.square(features)), metrics["loss"])
 
-  @combinations.generate(combinations.combine(iterations_per_loop=[1, 2]))
-  def testPassGlobalStepAsInput(self, iterations_per_loop):
+  @combinations.generate(
+      combinations.combine(num_weight_updates_per_loop=[1, 2]))
+  def testPassGlobalStepAsInput(self, num_weight_updates_per_loop):
     x = 1.5
     y = 1.0
     initial_w = 2.0
     gradient_accumulation_count = 4
+
+    iterations_per_loop = (gradient_accumulation_count *
+                           num_weight_updates_per_loop)
 
     def my_model_fn(mode):
       def stage1(global_step, features, labels):
@@ -601,8 +615,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
           gradient_accumulation_count=gradient_accumulation_count)
 
     def my_input_fn():
-      features = [x] * gradient_accumulation_count * iterations_per_loop
-      labels = [y] * gradient_accumulation_count * iterations_per_loop
+      features = [x] * iterations_per_loop
+      labels = [y] * iterations_per_loop
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       return dataset
 

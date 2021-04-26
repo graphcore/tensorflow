@@ -35,7 +35,6 @@ from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -510,7 +509,6 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     self._iterations_per_loop = config.ipu_run_config.iterations_per_loop
     self._replication_factor = config.ipu_run_config.num_replicas
     self._num_shards = config.ipu_run_config.num_shards
-    self._autosharding = config.ipu_run_config.autosharding
     self._ipu_device = "/device:IPU:{}".format(config.ipu_run_config.ordinal)
     self._captured_hooks = []
     self._captured_host_call_fn = None
@@ -574,9 +572,6 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
 
       if isinstance(estimator_spec, IPUEstimatorSpec):
         self._capture_host_call(estimator_spec.host_call)
-
-      if self._autosharding:
-        autoshard.automatic_sharding(self._num_shards, features, loss)
 
       # training_step will be run by xla.compile(). xla.compile() only supports
       # tensor output while train_op can be either an operation or a tensor.
@@ -659,9 +654,6 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
       else:
         metrics_fn, outfeed_values = eval_metrics
         self._capture_eval_metrics_fn(metrics_fn)
-
-      if self._autosharding:
-        autoshard.automatic_sharding(self._num_shards, features, loss)
 
       total_loss += math_ops.cast(loss, dtypes.float32)
       outfeed = self._outfeed_queue.enqueue(outfeed_values)

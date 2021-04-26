@@ -48,7 +48,7 @@ class GclTest(test_util.TensorFlowTestCase):
 
     num_io_tiles = 128
     cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_gcl_options(cfg, num_io_tiles=num_io_tiles)
+    cfg = ipu_utils.set_io_tile_options(cfg, num_io_tiles=num_io_tiles)
     cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
     ipu_utils.configure_ipu_system(cfg)
 
