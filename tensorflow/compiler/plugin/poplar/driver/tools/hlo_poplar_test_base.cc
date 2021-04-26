@@ -19,6 +19,8 @@ limitations under the License.
 #include <poplar/IPUModel.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
@@ -88,6 +90,23 @@ StatusOr<int32> HloPoplarTestBase::GetMaxIpuCount() {
     return InternalError("Invalid TF_IPU_COUNT value");
   }
   return count;
+}
+
+StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
+    CompilerResources& resources, HloModule* module) {
+  EXPECT_TRUE(HloTrivialScheduler().Run(module).ValueOrDie());
+
+  auto entry = module->entry_computation();
+  auto order = module->schedule().sequence(entry).instructions();
+  EntryVisitor visitor(resources, entry);
+
+  TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
+
+  poplar::program::Sequence main_program;
+  main_program.add(resources.preamble_sequence);
+  main_program.add(visitor.GetSequenceAndInitializeCounters());
+
+  return poplar::Engine(*resources.main_graph, main_program);
 }
 
 }  // namespace poplarplugin
