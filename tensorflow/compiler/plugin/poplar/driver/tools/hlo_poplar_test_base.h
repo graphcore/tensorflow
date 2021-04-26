@@ -19,10 +19,13 @@ limitations under the License.
 #include <memory>
 
 #include <poplar/Device.hpp>
+#include <poplar/Engine.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
+class HloModule;
+
 namespace poplarplugin {
 
 class HloPoplarTestBase : public HloTestBase {
@@ -36,6 +39,9 @@ class HloPoplarTestBase : public HloTestBase {
                                                  int32 num_tiles = 0);
   static StatusOr<poplar::Device> CreateIpuDevice(int32 num_ipus = 1,
                                                   int32 num_tiles = 0);
+
+  StatusOr<poplar::Engine> Compile(CompilerResources& resources,
+                                   HloModule* module);
 
   // Returns number of IPU allowed test allowed to use.
   static StatusOr<int32> GetMaxIpuCount();
