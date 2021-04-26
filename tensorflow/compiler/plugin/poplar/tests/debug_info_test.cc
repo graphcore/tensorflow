@@ -138,9 +138,20 @@ TEST_F(DebugInfoTest, TestHloInstructionDebugInfo_Dot) {
     auto x = HloInstruction::CreateParameter(0, r1f32, "x");
     auto y = HloInstruction::CreateParameter(1, r1f32, "y");
 
+    // Need to create a root node for a computation so we can get computation
+    // added to the instruction below. This is just so we can test for the
+    // presence of the fields.
+    auto root = HloInstruction::CreateDot(r1f32, x.get(), y.get(), dot_dnums,
+                                          DefaultPrecisionConfig(2));
+    auto builder = HloComputation::Builder("ComputationA");
+    builder.AddInstruction(std::move(root));
+
     auto instruction = HloInstruction::CreateDot(
         r1f32, x.get(), y.get(), dot_dnums, DefaultPrecisionConfig(2));
-    HloInstructionDebugInfo debugInfo(debugContext, instruction.get());
+
+    auto computation = builder.Build(root.get());
+    auto a = computation->AddInstruction(std::move(instruction));
+    HloInstructionDebugInfo debugInfo(debugContext, a);
   }
 
   poplar::DebugInfo::closeStreamer();
@@ -165,6 +176,10 @@ TEST_F(DebugInfoTest, TestHloInstructionDebugInfo_Dot) {
       c.get_child("debug_string").get_value<std::string>());
 
   EXPECT_EQ(2, c.get_child("operand_count").get_value<int>());
+
+  EXPECT_EQ("ComputationA",
+            c.get_child("computation").get_value<std::string>());
+  EXPECT_EQ(-1, c.get_child("computation_id").get_value<int64>());
 
   EXPECT_EQ(2, c.get_child("operands").size());
   EXPECT_EQ(0, c.get_child("users").size());

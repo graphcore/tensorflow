@@ -50,6 +50,12 @@ HloInstructionDebugInfo::HloInstructionDebugInfo(
 
   setValue("operand_count", poplar::ProfileValue{instruction->operand_count()});
 
+  // Record the parent computation information.
+  if (instruction->parent()) {
+    setValue("computation", instruction->parent()->name());
+    setValue("computation_id", instruction->parent()->unique_id());
+  }
+
   poplar::ProfileValue::Map operands;
   for (int i = 0; i < instruction->operand_count(); ++i) {
     auto* operand = instruction->operand(i);
