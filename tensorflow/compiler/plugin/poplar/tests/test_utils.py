@@ -639,6 +639,16 @@ class ReportJSON(object):
                           num_matches, msg)
 
 
+def count_ipu_compilations(events):
+  count = 0
+  for evt_str in events:
+    evt = IpuTraceEvent.FromString(evt_str)
+    if (evt.type == IpuTraceEvent.COMPILE_END
+        and evt.compile_end.compilation_report):
+      count += 1
+  return count
+
+
 def create_multi_increasing_dataset(value,
                                     shapes=None,
                                     dtypes=None,

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ipu_devices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -94,6 +95,20 @@ class IpuConfigureHardwareOp : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("IpuConfigureHardware").Device(DEVICE_CPU),
                         IpuConfigureHardwareOp);
+
+class IpuClearAllXlaCompilationCaches : public OpKernel {
+ public:
+  explicit IpuClearAllXlaCompilationCaches(OpKernelConstruction* ctx)
+      : OpKernel(ctx) {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto& active_devices = IPUDevices::GetActiveDevices();
+    OP_REQUIRES_OK(ctx, active_devices.ClearXlaCompilationCache());
+  }
+};
+REGISTER_KERNEL_BUILDER(
+    Name("IpuClearAllXlaCompilationCaches").Device(DEVICE_CPU),
+    IpuClearAllXlaCompilationCaches);
 
 class IpuResetSeedOp : public OpKernel {
  public:
