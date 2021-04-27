@@ -17,7 +17,9 @@ limitations under the License.
 
 #include <poplar/DebugContext.hpp>
 #include <poplar/Tensor.hpp>
+#include <popnn/CTCInference.hpp>
 #include <popnn/CTCLoss.hpp>
+#include <popops/Cast.hpp>
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -178,6 +180,152 @@ class CTCLossWithLogProbsOp : public CTCLossOpBase {
 };
 
 REGISTER_POPLAR_OP(CTCLossWithLogProbs, CTCLossWithLogProbsOp);
+
+class CTCBeamSearchOpBase : public PoplarOpDef {
+ public:
+  struct BeamSearchReturns {
+    poplar::Tensor label_probabilities;
+    poplar::Tensor label_lengths;
+    poplar::Tensor decoded_labels;
+  };
+
+ private:
+  virtual const std::string ClassName() const = 0;
+
+  virtual BeamSearchReturns PerformBeamSearch(
+      poplar::Graph& graph, const poplar::Tensor& data,
+      const poplar::Tensor& dataLengths, poplar::program::Sequence& prog,
+      int64 blankClass, int64 beamwidth, int64 topPaths,
+      const popnn::ctc::Plan& plan,
+      const poplar::DebugNameAndId& debug_name_and_id) const = 0;
+
+ public:
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
+    poplar::program::Sequence seq({}, debug_info);
+    const auto* ctc_inst = Cast<HloCTCInferenceInstructionBase>(inst);
+
+    // Retreive intputs, attributes and outputs from instruction
+    TF_ASSIGN_OR_RETURN(poplar::Tensor data,
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             {debug_info, "data"}, false));
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor data_lengths,
+        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                             {debug_info, "data_lengths"}, false));
+
+    TF_ASSIGN_OR_RETURN(poplar::Type in_type,
+                        PoplarDataType(ctc_inst->in_dtype()));
+
+    int64 blank_index = ctc_inst->blank_index();
+    int64 beam_width = ctc_inst->beam_width();
+    int64 top_paths = ctc_inst->top_paths();
+
+    TF_ASSIGN_OR_RETURN(const popnn::ctc::Plan* plan, GetCTCPlan(res, inst));
+
+    auto outputs =
+        PerformBeamSearch(graph, data, data_lengths, seq, blank_index,
+                          beam_width, top_paths, *plan, debug_info);
+
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, 0, outputs.label_probabilities));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, outputs.label_lengths));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, outputs.decoded_labels));
+    return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
+    const HloInstruction* inst = tensor_target.tgt;
+    const HloCTCInferenceInstructionBase* ctc_inst =
+        Cast<HloCTCInferenceInstructionBase>(inst);
+    const int64 input_index = tensor_target.input_index;
+    if (input_index != 0) {
+      return xla::FailedPrecondition(
+          "Invalid allocation index %d for instruction", input_index,
+          inst->ToString());
+    }
+    const Shape& allocation_shape = inst->operand(0)->shape();
+    TF_ASSIGN_OR_RETURN(const popnn::ctc::Plan* plan, GetCTCPlan(res, inst));
+    TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(allocation_shape));
+    TF_ASSIGN_OR_RETURN(poplar::Type in_dtype,
+                        PoplarDataType(ctc_inst->in_dtype()));
+    const int64 batch_size = ShapeUtil::GetDimension(allocation_shape, 1);
+    const int64 max_time = ShapeUtil::GetDimension(allocation_shape, 0);
+    const int64 num_classes = ShapeUtil::GetDimension(allocation_shape, 2);
+    if (in_dtype != dtype) {
+      return xla::FailedPrecondition(
+          "dtype of the data input tensor (%s) "
+          "does not match the specified "
+          "input dtype (%s)",
+          dtype.toString(), in_dtype.toString());
+    }
+    return popnn::ctc_infer::createDataInput(graph, dtype, batch_size, max_time,
+                                             num_classes, *plan,
+                                             {debug_info, "data"});
+  }
+};
+
+class CTCBeamSearchWithLogitsOp : public CTCBeamSearchOpBase {
+  const std::string ClassName() const override { return "CTCLossWithLogitsOp"; }
+
+  CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
+      poplar::Graph& graph, const poplar::Tensor& data,
+      const poplar::Tensor& data_lengths, poplar::program::Sequence& prog,
+      int64 blank_class, int64 beam_width, int64 top_paths,
+      const popnn::ctc::Plan& plan,
+      const poplar::DebugNameAndId& debug_name_and_id) const override {
+    poplar::Tensor input_lengths =
+        data_lengths.elementType() == poplar::UNSIGNED_INT
+            ? data_lengths
+            : popops::cast(graph, data_lengths, poplar::UNSIGNED_INT, prog,
+                           debug_name_and_id);
+
+    CTCBeamSearchOpBase::BeamSearchReturns result;
+    std::tie(result.label_probabilities, result.label_lengths,
+             result.decoded_labels) =
+        popnn::ctc_infer::beamSearchDecoderLogits(
+            graph, data, input_lengths, prog, blank_class, beam_width,
+            top_paths, plan, debug_name_and_id);
+    // Op def expects signed integer type tensors
+    result.label_lengths = popops::cast(graph, result.label_lengths,
+                                        poplar::INT, prog, debug_name_and_id);
+    result.decoded_labels = popops::cast(graph, result.decoded_labels,
+                                         poplar::INT, prog, debug_name_and_id);
+    return result;
+  }
+};
+
+REGISTER_POPLAR_OP(CTCBeamSearchWithLogits, CTCBeamSearchWithLogitsOp);
+
+class CTCBeamSearchWithLogProbsOp : public CTCBeamSearchOpBase {
+  const std::string ClassName() const override {
+    return "CTCBeamSearchWithLogProbsOp";
+  }
+
+  CTCBeamSearchOpBase::BeamSearchReturns PerformBeamSearch(
+      poplar::Graph& graph, const poplar::Tensor& data,
+      const poplar::Tensor& data_lengths, poplar::program::Sequence& prog,
+      int64 blank_class, int64 beam_width, int64 top_paths,
+      const popnn::ctc::Plan& plan,
+      const poplar::DebugNameAndId& debug_name_and_id) const override {
+    CTCBeamSearchOpBase::BeamSearchReturns result;
+    std::tie(result.label_probabilities, result.label_lengths,
+             result.decoded_labels) =
+        popnn::ctc_infer::beamSearchDecoderLogProbabilities(
+            graph, data, data_lengths, prog, blank_class, beam_width, top_paths,
+            plan, debug_name_and_id);
+  }
+};
+
+REGISTER_POPLAR_OP(CTCBeamSearchWithLogProbs, CTCBeamSearchWithLogProbsOp);
 
 }  // namespace
 }  // namespace poplarplugin

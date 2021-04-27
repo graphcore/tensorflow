@@ -34,6 +34,8 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu.ops import nn_ops
 from tensorflow.python.ipu.ops.nn_ops import _compute_sampled_logits
 
+from tensorflow.nn import ctc_beam_search_decoder as tf_ctc_beam_search
+
 
 class ComputeSampledLogitsTest(test_util.TensorFlowTestCase):
   def setUp(self):
@@ -767,6 +769,59 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                            inputs,
                            blank_index=blank_index,
                            out_dtype=out_dtype)
+
+  @test_util.deprecated_graph_mode_only
+  def testCTCBeamSearch(self):
+    batch_size = 8
+    label_length = 5
+    max_label_length = 2 * label_length + 1
+    max_time = max_label_length
+    num_classes = 7
+    beam_width = 5
+    top_paths = 3
+    in_dtype = np.float32
+
+    input_data = np.full([max_time, batch_size, num_classes],
+                         0.5,
+                         dtype=in_dtype)
+    input_length_data = np.full([batch_size], 1, dtype=np.uint32)  #pylint: disable=unused-variable
+    signed_input_length_data = np.full([batch_size], 1, dtype=np.int32)
+    inputs = array_ops.placeholder(in_dtype,
+                                   shape=[max_time, batch_size, num_classes])
+    signed_input_length = array_ops.placeholder(np.int32, shape=[batch_size])
+
+    with se.Session() as sess:  #pylint: disable=unused-variable
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+
+        a, b, c = ipu.ops.nn_ops.ctc_beam_search_decoder(  #pylint: disable=unused-variable
+            inputs,
+            signed_input_length,
+            blank_index=0,
+            top_paths=top_paths,
+            beam_width=beam_width,
+            name="BeamSearch")
+
+        # Need to wait for poplibs implmentation of ctc inference before can
+        # actually call it
+        # probs, lengths, decoded = sess.run([a, b, c],
+        #              feed_dict={inputs: input_data,
+        #                       signed_input_length: signed_input_length_data})
+
+    with se.Session() as sess2:
+      d, l = tf_ctc_beam_search(inputs,
+                                signed_input_length,
+                                beam_width=beam_width,
+                                top_paths=top_paths)
+
+      ex_decoded, ex_probs = sess2.run(  #pylint: disable=unused-variable
+          [d, l],
+          feed_dict={
+              inputs: input_data,
+              signed_input_length: signed_input_length_data
+          })
+
+    #self.assertEqual(probs, ex_probs)
+    #self.assertEqual(decoded, ex_decoded)
 
 
 if __name__ == "__main__":
