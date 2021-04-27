@@ -102,7 +102,8 @@ enum PoplarOp {
   MaxAndArgMax = 98;
   MinAndArgMin = 99;
   BatchNormStatistics = 100;
-  
+  NormaliseImage = 101;
+
   // Supported Fusions.
   Conv_biasadd = 200;
   Matmul_biasadd = 201;

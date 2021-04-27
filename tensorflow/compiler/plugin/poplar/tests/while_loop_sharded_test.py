@@ -42,26 +42,23 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
       def my_net(lr):
         def my_model(lr, loss, x, y):
           with ipu.scopes.ipu_scope("/device:IPU:0"):
-            inp = x
+            with ipu.scopes.ipu_shard(0):
+              x = layers.Conv2D(8,
+                                3,
+                                padding='same',
+                                name="conv1",
+                                use_bias=False)(x)
+              x = math_ops.reduce_max(x, axis=[1, 2])
+              cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
+                  logits=x, labels=array_ops.stop_gradient(y))
+              loss = math_ops.reduce_mean(cross_entropy)
 
-            x = layers.Conv2D(8,
-                              3,
-                              padding='same',
-                              name="conv1",
-                              use_bias=False)(x)
-            x = math_ops.reduce_max(x, axis=[1, 2])
+            with ipu.scopes.ipu_shard(1):
+              optim = sharded_optimizer.ShardedOptimizer(
+                  gd.GradientDescentOptimizer(lr))
+              train = optim.minimize(cross_entropy)
 
-            cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
-                logits=x, labels=array_ops.stop_gradient(y))
-            loss = math_ops.reduce_mean(cross_entropy)
-
-            optim = sharded_optimizer.ShardedOptimizer(
-                gd.GradientDescentOptimizer(lr))
-            train = optim.minimize(cross_entropy)
-
-            ipu.autoshard.automatic_sharding(2, inp, loss)
-
-            return [lr, loss, train]
+              return [lr, loss, train]
 
         loss = 0.0
         return ipu.loops.repeat(2, my_model, [lr, loss], infeed_queue)

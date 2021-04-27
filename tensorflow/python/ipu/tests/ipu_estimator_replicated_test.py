@@ -397,58 +397,6 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
 
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
-  def testTrainWithAutomaticSharding(self):
-    def my_model_fn(features, labels, mode):
-      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
-
-      with variable_scope.variable_scope("vs", use_resource=True):
-        predictions = layers.Dense(units=1)(features)
-
-      loss = losses.mean_squared_error(labels=labels, predictions=predictions)
-      sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(
-          gradient_descent.GradientDescentOptimizer(0.1))
-      train_op = sharded_optimizer_obj.minimize(loss)
-
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
-
-    def my_input_fn():
-      dataset = dataset_ops.Dataset.from_tensor_slices(
-          _create_regression_dataset(num_samples=1000, num_features=5))
-      dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
-      return dataset
-
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
-
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_shards=4,
-                                                   autosharding=True,
-                                                   ipu_options=ipu_options),
-        log_step_count_steps=1,
-        save_summary_steps=1)
-
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
-
-    estimator.train(input_fn=my_input_fn, steps=10)
-
-    model_dir = estimator.model_dir
-    events_file = glob.glob(model_dir + "/*tfevents*")
-    assert len(events_file) == 1
-    events_file = events_file[0]
-    loss_output = list()
-    for e in summary_iterator.summary_iterator(events_file):
-      for v in e.summary.value:
-        if "loss" in v.tag:
-          loss_output.append(v.simple_value)
-
-    self.assertTrue(loss_output[0] > loss_output[-1])
-
-  @tu.test_uses_ipus(num_ipus=4)
-  @test_util.deprecated_graph_mode_only
   def testReplicatedTrainingWithoutCrossReplicaSumShouldThrow(self):
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices([])

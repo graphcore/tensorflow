@@ -53,7 +53,6 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import deprecation
 
 
 class SelectionOrder(Enum):
@@ -318,14 +317,6 @@ def running_on_ipu_model():
   return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
 
 
-@deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
-                             "max_cross_replica_sum_buffer_size",
-                             "max_inter_ipu_copies_buffer_size")
-@deprecation.deprecated_args(
-    None,
-    "disable_graph_convolution_caching is deprecated and it has no effect. "
-    "Use disable_graph_outlining instead.",
-    "disable_graph_convolution_caching")
 def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
@@ -338,7 +329,6 @@ def create_ipu_config(profiling=False,
                       scheduler_selection=SchedulingAlgorithm.CHOOSE_BEST,
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
-                      disable_graph_convolution_caching=False,
                       disable_graph_outlining=False,
                       retain_control_dependencies=False,
                       max_cross_replica_sum_buffer_size=0,
@@ -927,13 +917,7 @@ def set_pooling_options(opts, pooling_options=None):
   return opts
 
 
-@deprecation.deprecated_args(
-    None, "report_options is deprecated, use graph_options and"
-    " execution_options instead", "report_options")
-def set_report_options(opts,
-                       report_options=None,
-                       graph_options=None,
-                       execution_options=None):
+def set_report_options(opts, graph_options=None, execution_options=None):
   """Set the options used to influence Poplar graph and execution reports
      generation.
 
@@ -942,7 +926,6 @@ def set_report_options(opts,
 
       opts = create_ipu_config()
       opts = set_report_options(opts,
-          report_options={"reportOption1": "false"},
           graph_options={"graphOptions": "false"},
           execution_options={"executionOptions": "false"})
       ipu.utils.configure_ipu_system(opts)
@@ -951,8 +934,6 @@ def set_report_options(opts,
 
   Args:
     opts: An IpuOptions session control protobuf.
-    report_options: (Deprecated) A dictionary of Poplar option flags for
-      the report generation.
     graph_options: A dictionary of Poplar option flags for the graph report
       generation.
     execution_options: A dictionary of Poplar option flags for the execution
@@ -961,15 +942,6 @@ def set_report_options(opts,
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  def use_report_options():
-    if report_options:
-      if not isinstance(report_options, dict):
-        raise Exception("`report_options` must be a dictionary")
-    return report_options
-
-  if not graph_options:
-    graph_options = use_report_options()
-
   if graph_options:
     if not isinstance(graph_options, dict):
       raise Exception("`graph_options` must be a dictionary")
@@ -978,9 +950,6 @@ def set_report_options(opts,
       opt = opts.profiling.graph_options.add()
       opt.option = option_name
       opt.value = value
-
-  if not execution_options:
-    execution_options = use_report_options()
 
   if execution_options:
     if not isinstance(execution_options, dict):
@@ -1018,15 +987,7 @@ def set_ipu_model_options(opts,
   return opts
 
 
-@deprecation.deprecated_args(
-    None,
-    "Pipelining recomputation will recompute all the non-stateful operations "
-    "when recomputation is enabled.",
-    "allow_stateful_recompute",
-)
-def set_recomputation_options(opts,
-                              allow_recompute=True,
-                              allow_stateful_recompute=None):  # pylint: disable=unused-argument
+def set_recomputation_options(opts, allow_recompute=True):  # pylint: disable=unused-argument
   """Set re-computation options.
 
   Args:
@@ -1037,7 +998,6 @@ def set_recomputation_options(opts,
       maximum memory liveness. Enabling this option can reduce memory usage at
       the expense of extra computation. Any stateful operations cannot be
       recomputed.
-    allow_stateful_recompute: Deprecated.
 
   Returns:
     The IpuOptions configuration protobuf.
@@ -1108,31 +1068,23 @@ def set_io_tile_options(opts,
   return opts
 
 
-@deprecation.deprecated_args(
-    None, "num_io_tiles is deprecated, use set_io_tile_options instead",
-    "num_io_tiles")
-def set_gcl_options(opts, num_io_tiles=0, gcl_options=None):
+def set_gcl_options(opts, gcl_options):
   """Set the IPU options for the Graphcore Communication Library.
 
   Args:
-    num_io_tiles: Number of tiles to reserve per IPU for the IO operations.
-      Deprecated. Use `set_io_tile_options` instead.
     gcl_options: A dictionary with options for configuring the GCL collective
       operations.
 
   Returns:
     The IpuOptions configuration protobuf.
   """
-  opts = set_io_tile_options(opts, num_io_tiles)
+  if not isinstance(gcl_options, dict):
+    raise TypeError("`gcl_options` must be a dictionary")
 
-  if gcl_options:
-    if not isinstance(gcl_options, dict):
-      raise TypeError("`gcl_options` must be a dictionary")
-
-    for (option_name, value) in gcl_options.items():
-      opt = opts.gcl_options.add()
-      opt.option = option_name
-      opt.value = value
+  for (option_name, value) in gcl_options.items():
+    opt = opts.gcl_options.add()
+    opt.option = option_name
+    opt.value = value
 
   return opts
 

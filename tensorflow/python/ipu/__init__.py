@@ -27,6 +27,7 @@ from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.ipu.ops import embedding_ops_grad
 from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops import functional_ops_grad
+from tensorflow.python.ipu.ops import image_ops
 from tensorflow.python.ipu.ops import internal_ops
 from tensorflow.python.ipu.ops import internal_ops_grad
 from tensorflow.python.ipu.ops import math_ops
@@ -46,8 +47,6 @@ from tensorflow.python.ipu.ops import slicing_ops
 from tensorflow.python.ipu.ops import slicing_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
 
-from tensorflow.python.ipu import autoshard
-from tensorflow.python.ipu import autoshard_cnn
 from tensorflow.python.ipu import data
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import ipu_compiler

@@ -125,7 +125,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     self.assertFalse(cfg.profiling.graph_options)
     cfg = ipu.utils.set_report_options(
-        cfg, report_options={"reportOption1": "false"})
+        cfg,
+        graph_options={"reportOption1": "false"},
+        execution_options={"reportOption1": "false"})
     self.assertTrue(cfg.profiling.graph_options)
 
     self.assertFalse(cfg.speed_size_config.allow_recompute)
@@ -696,9 +698,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertFalse(cfg.profiling.graph_options)
     self.assertFalse(cfg.profiling.execution_options)
     cfg = ipu.utils.set_report_options(
-        cfg, report_options={"reportOption1": "false"})
+        cfg, graph_options={"reportOption1": "false"})
     self.assertTrue(cfg.profiling.graph_options)
-    self.assertTrue(cfg.profiling.execution_options)
+    self.assertFalse(cfg.profiling.execution_options)
 
   @test_util.deprecated_graph_mode_only
   def testCreateConfig2(self):
@@ -706,9 +708,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertFalse(cfg.profiling.graph_options)
     self.assertFalse(cfg.profiling.execution_options)
     cfg = ipu.utils.set_report_options(
-        cfg, graph_options={"reportOption2": "false"})
-    self.assertTrue(cfg.profiling.graph_options)
-    self.assertFalse(cfg.profiling.execution_options)
+        cfg, execution_options={"reportOption2": "false"})
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
 
   @test_util.deprecated_graph_mode_only
   def testCreateConfig3(self):
@@ -716,61 +718,14 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertFalse(cfg.profiling.graph_options)
     self.assertFalse(cfg.profiling.execution_options)
     cfg = ipu.utils.set_report_options(
-        cfg, execution_options={"reportOption3": "false"})
-    self.assertFalse(cfg.profiling.graph_options)
+        cfg,
+        graph_options={"reportOption3a": "false"},
+        execution_options={"reportOption3b": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
     self.assertTrue(cfg.profiling.execution_options)
 
   @test_util.deprecated_graph_mode_only
   def testCreateConfig4(self):
-    cfg = ipu.utils.create_ipu_config()
-    self.assertFalse(cfg.profiling.graph_options)
-    self.assertFalse(cfg.profiling.execution_options)
-    cfg = ipu.utils.set_report_options(
-        cfg,
-        graph_options={"reportOption4a": "false"},
-        execution_options={"reportOption4b": "false"})
-    self.assertTrue(cfg.profiling.graph_options)
-    self.assertTrue(cfg.profiling.execution_options)
-
-  @test_util.deprecated_graph_mode_only
-  def testCreateConfig5(self):
-    cfg = ipu.utils.create_ipu_config()
-    self.assertFalse(cfg.profiling.graph_options)
-    self.assertFalse(cfg.profiling.execution_options)
-    cfg = ipu.utils.set_report_options(
-        cfg,
-        report_options={"reportOption5a": "false"},
-        execution_options={"reportOption5b": "false"})
-    self.assertTrue(cfg.profiling.graph_options)
-    self.assertTrue(cfg.profiling.execution_options)
-
-  @test_util.deprecated_graph_mode_only
-  def testCreateConfig6(self):
-    cfg = ipu.utils.create_ipu_config()
-    self.assertFalse(cfg.profiling.graph_options)
-    self.assertFalse(cfg.profiling.execution_options)
-    cfg = ipu.utils.set_report_options(
-        cfg,
-        report_options={"reportOption6a": "false"},
-        graph_options={"reportOption6b": "false"})
-    self.assertTrue(cfg.profiling.graph_options)
-    self.assertTrue(cfg.profiling.execution_options)
-
-  @test_util.deprecated_graph_mode_only
-  def testCreateConfig7(self):
-    cfg = ipu.utils.create_ipu_config()
-    self.assertFalse(cfg.profiling.graph_options)
-    self.assertFalse(cfg.profiling.execution_options)
-    cfg = ipu.utils.set_report_options(
-        cfg,
-        report_options={"reportOption7a": "false"},
-        graph_options={"reportOption7b": "false"},
-        execution_options={"reportOption7c": "false"})
-    self.assertTrue(cfg.profiling.graph_options)
-    self.assertTrue(cfg.profiling.execution_options)
-
-  @test_util.deprecated_graph_mode_only
-  def testCreateConfig8(self):
     cfg = ipu.utils.create_ipu_config()
     self.assertFalse(cfg.profiling.graph_options)
     self.assertFalse(cfg.profiling.execution_options)
@@ -782,20 +737,26 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
   def testGclOptions(self):
     cfg = ipu.utils.create_ipu_config()
     self.assertEqual(len(cfg.gcl_options), 0)
-    self.assertEqual(cfg.num_io_tiles, 0)
 
     with self.assertRaisesRegex(TypeError,
                                 "`gcl_options` must be a dictionary"):
       ipu.utils.set_gcl_options(cfg, gcl_options=123)
 
     cfg = ipu.utils.set_gcl_options(cfg,
-                                    num_io_tiles=32,
                                     gcl_options={"maxBytesPerTile": "128"})
 
-    self.assertEqual(cfg.num_io_tiles, 32)
     self.assertEqual(len(cfg.gcl_options), 1)
     self.assertEqual(cfg.gcl_options[0].option, "maxBytesPerTile")
     self.assertEqual(cfg.gcl_options[0].value, "128")
+
+  @test_util.deprecated_graph_mode_only
+  def testIoTileOptions(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertEqual(cfg.num_io_tiles, 0)
+
+    cfg = ipu.utils.set_io_tile_options(cfg, num_io_tiles=32)
+
+    self.assertEqual(cfg.num_io_tiles, 32)
 
 
 if __name__ == "__main__":

@@ -19,30 +19,22 @@ Run configs
 import collections
 
 from tensorflow.python.estimator import run_config as run_config_lib
-from tensorflow.python.util import deprecation
 
 
 class IPURunConfig(
     collections.namedtuple('IPURunConfig', [
         'iterations_per_loop', 'ipu_options', 'compile_summary',
-        'num_replicas', 'num_shards', 'autosharding', 'ordinal',
-        'prefetch_depth'
+        'num_replicas', 'num_shards', 'ordinal', 'prefetch_depth'
     ])):
   """IPU related configuration required by `IPUEstimator`.
 
   """
-  @deprecation.deprecated_arg_values(
-      None,
-      "autosharding is deprecated, use alternative execution modes, such as "
-      "pipelining, instead.",
-      autosharding=True)
   def __new__(cls,
               iterations_per_loop=1,
               ipu_options=None,
               compile_summary=False,
               num_replicas=1,
               num_shards=1,
-              autosharding=False,
               ordinal=0,
               prefetch_depth=None):
     """ Creates an `IPURunConfig` instance.
@@ -61,8 +53,6 @@ class IPURunConfig(
       num_replicas: Number of replicated graphs (data parallelism)
       num_shards: Number of IPU devices on which the graph is sharded (model
         parallelism)
-      autosharding: Use the IPU `automatic_sharding` to automatically shard the
-        graph across `num_shards` devices
       ordinal: The IPU device ordinal to use.  For instance `0` corresponds
         to `/device:IPU:0`.
       prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
@@ -101,7 +91,6 @@ class IPURunConfig(
                               compile_summary=compile_summary,
                               num_replicas=num_replicas,
                               num_shards=num_shards,
-                              autosharding=autosharding,
                               ordinal=ordinal,
                               prefetch_depth=prefetch_depth)
 
