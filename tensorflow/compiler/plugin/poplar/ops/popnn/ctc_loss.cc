@@ -56,4 +56,48 @@ REGISTER_OP("PopnnCTCLossWithLogProbs")
       return Status::OK();
     });
 
+REGISTER_OP("PopnnCTCBeamSearchWithLogits")
+    .Input("data: in_dtype")
+    .Input("data_lengths: int32")
+    .Output("label_probabilities: in_dtype")
+    .Output("label_lengths: int32")
+    .Output("decoded_labels: int32")
+    .Attr("blank_index: int")
+    .Attr("beam_width: int")
+    .Attr("in_dtype: {float16, float32}")
+    .Attr("top_paths: int")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto data_shape = c->input(0);
+      auto batch_size = c->Dim(data_shape, 1);
+      auto max_time = c->Dim(data_shape, 0);
+      int32 top_paths;
+      TF_RETURN_IF_ERROR(c->GetAttr("top_paths", &top_paths));
+      c->set_output(0, c->MakeShape({batch_size, top_paths}));
+      c->set_output(1, c->MakeShape({batch_size, top_paths}));
+      c->set_output(2, c->MakeShape({batch_size, top_paths, max_time}));
+      return Status::OK();
+    });
+
+REGISTER_OP("PopnnCTCBeamSearchWithLogProbs")
+    .Input("data: in_dtype")
+    .Input("data_lengths: int32")
+    .Output("label_probabilities: in_dtype")
+    .Output("label_lengths: int32")
+    .Output("decoded_labels: int32")
+    .Attr("blank_index: int")
+    .Attr("beam_width: int")
+    .Attr("in_dtype: {float16, float32}")
+    .Attr("top_paths: int")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto data_shape = c->input(0);
+      auto batch_size = c->Dim(data_shape, 1);
+      auto max_time = c->Dim(data_shape, 0);
+      int32 top_paths;
+      TF_RETURN_IF_ERROR(c->GetAttr("top_paths", &top_paths));
+      c->set_output(0, c->MakeShape({batch_size, top_paths}));
+      c->set_output(1, c->MakeShape({batch_size, top_paths}));
+      c->set_output(2, c->MakeShape({batch_size, top_paths, max_time}));
+      return Status::OK();
+    });
+
 }  // namespace tensorflow
