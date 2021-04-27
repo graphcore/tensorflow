@@ -607,12 +607,16 @@ cc_library(
 
 cc_library(
     name = "common",
-    srcs = [],
+    srcs = [
+        "driver/ipu_devices.cc",
+    ],
     hdrs = [
+        "driver/ipu_devices.h",
         "driver/xla_ipu_common.h",
     ],
     deps = [
         ":flags",
+        "//tensorflow/compiler/jit:xla_device",
     ],
 )
 
@@ -4726,6 +4730,18 @@ cc_binary(
 )
 
 tf_xla_py_test(
+    name = "clear_xla_cache_test",
+    size = "small",
+    srcs = ["tests/clear_xla_cache_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "executable_cache_test",
     size = "medium",
     srcs = ["tests/executable_cache_test.py"],
@@ -5216,6 +5232,7 @@ test_suite(
         "case_test",
         "casts_elimination_test",
         "cholesky_test",
+        "clear_xla_cache_test",
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
         "computation_flattener_test",

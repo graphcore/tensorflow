@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/ipu_devices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 
 #include "tensorflow/compiler/jit/kernels/xla_ops.h"
@@ -36,9 +37,11 @@ class IpuDevice : public XlaDevice {
   IpuDevice(const SessionOptions& options, const XlaDevice::Options& devopts)
       : XlaDevice(options, devopts) {
     UseGpuDeviceInfo();
+
+    IPUDevices::GetActiveDevices().Add(this);
   }
 
-  virtual ~IpuDevice() {}
+  virtual ~IpuDevice() { IPUDevices::GetActiveDevices().Remove(this); }
 };
 
 class XlaIpuDeviceFactory : public DeviceFactory {

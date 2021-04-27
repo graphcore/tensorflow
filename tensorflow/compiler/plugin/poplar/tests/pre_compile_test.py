@@ -21,7 +21,7 @@ import tempfile
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, count_ipu_compilations
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python import ops
@@ -61,21 +61,11 @@ def _temporary_executable_cache():
       yield
 
 
-def _count_ipu_compilations(events):
-  count = 0
-  for evt_str in events:
-    evt = IpuTraceEvent.FromString(evt_str)
-    if (evt.type == IpuTraceEvent.COMPILE_END
-        and evt.compile_end.compilation_report):
-      count += 1
-  return count
-
-
 def _count_ipu_compilations_in_summary(summary):
   count = 0
   for val in summary.value:
     if val.tag == "ipu_trace":
-      count += _count_ipu_compilations(val.tensor.string_val)
+      count += count_ipu_compilations(val.tensor.string_val)
   return count
 
 
@@ -129,8 +119,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       result1, report1 = self._run_in_new_process(build_and_run_model)
       self.assertAllClose(result0, result1)
       self.assertAllClose(result1, [0.0, 0.0])
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, count_ipu_compilations(report0))
+      self.assertEqual(0, count_ipu_compilations(report1))
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
@@ -169,8 +159,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
           build_and_run_model)
       self.assertEqual(dequeued0.shape, dequeued1.shape)
       self.assertEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, count_ipu_compilations(events0))
+      self.assertEqual(0, count_ipu_compilations(events1))
 
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
@@ -200,8 +190,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
         result1, events1 = build_and_run_model()
 
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, count_ipu_compilations(events0))
+      self.assertEqual(0, count_ipu_compilations(events1))
 
   def test_ipu_estimator(self):
     def my_model_fn(features, labels, mode):
@@ -337,8 +327,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       events0 = self._run_in_new_process(build_and_run_model)
       events1 = self._run_in_new_process(build_and_run_model)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, count_ipu_compilations(events0))
+      self.assertEqual(0, count_ipu_compilations(events1))
 
   @test_util.deprecated_graph_mode_only
   def test_host_embeddings(self):
@@ -398,8 +388,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       self.assertFalse(np.any(result0))
       self.assertAllEqual(result0, result1)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, count_ipu_compilations(events0))
+      self.assertEqual(0, count_ipu_compilations(events1))
 
 
 if __name__ == "__main__":

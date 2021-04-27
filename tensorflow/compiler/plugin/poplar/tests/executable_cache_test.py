@@ -83,16 +83,6 @@ def _count_ipu_compilations_in_dir(model_dir):
   return count
 
 
-def _count_ipu_compilations(events):
-  count = 0
-  for evt_str in events:
-    evt = IpuTraceEvent.FromString(evt_str)
-    if (evt.type == IpuTraceEvent.COMPILE_END
-        and evt.compile_end.compilation_report):
-      count += 1
-  return count
-
-
 class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-method
   def _run_in_new_process(self, fn):
     q = multiprocessing.Queue()
@@ -141,8 +131,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       result0, report0 = self._run_in_new_process(build_and_run_model)
       result1, report1 = self._run_in_new_process(build_and_run_model)
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, tu.count_ipu_compilations(report0))
+      self.assertEqual(0, tu.count_ipu_compilations(report1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
@@ -188,8 +178,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
           build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
       self.assertEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(0, tu.count_ipu_compilations(events1))
 
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -224,8 +214,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       received1, events1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 1.0)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(0, tu.count_ipu_compilations(events1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
@@ -261,8 +251,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         result1, events1 = build_and_run_model()
 
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(0, tu.count_ipu_compilations(events1))
 
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -352,8 +342,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       received1, events1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 4.0)
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(0, tu.count_ipu_compilations(events1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
@@ -396,8 +386,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       events0 = self._run_in_new_process(build_and_run_model)
       events1 = self._run_in_new_process(build_and_run_model)
       # Expect second compilation as the executable should not be cached
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(1, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(1, tu.count_ipu_compilations(events1))
 
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
@@ -440,8 +430,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       events0 = self._run_in_new_process(build_and_run_model)
       events1 = self._run_in_new_process(build_and_run_model)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, _count_ipu_compilations(events0))
-      self.assertEqual(0, _count_ipu_compilations(events1))
+      self.assertEqual(1, tu.count_ipu_compilations(events0))
+      self.assertEqual(0, tu.count_ipu_compilations(events1))
 
 
 if __name__ == "__main__":
