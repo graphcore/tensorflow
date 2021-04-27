@@ -103,7 +103,9 @@ enum PoplarOp {
   MinAndArgMin = 99;
   BatchNormStatistics = 100;
   NormaliseImage = 101;
-
+  CTCBeamSearchWithLogProbs = 102;
+  CTCBeamSearchWithLogits = 103;
+  
   // Supported Fusions.
   Conv_biasadd = 200;
   Matmul_biasadd = 201;
