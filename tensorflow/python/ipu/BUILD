@@ -204,7 +204,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    shard_count = 3,  # as can't have differing config in same process
+    shard_count = 6,  # as can't have differing config in same process
 )
 
 tf_py_test(
