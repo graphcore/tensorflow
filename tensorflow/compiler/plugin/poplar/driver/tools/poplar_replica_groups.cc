@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
+
 namespace xla {
 namespace poplarplugin {
 
@@ -23,7 +25,16 @@ namespace poplarplugin {
   if (group_size == 0) {
     return PoplarReplicaGroups();
   }
-  return PoplarReplicaGroups(group_size);
+  return PoplarReplicaGroups(group_size, Type::Consecutive);
+}
+
+/*static*/ PoplarReplicaGroups PoplarReplicaGroups::Orthogonal(
+    uint64 group_size) {
+  // Treat 0 is a special case meaning all replicas in the same group.
+  if (group_size == 0) {
+    return PoplarReplicaGroups();
+  }
+  return PoplarReplicaGroups(group_size, Type::Orthogonal);
 }
 
 uint64 PoplarReplicaGroups::GroupSizeOr(uint64 default_value) const {
@@ -39,7 +50,13 @@ std::string PoplarReplicaGroups::ToString() const {
   if (!group_size_.has_value()) {
     return "single(group_size=all)";
   }
-  return "consecutive(group_size=" + std::to_string(*group_size_) + ")";
+  switch (group_type_) {
+    case Type::Consecutive:
+      return "consecutive(group_size=" + std::to_string(*group_size_) + ")";
+    case Type::Orthogonal:
+      return "orthogonal(group_size=" + std::to_string(*group_size_) + ")";
+  }
+  LOG(FATAL) << "Unknown group type";
 }
 
 std::vector<xla::ReplicaGroup> PoplarReplicaGroups::ToXlaReplicaGroups() const {
@@ -47,15 +64,20 @@ std::vector<xla::ReplicaGroup> PoplarReplicaGroups::ToXlaReplicaGroups() const {
     return {};
   }
 
-  // We always create a single replica group here as we do not know the total
-  // number of replicas. However, we do know that there should be at least one
-  // group of the given size. During lowering multiple groups will be used if
-  // the total number of replicas is larger than the group size.
-  xla::ReplicaGroup group;
-  for (int64 i = 0; i < group_size_; ++i) {
-    group.add_replica_ids(i);
+  // We do not know the total number of replicas at this point, so we do not
+  // know how many groups to generate. Therefore we generate only enough groups
+  // to satisfy the HLO verifier. During lowering the correct number of groups
+  // will be used based on the total number of replicas.
+  const int64 group_size = *group_size_;
+  const int64 num_groups = group_type_ == Type::Consecutive ? 1 : 2;
+
+  std::vector<xla::ReplicaGroup> result(num_groups);
+  for (int64 i = 0; i < num_groups; ++i) {
+    for (int64 j = 0; j < group_size; ++j) {
+      result[i].add_replica_ids(j * num_groups + i);
+    }
   }
-  return {group};
+  return result;
 }
 
 /*static*/ xla::StatusOr<PoplarReplicaGroups>
@@ -65,26 +87,43 @@ PoplarReplicaGroups::FromXlaReplicaGroups(
     return PoplarReplicaGroups();
   }
 
-  // We expect a single consecutive replica group.
-  if (groups.size() != 1) {
-    return xla::InvalidArgumentStrCat(
-        "Expected a single replica group, but got ", groups.size());
+  const int64 num_groups = groups.size();
+  const int64 group_size = groups[0].replica_ids_size();
+  if (group_size == 0) {
+    return xla::InvalidArgument("Unsupported empty replica group");
   }
 
-  const auto& group = groups[0];
-  const int64 group_size = group.replica_ids_size();
-  for (int64 i = 0; i < group_size; ++i) {
-    if (group.replica_ids(i) != i) {
+  for (int64 i = 0; i < num_groups; ++i) {
+    const xla::ReplicaGroup& group = groups[i];
+    if (group.replica_ids_size() != group_size) {
       return xla::InvalidArgumentStrCat(
-          "Unsupported non-consecutive replica group: ", group.DebugString());
+          "Irregular replica group size: Expected ", group_size, ", actual ",
+          group.replica_ids_size());
+    }
+
+    for (int64 j = 0; j < group_size; ++j) {
+      const int64 expected = j * num_groups + i;
+      const int64 actual = group.replica_ids(j);
+      if (expected != actual) {
+        return xla::InvalidArgumentStrCat(
+            "Unsupported replica group: Expected ", expected, " at index ", j,
+            ", actual ", actual, ": ", group.DebugString());
+      }
     }
   }
 
-  return Consecutive(group_size);
+  switch (num_groups) {
+    case 1:
+      return Consecutive(group_size);
+    case 2:
+      return Orthogonal(group_size);
+  }
+  return xla::InvalidArgumentStrCat("Unsupported number of replica groups: ",
+                                    num_groups);
 }
 
 bool PoplarReplicaGroups::operator==(const PoplarReplicaGroups& other) const {
-  return group_size_ == other.group_size_;
+  return group_size_ == other.group_size_ && group_type_ == other.group_type_;
 }
 
 bool PoplarReplicaGroups::operator!=(const PoplarReplicaGroups& other) const {
@@ -92,13 +131,21 @@ bool PoplarReplicaGroups::operator!=(const PoplarReplicaGroups& other) const {
 }
 
 size_t PoplarReplicaGroups::Hash() const {
-  return std::hash<decltype(group_size_)>()(group_size_);
+  return hash_util::hash(group_size_, group_type_);
 }
 
-PoplarReplicaGroups::PoplarReplicaGroups(uint64 group_size)
-    : group_size_(group_size) {
+PoplarReplicaGroups::Type PoplarReplicaGroups::GroupType() const {
+  return group_type_;
+}
+
+PoplarReplicaGroups::PoplarReplicaGroups(uint64 group_size, Type group_type)
+    : group_size_(group_size), group_type_(group_type) {
   // 0 should use default constructor instead.
   CHECK_NE(group_size, 0);
+}
+
+std::ostream& operator<<(std::ostream& oss, const PoplarReplicaGroups& groups) {
+  return oss << groups.ToString();
 }
 
 }  // namespace poplarplugin

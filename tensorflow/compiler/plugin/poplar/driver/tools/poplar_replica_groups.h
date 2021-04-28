@@ -30,11 +30,18 @@ class PoplarReplicaGroups {
   PoplarReplicaGroups() = default;
 
   /* The replicas are divided consecutively into groups of the given size.
-   * If there are N replicas denoted {0, ... N-1} and group size is k then the
-   * groups are:
+   * If there are N replicas denoted {0, ... N-1} and group size is k,
+   * then there are N/k groups of size k:
    *   {0, 1, ... k-1}, {k, ... 2k-1} ... {N-k-1, ... N-1}
    */
   static PoplarReplicaGroups Consecutive(uint64 group_size);
+
+  /* The replicas are sliced into orthogonal (strided) groups.
+   * If there are N replicas denoted {0, ... N-1} and group size is k,
+   * then there are m = N/k groups of size k:
+   *   {0, m, 2m, ...}, {1, m+1, 2m+1, ...} ... {m-1, 2m-1, ... N-1}
+   */
+  static PoplarReplicaGroups Orthogonal(uint64 group_size);
 
   uint64 GroupSizeOr(uint64 default_value) const;
   uint64 GroupSizeOrDie() const;
@@ -55,11 +62,17 @@ class PoplarReplicaGroups {
 
   size_t Hash() const;
 
+  enum class Type { Consecutive, Orthogonal };
+  Type GroupType() const;
+
  private:
-  explicit PoplarReplicaGroups(uint64 group_size);
+  PoplarReplicaGroups(uint64 group_size, Type group_type);
 
   absl::optional<uint64> group_size_;
+  Type group_type_ = Type::Consecutive;
 };
+
+std::ostream& operator<<(std::ostream& oss, const PoplarReplicaGroups& groups);
 
 }  // namespace poplarplugin
 }  // namespace xla

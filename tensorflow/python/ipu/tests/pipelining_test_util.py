@@ -265,7 +265,10 @@ class PipelineTester(object):
       merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128,
-      return_vars=False):
+      return_vars=False,
+      ipu_id=None,
+      process_count=None,
+      process_index=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -277,7 +280,8 @@ class PipelineTester(object):
           next_feed_id(), replication_factor=replication_factor)
 
       def opt_fn(loss):
-        if replication_factor > 1:
+        global_replication_factor = replication_factor * (process_count or 1)
+        if global_replication_factor > 1:
           opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
         else:
           opt = optimizer
@@ -318,9 +322,19 @@ class PipelineTester(object):
                                         tiles_per_ipu=128)
       if number_of_io_tiles > 0:
         cfg = utils.set_io_tile_options(cfg, number_of_io_tiles, True)
-      num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
-      num_ipus = num_ipus * replication_factor
-      cfg = utils.auto_select_ipus(cfg, num_ipus)
+
+      if ipu_id is None:
+        num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
+        num_ipus = num_ipus * replication_factor
+        cfg = utils.auto_select_ipus(cfg, num_ipus)
+      else:
+        cfg = utils.select_ipus(cfg, indices=[ipu_id])
+
+      if process_count is not None:
+        assert process_index is not None
+        cfg = utils.set_experimental_multi_replica_distribution_options(
+            cfg, process_count=process_count, process_index=process_index)
+
       if recomp:
         cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
       cfg = utils.set_optimization_options(

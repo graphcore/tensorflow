@@ -46,7 +46,6 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
@@ -1202,26 +1201,18 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         " The number of shards needs to divide the number of local IPUs.");
   }
 
-  // The IPU-link domain size is the number of IPUs per IPU-link domain.
-  // A CPU target cannot be trusted to report a sensible value.
-  const auto num_ipu_link_domain_ipus =
-      target.getTargetType() == poplar::TargetType::CPU
-          ? num_ipus
-          : std::min(num_ipus, target.getIpuLinkDomainSize());
+  CHECK_LE(local_replication_factor, replication_factor);
 
-  CHECK_GE(num_ipu_link_domain_ipus, num_shards);
-  CHECK_EQ(num_ipu_link_domain_ipus % num_shards, 0);
-  const auto ipu_link_domain_replication_factor =
-      num_ipu_link_domain_ipus / num_shards;
+  // Currently we only support performing replica partitioning across the local
+  // replicas in each process, as this allows access to all the parts of a
+  // partitioned remote buffer locally. This means that copying to/from all the
+  // parts of the partitioned remote buffer can be done without any additional
+  // inter-process collective communication.
+  const auto partition_replication_factor = local_replication_factor;
 
   VLOG(1) << "Local replication factor " << local_replication_factor
-          << ", IPU-link domain replication factor "
-          << ipu_link_domain_replication_factor
-          << ", global replication factor " << replication_factor;
-
-  // Replication factor invariant: local <= ipu_link_domain <= global.
-  CHECK_LE(local_replication_factor, ipu_link_domain_replication_factor);
-  CHECK_LE(ipu_link_domain_replication_factor, replication_factor);
+          << ", global replication factor " << replication_factor
+          << ", partition replication factor " << partition_replication_factor;
 
   const auto information =
       CompilerInformation()
@@ -1247,7 +1238,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
-      ipu_link_domain_replication_factor, local_replication_factor,
+      local_replication_factor, partition_replication_factor,
       poplar_executor->FloatingPointBehaviour(),
       poplar_executor->AlwaysRearrangeCopiesOnTheHost(),
       poplar_executor->GetSchedulerSelection(),
@@ -1402,11 +1393,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<VariablesOffloadAndPartition>(
         resources.annotations, resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size,
-        resources.replication_factor);
+        resources.partition_replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
     pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
-        resources.replication_factor);
+        resources.partition_replication_factor, resources.replication_factor);
     {
       auto inline_fusion = [](const HloInstruction* inst) {
         return IsReplicatedParameterLoadFusion(inst) ||

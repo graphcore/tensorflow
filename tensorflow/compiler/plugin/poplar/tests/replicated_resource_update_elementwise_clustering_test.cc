@@ -21,11 +21,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fusion_inliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/variables_offload_and_partition.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/elementwise_cluster.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -1541,6 +1543,246 @@ INSTANTIATE_TEST_CASE_P(
     ReplicatedResourceUpdateElementwiseClusteringBasicTest_Instantiation,
     ReplicatedResourceUpdateElementwiseClusteringBasicTest,
     ::testing::Values(true, false));
+
+using TestPartitionReplicationFactor = HloTestBase;
+
+TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg2 = f16[128] parameter(2)
+
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum
+    arg2_new = f16[128] add(arg0_r, arg2)
+    arg1_new = f16[128] add(arg1, arg2_new)
+
+    ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+
+    add.1 = f16[128] add(input, arg0)
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = f16[128] get-tuple-element(call), index=0
+    gte1 = f16[128] get-tuple-element(call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    loop_call = (f16[128],f16[128]) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloInstruction* loop =
+      CHECK_NOTNULL(FindInstruction(module.get(), "loop_call"));
+  HloInstruction* arg0 = CHECK_NOTNULL(FindInstruction(module.get(), "arg0"));
+  HloInstruction* arg0_r =
+      CHECK_NOTNULL(FindInstruction(module.get(), "arg0_r"));
+  HloInstruction* arg1 = CHECK_NOTNULL(FindInstruction(module.get(), "arg1"));
+  HloInstruction* arg2 = CHECK_NOTNULL(FindInstruction(module.get(), "arg2"));
+  HloInstruction* arg2_new =
+      CHECK_NOTNULL(FindInstruction(module.get(), "arg2_new"));
+  HloInstruction* arg1_new =
+      CHECK_NOTNULL(FindInstruction(module.get(), "arg1_new"));
+
+  const uint64 partition_replication_factor = 2;
+  const uint64 global_replication_factor = 8;
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(
+          annotations, /*remote_memory_supported=*/true,
+          /*minimum_remote_tensor_size=*/4, partition_replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  ReplicatedResourceUpdateElementwiseClustering pass(
+      partition_replication_factor, global_replication_factor);
+  auto elementwise_comps =
+      pass.GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
+                          pass.GetClustersIn(loop, elementwise_comps));
+  ASSERT_THAT(clusters.size(), 1);
+
+  const int64 shard_size = 128 / partition_replication_factor;
+  auto& cluster = *std::begin(clusters);
+  EXPECT_THAT(cluster.GetClusterSize(), 128);
+  EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
+  EXPECT_THAT(cluster.GetShardSize(), shard_size);
+
+  HloInstruction* arg2_new_reshape = arg2_new->mutable_operand(1);
+  EXPECT_THAT(cluster.GetInputs(),
+              ::testing::UnorderedElementsAre(arg0_r, arg1, arg2_new_reshape));
+  EXPECT_THAT(cluster.GetPostOrder(),
+              ::testing::UnorderedElementsAre(arg2_new, arg1_new));
+  EXPECT_THAT(cluster.GetOutputs(),
+              ::testing::UnorderedElementsAre(arg1_new, arg2_new));
+
+  // Convert the cluster.
+  TF_ASSERT_OK(pass.OutlineCluster(cluster).status());
+  TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
+
+  HloInstruction *arg2_load, *arg2_store;
+  TF_ASSERT_OK(GetRemoteLoadStoreUsers(arg2, &arg2_load, &arg2_store));
+
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* cluster_call = GetNextUser(arg0).ValueOrDie();
+  EXPECT_TRUE(IsFunction(cluster_call));
+  HloComputation* cluster_comp = cluster_call->to_apply();
+  EXPECT_THAT(cluster_call->operands(),
+              ::testing::ElementsAre(arg1, arg0, arg2_load));
+
+  arg1 = cluster_comp->parameter_instruction(0);
+  TF_ASSERT_OK_AND_ASSIGN(arg1, GetRewrittenInput(arg1, false));
+  EXPECT_THAT(arg1->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
+
+  HloInstruction* collective = cluster_comp->parameter_instruction(1);
+  TF_ASSERT_OK_AND_ASSIGN(collective, GetScatterInput(collective, false));
+  EXPECT_THAT(collective->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
+
+  auto* reduce_scatter = Cast<HloReduceScatterInstruction>(collective);
+  const auto reduce_scatter_groups = reduce_scatter->GetPoplarReplicaGroups();
+  EXPECT_THAT(reduce_scatter_groups,
+              PoplarReplicaGroups::Consecutive(partition_replication_factor));
+
+  EXPECT_THAT(reduce_scatter->user_count(), 1);
+  HloInstruction* all_reduce = reduce_scatter->users()[0];
+  EXPECT_THAT(all_reduce->opcode(), HloOpcode::kAllReduce);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      const auto all_reduce_groups,
+      PoplarReplicaGroups::FromXlaReplicaGroups(all_reduce->replica_groups()));
+
+  EXPECT_THAT(all_reduce_groups,
+              PoplarReplicaGroups::Orthogonal(global_replication_factor /
+                                              partition_replication_factor));
+}
+
+TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
+  const std::string hlo = R"(
+  HloModule main
+
+  sum {
+    y = f16[] parameter(1)
+    x = f16[] parameter(0), control-predecessors={y}
+    ROOT add = f16[] add(x, y), backend_config="{\"isInplace\":true}"
+  }
+
+  resource_update {
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+    arg2 = f16[128] parameter(2)
+
+    arg0_r = f16[128] all-reduce(arg0), to_apply=sum, replica_groups={{0}}
+    arg2_new = f16[128] add(arg0_r, arg2)
+    arg1_new = f16[128] add(arg1, arg2_new)
+
+    ROOT t = (f16[128],f16[128]) tuple(arg1_new, arg2_new)
+  }
+
+  loop {
+    after-all = token[] after-all()
+    infeed = (f16[128], token[]) infeed(after-all), infeed_config="140121807314576"
+    input = f16[128] get-tuple-element(infeed), index=0
+
+    arg0 = f16[128] parameter(0)
+    arg1 = f16[128] parameter(1)
+
+    add.1 = f16[128] add(input, arg0)
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    gte0 = f16[128] get-tuple-element(call), index=0
+    gte1 = f16[128] get-tuple-element(call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+
+  ENTRY e {
+    e.in0 = f16[128] parameter(0)
+    e.in1 = f16[128] parameter(1)
+    loop_call = (f16[128],f16[128]) call(e.in0, e.in1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+    gte0 = f16[128] get-tuple-element(loop_call), index=0
+    gte1 = f16[128] get-tuple-element(loop_call), index=1
+    ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
+  }
+  )";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloInstruction* loop =
+      CHECK_NOTNULL(FindInstruction(module.get(), "loop_call"));
+  HloInstruction* arg0 = CHECK_NOTNULL(FindInstruction(module.get(), "arg0"));
+
+  const uint64 partition_replication_factor = 2;
+  const uint64 global_replication_factor = 8;
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(
+          annotations, /*remote_memory_supported=*/true,
+          /*minimum_remote_tensor_size=*/4, partition_replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  ReplicatedResourceUpdateElementwiseClustering pass(
+      partition_replication_factor, global_replication_factor);
+  auto elementwise_comps =
+      pass.GetElementwiseClusterableComputations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(auto clusters,
+                          pass.GetClustersIn(loop, elementwise_comps));
+  ASSERT_THAT(clusters.size(), 1);
+
+  const int64 shard_size = 128 / partition_replication_factor;
+  auto& cluster = *std::begin(clusters);
+  EXPECT_THAT(cluster.GetClusterSize(), 128);
+  EXPECT_THAT(cluster.GetAlignedClusterSize(), 128);
+  EXPECT_THAT(cluster.GetShardSize(), shard_size);
+
+  // Convert the cluster.
+  TF_ASSERT_OK(pass.OutlineCluster(cluster).status());
+  TF_ASSERT_OK_AND_ASSIGN(bool eliminated, HloDCE().Run(module.get()));
+
+  EXPECT_THAT(arg0->user_count(), 1);
+  HloInstruction* all_reduce = GetNextUser(arg0).ValueOrDie();
+
+  // The non-global all-reduce should be left alone.
+  EXPECT_THAT(all_reduce->opcode(), HloOpcode::kAllReduce);
+  EXPECT_THAT(all_reduce->replica_groups().size(), 1);
+  EXPECT_THAT(all_reduce->replica_groups()[0].replica_ids(),
+              ::testing::ElementsAre(0));
+}
 
 }  // namespace
 }  // namespace poplarplugin

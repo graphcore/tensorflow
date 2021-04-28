@@ -1144,7 +1144,9 @@ Status DeferredVisitor::HandleRemoteParameterLoad(HloInstruction* inst) {
         const TensorOrRemoteBuffer& input = inputs[0];
 
         const uint64 load_replication_factor =
-            input.IsReplicaPartitioned() ? resources_.replication_factor : 1;
+            input.IsReplicaPartitioned()
+                ? resources_.partition_replication_factor
+                : 1;
         CHECK_EQ(load_inst->GetReplicationFactor(i), load_replication_factor)
             << load_inst->ToString();
 
@@ -1235,7 +1237,9 @@ Status DeferredVisitor::HandleBufferLoadSlice(HloInstruction* inst) {
         const TensorOrRemoteBuffer& input = inputs[0];
 
         const uint64 load_replication_factor =
-            input.IsReplicaPartitioned() ? resources_.replication_factor : 1;
+            input.IsReplicaPartitioned()
+                ? resources_.partition_replication_factor
+                : 1;
         CHECK_EQ(load_inst->GetReplicationFactor(i), load_replication_factor)
             << load_inst->ToString();
 

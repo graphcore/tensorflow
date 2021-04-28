@@ -67,6 +67,7 @@ std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
   resources->main_graph = absl::make_unique<poplar::Graph>(
       device, poplar::replication_factor(replication_factor));
   resources->replication_factor = replication_factor;
+  resources->partition_replication_factor = replication_factor;
 
   poplin::addCodelets(*resources->main_graph);
   popnn::addCodelets(*resources->main_graph);
