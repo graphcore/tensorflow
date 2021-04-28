@@ -102,7 +102,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'GradientDescent/update_vs/batch_normalization/',
           'GradientDescent/update_vs/batch_normalization_1/',
           'GradientDescent/update_vs/batch_normalization_2/',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo*',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',

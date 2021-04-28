@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_module.h"
@@ -63,13 +64,16 @@ void InplaceFinder::RouteFinder(HloInstruction* inst,
       }
       break;
     }
+    case HloOpcode::kCustomCall: {
+      if (IsAnyScaledInplace(inst)) {
+        break;
+      }
+      return;
+    }
     case HloOpcode::kFusion:
       if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
         // This is always acceptable on a variable update inplace route
         break;
-      }
-      if (!IsPopOpsFusion(inst, "scaled_inplace")) {
-        return;
       }
     // Fall through since inplace subgraphs have to pass all the same
     // criteria

@@ -348,8 +348,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
-          'z1/Initializer/truncated_normal/fusion*/Op/Multiply',
-          'z1/Initializer/truncated_normal/fusion*/Add'
+          'z1/Initializer/truncated_normal/scaled-inplace',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
