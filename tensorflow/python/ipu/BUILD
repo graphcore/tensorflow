@@ -197,7 +197,7 @@ tf_py_test(
     name = "io_tiles_test",
     size = "medium",
     srcs = ["tests/io_tiles_test.py"],
-    shard_count = 3,  # as can't have differing config in same process
+    shard_count = 6,  # as can't have differing config in same process
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

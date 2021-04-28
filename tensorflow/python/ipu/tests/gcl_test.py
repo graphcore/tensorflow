@@ -17,6 +17,7 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -33,22 +34,36 @@ class GclTest(test_util.TensorFlowTestCase):
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testIoTilesAreExcludedFromShard(self):
-    def my_net(a, b):
+    tiles_per_ipu = 1216
+    num_io_tiles = 128
+    num_compute_tiles = tiles_per_ipu - num_io_tiles
+
+    a = np.ones([tiles_per_ipu, 1], dtype=np.float32)
+    b = np.ones([tiles_per_ipu, 1], dtype=np.float32)
+    dataset = dataset_ops.Dataset.from_tensors((a, b))
+    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+
+    def my_net():
       with ipu_shard(0):
+        # I/O op to ensure I/O tiles are allocated for this shard
+        a, b = infeed._dequeue()  # pylint: disable=protected-access
         aa = math_ops.matmul(a, a, transpose_b=True, name="aa")
       with ipu_shard(1):
         bb = math_ops.matmul(b, b, transpose_b=True, name="bb")
-      return aa, bb
-
-    input_a = array_ops.placeholder(np.float32, [1216, 1])
-    input_b = array_ops.placeholder(np.float32, [1216, 1])
+        # I/O op to ensure I/O tiles are allocated for this shard
+        return outfeed.enqueue((aa, bb))
 
     with ops.device("/device:IPU:0"):
-      compiled_net = ipu_compiler.compile(my_net, inputs=[input_a, input_b])
+      compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    num_io_tiles = 128
     cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_io_tile_options(cfg, num_io_tiles=num_io_tiles)
+    cfg = ipu_utils.set_ipu_model_options(cfg,
+                                          compile_ipu_code=False,
+                                          tiles_per_ipu=tiles_per_ipu)
+    cfg = ipu_utils.set_io_tile_options(cfg,
+                                        num_io_tiles=num_io_tiles,
+                                        place_ops_on_io_tiles=True)
     cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
     ipu_utils.configure_ipu_system(cfg)
 
@@ -56,13 +71,12 @@ class GclTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess, configure_device=False)
       report.reset()
 
-      sess.run(compiled_net, {
-          input_a: np.ones(input_a.shape),
-          input_b: np.ones(input_b.shape)
-      })
+      sess.run(infeed.initializer)
+      sess.run(compiled_net)
+      sess.run(outfeed.dequeue())
 
       report.parse_log()
-      num_compute_tiles = report.get_num_tiles_per_ipu() - num_io_tiles
+      self.assertEqual(report.get_num_tiles_per_ipu(), tiles_per_ipu)
       for t in report.get_tensor_map().all_tensors():
         self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
