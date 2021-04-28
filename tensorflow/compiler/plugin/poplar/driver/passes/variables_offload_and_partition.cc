@@ -44,25 +44,27 @@ namespace poplarplugin {
 
 VariablesOffloadAndPartition::VariablesOffloadAndPartition(
     CompilerAnnotations& annotations, bool remote_memory_supported,
-    int64 minimum_remote_tensor_size, int64 replication_factor)
+    int64 minimum_remote_tensor_size, int64 partition_replication_factor)
     : annotations_(annotations),
       remote_memory_supported_(remote_memory_supported),
       minimum_remote_tensor_size_(minimum_remote_tensor_size),
-      replication_factor_(replication_factor) {}
+      partition_replication_factor_(partition_replication_factor) {}
 
 namespace {
 /**
  * Insert instruction sequence to load gather all the elements of the remote
- * tensor from all replicas.
+ * tensor from the replicas it is partitioned across.
  *
- * We expect the resulting program to insert a fusion which looks like this:
+ * We expect the resulting program to insert a fusion which looks like this
+ * (assuming a partition_replication_factor of 4):
+ *
  * // pretend this is the "true" shape ignoring partitioning
  * remote_buffer = param(0) : f32[3, 5, 7]
  *
  * // Load the replica-local region
  * a = load(remote_buffer) : f32[27]
  *
- * // gather from all replicas
+ * // gather from replicas
  * b = all-gather(a) : f32[4, 27]
  *
  * // slice off the padding, if needed
@@ -76,7 +78,8 @@ namespace {
  *
  * @param computation The computation to add the instructions to.
  * @param parameter The parameter instruction to be loaded and gathered.
- * @param replication_factor The graph replication factor.
+ * @param partition_replication_factor The number of replicas to partition
+ * across.
  *
  * @returns The final instruction with the gathered values.
  *
@@ -84,12 +87,13 @@ namespace {
  */
 StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
     HloComputation* computation, HloInstruction* parameter,
-    int64 replication_factor) {
-  HloInstruction* load = computation->AddInstruction(
-      CreateHloRemoteParameterLoad({parameter}, {replication_factor}));
+    int64 partition_replication_factor) {
+  HloInstruction* load =
+      computation->AddInstruction(CreateHloRemoteParameterLoad(
+          {parameter}, {partition_replication_factor}));
 
   HloInstruction* replicated_load = load;
-  if (replication_factor > 1) {
+  if (partition_replication_factor > 1) {
     HloModule* module = computation->parent();
     HloComputation::Builder builder(GetReplicatedParameterLoadFusionName());
 
@@ -101,9 +105,10 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
     // All-gather from the replicas.
     Shape all_gather_shape = ShapeUtil::MakeShape(
         element_type,
-        {replication_factor, ShapeUtil::ElementsIn(load->shape())});
-    HloInstruction* all_gather = builder.AddInstruction(
-        CreatePoplarAllGather({load_parameter}, all_gather_shape));
+        {partition_replication_factor, ShapeUtil::ElementsIn(load->shape())});
+    HloInstruction* all_gather = builder.AddInstruction(CreatePoplarAllGather(
+        {load_parameter}, all_gather_shape,
+        PoplarReplicaGroups::Consecutive(partition_replication_factor)));
 
     HloInstruction* output;
     // If there's no padding, just reshape the tensor.
@@ -158,7 +163,8 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
  * @param remote_buffer The remote buffer instruction that we would like to
  * store a value in.
  * @param to_store The to_store instruction that we would like to store.
- * @param replication_factor The graph replication factor.
+ * @param partition_replication_factor The number of replicas to partition
+ * across.
  *
  * @returns The final instruction with the values to be stored.
  *
@@ -167,8 +173,8 @@ StatusOr<HloInstruction*> InsertReplicatedLoadInstructions(
 
 StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
     HloComputation* computation, HloInstruction* remote_buffer,
-    HloInstruction* to_store, int64 replication_factor) {
-  if (replication_factor > 1) {
+    HloInstruction* to_store, int64 partition_replication_factor) {
+  if (partition_replication_factor > 1) {
     HloModule* module = computation->parent();
     HloComputation::Builder builder(GetReplicatedParameterStoreFusionName());
 
@@ -186,11 +192,12 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
         tensorflow::MathUtil::CeilOfRatio<int64>(
             tensorflow::MathUtil::CeilOfRatio<int64>(
                 ShapeUtil::ElementsIn(to_store->shape()), grain_size),
-            replication_factor);
+            partition_replication_factor);
 
     HloInstruction* output = to_store_parameter;
     // Add padding, if it is needed
-    if ((ShapeUtil::ElementsIn(to_store->shape()) % replication_factor) != 0) {
+    if ((ShapeUtil::ElementsIn(to_store->shape()) %
+         partition_replication_factor) != 0) {
       HloInstruction* zero_f = builder.AddInstruction(
           HloInstruction::CreateConstant(LiteralUtil::Zero(element_type)));
 
@@ -200,9 +207,9 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
       HloInstruction* flat = builder.AddInstruction(
           HloInstruction::CreateReshape(flat_shape, to_store_parameter));
 
-      // Pad the tensor to be a multiple of `replication_factor`.
+      // Pad the tensor to be a multiple of `partition_replication_factor`.
       Shape pad_shape = ShapeUtil::MakeShape(
-          element_type, {element_count * replication_factor});
+          element_type, {element_count * partition_replication_factor});
 
       PaddingConfig padding_config;
       std::size_t difference = ShapeUtil::ElementsIn(pad_shape) -
@@ -217,8 +224,8 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
     }
 
     // Reshape to the storage shape.
-    Shape store_shape =
-        ShapeUtil::MakeShape(element_type, {replication_factor, element_count});
+    Shape store_shape = ShapeUtil::MakeShape(
+        element_type, {partition_replication_factor, element_count});
     HloInstruction* reshaped = builder.AddInstruction(
         HloInstruction::CreateReshape(store_shape, output));
 
@@ -249,7 +256,7 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
 
   HloInstruction* remote_store =
       computation->AddInstruction(CreateHloRemoteParameterStore(
-          {remote_buffer, to_store}, {replication_factor}));
+          {remote_buffer, to_store}, {partition_replication_factor}));
   return remote_store;
 }
 
@@ -674,8 +681,8 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       continue;
     }
 
-    const std::size_t replication_factor =
-        offload_info.replica_partition ? replication_factor_ : 1;
+    const std::size_t partition_replication_factor =
+        offload_info.replica_partition ? partition_replication_factor_ : 1;
 
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
             << offload_info.input_to_call->ToString();
@@ -689,7 +696,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
           HloInstruction * remote_load,
           InsertReplicatedLoadInstructions(resource_update_comp,
                                            modifying_user.user_parameter,
-                                           replication_factor));
+                                           partition_replication_factor));
 
       // If the input and output are the same instruction, then we use the
       // remote resource but don't modify it. In this case we simply reconnect
@@ -704,7 +711,7 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
             HloInstruction * remote_store,
             InsertReplicatedStoreInstructions(
                 resource_update_comp, modifying_user.user_parameter,
-                modifying_user.user_output, replication_factor));
+                modifying_user.user_output, partition_replication_factor));
 
         TF_RETURN_IF_ERROR(modifying_user.user_output->ReplaceUseWith(
             resource_update_comp->root_instruction(), remote_store));
@@ -713,14 +720,14 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     for (OffloadedResourceUse& user : offload_info.users) {
       // All the other users are read-only.
       CHECK(user.type == OffloadedResourceUse::Type::ReadOnly);
-      TF_RETURN_IF_ERROR(InsertReplicatedLoadInstructions(user.user->to_apply(),
-                                                          user.user_parameter,
-                                                          replication_factor)
+      TF_RETURN_IF_ERROR(InsertReplicatedLoadInstructions(
+                             user.user->to_apply(), user.user_parameter,
+                             partition_replication_factor)
                              .status());
     }
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(RemoteParameterInfo{
-        offload_info.entry_param_number, replication_factor > 1,
+        offload_info.entry_param_number, partition_replication_factor > 1,
         offload_info.stream_name, /*buffer_offset=*/0, /*num_merged=*/1});
     changed = true;
   }

@@ -115,7 +115,7 @@ class VariablesOffloadAndPartition : public HloModulePass {
   VariablesOffloadAndPartition(CompilerAnnotations& annotations,
                                bool remote_memory_supported,
                                int64 minimum_remote_tensor_size,
-                               int64 replication_factor);
+                               int64 partition_replication_factor);
   absl::string_view name() const override {
     return "variables-offload-and-partition";
   }
@@ -132,7 +132,7 @@ class VariablesOffloadAndPartition : public HloModulePass {
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
   const int64 minimum_remote_tensor_size_;
-  const int64 replication_factor_;
+  const int64 partition_replication_factor_;
 };
 
 }  // namespace poplarplugin

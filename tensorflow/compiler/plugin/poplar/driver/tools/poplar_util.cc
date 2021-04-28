@@ -320,7 +320,14 @@ StatusOr<gcl::CommGroup> ToGclCommGroup(PoplarReplicaGroups replica_groups,
         res.replication_factor, ")");
   }
 
-  return gcl::CommGroup(gcl::CommGroupType::CONSECUTIVE, replica_group_size);
+  switch (replica_groups.GroupType()) {
+    case PoplarReplicaGroups::Type::Consecutive:
+      return gcl::CommGroup(gcl::CommGroupType::CONSECUTIVE,
+                            replica_group_size);
+    case PoplarReplicaGroups::Type::Orthogonal:
+      return gcl::CommGroup(gcl::CommGroupType::ORTHOGONAL, replica_group_size);
+  }
+  LOG(FATAL) << "Unknown replica group type";
 }
 
 StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
@@ -477,7 +484,7 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
     element_count = grain_size * tensorflow::MathUtil::CeilOfRatio<int64>(
                                      tensorflow::MathUtil::CeilOfRatio<int64>(
                                          element_count, grain_size),
-                                     res.replication_factor);
+                                     res.partition_replication_factor);
   }
 
   const int64 total_num_repeats = num_merged * num_repeats;

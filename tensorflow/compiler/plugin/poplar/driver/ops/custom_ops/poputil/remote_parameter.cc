@@ -109,7 +109,7 @@ class RemoteParameterStoreOp : public PoplarOpDef {
       TensorOrRemoteBuffer& output = outputs[i][0];
 
       const uint64 store_replication_factor =
-          output.IsReplicaPartitioned() ? res.replication_factor : 1;
+          output.IsReplicaPartitioned() ? res.partition_replication_factor : 1;
       CHECK_EQ(store_inst->GetReplicationFactor(i), store_replication_factor)
           << store_inst->ToString();
 
@@ -179,7 +179,7 @@ class BufferStoreSliceOp : public PoplarOpDef {
       TensorOrRemoteBuffer& output = outputs[i][0];
 
       const uint64 store_replication_factor =
-          output.IsReplicaPartitioned() ? res.replication_factor : 1;
+          output.IsReplicaPartitioned() ? res.partition_replication_factor : 1;
       CHECK_EQ(store_inst->GetReplicationFactor(i), store_replication_factor)
           << store_inst->ToString();
 

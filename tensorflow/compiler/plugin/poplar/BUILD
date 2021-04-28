@@ -3032,6 +3032,8 @@ tf_cc_test(
     srcs = ["tests/poplar_replica_groups_test.cc"],
     deps = [
         ":poplar_lib",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",

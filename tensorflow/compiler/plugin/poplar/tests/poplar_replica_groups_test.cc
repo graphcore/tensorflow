@@ -14,8 +14,9 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 
-#include <gmock/gmock-matchers.h>
-
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/test.h"
+#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/platform/test.h"
 
 namespace xla {
@@ -42,34 +43,100 @@ TEST(PoplarReplicaGroupsTest, Consecutive) {
 
   const auto xla_groups = groups.ToXlaReplicaGroups();
   EXPECT_EQ(xla_groups.size(), 1);
-  EXPECT_EQ(xla_groups[0].replica_ids_size(), 4);
+  EXPECT_THAT(xla_groups[0].replica_ids(), ::testing::ElementsAre(0, 1, 2, 3));
 
   const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(xla_groups);
   EXPECT_OK(recovered);
   EXPECT_EQ(recovered.ValueOrDie(), groups);
 }
 
-TEST(PoplarReplicaGroupsTest, NonConsecutiveXlaReplicaGroup) {
-  xla::ReplicaGroup group;
-  group.add_replica_ids(0);
-  const auto recovered1 = PoplarReplicaGroups::FromXlaReplicaGroups({group});
-  EXPECT_OK(recovered1);
+TEST(PoplarReplicaGroupsTest, Orthogonal) {
+  const auto groups = PoplarReplicaGroups::Orthogonal(4);
+  EXPECT_EQ(groups.GroupSizeOr(42), 4);
+  EXPECT_EQ(groups.ToString(), "orthogonal(group_size=4)");
 
-  group.add_replica_ids(2);
-  const auto recovered2 = PoplarReplicaGroups::FromXlaReplicaGroups({group});
-  EXPECT_EQ(recovered2.status().code(), tensorflow::error::INVALID_ARGUMENT);
-  EXPECT_THAT(
-      recovered2.status().error_message(),
-      ::testing::StartsWith("Unsupported non-consecutive replica group"));
+  const auto xla_groups = groups.ToXlaReplicaGroups();
+  EXPECT_EQ(xla_groups.size(), 2);
+  EXPECT_THAT(xla_groups[0].replica_ids(), ::testing::ElementsAre(0, 2, 4, 6));
+  EXPECT_THAT(xla_groups[1].replica_ids(), ::testing::ElementsAre(1, 3, 5, 7));
+
+  const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(xla_groups);
+  EXPECT_OK(recovered);
+  EXPECT_EQ(recovered.ValueOrDie(), groups);
 }
 
-TEST(PoplarReplicaGroupsTest, MultipleXlaReplicaGroups) {
-  const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(
-      {xla::ReplicaGroup(), xla::ReplicaGroup()});
-  EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
-  EXPECT_THAT(
-      recovered.status().error_message(),
-      ::testing::StartsWith("Expected a single replica group, but got 2"));
+TEST(PoplarReplicaGroupsTest, FromXlaReplicaGroups) {
+  xla::ReplicaGroup group0;
+  group0.add_replica_ids(0);
+
+  {
+    const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups({group0});
+    EXPECT_OK(recovered);
+    EXPECT_EQ(recovered.ValueOrDie().GroupType(),
+              PoplarReplicaGroups::Type::Consecutive);
+  }
+
+  group0.add_replica_ids(2);
+
+  {
+    const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups({group0});
+    EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
+    EXPECT_THAT(
+        recovered.status().error_message(),
+        ::testing::StartsWith(
+            "Unsupported replica group: Expected 1 at index 1, actual 2"));
+  }
+
+  xla::ReplicaGroup group1;
+  group1.add_replica_ids(1);
+
+  {
+    const auto recovered =
+        PoplarReplicaGroups::FromXlaReplicaGroups({group0, group1});
+    EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
+    EXPECT_THAT(recovered.status().error_message(),
+                ::testing::StartsWith(
+                    "Irregular replica group size: Expected 2, actual 1"));
+  }
+
+  group1.add_replica_ids(3);
+
+  {
+    const auto recovered =
+        PoplarReplicaGroups::FromXlaReplicaGroups({group0, group1});
+    EXPECT_OK(recovered);
+    EXPECT_EQ(recovered.ValueOrDie(), PoplarReplicaGroups::Orthogonal(2));
+  }
+}
+
+TEST(PoplarReplicaGroupsTest, UnuspportedNumberOfXlaGroups) {
+  std::vector<xla::ReplicaGroup> groups(3);
+
+  {
+    const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(groups);
+    EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
+    EXPECT_THAT(recovered.status().error_message(),
+                ::testing::StartsWith("Unsupported empty replica group"));
+  }
+
+  groups[0].add_replica_ids(0);
+  {
+    const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(groups);
+    EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
+    EXPECT_THAT(recovered.status().error_message(),
+                ::testing::StartsWith(
+                    "Irregular replica group size: Expected 1, actual 0"));
+  }
+
+  groups[1].add_replica_ids(1);
+  groups[2].add_replica_ids(2);
+  {
+    const auto recovered = PoplarReplicaGroups::FromXlaReplicaGroups(groups);
+    EXPECT_EQ(recovered.status().code(), tensorflow::error::INVALID_ARGUMENT);
+    EXPECT_THAT(
+        recovered.status().error_message(),
+        ::testing::StartsWith("Unsupported number of replica groups: 3"));
+  }
 }
 
 TEST(PoplarReplicaGroupsTest, EqualsAndHash) {
@@ -88,6 +155,72 @@ TEST(PoplarReplicaGroupsTest, EqualsAndHash) {
   EXPECT_EQ(single1.Hash(), single2.Hash());
   EXPECT_NE(single1, consecutive1);
   EXPECT_NE(single1.Hash(), consecutive1.Hash());
+}
+
+TEST(PoplarReplicaGroupsTest, ConsecutiveOrthogonal) {
+  const auto consecutive0 = PoplarReplicaGroups::Consecutive(0);
+  const auto orthogonal0 = PoplarReplicaGroups::Orthogonal(0);
+  const auto default_instance = PoplarReplicaGroups();
+  EXPECT_EQ(consecutive0, orthogonal0);
+  EXPECT_EQ(consecutive0, default_instance);
+  EXPECT_EQ(consecutive0.Hash(), orthogonal0.Hash());
+  EXPECT_EQ(consecutive0.Hash(), default_instance.Hash());
+  EXPECT_EQ(consecutive0.GroupSizeOr(42), 42);
+  EXPECT_EQ(orthogonal0.GroupSizeOr(42), 42);
+
+  const auto consecutive1 = PoplarReplicaGroups::Consecutive(1);
+  const auto orthogonal1 = PoplarReplicaGroups::Orthogonal(1);
+  EXPECT_NE(consecutive1, orthogonal1);
+  EXPECT_NE(consecutive1.Hash(), orthogonal1.Hash());
+  EXPECT_EQ(consecutive1.GroupSizeOrDie(), 1);
+  EXPECT_EQ(orthogonal1.GroupSizeOrDie(), 1);
+}
+
+std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape) {
+  auto builder = HloComputation::Builder("sum");
+
+  auto* lhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "lhs"));
+
+  auto* rhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "rhs"));
+
+  auto* add = builder.AddInstruction(
+      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, lhs, rhs));
+
+  return builder.Build(add);
+}
+
+struct PoplarReplicaGroupsHloTest : public HloTestBase {
+  std::unique_ptr<VerifiedHloModule> CreateModuleWithReplicaGroups(
+      const PoplarReplicaGroups& groups) {
+    auto module = CreateNewVerifiedModule("test");
+    auto shape = ShapeUtil::MakeShape(xla::F32, {});
+
+    auto builder = HloComputation::Builder("entry");
+    auto* param = builder.AddInstruction(
+        HloInstruction::CreateParameter(0, shape, "param"));
+    auto* reduction = module->AddEmbeddedComputation(CreateSumReduction(shape));
+    auto* all_reduce = builder.AddInstruction(HloInstruction::CreateAllReduce(
+        shape, std::vector<HloInstruction*>{param}, reduction,
+        groups.ToXlaReplicaGroups(),
+        /*channel_id=*/absl::nullopt));
+    module->AddEntryComputation(builder.Build(all_reduce));
+
+    return module;
+  }
+};
+
+TEST_F(PoplarReplicaGroupsHloTest, VerifyModulesWithReplicaGroups) {
+  // Check that the HloVerifier accepts the XLA replica groups that we produce.
+
+  auto consecutive =
+      CreateModuleWithReplicaGroups(PoplarReplicaGroups::Consecutive(4));
+  consecutive->VerifyOrAddFailure("consecutive");
+
+  auto orthogonal =
+      CreateModuleWithReplicaGroups(PoplarReplicaGroups::Orthogonal(4));
+  orthogonal->VerifyOrAddFailure("orthogonal");
 }
 
 }  // namespace
