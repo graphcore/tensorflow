@@ -400,7 +400,7 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
 
       // Check shape of non-replicated case
       if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
-          ((resources_.replication_factor < 2) ||
+          (resources_.partition_replication_factor < 2 ||
            !out.IsReplicaPartitioned())) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
@@ -410,12 +410,13 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
 
       // Check shape of replicated case
       if (!PoplarShapeMatchesXLAShape(out, shape, resources_) &&
-          (resources_.replication_factor > 1) && out.IsReplicaPartitioned()) {
+          resources_.partition_replication_factor > 1 &&
+          out.IsReplicaPartitioned()) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
-            element_count * resources_.replication_factor, ") and XLA (",
-            Join(shape.dimensions(), ","), ") replica partitioned shapes. ",
-            __FUNCTION__, " ", __LINE__);
+            element_count * resources_.partition_replication_factor,
+            ") and XLA (", Join(shape.dimensions(), ","),
+            ") replica partitioned shapes. ", __FUNCTION__, " ", __LINE__);
       }
 
       // Check type

@@ -1386,12 +1386,12 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
   std::size_t element_count = merged_element_count / torb.NumMerged();
 
   if (torb.IsReplicaPartitioned()) {
-    element_count *= resources.replication_factor;
+    element_count *= resources.partition_replication_factor;
 
     // Check the remote buffer shape is correct, allowing for padding.
     return element_count >= ShapeUtil::ElementsIn(shape) &&
-           (ShapeUtil::ElementsIn(shape) + resources.replication_factor) >
-               element_count;
+           (ShapeUtil::ElementsIn(shape) +
+            resources.partition_replication_factor) > element_count;
   }
 
   // Check the remote buffer shape is correct.
