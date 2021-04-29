@@ -16,9 +16,6 @@
 General utilities
 ~~~~~~~~~~~~~~~~~
 """
-
-import collections
-from enum import Enum
 import os
 import time
 import numpy as np
@@ -42,7 +39,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import (
     export_variables_from_live_session, export_variables_from_live_model,
     import_data_in_live_session, import_data_in_live_model)
-# pylint: enable=unused-import
 from tensorflow.compat.v1 import executing_eagerly
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
@@ -51,240 +47,13 @@ from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
+from tensorflow.python.ipu.config import (
+    IPUConfig, SelectionOrder, ExecutionProfileType, DeviceConnectionType,
+    MergeRemoteBuffersBehaviour, SchedulingAlgorithm, KeyId,
+    VerificationOptions, get_ipu_config, configure_ipu_system)
+# pylint: enable=unused-import
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
-
-
-class SelectionOrder(Enum):
-  """Depending on the communication pattern of the model, the order in
-  which the IPUs are selected and mapped to shards can impact the performance.
-
-  For example, given a model which executes on multiple IPUs:
-
-  .. code-block:: python
-
-    def sharded_graph(pa, pb, pc, pd):
-      with ipu.scopes.ipu_shard(0):
-        o1 = pa + pb
-      with ipu.scopes.ipu_shard(1):
-        o2 = o1 + pc
-      with ipu.scopes.ipu_shard(2):
-        o3 = o2 + pd
-        return o3
-
-  and a typical machine with 8 Graphcore C2 cards:
-
-  .. code-block:: none
-
-     _______               _______
-    |       |             |       |
-    |  14   |=============|  15   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |  12   |=============|  13   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |  10   |=============|  11   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |   8   |=============|   9   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |   6   |=============|   7   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |   4   |=============|   5   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |   2   |=============|   3   |
-    |_______|             |_______|
-        ||                    ||
-     _______               _______
-    |       |             |       |
-    |   0   |=============|   1   |
-    |_______|             |_______|
-
-  (where each numbered square represents an IPU with the given device ID and the
-  == and || connections represent IPUs being directly connected via IPU-Links)
-
-  we can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
-  and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
-  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 2 in that order, then the
-  communication between shards 1 and 2 would not have a direct connection via an
-  IPU-Link and would have to perform a "hop" via an IPU.
-  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 3 in that order, then the
-  communication between shards 1 and 2 would have a direct connection via an
-  IPU-Link which will reduce the communication cost.
-
-  This Enum class is used to control the order in which the IPUs are selected.
-  Currently, the following IPU selection orderings are supported:
-
-  * `AUTO`: automatically try and select the best selection given the network.
-  * `ZIGZAG`: follow the natural ordering of IPUs. In the above example, the
-    IPUs would be selected in the following order:
-    `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`.
-  * `SNAKE`: select IPUs such that each consecutive shard is directly
-    connected via IPU-Links to the shard before and after. In the above example,
-    the IPUs would be selected in the following order:
-    `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
-  * `HOOF`: select IPUs such that each consecutive shard is directly
-    connected via IPU-Links to the shard before and after and the last and first
-    shard are on the same C2 cards. In the above example, the IPUs would be
-    selected in the following order:
-    `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
-
-  The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
-  pipelined models.
-  """
-  AUTO = config_pb2.IpuSelectionOrder.Value("AUTO")
-  ZIGZAG = config_pb2.IpuSelectionOrder.Value("ZIGZAG")
-  SNAKE = config_pb2.IpuSelectionOrder.Value("SNAKE")
-  HOOF = config_pb2.IpuSelectionOrder.Value("HOOF")
-
-
-class ExecutionProfileType(Enum):
-  """The execution profile type indicates the desired information in the
-  execution profile.
-
-  * `NO_PROFILE` indicates that there should be no execution profiling.
-  * `DEVICE_PROFILE` indicates that the execution profile should contain only
-    device wide events.
-  * `IPU_PROFILE` indicates that the profile should contain IPU level
-    execution events.
-  * `TILE_PROFILE` indicates that the profile should contain Tile level
-    execution events.
-  """
-  NO_PROFILE = config_pb2.IpuExecutionProfileType.Value("NO_PROFILE")
-  DEVICE_PROFILE = config_pb2.IpuExecutionProfileType.Value("DEVICE_PROFILE")
-  IPU_PROFILE = config_pb2.IpuExecutionProfileType.Value("IPU_PROFILE")
-  TILE_PROFILE = config_pb2.IpuExecutionProfileType.Value("TILE_PROFILE")
-
-
-class DeviceConnectionType(Enum):
-  """Enumeration to describe the mechanism used to attach to the Poplar
-  device.
-
-  * `ALWAYS` indicates that the system will attach when configuring the
-    device.
-  * `ON_DEMAND` will defer connection to when the IPU is needed.
-  * `PRE_COMPILE` will never try to attach to a device and anything which is
-    meant to be executed on the device will return all zeros. Used to
-    pre-compile Poplar programs on machines without IPUs.
-  * `NEVER` will never try to attach to a device.
-  """
-  ALWAYS = config_pb2.IpuDeviceConnectionType.ALWAYS
-  ON_DEMAND = config_pb2.IpuDeviceConnectionType.ON_DEMAND
-  PRE_COMPILE = config_pb2.IpuDeviceConnectionType.PRE_COMPILE
-  NEVER = config_pb2.IpuDeviceConnectionType.NEVER
-
-
-class MergeRemoteBuffersBehaviour(Enum):
-  """The remote buffers merging behaviour indicates when or if compatible remote
-  buffers should be merged.
-
-  * `NO_MERGING` indicates that there should be no merging.
-  * `MERGE` indicates that all compatible remote buffers will be merged.
-  * `IF_BENEFICIAL` indicates that compatible remote buffers will only
-    be merged when it is considered beneficial for code re-use.
-  """
-  NO_MERGING = threestate_pb2.ThreeState.Value("THREESTATE_OFF")
-  MERGE = threestate_pb2.ThreeState.Value("THREESTATE_ON")
-  IF_BENEFICIAL = threestate_pb2.ThreeState.Value("THREESTATE_UNDEFINED")
-
-
-class SchedulingAlgorithm(Enum):
-  """Controls the algorithm that the scheduler uses.
-
-  * `CHOOSE_BEST` creates several schedules and chooses the one with the lowest
-    predicted liveness.
-  * `CLUSTERING` groups clusters of operations together in order to look through
-    stretches of instructions with potentially high liveness.
-  * `POST_ORDER` schedules the instructions in the order which is obtained by
-    walking the graph in 'post order'.
-  * `LOOK_AHEAD` looks ahead a number of operations from any schedulable one, as
-    given by the `max_scheduler_lookahead_depth` and
-    `max_scheduler_search_space_size` options. It attempts to look through areas
-    of high liveness.
-  * `SHORTEST_PATH` schedules the graph giving priority to the shortest path to
-    the root.
-  """
-  CHOOSE_BEST = config_pb2.IpuSchedulingAlgorithm.Value("CHOOSE_BEST")
-  CLUSTERING = config_pb2.IpuSchedulingAlgorithm.Value("CLUSTERING")
-  POST_ORDER = config_pb2.IpuSchedulingAlgorithm.Value("POST_ORDER")
-  LOOK_AHEAD = config_pb2.IpuSchedulingAlgorithm.Value("LOOK_AHEAD")
-  SHORTEST_PATH = config_pb2.IpuSchedulingAlgorithm.Value("SHORTEST_PATH")
-
-
-def configure_ipu_system(config, device="cpu"):
-  """Configure an IPU system.  Passing an IpuOptions protobuf created by the
-  ``create_ipu_config`` function.
-
-  Args:
-    config: An IpuOptions configuration protobuf
-    device: The CPU device which is local to the IPU hardware
-
-  Returns:
-    None
-  """
-  if not isinstance(config, config_pb2.IpuOptions):
-    raise Exception("`config` must be an IpuOptions instance")
-
-  g = ops.Graph()
-  with g.as_default():
-    with ops.device(device):
-      cfg_op = gen_ipu_ops.ipu_configure_hardware(config.SerializeToString())
-
-  with session_lib.Session(graph=g) as sess:
-    sess.run(cfg_op)
-
-
-def get_ipu_config(session=None):
-  """Get the configuration of an IPU system.
-
-  Args:
-    session: An optional session on which to execute.
-
-  Returns:
-    A list of IpuOption instances, one for each PoplarExecutor.
-  """
-  configurations = None
-
-  # Get the serialized output.
-  if executing_eagerly():
-    assert not session, "No session is required for eager execution."
-    configurations = gen_ipu_ops.ipu_get_configuration().numpy()
-  else:
-    s = session if session else session_lib.Session()
-    configurations = s.run(gen_ipu_ops.ipu_get_configuration())
-
-  # Deserialize and determine if a valid config exists,
-  # i.e. user has succesfully called ipu_configure_hardware.
-  deserialized = []
-  valid = False
-  for conf in configurations:
-    # Deserialize.
-    opt = IpuOptions()
-    opt.ParseFromString(conf)
-    deserialized.append(opt)
-
-    valid |= len(opt.device_config) > 0
-
-  if not valid:
-    raise RuntimeError("No IPU devices configured.")
-
-  return deserialized
 
 
 def get_num_of_ipus_in_device(ipu_device, device="cpu"):
@@ -559,7 +328,7 @@ def set_optimization_options(
     merge_remote_buffers: Whether to merge compatible remote buffers. Merging
       of remote buffers can allow for more code re-use if the only difference
       between computations are the remote buffers being accessed. Must be a
-      :py:class:`~tensorflow.python.ipu.utils.MergeRemoteBuffersBehaviour`.
+      :py:class:`~tensorflow.python.ipu.config.MergeRemoteBuffersBehaviour`.
       Defaults to `MergeRemoteBuffersBehaviour.IF_BENEFICIAL`.
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
@@ -686,38 +455,6 @@ def set_transfer_options(opts, use_verified_transfers=False):
   opts.verified_transfers.enabled = use_verified_transfers
 
   return opts
-
-
-class KeyId:
-  def __init__(self, key=0, start_id=-1):
-    self.key = key
-    self.start_id = start_id
-
-
-class VerificationOptions:
-  """Store pairs of key / id to use for each type of data used in the graph.
-  Does nothing unless verified transfers have been enabled by calling
-  `set_transfer_options(opts, use_verified_transfers=True)`
-  and an instance of this class has been set by calling
-  `set_verification_options`:
-
-  .. code-block:: python
-
-    o = VerificationOptions()
-    o.inputs.key = 1
-    o.infeeds["infeed"].key = 3
-    set_verification_options(opts, o)
-
-  """
-  def __init__(self):
-    self.inputs = KeyId()
-    self.input_parameters = KeyId()
-    self.outputs = KeyId()
-    self.output_parameters = KeyId()
-    self.infeeds = collections.defaultdict(KeyId)
-    self.outfeeds = collections.defaultdict(KeyId)
-    self.checkpoint_in = KeyId(0, 0)
-    self.checkpoint_out = KeyId(0, 0)
 
 
 def set_verification_options(opts, verification_options):

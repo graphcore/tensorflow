@@ -148,6 +148,19 @@ Changes to configuration API
     ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``, while before it was
     ``False`` (disabled by default).
 
+The following functions and classes have moved to a new file
+``tensorflow/python/ipu/config.py``, but they are still accessible from
+``tensorflow/python/ipu/utils.py`` as usual:
+  - ``configure_ipu_system``
+  - ``get_ipu_config``
+  - ``SelectionOrder``
+  - ``ExecutionProfileType``
+  - ``DeviceConnectionType``
+  - ``MergeRemoteBuffersBehaviour``
+  - ``SchedulingAlgorithm``
+  - ``KeyId``
+  - ``VerificationOptions``
+
 Support for grouped collectives
 '''''''''''''''''''''''''''''''
 

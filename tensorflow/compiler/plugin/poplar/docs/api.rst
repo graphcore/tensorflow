@@ -46,6 +46,13 @@ For example, this will not work:
 .. automodule:: tensorflow.python.ipu.utils
   :members:
 
+.. Configuration utilities
+
+.. automodule:: tensorflow.python.ipu.config
+  :members:
+  :exclude-members: deprecate_config_attribute, deprecate_config_attributes, running_on_ipu_model
+
+
 .. Looping utilities
 
 .. automodule:: tensorflow.python.ipu.loops
