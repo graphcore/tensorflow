@@ -8,7 +8,7 @@ package(
 )
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
-load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun_py_test")
 
 py_library(
     name = "ipu_ops_lib",
@@ -192,7 +192,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    shard_count = 3,  # as can't have differing config in same process
+    shard_count = 6,  # as can't have differing config in same process
 )
 
 tf_py_test(
@@ -1415,6 +1415,24 @@ tf_py_test(
     tags = ["hw_poplar_test"],
 )
 
+poprun_py_test(
+    name = "poprun_replica_partitioning_test",
+    size = "large",
+    srcs = ["tests/poprun_replica_partitioning_test.py"],
+    ipus_per_replica = 2,
+    main = "tests/poprun_replica_partitioning_test.py",
+    num_instances = 2,
+    num_replicas = 8,
+    deps = [
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_py_test(
     name = "sequence_slice_test",
     size = "large",
@@ -1491,6 +1509,7 @@ test_suite(
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
+        "poprun_replica_partitioning_test",
         "random_constant_matmul_test",
         "random_number_generation_test",
         "recompute_suggestion_test",

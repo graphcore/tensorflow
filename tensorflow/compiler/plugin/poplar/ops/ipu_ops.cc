@@ -23,6 +23,10 @@ REGISTER_OP("IpuConfigureHardware")
     .SetIsStateful()
     .Doc("IPU Hardware configuration.");
 
+REGISTER_OP("IpuClearAllXlaCompilationCaches")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
 REGISTER_OP("IpuResetSeed")
     .Attr("device: string")
     .Attr("seed: int")

@@ -51,24 +51,77 @@ struct TensorCopyInfo {
   poplar::Tensor output_for_copy;
 };
 
+StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
+                                         const HloInstruction* inst,
+                                         const HloInstruction* src,
+                                         const int64 dst_shard) {
+  TF_ASSIGN_OR_RETURN(const Tileset src_tileset, GetTileset(src));
+  TF_ASSIGN_OR_RETURN(const Tileset dst_tileset, GetTileset(inst));
+
+  if (src_tileset != dst_tileset) {
+    return false;
+  }
+
+  const int64 src_shard = GetShardForOutputIndex(src, 0);
+
+  if (src_tileset == TILESET_COMPUTE_TILES) {
+    CHECK_LT(src_shard, res.shard_compute_graphs.size()) << src->ToString();
+    CHECK_LT(dst_shard, res.shard_compute_graphs.size()) << inst->ToString();
+    const poplar::Graph& src_compute_graph =
+        res.shard_compute_graphs[src_shard];
+    const poplar::Graph& dst_compute_graph =
+        res.shard_compute_graphs[dst_shard];
+    if (src_compute_graph.getTarget().getNumTiles() !=
+        dst_compute_graph.getTarget().getNumTiles()) {
+      return false;
+    }
+  }
+  if (!res.io_graph.has_value()) {
+    CHECK_NE(src_tileset, TILESET_IO_TILES)
+        << "IO tiles not allocated, but requested by " << src->ToString();
+  } else {
+    // If I/O tiles are being used, the number of I/O tiles on each device must
+    // match for the compute or io graphs to be compatible.
+    CHECK_LT(src_shard, res.shard_io_graphs.size()) << src->ToString();
+    CHECK_LT(dst_shard, res.shard_io_graphs.size()) << inst->ToString();
+    const poplar::Graph& src_io_graph = res.shard_io_graphs[src_shard];
+    const poplar::Graph& dst_io_graph = res.shard_io_graphs[dst_shard];
+    if (src_io_graph.getTarget().getNumTiles() !=
+        dst_io_graph.getTarget().getNumTiles()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     CompilerResources& res, poplar::Tensor input, const HloInstruction* inst,
-    int64 output_flat_tuple_index, int64 dst_shard, const Shape& output_shape,
-    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
+    const HloInstruction* src, int64 output_flat_tuple_index, int64 dst_shard,
+    const Shape& output_shape, TensorMap& tensor_map,
+    const poplar::DebugNameAndId& debug_name_and_id) {
   const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
   TensorLocation output_location{inst, output_flat_tuple_index};
-  if (HasTensorAllocationTarget(output_location, res)) {
-    // Allocate the new tensor on the destination device.
-    poplar::Graph& graph =
+
+  TF_ASSIGN_OR_RETURN(bool tiles_match,
+                      SrcAndDstGraphsCompatible(res, inst, src, dst_shard));
+
+  if (HasTensorAllocationTarget(output_location, res) || !tiles_match) {
+    // Allocate the new tensor on the destination device if there is an
+    // allocation target, or if the tiles available on the src and dst devices
+    // do not match. This can happen if one device has I/O tiles allocated,
+    // and the other does not.
+    poplar::Graph& dst_graph =
         GetGraphWithOutputIndex(res, inst, output_flat_tuple_index);
     TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, output_location, output_shape, res,
+                        AddTensor(dst_graph, output_location, output_shape, res,
                                   tensor_map, {debug_name_and_id, "output"}));
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
   }
 
-  // No tensor target, so just reuse the tensor, preserving aliasing.
+  // No tensor target and src and dst graphs have equivalent tiles available so
+  // reuse the src tensor preserving aliasing.
   poplar::Graph& master_graph = GetMasterGraph(res);
+
   poplar::Tensor output = poputil::cloneToIpu(
       master_graph, input, dst_device_id,
       {debug_name_and_id, std::to_string(output_flat_tuple_index)},
@@ -110,7 +163,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   using ShardCopyInfos = std::map<int64, DestinationShardCopyInfos>;
   ShardCopyInfos copy_informations;
 
-  // Construct the infomartion about the source and destination copies.
+  // Construct the information about the source and destination copies.
   for (int64 i = 0, flat_tuple_index = 0; i < inst->operand_count(); ++i) {
     const auto src = inst->operand(i);
     if (!src->has_sharding()) {
@@ -134,9 +187,9 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
 
       TF_ASSIGN_OR_RETURN(
           TensorCopyInfo copy_info,
-          GetTensorCopyInfo(res, operand_tensors[index], inst, flat_tuple_index,
-                            dst_shard, shapes[index], tensor_map,
-                            {debug_info}));
+          GetTensorCopyInfo(res, operand_tensors[index], inst, src,
+                            flat_tuple_index, dst_shard, shapes[index],
+                            tensor_map, {debug_info}));
 
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index,
                                   copy_info.output));

@@ -42,9 +42,10 @@ limitations under the License.
 #include <random>
 #include <string>
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
@@ -654,8 +655,6 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
     return absl::nullopt;
   }
 
-  LOG(INFO) << "Reserving " << num_io_tiles << " IO tile(s) on each IPU.";
-
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
 
@@ -703,6 +702,22 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                   : IpuSelectionOrder::ZIGZAG;
     }
 
+    absl::flat_hash_set<int64> shards_with_io_instructions;
+    for (const HloComputation* comp : module->computations()) {
+      for (const HloInstruction* inst : comp->instructions()) {
+        TF_ASSIGN_OR_RETURN(const Tileset tileset, GetTileset(inst));
+        if (tileset == TILESET_IO_TILES) {
+          const std::vector<int64>& sharding =
+              GetShardingDeviceIdVector(inst->sharding());
+          for (const int64 shard : sharding) {
+            if (!shards_with_io_instructions.contains(shard)) {
+              shards_with_io_instructions.insert(shard);
+            }
+          }
+        }
+      }
+    }
+
     VLOG(1) << "Using " << IpuSelectionOrder_Name(order)
             << " selection order when mapping shards to IPUs.";
     for (unsigned virtual_graph_idx = 0; virtual_graph_idx < num_ipus;
@@ -748,15 +763,26 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         }
       }
 
+      bool has_io_instructions =
+          shards_with_io_instructions.contains(virtual_graph_idx);
+
       poplar::Graph ipu_graph = main_graph.createVirtualGraph(
           ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu);
 
       if (tilesets.has_value()) {
-        resources.shard_compute_graphs.emplace_back(
-            ipu_graph.createVirtualGraph(tilesets->compute_tiles));
-
-        resources.shard_io_graphs.emplace_back(
-            ipu_graph.createVirtualGraph(tilesets->io_tiles));
+        if (has_io_instructions) {
+          LOG(INFO) << "Reserving " << num_io_tiles << " IO tile(s) on IPU "
+                    << ipu << ".";
+          resources.shard_compute_graphs.emplace_back(
+              ipu_graph.createVirtualGraph(tilesets->compute_tiles));
+          resources.shard_io_graphs.emplace_back(
+              ipu_graph.createVirtualGraph(tilesets->io_tiles));
+        } else {
+          // Insert a placeholder I/O graph to preserve indexing by device id.
+          resources.shard_io_graphs.emplace_back(
+              ipu_graph.createVirtualGraph(0));
+          resources.shard_compute_graphs.emplace_back(std::move(ipu_graph));
+        }
       } else {
         resources.shard_compute_graphs.emplace_back(std::move(ipu_graph));
       }
@@ -1174,26 +1200,18 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         " The number of shards needs to divide the number of local IPUs.");
   }
 
-  // The IPU-link domain size is the number of IPUs per IPU-link domain.
-  // A CPU target cannot be trusted to report a sensible value.
-  const auto num_ipu_link_domain_ipus =
-      target.getTargetType() == poplar::TargetType::CPU
-          ? num_ipus
-          : std::min(num_ipus, target.getIpuLinkDomainSize());
+  CHECK_LE(local_replication_factor, replication_factor);
 
-  CHECK_GE(num_ipu_link_domain_ipus, num_shards);
-  CHECK_EQ(num_ipu_link_domain_ipus % num_shards, 0);
-  const auto ipu_link_domain_replication_factor =
-      num_ipu_link_domain_ipus / num_shards;
+  // Currently we only support performing replica partitioning across the local
+  // replicas in each process, as this allows access to all the parts of a
+  // partitioned remote buffer locally. This means that copying to/from all the
+  // parts of the partitioned remote buffer can be done without any additional
+  // inter-process collective communication.
+  const auto partition_replication_factor = local_replication_factor;
 
   VLOG(1) << "Local replication factor " << local_replication_factor
-          << ", IPU-link domain replication factor "
-          << ipu_link_domain_replication_factor
-          << ", global replication factor " << replication_factor;
-
-  // Replication factor invariant: local <= ipu_link_domain <= global.
-  CHECK_LE(local_replication_factor, ipu_link_domain_replication_factor);
-  CHECK_LE(ipu_link_domain_replication_factor, replication_factor);
+          << ", global replication factor " << replication_factor
+          << ", partition replication factor " << partition_replication_factor;
 
   const auto information =
       CompilerInformation()
@@ -1219,7 +1237,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
-      ipu_link_domain_replication_factor, local_replication_factor,
+      local_replication_factor, partition_replication_factor,
       poplar_executor->FloatingPointBehaviour(),
       poplar_executor->AlwaysRearrangeCopiesOnTheHost(),
       poplar_executor->GetSchedulerSelection(),
@@ -1376,11 +1394,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<VariablesOffloadAndPartition>(
         resources.annotations, resources.remote_memory_supported,
         resources.information.minimum_remote_tensor_size,
-        resources.replication_factor);
+        resources.partition_replication_factor);
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>(resources.remote_memory_supported);
     pipeline.AddPass<ReplicatedResourceUpdateElementwiseClustering>(
-        resources.replication_factor);
+        resources.partition_replication_factor, resources.replication_factor);
     {
       auto inline_fusion = [](const HloInstruction* inst) {
         return IsReplicatedParameterLoadFusion(inst) ||

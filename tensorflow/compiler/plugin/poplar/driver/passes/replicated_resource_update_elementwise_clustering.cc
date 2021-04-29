@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replicated_resource_update_elementwise_clustering.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
@@ -36,8 +37,9 @@ bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
 }
 
-bool IsAllReduce(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kAllReduce;
+bool IsGlobalAllReduce(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kAllReduce &&
+         inst->replica_groups().empty();
 }
 
 StatusOr<Shape> GetNewShape(const ElementwiseCluster& cluster,
@@ -133,6 +135,22 @@ absl::flat_hash_set<int64> GetPartitionableResourceUpdateInputs(
   return allowed_resource_update_parameter_indices;
 }
 
+std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape,
+                                                   const std::string& name) {
+  HloComputation::Builder builder(name);
+
+  auto* lhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "lhs"));
+
+  auto* rhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "rhs"));
+
+  auto* add = builder.AddInstruction(
+      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, lhs, rhs));
+
+  return builder.Build(add);
+}
+
 }  // namespace
 
 std::unique_ptr<ElementwiseClusterValidator>
@@ -140,7 +158,7 @@ ReplicatedResourceUpdateElementwiseClustering::CreateValidator(
     const HloInstruction* call, const HloInstruction* resource_update) const {
   absl::flat_hash_set<int64> allowed_resource_update_parameter_indices =
       GetPartitionableResourceUpdateInputs(call, resource_update,
-                                           replication_factor_);
+                                           partition_replication_factor_);
 
   VLOG(2) << "Allowed resource update parameters are: "
           << absl::StrJoin(allowed_resource_update_parameter_indices, ", ");
@@ -201,7 +219,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   // Lower the all reduce into the cluster if all its users will be in the
   // cluster too.
   const bool lower_all_reduce =
-      IsAllReduce(cluster_input) && cluster.AllUsersIn(cluster_input);
+      IsGlobalAllReduce(cluster_input) && cluster.AllUsersIn(cluster_input);
 
   if (lower_all_reduce) {
     HloInstruction* input = cluster_input->mutable_operand(0);
@@ -220,8 +238,57 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
     TF_ASSIGN_OR_RETURN(parameter, PadInput(cluster, parameter, builder));
 
     HloInstruction* scatter = builder->AddInstruction(CreateReduceScatter(
-        in_comp_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_ADD));
-    context->MapInstruction(cluster_input, scatter);
+        in_comp_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_ADD,
+        PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
+
+    if (partition_replication_factor_ == global_replication_factor_) {
+      // If we partition across all the replicas, we already have the correct
+      // data per replica from the reduce scatter.
+      context->MapInstruction(cluster_input, scatter);
+      return input;
+    }
+
+    // If we partition across a subset of the replicas, the reduce scatter has
+    // only summed over the subset that we partition across. We then also need
+    // to sum over the orthogonal replicas that share the same partition of the
+    // variable.
+    //
+    // Reference example partitioning across all the replicas:
+    // partition_replication_factor 4 and global_replication_factor 4.
+    //            -------                     -------
+    // replica 0: 1 0 1 1  reduce-scatter     1
+    // replica 1: 0 0 1 1  consecutive    ->    2
+    // replica 2: 0 1 0 1  group size 4           3
+    // replica 3: 0 1 1 1                           4
+    //            -------                     -------
+    //
+    // The same example, but partitioned across half of the replicas:
+    // partition_replication_factor 2 and global_replication_factor 4.
+    //            -------                   -------                 -------
+    // replica 0: 1 0 1 1                   1 0                     1 2
+    // replica 1: 0 0 1 1  reduce-scatter       2 2  all-reduce         3 4
+    //            -------  consecutive   -> -------  orthogonal  -> -------
+    // replica 2: 0 1 0 1  group size 2     0 2      group size 2   1 2
+    // replica 3: 0 1 1 1                       1 2                     3 4
+    //            -------                   -------                 -------
+
+    CHECK_NE(partition_replication_factor_, 0);
+    CHECK_EQ(global_replication_factor_ % partition_replication_factor_, 0);
+    const uint64 orthogonal_group_size =
+        global_replication_factor_ / partition_replication_factor_;
+    const auto orthogonal_groups =
+        PoplarReplicaGroups::Orthogonal(orthogonal_group_size);
+
+    HloComputation* sum_reduction = context->module()->AddEmbeddedComputation(
+        CreateSumReduction(scatter->shape(), "sum-" + scatter->name()));
+
+    HloInstruction* all_reduce =
+        builder->AddInstruction(HloInstruction::CreateAllReduce(
+            scatter->shape(), std::vector<HloInstruction*>{scatter},
+            sum_reduction, orthogonal_groups.ToXlaReplicaGroups(),
+            /*channel_id=*/absl::nullopt));
+
+    context->MapInstruction(cluster_input, all_reduce);
     return input;
   }
 
@@ -235,7 +302,8 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
   TF_ASSIGN_OR_RETURN(parameter, PadInput(cluster, parameter, builder));
 
   const Shape all_shards_shape = ShapeUtil::MakeShape(
-      cluster_input_type, {replication_factor_, cluster.GetShardSize()});
+      cluster_input_type,
+      {partition_replication_factor_, cluster.GetShardSize()});
 
   // Reshaped the parameter so that it can be sliced.
   HloInstruction* reshaped = builder->AddInstruction(
@@ -298,9 +366,11 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterOutput(
   // Create all gather.
   auto inst_element_type = cluster_output->shape().element_type();
   const Shape all_gather_shape = ShapeUtil::MakeShape(
-      inst_element_type, {replication_factor_, cluster.GetShardSize()});
-  HloInstruction* output = builder->AddInstruction(
-      CreatePoplarAllGather({in_cluster_output}, all_gather_shape));
+      inst_element_type,
+      {partition_replication_factor_, cluster.GetShardSize()});
+  HloInstruction* output = builder->AddInstruction(CreatePoplarAllGather(
+      {in_cluster_output}, all_gather_shape,
+      PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
   const Shape flat_cluster_shape =
       ShapeUtil::MakeShape(inst_element_type, {cluster.GetClusterSize()});
