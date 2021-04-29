@@ -91,5 +91,31 @@ Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
   }
   return Status::OK();
 }
+
+int64 PartitionedElementCountPerReplica(int64 element_count,
+                                        int64 partition_replication_factor) {
+  CHECK_GE(element_count, 0);
+  CHECK_GT(partition_replication_factor, 0);
+  return tensorflow::MathUtil::CeilOfRatio(element_count,
+                                           partition_replication_factor);
+}
+
+std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
+                                           PrimitiveType element_type,
+                                           int64 partition_replication_factor) {
+  const std::size_t bytes_per_element =
+      ShapeUtil::ByteSizeOfPrimitiveType(element_type);
+
+  CHECK_NE(bytes_per_element, 0);
+  CHECK_EQ(byte_count % bytes_per_element, 0);
+  const std::size_t element_count = byte_count / bytes_per_element;
+
+  const std::size_t partitioned_element_count =
+      PartitionedElementCountPerReplica(element_count,
+                                        partition_replication_factor);
+
+  return partitioned_element_count * bytes_per_element;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
