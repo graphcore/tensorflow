@@ -66,6 +66,7 @@ bool IsAddOrSubtract(const HloInstruction*);
 bool IsMultiplyOrDivide(const HloInstruction*);
 bool IsBiasAdd(const HloInstruction*);
 bool IsPopOpsBiasAdd(const xla::HloInstruction*);
+bool IsAnyScaledInplace(const xla::HloInstruction*);
 bool IsPopOpsElementwise(const xla::HloInstruction*);
 bool IsPopOpsElementwiseBinary(const xla::HloInstruction*);
 bool IsPopOpsElementwiseBinaryOperandsDifferent(const xla::HloInstruction*);

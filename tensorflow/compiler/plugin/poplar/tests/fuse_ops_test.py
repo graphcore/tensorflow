@@ -313,7 +313,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFrom(self):
@@ -335,7 +337,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledAddToVariable(self):
@@ -355,7 +359,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFromVariable(self):
@@ -375,7 +381,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionBiasApply(self):
@@ -1018,7 +1026,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractaXbY(self):
@@ -1064,7 +1074,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   # Using a scale smaller than a float16 can represent
@@ -1093,7 +1105,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledAddToVariableFor2Scales(self):
@@ -1119,7 +1133,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFromVariableFor2Scales(self):
@@ -1144,7 +1160,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=4)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testPopOpNormScaleAddLiteralScalars(self):
