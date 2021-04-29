@@ -37,6 +37,13 @@ bool IsReplicatedParameterStore(const HloInstruction*);
 Status GetRemoteLoadStoreUsers(HloInstruction* inst, HloInstruction** load,
                                HloInstruction** store);
 
+int64 PartitionedElementCountPerReplica(int64 element_count,
+                                        int64 partition_replication_factor);
+
+std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
+                                           PrimitiveType element_type,
+                                           int64 partition_replication_factor);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

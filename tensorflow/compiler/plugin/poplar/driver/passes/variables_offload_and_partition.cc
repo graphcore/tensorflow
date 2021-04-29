@@ -182,17 +182,10 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
         builder.AddInstruction(HloInstruction::CreateParameter(
             0, to_store->shape(), "parameter_" + to_store->name()));
 
-    PrimitiveType element_type = to_store->shape().element_type();
-    const int64 grain_size =
-        4 / ShapeUtil::ByteSizeOfPrimitiveType(element_type);
+    const PrimitiveType element_type = to_store->shape().element_type();
 
-    // Pad the element count appropriately
-    const int64 element_count =
-        grain_size *
-        tensorflow::MathUtil::CeilOfRatio<int64>(
-            tensorflow::MathUtil::CeilOfRatio<int64>(
-                ShapeUtil::ElementsIn(to_store->shape()), grain_size),
-            partition_replication_factor);
+    const int64 element_count = PartitionedElementCountPerReplica(
+        ShapeUtil::ElementsIn(to_store->shape()), partition_replication_factor);
 
     HloInstruction* output = to_store_parameter;
     // Add padding, if it is needed

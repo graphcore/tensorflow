@@ -42,6 +42,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -2853,21 +2854,26 @@ Status PoplarExecutor::MoveDeviceToHost() {
               tc->in_memory_remote_parameter_info->buffer_offset;
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            const std::size_t size =
-                HostSizeToDeviceSize(tc->size, tc->element_type);
-            // Pad the per-replica length up.
-            const std::size_t length =
-                4 * tensorflow::MathUtil::CeilOfRatio<int64>(
-                        tensorflow::MathUtil::CeilOfRatio<int64>(size, 4),
-                        current_replication_factor_);
-            std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
+            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+              return InvalidArgumentStrCat(
+                  "Unsupported replica partitioned type ",
+                  PrimitiveType_Name(tc->element_type), " for ", buffer_name);
+            }
+
+            const std::size_t bytes_per_replica =
+                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                                               current_replication_factor_);
+
+            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
-              const std::size_t offset = replica_id * length;
+              const std::size_t offset = replica_id * bytes_per_replica;
+              CHECK_LE(offset, tc->size);
               const std::size_t replica_length =
-                  std::min(length, size - offset);
+                  std::min(bytes_per_replica, tc->size - offset);
 
               current_engine_->copyFromRemoteBuffer(buffer_name, buffer.get(),
                                                     buffer_offset, replica_id);
@@ -2951,22 +2957,26 @@ Status PoplarExecutor::MoveHostToDevice() {
               tc->in_memory_remote_parameter_info->buffer_offset;
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            const std::size_t size =
-                HostSizeToDeviceSize(tc->size, tc->element_type);
-            // Pad the per-replica length up.
-            const std::size_t length =
-                4 * tensorflow::MathUtil::CeilOfRatio<int64>(
-                        tensorflow::MathUtil::CeilOfRatio<int64>(size, 4),
-                        current_replication_factor_);
+            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+              return InvalidArgumentStrCat(
+                  "Unsupported replica partitioned type ",
+                  PrimitiveType_Name(tc->element_type), " for ", buffer_name);
+            }
 
-            std::unique_ptr<char[]> buffer = absl::make_unique<char[]>(length);
+            const std::size_t bytes_per_replica =
+                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                                               current_replication_factor_);
+
+            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
-              const std::size_t offset = replica_id * length;
+              const std::size_t offset = replica_id * bytes_per_replica;
+              CHECK_LE(offset, tc->size);
               const std::size_t replica_length =
-                  std::min(length, size - offset);
+                  std::min(bytes_per_replica, tc->size - offset);
 
               // Copy the replica-local region into the tmp buffer (with
               // padding).
@@ -2975,7 +2985,7 @@ Status PoplarExecutor::MoveHostToDevice() {
 
               // Zero the padding
               std::memset(buffer.get() + replica_length, 0,
-                          length - replica_length);
+                          bytes_per_replica - replica_length);
 
               // Copy the padded buffer to the remote buffer.
               current_engine_->copyToRemoteBuffer(buffer.get(), buffer_name,
