@@ -34,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -478,13 +479,8 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
 
   // Create a new remote buffer.
   if (is_replica_partitioned) {
-    const std::size_t grain_size =
-        4 / graph.getTarget().getTypeSize(element_type);
-
-    element_count = grain_size * tensorflow::MathUtil::CeilOfRatio<int64>(
-                                     tensorflow::MathUtil::CeilOfRatio<int64>(
-                                         element_count, grain_size),
-                                     res.partition_replication_factor);
+    element_count = PartitionedElementCountPerReplica(
+        element_count, res.partition_replication_factor);
   }
 
   const int64 total_num_repeats = num_merged * num_repeats;
