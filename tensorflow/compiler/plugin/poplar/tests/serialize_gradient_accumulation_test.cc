@@ -812,6 +812,76 @@ ENTRY main {
   }
 }
 
+TEST_P(SerializeGradientAccumulationTest, ScaledAddTo) {
+  const auto hlo_template = R"(
+HloModule main
+
+ENTRY main {
+  accumulator = $AT[16,100] parameter(0)
+  grads1 = $GT[16,100] parameter(1)
+  grads2 = $GT[16,100] parameter(2)
+  scale1 = $GT[] parameter(3)
+  scale2 = $GT[] parameter(4)
+  bscale1 = $GT[16,100] broadcast(scale1), dimensions={}
+  bscale2 = $GT[16,100] broadcast(scale2), dimensions={}
+  multiply1 = $GT[16,100] multiply(grads1, bscale1)
+  multiply2 = $GT[16,100] multiply(grads2, bscale2)
+  add_grads = $GT[16,100] add(multiply1, multiply2)
+  add = $AT[16,100] custom-call(accumulator, add_grads), custom_call_target="GradientAccumulatorAdd"
+  ROOT t = ($AT[16,100]) tuple(add)
+}
+)";
+  const auto param = GetParam();
+  const auto hlo_string = ReplaceParams(hlo_template, param);
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module0,
+                          ParseAndReturnVerifiedModule(hlo_string, config));
+  auto* module = module0.get();
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  auto root = module->entry_computation()->root_instruction();
+  auto accumulator_add = root->operand(0);
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(accumulator_add));
+  auto accumulator = accumulator_add->operand(0);
+
+  SerializeGradientAccumulation sga;
+  EXPECT_TRUE(sga.Run(module).ValueOrDie());
+
+  accumulator_add = root->operand(0);
+  EXPECT_EQ(accumulator_add->opcode(), HloOpcode::kFusion);
+  EXPECT_EQ(accumulator_add->shape().element_type(), param.accumulator_type);
+
+  const auto accumulator_index = accumulator_add->operand_index(accumulator);
+  EXPECT_EQ(accumulator_index, 0);
+
+  const auto* scaled_add_1 = accumulator_add->fused_expression_root();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(scaled_add_1));
+  const auto* scaled_add_0 = scaled_add_1->operand(0);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(scaled_add_0));
+
+  if (param.gradient_type == param.accumulator_type) {
+    EXPECT_TRUE(Match(
+        scaled_add_1,
+        m::CustomCall(
+            m::CustomCall(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+            m::Parameter(3), m::Parameter(4))));
+  } else {
+    EXPECT_TRUE(
+        Match(scaled_add_1,
+              m::CustomCall(
+                  m::CustomCall(m::Parameter(0), m::Convert(m::Parameter(3)),
+                                m::Convert(m::Parameter(4))),
+                  m::Convert(m::Parameter(1)), m::Convert(m::Parameter(2)))));
+  }
+}
+
 TEST_P(SerializeGradientAccumulationTest, AddWithMultipleUsers) {
   const auto hlo_template = R"(
 HloModule main
