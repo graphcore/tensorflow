@@ -19,6 +19,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/scaled_inplace.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -84,17 +85,19 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
     //      SliceApply(SliceApply(a, b), c) ...
     // ( 3) Add(a, Multiply(Concat(b, c, ...), Broadcast(d)) =>
     //      SliceApplyabY(SliceApplyabY(a, b, d), c, d) ...
-    // ( 4) Add(a, Add(b, c)) =>
+    // ( 4) Add(a, Multiply(b, Broadcast(c))) =>
+    //      ScaledInplaceXbY(a, b, c)
+    // ( 5) Add(a, Add(b, c)) =>
     //      Add(Add(a, b), c)
-    // ( 5) Add(a, 0) =>
+    // ( 6) Add(a, 0) =>
     //      a
     // Following patterns also handle the RHS being a transpose.
-    // ( 6) Add(a, Transpose(Concat(b, c, ...))) =>
+    // ( 7) Add(a, Transpose(Concat(b, c, ...))) =>
     //      Add(a, Concat(Transpose(b), Transpose(c), ...)
-    // ( 7) Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
+    // ( 8) Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
     //      Add(a, Multiply(Concat(Transpose(b), Transpose(c), ...),
     //                      Broadcast(d))
-    // ( 8) Add(a, Transpose(Add(b, c))) =>
+    // ( 9) Add(a, Transpose(Add(b, c))) =>
     //      Add(a, Add(Transpose(b), Transpose(c)))
     // These patterns try and move the transpose so that patterns 1-5 can be
     // applied.
@@ -165,7 +168,8 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       output = lhs;
 
     } else if (Match(rhs, m::Multiply(m::Concatenate(),
-                                      m::Broadcast(m::ConstantScalar())))) {
+                                      m::Broadcast(m::Op().WithShape(
+                                          m::Shape().IsScalar()))))) {
       // Case 3:
       // Add(a, Multiply(Concat(b, c, ...), Broadcast(d)) =>
       // SliceApplyabY(SliceApplyabY(a, b, d), c, d)
@@ -192,8 +196,30 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, new_output));
       output = lhs;
 
-    } else if (rhs->opcode() == HloOpcode::kAdd) {
+    } else if (Match(rhs, m::Multiply(m::Op(), m::Broadcast(m::Op().WithShape(
+                                                   m::Shape().IsScalar()))))) {
       // Case 4:
+      // Add(a, Multiply(b, Broadcast(c))) =>
+      // ScaledInplaceXbY(a, b, c)
+      HloInstruction* b = rhs->mutable_operand(0);
+      HloInstruction* scale = rhs->mutable_operand(1)->mutable_operand(0);
+
+      if (b->shape().element_type() != accumulator_type) {
+        b = MakeConvertToHlo(b, accumulator_type);
+        convert_instructions.push_back(b);
+        scale = MakeConvertToHlo(scale, accumulator_type);
+        convert_instructions.push_back(scale);
+      } else if (scale->opcode() == HloOpcode::kConvert && IsF16(scale) &&
+                 IsF32(scale->operand(0))) {
+        scale = scale->mutable_operand(0);
+      }
+
+      TF_RETURN_IF_ERROR(comp->ReplaceWithNewInstruction(
+          output, CreateScaledInplaceXbY(lhs, b, scale, HloOpcode::kAdd)));
+      output = lhs;
+
+    } else if (rhs->opcode() == HloOpcode::kAdd) {
+      // Case 5:
       // Add(lhs, Add(a, b)) =>
       // Add(Add(lhs, a), b)
       HloInstruction* a = rhs->mutable_operand(0);
@@ -212,7 +238,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       rhs->mutable_shape()->set_element_type(accumulator_type);
 
     } else if (IsWideConstantZero(rhs)) {
-      // Case 5:
+      // Case 6:
       // Add(lhs, zeros) =>
       // lhs
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(output, lhs));
@@ -222,10 +248,10 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
                Match(rhs, m::Transpose(m::Multiply(
                               m::Concatenate(),
                               m::Broadcast(m::ConstantScalar()))))) {
-      // Case 6:
+      // Case 7:
       // Add(a, Transpose(Concat(b, c, ...))) =>
       // Add(a, Concat(Transpose(b), Transpose(c), ...)
-      // Case 7:
+      // Case 8:
       // Add(a, Transpose(Multiply(Concat(b, c, ...), Broadcast(d))) =>
       // Add(a, Multiply(Concat(Transpose(b), Transpose(c), ...),
       //                 Broadcast(d))
@@ -283,7 +309,7 @@ Status ConvertGradientAccumulatorAdd(HloInstruction* inst) {
       TF_RETURN_IF_ERROR(comp->ReplaceInstruction(rhs, new_output));
 
     } else if (Match(rhs, m::Transpose(m::Add()))) {
-      // Case 8:
+      // Case 9:
       // Add(a, Transpose(Add(b, c))) =>
       // Add(a, Add(Transpose(b), Transpose(c)))
       HloInstruction* add = rhs->mutable_operand(0);
