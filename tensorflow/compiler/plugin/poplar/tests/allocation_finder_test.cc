@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
@@ -4558,8 +4558,8 @@ ENTRY top {
   auto* module0 = module.ValueOrDie().get();
   CompilerAnnotations annotations(module0);
 
-  FuseOpsLate fol(annotations);
-  EXPECT_TRUE(fol.Run(module0).ValueOrDie());
+  FuseOpsIntoPoplarOps foipo(annotations);
+  EXPECT_TRUE(foipo.Run(module0).ValueOrDie());
 
   const auto* root = module0->entry_computation()->root_instruction();
   const auto* div = root;

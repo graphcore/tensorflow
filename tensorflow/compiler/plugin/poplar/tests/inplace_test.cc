@@ -16,10 +16,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_into_poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
@@ -588,8 +589,8 @@ ENTRY c1 {
 
   CompilerAnnotations annotations(module0);
 
-  FuseOpsLate fuseOpsLate(annotations);
-  EXPECT_TRUE(fuseOpsLate.Run(module0).ValueOrDie());
+  FuseOpsIntoPoplarOps foipo(annotations);
+  EXPECT_TRUE(foipo.Run(module0).ValueOrDie());
   InplaceFinder inplaceFinder;
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
 
@@ -599,8 +600,8 @@ ENTRY c1 {
 
   EXPECT_TRUE(module0->entry_computation()->root_instruction() ==
               *inplace_instructions.begin());
-  EXPECT_TRUE(IsPopOpsFusion(module0->entry_computation()->root_instruction(),
-                             "scaled_inplace"));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(
+      module0->entry_computation()->root_instruction()));
 }
 
 TEST_F(HloInplaceDependencyTest, InplaceInsideWhile) {
