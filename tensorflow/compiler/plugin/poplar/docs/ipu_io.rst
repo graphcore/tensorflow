@@ -35,6 +35,8 @@ a staging area near the IPU.
 
     The same application without a long wait for ``StreamCopyBegin``.
 
+.. _i-o-tiles:
+
 I/O Tiles
 ~~~~~~~~~
 The option to designate a number of IPU-tiles to be "I/O tiles" allows

@@ -8,17 +8,15 @@ from tensorflow.python import ipu
 #
 # Configure the IPU system
 #
-cfg = ipu.utils.create_ipu_config()
-cfg = ipu.utils.auto_select_ipus(cfg, 1)
+cfg = ipu.utils.IPUConfig()
+cfg.auto_select_ipus = 1
 
 # Enable the Pre-compile mode for IPU version 2 with remote buffers enabled.
-cfg = ipu.utils.set_ipu_connection_type(
-    cfg,
-    connection_type=ipu.utils.DeviceConnectionType.PRE_COMPILE,
-    ipu_version="ipu2",
-    enable_remote_buffers=True)
+cfg.device_connection.type = ipu.utils.DeviceConnectionType.PRE_COMPILE
+cfg.device_connection.version = "ipu2"
+cfg.device_connection.enable_remote_buffers = True
 
-ipu.utils.configure_ipu_system(cfg)
+cfg.configure_ipu_system()
 
 
 #

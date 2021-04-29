@@ -19,6 +19,7 @@ Run configs
 import collections
 
 from tensorflow.python.estimator import run_config as run_config_lib
+from tensorflow.python.ipu.utils import IPUConfig, IpuOptions
 
 
 class IPURunConfig(
@@ -45,15 +46,16 @@ class IPURunConfig(
         counter is increased by `iterations_per_loop` for every `Session.run`.
         The number of weight updates can be less than the number of iterations
         if gradient accumulation is used.
-      ipu_options: An IpuOptions configuration protobuf which is populated prior
-        to being passed into IPURunConfig. Note that if more than one device is
-        being used then `ipu_options` needs to be populated with a
-        `device_config`.
+      ipu_options: An :py:class:`~tensorflow.python.ipu.utils.IPUConfig` or an
+        `IpuOptions` configuration protobuf which you have populated with your
+        desired configuration options before creating this IPURunConfig. The
+        `IPUEstimator` will then configure the IPU system with this
+        `ipu_options` object when it builds your model.
       compile_summary: Generate compilation summary
       num_replicas: Number of replicated graphs (data parallelism)
       num_shards: Number of IPU devices on which the graph is sharded (model
         parallelism)
-      ordinal: The IPU device ordinal to use.  For instance `0` corresponds
+      ordinal: The IPU device ordinal to use.  For instance, 0 corresponds
         to `/device:IPU:0`.
       prefetch_depth: Integer or `None`. The `prefetch_depth` to be used by the
         :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue` that is
@@ -68,6 +70,14 @@ class IPURunConfig(
 
     num_configured_devices = 1
     if ipu_options is not None:
+      if not isinstance(ipu_options, IPUConfig):
+        if not isinstance(ipu_options, IpuOptions):
+          raise TypeError("ipu_options must be an IPUConfig, or an IpuOptions"
+                          " configuration protobuf.")
+      else:
+        # Convert IPUConfig to IpuOptions
+        ipu_options = ipu_options._create_protobuf()
+
       if ordinal >= len(ipu_options.device_config):
         raise ValueError('Only {} device(s) available to choose from.'
                          ' You tried to pick a device at ordinal {}'.format(
