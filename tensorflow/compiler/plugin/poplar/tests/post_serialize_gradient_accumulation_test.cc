@@ -38,22 +38,22 @@ TEST_F(PostSerializeGradientAccumulationTest, LowerGradientAccumulationFusion) {
 HloModule main
 
 _pop_op_serialized_gradient_accumulation {
-  p0 = f32[] parameter(0)
-  p1 = f32[] parameter(1)
-  a0 = f32[] add(p0, p1)
-  p2 = f32[] parameter(2)
-  a1 = f32[] add(a0, p2)
-  p3 = f32[] parameter(3)
-  ROOT a2 = f32[] add(a1, p3)
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  a0 = f32[2] add(p0, p1)
+  p2 = f32[2] parameter(2)
+  a1 = f32[2] add(a0, p2)
+  p3 = f32[2] parameter(3)
+  ROOT a2 = f32[2] add(a1, p3)
 }
 
 ENTRY main {
-  p0 = f32[] parameter(0)
-  p1 = f32[] parameter(1)
-  p2 = f32[] parameter(2)
-  p3 = f32[] parameter(3)
-  grad = f32[] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
-  ROOT t = (f32[]) tuple(grad)
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = f32[2] parameter(2)
+  p3 = f32[2] parameter(3)
+  grad = f32[2] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
+  ROOT t = (f32[2]) tuple(grad)
 }
 )";
   HloModuleConfig config;
@@ -82,31 +82,31 @@ TEST_F(PostSerializeGradientAccumulationTest,
 HloModule main
 
 _pop_op_serialized_gradient_accumulation {
-  p0 = f32[] parameter(0)
-  p1 = f32[] parameter(1)
-  a0 = f32[] add(p0, p1)
-  p2 = f32[] parameter(2)
-  a1 = f32[] add(a0, p2)
-  p3 = f32[] parameter(3)
-  ROOT a2 = f32[] add(a1, p3)
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  a0 = f32[2] add(p0, p1)
+  p2 = f32[2] parameter(2)
+  a1 = f32[2] add(a0, p2)
+  p3 = f32[2] parameter(3)
+  ROOT a2 = f32[2] add(a1, p3)
 }
 
 _pop_op_serialized_gradient_accumulation_2 {
-  p0 = f32[] parameter(0)
-  p1 = f32[] parameter(1)
-  ROOT a0 = f32[] add(p0, p1)
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  ROOT a0 = f32[2] add(p0, p1)
 }
 
 ENTRY main {
-  p0 = f32[] parameter(0)
-  p1 = f32[] parameter(1)
-  p2 = f32[] parameter(2)
-  p3 = f32[] parameter(3)
-  p4 = f32[] parameter(4)
-  grad = f32[] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
-  add = f32[] add(p2, p3)
-  grad2 = f32[] fusion(p4, add), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation_2
-  ROOT t = (f32[], f32[]) tuple(grad, grad2)
+  p0 = f32[2] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = f32[2] parameter(2)
+  p3 = f32[2] parameter(3)
+  p4 = f32[2] parameter(4)
+  grad = f32[2] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
+  add = f32[2] add(p2, p3)
+  grad2 = f32[2] fusion(p4, add), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation_2
+  ROOT t = (f32[2], f32[2]) tuple(grad, grad2)
 }
 )";
   HloModuleConfig config;

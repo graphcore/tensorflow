@@ -76,6 +76,11 @@ Status InlineSerializedGradientAccumulation(HloInstruction* fusion) {
     }
 
     for (HloInstruction* input : input_set) {
+      // Skip scalar dependencies.
+      if (ShapeUtil::ElementsIn(input->shape()) == 1) {
+        continue;
+      }
+
       for (HloInstruction* user : input->users()) {
         TF_RETURN_IF_ERROR(add_control_dependency(inst, user));
       }
