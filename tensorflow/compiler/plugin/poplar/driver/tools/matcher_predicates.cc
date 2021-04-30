@@ -370,18 +370,23 @@ bool IsPopOpsBiasAdd(const HloInstruction* inst) {
          IsPopOpsFusion(inst, "conv_biasadd");
 }
 
+bool IsAnyScaledInplace(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::ScaledInplaceXbY)(inst) ||
+         IsPoplarInstruction(PoplarOp::ScaledInplaceaXbY)(inst);
+}
+
 bool IsPopOpsElementwise(const HloInstruction* inst) {
   if (auto* poplar_inst = DynCast<HloPoplarInstruction>(inst)) {
     return poplar_inst->IsPopOpsElementwise();
   }
-  return IsPopOpsFusion(inst, "scaled_inplace") || inst->IsElementwise();
+  return IsAnyScaledInplace(inst) || inst->IsElementwise();
 }
 
 bool IsPopOpsElementwiseBinary(const HloInstruction* inst) {
   // Scaled inplace is a special case because it has 3 operands but the 3rd one
   // is always constant - we consider it a binary op.
   return (IsPopOpsElementwise(inst) && inst->operand_count() == 2) ||
-         IsPopOpsFusion(inst, "scaled_inplace");
+         IsAnyScaledInplace(inst);
 }
 
 bool IsPopOpsElementwiseBinaryOperandsDifferent(const HloInstruction* inst) {

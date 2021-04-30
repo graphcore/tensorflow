@@ -19,7 +19,9 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/non_linearity.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/scaled_inplace.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/xla/literal_util.h"
 
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
@@ -40,6 +42,44 @@ namespace {
 
 bool IsCompareGreaterOrGreaterEqual(const HloInstruction* inst) {
   return IsCompareGreater(inst) || IsCompareGreaterOrEqual(inst);
+}
+
+StatusOr<PatternInstructionOutputs> CreateScaledInplaceaXbYFromMatch(
+    const HloMatcherMatched& matched) {
+  const auto& inputs = matched.GetInputs();
+  const auto& outputs = matched.GetOutputs();
+  CHECK_EQ(inputs.size(), 4);
+  CHECK_EQ(outputs.size(), 1);
+  return PatternInstructionOutputs{
+      matched.computation->AddInstruction(CreateScaledInplaceaXbY(
+          inputs[0], inputs[1], inputs[2], inputs[3], outputs[0]->opcode()))};
+}
+
+StatusOr<PatternInstructionOutputs> CreateScaledInplaceaXYFromMatch(
+    const HloMatcherMatched& matched) {
+  const auto& inputs = matched.GetInputs();
+  const auto& outputs = matched.GetOutputs();
+  HloComputation* comp = matched.computation;
+  CHECK_EQ(inputs.size(), 3);
+  CHECK_EQ(outputs.size(), 1);
+
+  // Scale of Y is 1.
+  HloInstruction* one = comp->AddInstruction(HloInstruction::CreateConstant(
+      LiteralUtil::One(inputs[0]->shape().element_type())));
+
+  return PatternInstructionOutputs{comp->AddInstruction(CreateScaledInplaceaXbY(
+      inputs[0], inputs[1], inputs[2], one, outputs[0]->opcode()))};
+}
+
+StatusOr<PatternInstructionOutputs> CreateScaledInplaceXbYFromMatch(
+    const HloMatcherMatched& matched) {
+  const auto& inputs = matched.GetInputs();
+  const auto& outputs = matched.GetOutputs();
+  CHECK_EQ(inputs.size(), 3);
+  CHECK_EQ(outputs.size(), 1);
+  return PatternInstructionOutputs{
+      matched.computation->AddInstruction(CreateScaledInplaceXbY(
+          inputs[0], inputs[1], inputs[2], outputs[0]->opcode()))};
 }
 }  // namespace
 
@@ -86,12 +126,180 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kSelect, NodeOperands({1, 4, 2}), IsF16OrF32},
-      {HloOpcode::kCompare, NodeOperands({5, 2}),
-                                  IsCompareGreaterOrGreaterEqual},
+      // NOLINTNEXTLINE
+      {HloOpcode::kCompare, NodeOperands({5, 2}), IsCompareGreaterOrGreaterEqual},
       {HloOpcode::kBroadcast, NodeOperands({3})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternReplaceFn(CreateScaledInplaceaXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({7, 8, 9, 10}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({7, 3})},
+      {HloOpcode::kMultiply, NodeOperands({8, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kConvert, NodeOperands({9}), IsF32ToF16Convert},
+      {HloOpcode::kConvert, NodeOperands({10}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (mixed precision with
+  // reshape)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternReplaceFn(CreateScaledInplaceaXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({9, 10, 11, 12}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({9, 3})},
+      {HloOpcode::kMultiply, NodeOperands({10, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kReshape, NodeOperands({7}), IsScalar},
+      {HloOpcode::kReshape, NodeOperands({8}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({11}), IsF32ToF16Convert},
+      {HloOpcode::kConvert, NodeOperands({12}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternReplaceFn(CreateScaledInplaceaXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7, 8}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({5, 3})},
+      {HloOpcode::kMultiply, NodeOperands({6, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({7})},
+      {HloOpcode::kBroadcast, NodeOperands({8})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/- Y (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axy"),
+    PatternReplaceFn(CreateScaledInplaceaXYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({4, 5, 6}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 5}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({4, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/- Y (mixed precision with
+  // reshape)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axy"),
+    PatternReplaceFn(CreateScaledInplaceaXYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 6}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({5, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({7}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/- Y
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axy"),
+    PatternReplaceFn(CreateScaledInplaceaXYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({3, 4, 5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 4}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({3, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = X +/- b * Y (mixed precision)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_xby"),
+    PatternReplaceFn(CreateScaledInplaceXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({4, 5, 6}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({5, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConvert, NodeOperands({6}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
+
+  // Scaled add/subtract to/from - X = X +/- b * Y (mixed precision with
+  // reshape)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_xby"),
+    PatternReplaceFn(CreateScaledInplaceXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({5, 1}), IsAdd},
+      {HloOpcode::kMultiply, NodeOperands({6, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kReshape, NodeOperands({4}), IsScalar},
+      {HloOpcode::kConvert, NodeOperands({7}), IsF32ToF16Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+    })),
+
+  // Scaled add/subtract to/from - X = X +/- b * Y
+  HloMatcherPattern(
+    PatternType("scaled_inplace_xby"),
+    PatternReplaceFn(CreateScaledInplaceXbYFromMatch),
+    PatternMetaTarget(0),
+    PatternInputs({3, 4, 5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({3, 1}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({4, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
     })),
 };
 // clang-format on

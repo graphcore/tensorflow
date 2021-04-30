@@ -48,6 +48,7 @@ from tensorflow.python.ipu.ops import slicing_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
 
 from tensorflow.python.ipu import data
+from tensorflow.python.ipu import config
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue

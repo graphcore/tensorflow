@@ -140,6 +140,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.parse_log()
       # There would be multiple non-linearities(grads) if the function was not
       # cached.
+      # pylint: disable=line-too-long
       ok = [
           'MatMul/dot*/Conv_1', 'add/add*/Op/Add',
           'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract',
@@ -147,12 +148,11 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
           'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
-          'gradients/AddN/fusion/scaledAdd/Op/Multiply',
-          'gradients/AddN/fusion/AddTo',
-          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
-          'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
+          'gradients/AddN/scaled-inplace',
+          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
           'gradients/MatMul_grad/MatMul_1/dot', '/Transpose'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1370576, tolerance=0.1)
       report.assert_max_tile_memory(2952, tolerance=0.1)
@@ -220,6 +220,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.parse_log()
       # There would be multiple non-linearities(grads) if the function was not
       # cached.
+      # pylint: disable=line-too-long
       ok = [
           '__seed/set/setMasterSeed',
           'matmul/dot*/Conv_1',
@@ -229,15 +230,16 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/',
           'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad/NonLinearityGrad',
           'gradients/add_grad/Sum/reduce*/Reduce',
-          'GradientDescent/update_1/bias/ResourceApplyGradientDescent/fusion.5/AddTo',
-          'GradientDescent/update_1/w/ResourceApplyGradientDescent/fusion.4/AddTo',
-          'GradientDescent/update_2/bias/ResourceApplyGradientDescent/fusion.3/AddTo',
-          'GradientDescent/update_2/w/ResourceApplyGradientDescent/fusion.2/AddTo',
+          'GradientDescent/update_1/bias/ResourceApplyGradientDescent/scaled-inplace',
+          'GradientDescent/update_1/w/ResourceApplyGradientDescent/scaled-inplace',
+          'GradientDescent/update_2/bias/ResourceApplyGradientDescent/scaled-inplace',
+          'GradientDescent/update_2/w/ResourceApplyGradientDescent/scaled-inplace',
           '[cC]opy',
           '/Transpose',
           'gradients/matmul_grad/MatMul/dot',
           'gradients/matmul_grad/MatMul_1/dot',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1317440, tolerance=0.1)
       report.assert_max_tile_memory(2952, tolerance=0.1)
@@ -459,6 +461,7 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.parse_log()
       # There would be multiple non-linearities(grads) if the function was not
       # cached.
+      # pylint: disable=line-too-long
       ok = [
           'MatMul/dot*/Conv_1',
           '*/slice-apply*/Op/Add',
@@ -471,14 +474,13 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
           'gradients/sub_grad/Neg/negate*/Op/Negate',
           'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
-          'gradients/AddN/fusion/scaledAdd/Op/Multiply',
-          'gradients/AddN/fusion/AddTo',
+          'gradients/AddN/scaled-inplace',
           'gradients/AddN/add*/Op/Add',
-          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
-          'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
+          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
           'gradients/MatMul_1_grad/MatMul/dot',
           'gradients/MatMul_grad/MatMul_1/dot',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1437160, tolerance=0.1)
       report.assert_max_tile_memory(4950, tolerance=0.1)

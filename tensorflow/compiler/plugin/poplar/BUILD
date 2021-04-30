@@ -340,6 +340,7 @@ cc_library(
         "driver/tools/custom_ops/replication_factor.cc",
         "driver/tools/custom_ops/replication_index.cc",
         "driver/tools/custom_ops/rnn.cc",
+        "driver/tools/custom_ops/scaled_inplace.cc",
         "driver/tools/custom_ops/seed.cc",
         "driver/tools/custom_ops/send_recv_barrier.cc",
         "driver/tools/custom_ops/send_to_host.cc",
@@ -527,6 +528,7 @@ cc_library(
         "driver/tools/custom_ops/replication_factor.h",
         "driver/tools/custom_ops/replication_index.h",
         "driver/tools/custom_ops/rnn.h",
+        "driver/tools/custom_ops/scaled_inplace.h",
         "driver/tools/custom_ops/seed.h",
         "driver/tools/custom_ops/send_recv_barrier.h",
         "driver/tools/custom_ops/send_to_host.h",
@@ -693,6 +695,7 @@ cc_library(
         "driver/ops/custom_ops/popops/normalise_image.cc",
         "driver/ops/custom_ops/popops/random.cc",
         "driver/ops/custom_ops/popops/reduce_scatter.cc",
+        "driver/ops/custom_ops/popops/scaled_inplace.cc",
         "driver/ops/custom_ops/popops/scatter_ops.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/popops/sequence_slice.cc",
@@ -1018,8 +1021,14 @@ cc_library(
 cc_library(
     name = "poplar_test_base",
     testonly = True,
-    srcs = ["driver/tools/hlo_poplar_test_base.cc"],
-    hdrs = ["driver/tools/hlo_poplar_test_base.h"],
+    srcs = [
+        "driver/tools/hlo_poplar_test_base.cc",
+        "driver/tools/hlo_poplar_test_util.cc",
+    ],
+    hdrs = [
+        "driver/tools/hlo_poplar_test_base.h",
+        "driver/tools/hlo_poplar_test_util.h",
+    ],
     deps = [
         ":driver",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -3861,12 +3870,27 @@ tf_xla_py_test(
 )
 
 xla_test(
+    name = "replicated_resource_update_elementwise_clustering_hw_test",
+    srcs = ["tests/replicated_resource_update_elementwise_clustering_hw_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    tags = ["hw_poplar_test"],
+    deps = [
+        ":optimizers",
+        ":poplar_test_base",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "replicated_resource_update_elementwise_clustering_test",
     srcs = ["tests/replicated_resource_update_elementwise_clustering_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
@@ -5244,6 +5268,7 @@ test_suite(
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
         "repeat_loop_copy_inserter_test",
+        "replicated_resource_update_elementwise_clustering_hw_test",
         "replicated_resource_update_elementwise_clustering_test",
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",

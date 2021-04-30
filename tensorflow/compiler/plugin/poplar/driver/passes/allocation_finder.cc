@@ -267,9 +267,6 @@ void AllocationFinder::FindConsumers(
         if (IsPopOpsFusion(user)) {
           if (IsPopOpsFusion(user, "zero_pad")) {
             FindConsumers(src, user, index, permutation);
-          } else if (IsPopOpsFusion(user, "scaled_inplace") && op_index < 2) {
-            // Look through the scaled inplace op.
-            FindConsumers(src, user, index, permutation);
           } else if (IsPopOpsFusion(user, "implicit")) {
             // Look through implicit elementwise ops if the shape dimensions
             // match.
@@ -310,9 +307,10 @@ void AllocationFinder::FindConsumers(
               FindConsumers(src, user, index, permutation);
             }
           } else {
-            // Look through SequenceSlice.
-            if (IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
-                op_index == 0) {
+            // Look through.
+            if ((IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
+                 op_index == 0) ||
+                (IsAnyScaledInplace(user) && op_index < 2)) {
               FindConsumers(src, user, index, permutation);
               break;
             }

@@ -105,6 +105,8 @@ enum PoplarOp {
   NormaliseImage = 101;
   CTCBeamSearchWithLogProbs = 102;
   CTCBeamSearchWithLogits = 103;
+  ScaledInplaceXbY = 104;
+  ScaledInplaceaXbY = 105;
   
   // Supported Fusions.
   Conv_biasadd = 200;
@@ -118,15 +120,15 @@ enum PoplarOp {
   Bias_apply = 208;
   Zero_pad = 209;
   Depthwise_filter = 210;
-  Scaled_inplace_xby = 211;
-  Scaled_inplace_axby = 212;
+  // retired = 211;
+  // retired = 212;
   Conv_scaled_inplace = 213;
   Padding_reduce_window = 214;
   Implicit_binary = 215;
   Implicit_binary_inplace = 216;
   Implicit_ternary = 217;
   Implicit_ternary_inplace = 218;
-  Scaled_inplace_axy = 219;
+  // retired = 219;
   Reduction_fp16_input = 220;
   Reduction_square_add = 221;
 }
