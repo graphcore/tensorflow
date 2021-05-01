@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -36,16 +37,8 @@ Shape ComputePerReplicaLoadShape(Shape remote_buffer_shape,
     return remote_buffer_shape;
   }
 
-  const int64 grain_size = 4 / ShapeUtil::ByteSizeOfPrimitiveType(
-                                   remote_buffer_shape.element_type());
-
-  // Pad the element count appropriately
-  const int64 element_count =
-      grain_size *
-      tensorflow::MathUtil::CeilOfRatio<int64>(
-          tensorflow::MathUtil::CeilOfRatio<int64>(
-              ShapeUtil::ElementsIn(remote_buffer_shape), grain_size),
-          replication_factor);
+  const int64 element_count = PartitionedElementCountPerReplica(
+      ShapeUtil::ElementsIn(remote_buffer_shape), replication_factor);
 
   return ShapeUtil::MakeShape(remote_buffer_shape.element_type(),
                               {element_count});
