@@ -1426,7 +1426,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     # Shard count needs to match the number of tests.
-    shard_count = 8,
+    shard_count = 10,
     tags = ["hw_poplar_test"],
 )
 

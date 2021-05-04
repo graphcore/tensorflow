@@ -449,6 +449,12 @@ class PipelineTester(object):
       assert device_mapping is None
       device_mapping = [0] * len(stages)
 
+    if not isinstance(replicated_optimizer_state_sharding, (tuple, list)):
+      replicated_optimizer_state_sharding = [
+          replicated_optimizer_state_sharding,
+          replicated_optimizer_state_sharding
+      ]
+
     pipeline_losses, pipeline_vars = PipelineTester.pipeline_on_ipu(
         stages,
         inputs_fn,
@@ -469,7 +475,7 @@ class PipelineTester(object):
         replication_factor,
         offload_activations,
         merge_remote_buffers,
-        replicated_optimizer_state_sharding,
+        replicated_optimizer_state_sharding[0],
         minimum_remote_tensor_size,
         return_vars=True)
 
@@ -489,7 +495,7 @@ class PipelineTester(object):
         number_of_io_tiles,
         replication_factor,
         merge_remote_buffers,
-        replicated_optimizer_state_sharding,
+        replicated_optimizer_state_sharding[1],
         minimum_remote_tensor_size,
         return_vars=True)
     test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
