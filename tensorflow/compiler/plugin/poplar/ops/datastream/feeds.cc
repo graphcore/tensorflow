@@ -77,7 +77,6 @@ REGISTER_OP("PopDatastreamOutfeedEnqueue")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("outfeed_mode: string='all'")
     .Attr("feed_id: string")
-    .Attr("replication_factor: int")
     .Attr("io_batch_size: int")
     .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
@@ -91,8 +90,6 @@ output_types: The element types of each element in `outputs`.
 outfeed_mode: 'all' or 'get_last', default is 'all'. In 'all'-mode all outfed
   values are enqueued for reading on the host. In 'get_last'-mode a single
   value is queued to be passed to the host.
-replication_factor: the number of replica graphs that this operation will
-  feed.
 io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
@@ -105,13 +102,12 @@ REGISTER_OP("PopDatastreamOutfeedDequeue")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
     .Attr("outfeed_mode: string='all'")
-    .Attr("replication_factor: int = 1")
     .Attr("io_batch_size: int = 1")
     .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
-Retrieve multiple values that will be emitted by the computation as an XLA
+Retrieve multiple values that will be emitted by the computation as an XLABLA
 tuple.  This operations will block indefinitely until data is available.
 Output `i` corresponds to XLA tuple element `i`.
 
@@ -121,8 +117,6 @@ output_shapes: The output_shapes of each tensor in `outputs`. If the first
   dimension is None, then the dequeue operation will output all outfed
   elements available.
 device_ordinal: The IPU device to use.
-replication_factor: the number of replica graphs that this operation will
-  feed.
 io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
