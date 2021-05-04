@@ -128,6 +128,7 @@ py_library(
         "keras/model.py",
         "keras/optimizers/__init__.py",
         "keras/optimizers/cross_replica_optimizer.py",
+        "keras/optimizers/gradient_accumulate_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
         "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
@@ -544,7 +545,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 4,
+    shard_count = 5,
     tags = ["hw_poplar_test"],
 )
 

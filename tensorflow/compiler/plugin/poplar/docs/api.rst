@@ -168,8 +168,8 @@ Keras optimizers
 ^^^^^^^^^^^^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras.optimizers
-  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer
-  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer
+  :members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, GradientAccumulationOptimizer
+  :imported-members: IpuOptimizer, CrossReplicaOptimizer, MapGradientOptimizer, GradientAccumulationOptimizer
 
 .. _operators-api:
 
