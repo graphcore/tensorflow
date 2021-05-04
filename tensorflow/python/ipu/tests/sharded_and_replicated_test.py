@@ -254,5 +254,103 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
       self.assertEqual(num_compiles, 1)
 
 
+@test_util.deprecated_graph_mode_only
+class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
+  @classmethod
+  def setUpClass(cls):
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_optimization_options(
+        cfg,
+        max_cross_replica_sum_buffer_size=10000,
+        max_inter_ipu_copies_buffer_size=10000)
+
+    cls.base_cfg = tu.add_hw_ci_connection_options(cfg)
+
+  @staticmethod
+  def create_body_2shards(outfeed_queue):
+    def body_sharded(v, x):
+      with ipu.scopes.ipu_shard(0):
+        z = v + x
+        y = x * x
+      with ipu.scopes.ipu_shard(1):
+        z = (ipu.ops.cross_replica_ops.cross_replica_sum(z) +
+             ipu.ops.cross_replica_ops.cross_replica_sum(y))
+        outfeed = outfeed_queue.enqueue(z)
+      return (z, outfeed)
+
+    return body_sharded
+
+  @staticmethod
+  def create_body_not_sharded(outfeed_queue):
+    def body_not_sharded(v, x):
+      v = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)
+      outfeed = outfeed_queue.enqueue(v)
+      return (v, outfeed)
+
+    return body_not_sharded
+
+  @staticmethod
+  def create_network(body, shape, infeed_queue):
+    def my_net():
+      v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
+      r = ipu.loops.repeat(2, body, [v], infeed_queue)
+      return r
+
+    return my_net
+
+  @tu.test_uses_ipus(num_ipus=4)
+  def testOutfeedShapeWhenMixingReplicationFactors(self):
+    ''' Check that we get the correct outfeed shape when running two programs
+    with different replication factors'''
+
+    cfg = ipu.utils.auto_select_ipus(self.base_cfg, 4)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with sl.Session() as sess:
+      shape = [2]
+      dataset = tu.create_single_increasing_dataset(3, shape)
+
+      # Setup/run the first program with a replication factor of 2
+      infeed_queue_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, feed_name=next_feed_id(), replication_factor=2)
+      outfeed_queue_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          feed_name=next_feed_id())
+      body_sharded = self.create_body_2shards(outfeed_queue_sharded)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        result_sharded = ipu.ipu_compiler.compile(self.create_network(
+            body_sharded, shape, infeed_queue_sharded),
+                                                  inputs=[])
+
+      sess.run(infeed_queue_sharded.initializer)
+      sess.run(result_sharded)
+
+      # Setup/run the second program with a replication factor of 4
+      infeed_queue_not_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, feed_name=next_feed_id(), replication_factor=4)
+      outfeed_queue_not_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          feed_name=next_feed_id())
+      body_not_sharded = self.create_body_not_sharded(
+          outfeed_queue_not_sharded)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        result_not_sharded = ipu.ipu_compiler.compile(self.create_network(
+            body_not_sharded, shape, infeed_queue_not_sharded),
+                                                      inputs=[])
+
+      sess.run(infeed_queue_not_sharded.initializer)
+      sess.run(result_not_sharded)
+
+      # Dequeue the outfeeds after running the programs to make sure the the correct replication
+      # factor is preserved.
+      outfed_result = sess.run(outfeed_queue_sharded.dequeue())
+      # The second dimension contains the replication factor
+      self.assertEqual(outfed_result.shape[1], 2)
+
+      outfed_result = sess.run(outfeed_queue_not_sharded.dequeue())
+      # The second dimension contains the replication factor
+      self.assertEqual(outfed_result.shape[1], 4)
+
+
 if __name__ == "__main__":
   googletest.main()

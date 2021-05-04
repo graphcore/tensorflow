@@ -575,39 +575,6 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result[4][0], outfed_result[4][1])
       self.assertAllClose(outfed_result[4][0], np.broadcast_to(34, shape))
 
-  @tu.test_uses_ipus(num_ipus=2)
-  @test_util.deprecated_graph_mode_only
-  def testCreateSimpleReplicatedOutfeedWrongReplicationFactor(self):
-    shape = [2]
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=4)
-
-    def body(v):
-      v = ipu.ops.cross_replica_ops.cross_replica_sum(v)
-      outfeed = outfeed_queue.enqueue(v)
-      return (v, outfeed)
-
-    def my_net():
-      v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = ipu.loops.repeat(5, body, [v])
-      return r
-
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[])
-
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
-
-    with sl.Session() as sess:
-      with six.assertRaisesRegex(
-          self, errors.FailedPreconditionError,
-          'Current program has been created with replication_factor 2'):
-        sess.run(res)
-
 
 if __name__ == "__main__":
   googletest.main()

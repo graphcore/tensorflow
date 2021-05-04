@@ -613,13 +613,13 @@ class _IpuModelBase(KerasModel):
 
         # Fetch the outfeed for the history
         if utils.use_synthetic_data_for(utils.SyntheticDataCategory.Outfeed):
-          self.outfeed.dequeue()
+          empty_results = self.outfeed.dequeue()
           results = []
-          for shape, dtype in \
-              zip(self.outfeed._flat_shapes, self.outfeed._flat_types):  # pylint: disable=protected-access
-            shape = list(shape)
-            shape.insert(0, mini_batches_per_epoch)
-            dtype = dtype.as_numpy_dtype()
+          for empty_result in empty_results:
+            shape = empty_result.shape.as_list()
+            # The first dimension is the number of iterations
+            shape[0] = mini_batches_per_epoch
+            dtype = empty_result.dtype.as_numpy_dtype()
             results.append(np.full(shape, np.nan, dtype=dtype))
         else:
           results = self.outfeed.dequeue()
