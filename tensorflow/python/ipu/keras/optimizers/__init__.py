@@ -21,3 +21,4 @@ from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _TensorflowOptim
 from tensorflow.python.ipu.keras.optimizers.ipu_wrappers import _KerasOptimizerWrapper
 from tensorflow.python.ipu.keras.optimizers.cross_replica_optimizer import CrossReplicaOptimizer
 from tensorflow.python.ipu.keras.optimizers.map_gradient_optimizer import MapGradientOptimizer
+from tensorflow.python.ipu.keras.optimizers.gradient_accumulate_optimizer import GradientAccumulationOptimizer

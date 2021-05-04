@@ -136,6 +136,46 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
 
     return self._opt.compute_gradients(*args, **kwargs)
 
+  @staticmethod
+  def create_accumulated_grads(grad, var, dtype, num_mini_batches):
+    if grad is None:
+      return (grad, var)
+    with ops.colocate_with(grad):
+      # Find the data type for the accumulator.
+      dtype = op_util.get_accumulator_dtype(var, dtype)
+      # Create an accumulator - variable is used as reference for shape/layout.
+      accumulator = gen_poputil_ops.gradient_accumulator_create(
+          var, output_type=dtype)
+      # Add the gradients to the accumulator.
+      accumulator = gen_poputil_ops.gradient_accumulator_add(accumulator, grad)
+      # Sink the accumulators.
+      grad = gen_poputil_ops.gradient_accumulator_sink(
+          accumulator, num_mini_batches=num_mini_batches)
+      return (grad, var)
+
+  @staticmethod
+  def apply_gradient_accumulation(resource_update_, name, apply_grad_ops,
+                                  offload_weight_update_variables,
+                                  replicated_optimizer_state_sharding,
+                                  num_mini_batches):
+    with ops.name_scope(name + "/WU") as scope:
+      func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+          resource_update_, [], scope, apply_grad_ops, True)
+
+    # Create the resource update and lower the function into XLA.
+    with ops.control_dependencies(list(func_graph.control_captures)):
+      outputs = gen_functional_ops.resource_update(
+          captured_args,
+          to_apply=util.create_new_tf_function(func_graph),
+          Tout=func_graph.output_types,
+          output_shapes=func_graph.output_shapes,
+          offload_weight_update_variables=offload_weight_update_variables,
+          replicated_optimizer_state_sharding=
+          replicated_optimizer_state_sharding,
+          num_batches_to_accumulate=num_mini_batches)
+
+    return outputs
+
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     """Apply gradients to variables.
 
@@ -154,23 +194,11 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
     Raises:
       ValueError: If the grads_and_vars is malformed.
     """
-    accumulated_grads_and_vars = []
-    for grad, var in grads_and_vars:
-      if grad is not None:
-        with ops.colocate_with(grad):
-          # Find the data type for the accumulator.
-          dtype = op_util.get_accumulator_dtype(var, self._dtype)
-          # Create an accumulator - variable is used as reference for shape/layout.
-          accumulator = gen_poputil_ops.gradient_accumulator_create(
-              var, output_type=dtype)
-          # Add the gradients to the accumulator.
-          accumulator = gen_poputil_ops.gradient_accumulator_add(
-              accumulator, grad)
-          # Sink the accumulators.
-          grad = gen_poputil_ops.gradient_accumulator_sink(
-              accumulator, num_mini_batches=self._num_mini_batches)
-      # Use the accumulated gradients.
-      accumulated_grads_and_vars.append((grad, var))
+
+    accumulated_grads_and_vars = list(
+        map(
+            lambda x: self.create_accumulated_grads(x[0], x[
+                1], self._dtype, self._num_mini_batches), grads_and_vars))
 
     # Create an explicit function call for the apply gradients - note that we
     # allow external captures here.
@@ -181,24 +209,10 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
                                               global_step, name)
       apply_grad_ops.append(apply_grads)
 
-    with ops.name_scope(self._opt.get_name() + "/WU") as scope:
-      func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
-          resource_update_, [], scope, apply_grad_ops, True)
-
-    # Create the resource update and lower the function into XLA.
-    with ops.control_dependencies(list(func_graph.control_captures)):
-      outputs = gen_functional_ops.resource_update(
-          captured_args,
-          to_apply=util.create_new_tf_function(func_graph),
-          Tout=func_graph.output_types,
-          output_shapes=func_graph.output_shapes,
-          offload_weight_update_variables=self.
-          _offload_weight_update_variables,
-          replicated_optimizer_state_sharding=self.
-          _replicated_optimizer_state_sharding,
-          num_batches_to_accumulate=self._num_mini_batches)
-
-    return outputs
+    return self.apply_gradient_accumulation(
+        resource_update_, self._opt.get_name(), apply_grad_ops,
+        self._offload_weight_update_variables,
+        self._replicated_optimizer_state_sharding, self._num_mini_batches)
 
   def get_slot(self, *args, **kwargs):  #pylint: disable=arguments-differ
     """Return a slot named "name" created for "var" by the Optimizer.

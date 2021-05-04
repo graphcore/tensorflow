@@ -27,6 +27,7 @@ from tensorflow.python.ipu.keras.optimizers import CrossReplicaOptimizer
 from tensorflow.python.ipu.keras.optimizers import MapGradientOptimizer
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 from tensorflow.python.framework.constant_op import constant as tf_constant
+from tensorflow.python.ipu.keras.optimizers import GradientAccumulationOptimizer
 
 v0 = 5
 data_init = 2
@@ -55,6 +56,11 @@ def map_fn_quadratic(grad, _):
 def map_fn_add(grad, _):
   h = tf_constant(([10.0]))
   return math_ops.add(grad, h)
+
+
+def map_fn_divide(grad, _):
+  h = tf_constant([2.0])
+  return math_ops.divide(grad, h)
 
 
 nipus = 2
@@ -158,6 +164,24 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
       #expected = v0 - (learning_rate * (grad + 10))
       # re enable when T36442 is fixed
       #self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
+
+  @test_util.run_v2_only
+  def testGradientAccumulation(self):
+    cfg = ipu_utils.create_ipu_config()
+    cfg = ipu_utils.auto_select_ipus(cfg, 1)
+    cfg = tu.add_hw_ci_connection_options(cfg)
+    ipu_utils.configure_ipu_system(cfg)
+    strategy = ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = create_model(
+          True,
+          GradientAccumulationOptimizer(
+              MapGradientOptimizer(original_optimizer, map_fn_divide), 2))
+      m.fit(x=x, y=y, steps_per_epoch=2, epochs=1, batch_size=1)
+
+      grad = (2 * data_init * ((v0 * data_init) - (data_init)))
+      expected = v0 - (learning_rate * grad)
+      self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
 
 
 if __name__ == "__main__":

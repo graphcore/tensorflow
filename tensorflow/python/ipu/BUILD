@@ -128,6 +128,7 @@ py_library(
         "keras/model.py",
         "keras/optimizers/__init__.py",
         "keras/optimizers/cross_replica_optimizer.py",
+        "keras/optimizers/gradient_accumulate_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
         "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
@@ -538,7 +539,7 @@ tf_py_test(
     name = "keras_v2_optimizers",
     size = "large",
     srcs = ["tests/keras/keras_v2_optimizers.py"],
-    shard_count = 4,
+    shard_count = 5,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/python/keras:layers",
