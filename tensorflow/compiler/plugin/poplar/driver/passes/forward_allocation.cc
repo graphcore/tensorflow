@@ -523,6 +523,11 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
     CallGraph* call_graph) {
   bool found_target = false;
 
+  // Check that there is work for us to do.
+  if (!absl::c_any_of(comp->instructions(), IsLayoutSensitiveTarget)) {
+    return false;
+  }
+
   TF_ASSIGN_OR_RETURN(auto deferred_allocation_inputs,
                       FindInputs(comp, call_graph));
 
@@ -654,6 +659,11 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
 StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
     HloComputation* comp, CallGraph* call_graph) {
   bool found_target = false;
+
+  // Check that there is work for us to do.
+  if (!absl::c_any_of(comp->instructions(), IsLayoutDependentTarget)) {
+    return false;
+  }
 
   TF_ASSIGN_OR_RETURN(auto deferred_allocation_inputs,
                       FindInputs(comp, call_graph));
