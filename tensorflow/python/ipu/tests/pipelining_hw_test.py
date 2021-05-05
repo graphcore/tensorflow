@@ -49,6 +49,11 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
           'minimum_remote_tensor_size': 0,
           'replicated_optimizer_state_sharding': True,
           'merge_remote_buffers': True,
+      }, {
+          'replication_factor': 2,
+          'minimum_remote_tensor_size': 0,
+          'replicated_optimizer_state_sharding': [True, False],
+          'merge_remote_buffers': True,
       })
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, replication_factor,
@@ -192,6 +197,11 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
           'minimum_remote_tensor_size': 0,
           'offload_activations': True,
           'replicated_optimizer_state_sharding': False
+      }, {
+          'replication_factor': 2,
+          'minimum_remote_tensor_size': 0,
+          'offload_activations': True,
+          'replicated_optimizer_state_sharding': [True, False],
       })
   @test_util.deprecated_graph_mode_only
   def testPipelineCompareSharedWeights(
