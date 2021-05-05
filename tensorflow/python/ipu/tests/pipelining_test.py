@@ -2051,6 +2051,45 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(outfeed_queue.deleter)
       sess.run(grad_outfeed_queue.deleter)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipeliningArgsAndKwargs(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("args_kwargs_outfeed")
+
+    def stage1(x):
+      return x + 1
+
+    def stage2(x):
+      y = layers.Conv2D(2,
+                        1,
+                        use_bias=True,
+                        bias_initializer=init_ops.ones_initializer(),
+                        kernel_initializer=init_ops.ones_initializer())(x)
+      loss = math_ops.reduce_sum(y)
+      return loss
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      # Empty var list.
+      compute_gradients_args = ([],)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss,
+                                                    compute_gradients_args)
+
+    def my_net(x):
+      return pipelining_ops.pipeline(
+          [stage1, stage2],
+          10,
+          inputs=[x],
+          outfeed_queue=outfeed_queue,
+          optimizer_function=optimizer_function,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(ValueError, 'No variables to optimize.'):
+        ipu_compiler.compile(my_net, inputs=[x])
+
 
 if __name__ == "__main__":
   googletest.main()

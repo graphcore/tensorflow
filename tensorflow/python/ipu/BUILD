@@ -809,7 +809,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     # Shard count needs to match the number of tests.
-    shard_count = 36,
+    shard_count = 37,
 )
 
 tf_py_test(
