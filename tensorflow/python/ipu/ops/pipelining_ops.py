@@ -114,16 +114,39 @@ class OptimizerFunctionOutput:
   A helper class used for returning a structured output from an
   optimizer_function in a pipeline.
   """
-  def __init__(self, opt, loss):
+  def __init__(self,
+               opt,
+               loss,
+               compute_gradients_args=None,
+               compute_gradients_kwargs=None,
+               apply_gradients_args=None,
+               apply_gradients_kwargs=None):
     """Creates an OptimizerFunctionOutput object.
 
     Args:
        opt: An instance of `optimizer.Optimizer` which is used to generate
          the back-propagation and the weight update pipeline stages.
-       loss: The loss which is passed to the optimizer.
+       loss: The loss which is passed to the optimizer when calling
+         `compute_gradients`.
+       compute_gradients_args: Positional arguments (not including loss) which
+         are passed to the `compute_gradients` function.
+       compute_gradients_kwargs: Keyword arguments (not including loss) which
+         are passed to the `compute_gradients` function.
+       apply_gradients_args: Positional arguments (not including grads_and_vars)
+         which are passed to the `apply_gradients` function.
+       apply_gradients_kwargs: Keyword arguments (not including grads_and_vars)
+         which are passed to the `apply_gradients` function.
     """
     self.opt = opt
     self.loss = loss
+    self.compute_gradients_args = \
+      compute_gradients_args if compute_gradients_args else tuple()
+    self.compute_gradients_kwargs = \
+      compute_gradients_kwargs if compute_gradients_kwargs else dict()
+    self.apply_gradients_args = \
+      apply_gradients_args if apply_gradients_args else tuple()
+    self.apply_gradients_kwargs = \
+      apply_gradients_kwargs if apply_gradients_kwargs else dict()
 
   @property
   def opt(self):
@@ -147,6 +170,50 @@ class OptimizerFunctionOutput:
       raise TypeError(
           "OptimizerFunctionOutput.loss must be a TensorFlow Tensor object.")
     self._loss = value
+
+  @property
+  def compute_gradients_args(self):
+    return self._compute_gradients_args
+
+  @compute_gradients_args.setter
+  def compute_gradients_args(self, value):
+    if not isinstance(value, tuple):
+      raise TypeError(
+          "OptimizerFunctionOutput.compute_gradients_args must be a tuple.")
+    self._compute_gradients_args = value
+
+  @property
+  def compute_gradients_kwargs(self):
+    return self._compute_gradients_kwargs
+
+  @compute_gradients_kwargs.setter
+  def compute_gradients_kwargs(self, value):
+    if not isinstance(value, dict):
+      raise TypeError(
+          "OptimizerFunctionOutput.compute_gradients_kwargs must be a dict.")
+    self._compute_gradients_kwargs = value
+
+  @property
+  def apply_gradients_args(self):
+    return self._apply_gradients_args
+
+  @apply_gradients_args.setter
+  def apply_gradients_args(self, value):
+    if not isinstance(value, tuple):
+      raise TypeError(
+          "OptimizerFunctionOutput.apply_gradients_args must be a tuple.")
+    self._apply_gradients_args = value
+
+  @property
+  def apply_gradients_kwargs(self):
+    return self._apply_gradients_kwargs
+
+  @apply_gradients_kwargs.setter
+  def apply_gradients_kwargs(self, value):
+    if not isinstance(value, dict):
+      raise TypeError(
+          "OptimizerFunctionOutput.apply_gradients_kwargs must be a dict.")
+    self._apply_gradients_kwargs = value
 
 
 class PipelineStageOptions:
@@ -771,6 +838,10 @@ def pipeline(computational_stages,
       opt_fn = optimizer_function(*outputs)
       loss = opt_fn.loss
       opt = opt_fn.opt
+      compute_gradients_args = opt_fn.compute_gradients_args
+      compute_gradients_kwargs = opt_fn.compute_gradients_kwargs
+      apply_gradients_args = opt_fn.apply_gradients_args
+      apply_gradients_kwargs = opt_fn.apply_gradients_kwargs
 
       # Enqueue loss or any output tensors to the outfeed.
       if outfeed_loss:
@@ -788,7 +859,8 @@ def pipeline(computational_stages,
 
       # Call the compute gradients function - this will be automatically put
       # into pipeline stages.
-      grads_and_vars = opt.compute_gradients(loss)
+      grads_and_vars = opt.compute_gradients(loss, *compute_gradients_args,
+                                             **compute_gradients_kwargs)
       # Insert gradient accumulation ops.
       accumulated_grads_and_vars = []
       for grad, var in grads_and_vars:
@@ -822,7 +894,9 @@ def pipeline(computational_stages,
 
       def resource_update_():
         if training:
-          apply_grads = opt.apply_gradients(accumulated_grads_and_vars)
+          apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
+                                            *apply_gradients_args,
+                                            **apply_gradients_kwargs)
           resource_update_ops.append(apply_grads)
 
         # Enqueue any accumulated outfeed data
