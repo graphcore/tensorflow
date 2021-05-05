@@ -408,7 +408,9 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
     poplar::Tensor input_state = args[1];
     poplar::Tensor kernel = args[2];
     poplar::Tensor biases = args[3];
-    poplin::matmul::PlanningCache cache;
+    poplar::Tensor seq_len = args[4];
+
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
 
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
@@ -417,7 +419,7 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
 
     auto intermediates_ptr = training ? &args[7] : nullptr;
     args[5] =
-        popnn::gru::gruFwd(graph, gru_params, input_state, input_seq, args[4],
+        popnn::gru::gruFwd(graph, gru_params, input_state, input_seq, seq_len,
                            weights, intermediates_ptr, prog,
                            {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
@@ -472,6 +474,8 @@ class DynamicGRULayerBwdOp : public GRULayerBwdOp {
     poplar::Tensor output_backprop = args[8];
     poplar::Tensor output_state_backprop = args[9];
 
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
+
     popnn::gru::GruWeights weights_backprop;
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
@@ -521,6 +525,8 @@ class AUGRULayerFwdOp : public GRULayerFwdOp {
     poplar::Tensor biases = args[3];
     poplar::Tensor seq_len = args[4];
     poplar::Tensor attention = args[5].transpose();
+
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
 
     popnn::gru::GruWeights weights;
     std::tie(weights.inputWeights, weights.outputWeights) =
@@ -606,18 +612,15 @@ class AUGRULayerBwdOp : public GRULayerBwdOp {
     poplar::Tensor output_backprop = args[9];
     poplar::Tensor output_state_backprop = args[10];
 
-    auto real_time_step_casted = popops::cast(
-        graph, seq_len, poplar::UNSIGNED_INT, prog, debug_name_and_id);
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
     auto indices =
         graph.addVariable(poplar::UNSIGNED_INT, {output_backprop.dim(0)},
                           {debug_name_and_id, "iotaIndices"});
 
     graph.setTileMapping(indices, 0);
-    popops::iota(graph, indices, (uint32_t)1, prog,
-                 {debug_name_and_id, "iotaIdx"});
+    popops::iota(graph, indices, 1U, prog, {debug_name_and_id, "iotaIdx"});
     indices = indices.expand({1, 1});
-    real_time_step_casted = real_time_step_casted.expand({0, 1});
-    auto mask = popops::eq(graph, indices, real_time_step_casted, prog,
+    auto mask = popops::eq(graph, indices, seq_len.expand({0, 1}), prog,
                            debug_name_and_id);
     output_state_backprop = output_state_backprop.expand({0});
     output_state_backprop =
