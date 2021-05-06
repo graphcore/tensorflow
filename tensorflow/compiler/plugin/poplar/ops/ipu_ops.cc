@@ -30,6 +30,7 @@ REGISTER_OP("IpuClearAllXlaCompilationCaches")
 REGISTER_OP("IpuResetSeed")
     .Attr("device: string")
     .Attr("seed: int")
+    .Attr("identical_replicas: bool = False")
     .SetIsStateful()
     .Doc("Reset IPU seed.");
 

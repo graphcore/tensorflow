@@ -91,7 +91,7 @@ class PoplarPlatform : public se::Platform {
 
   StatusOr<int64> GetNumIpusForDevice(int ordinal);
 
-  Status ResetSeed(int ordinal, int seed);
+  Status ResetSeed(int ordinal, int seed, bool identical_replicas);
 
   Status GetCompilerEvents(std::list<tensorflow::IpuTraceEvent>& out);
 
