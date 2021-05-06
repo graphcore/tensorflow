@@ -167,6 +167,15 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
 
   @test_util.run_v2_only
   def testGradientAccumulation(self):
+
+    no_acc = GradientAccumulationOptimizer(original_optimizer, 1)
+    acc = GradientAccumulationOptimizer(original_optimizer, 10)
+
+    self.assertIsInstance(no_acc, keras.optimizer_v2.gradient_descent.SGD)
+    self.assertIsInstance(acc, GradientAccumulationOptimizer)
+    self.assertFalse(isinstance(no_acc, GradientAccumulationOptimizer))
+    self.assertFalse(isinstance(acc, keras.optimizer_v2.gradient_descent.SGD))
+
     cfg = ipu_utils.create_ipu_config()
     cfg = ipu_utils.auto_select_ipus(cfg, 1)
     cfg = tu.add_hw_ci_connection_options(cfg)

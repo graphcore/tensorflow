@@ -34,6 +34,11 @@ class GradientAccumulationOptimizer(IpuOptimizer):
       return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_ON)
     return threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_OFF)
 
+  def __new__(cls, opt, num_mini_batches, *nargs, **kwargs):  #pylint: disable=unused-argument
+    if num_mini_batches == 1:
+      return opt
+    return super(GradientAccumulationOptimizer, cls).__new__(cls)
+
   def __init__(self,
                opt,
                num_mini_batches,
@@ -81,9 +86,6 @@ class GradientAccumulationOptimizer(IpuOptimizer):
         gradients. Defaults to "GradientAccumulationOptimizer".
     """
 
-    if num_mini_batches == 1:
-      self = opt
-      return
     if num_mini_batches < 1:
       raise ValueError("num mini batches must be >= 1")
 
