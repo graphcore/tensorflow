@@ -146,7 +146,7 @@ class PipelineTester(object):
       device_mapping,
       number_of_io_tiles=0,
       replication_factor=1,
-      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128,
       return_vars=False):
@@ -256,7 +256,7 @@ class PipelineTester(object):
       return_report=False,
       replication_factor=1,
       offload_activations=None,
-      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128,
       return_vars=False,
@@ -441,7 +441,7 @@ class PipelineTester(object):
       recomputation_mode=None,
       number_of_io_tiles=0,
       offload_activations=None,
-      merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
+      merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
       replication_factor=1,
       replicated_optimizer_state_sharding=False,
       minimum_remote_tensor_size=128):
