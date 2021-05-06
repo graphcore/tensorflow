@@ -1538,6 +1538,8 @@ tf_py_test(
     name = "replicated_seed_control_test",
     size = "large",
     srcs = ["tests/replicated_seed_control_test.py"],
+    # Shard count needs to match the number of tests.
+    shard_count = 2,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow:tensorflow_py",

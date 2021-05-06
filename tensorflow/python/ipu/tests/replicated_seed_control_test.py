@@ -114,6 +114,54 @@ class TestSeedControl(test_util.TensorFlowTestCase):
       res2 = sess.run(out0, {inp: in_data}).astype(np.float32)
       self.assertAllEqual(res1, res2)
 
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def test_identical_replica_seeds(self):
+    inp = array_ops.placeholder(np.float32, [1000])
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed',
+                                                    replication_factor=2)
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      device_op = outfeed.enqueue(math_ops.cast(inp, dtype=np.float16))
+
+    dequeue_op = outfeed.dequeue()
+
+    config = ipu.utils.create_ipu_config()
+    config = ipu.utils.auto_select_ipus(config, [2])
+    config = tu.add_hw_ci_connection_options(config)
+    config = ipu.utils.set_floating_point_behaviour_options(config)
+    # Portable determinism is required as the replicas use different IPUs.
+    config = ipu.utils.set_compilation_options(
+        config, {'target.deterministicWorkers': 'portable'})
+    ipu.utils.configure_ipu_system(config)
+
+    with session_lib.Session() as sess:
+
+      in_data = np.ones(inp.shape) * 0.1
+
+      # Each replica does not generate same initial rounding.
+      sess.run(device_op, {inp: in_data})
+      res1, res2 = sess.run(dequeue_op)[0].astype(np.float32)
+      self.assertNotAllEqual(res1, res2)
+
+      # Each replica does not generate same rounding after seeding.
+      ipu.utils.reset_ipu_seed(1)
+      sess.run(device_op, {inp: in_data})
+      res1, res2 = sess.run(dequeue_op)[0].astype(np.float32)
+      self.assertNotAllEqual(res1, res2)
+
+      # Each replica does generate same rounding after identical seeding.
+      ipu.utils.reset_ipu_seed(1, experimental_identical_replicas=True)
+      sess.run(device_op, {inp: in_data})
+      res1, res2 = sess.run(dequeue_op)[0].astype(np.float32)
+      self.assertAllEqual(res1, res2)
+
+      # When run again, it should not generate the same rounding as last time.
+      sess.run(device_op, {inp: in_data})
+      res1_second, res2_second = sess.run(dequeue_op)[0].astype(np.float32)
+      self.assertNotAllEqual(res1, res1_second)
+      self.assertNotAllEqual(res2, res2_second)
+
 
 if __name__ == "__main__":
   googletest.main()

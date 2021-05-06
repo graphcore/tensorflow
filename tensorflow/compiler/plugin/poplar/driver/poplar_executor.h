@@ -682,7 +682,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   tensorflow::Rendezvous* GetRendezvous();
 
-  void ResetSeed(int seed);
+  void ResetSeed(int seed, bool identical_replicas);
 
   static std::string GetCycleCounterStream();
 
@@ -1034,7 +1034,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::mutex host_embeddings_mutex_;
 
-  SeedGenerator seed_generator_;
+  std::unique_ptr<SeedGenerator> seed_generator_;
 
   std::string ReportFileExtension() const;
 
