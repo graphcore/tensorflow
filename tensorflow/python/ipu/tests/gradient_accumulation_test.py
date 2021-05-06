@@ -78,8 +78,7 @@ def _gradient_accumulation_loop(test_wrapper,
     inputs = inputs_fn()
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
         dataset, next_feed_id(), replication_factor=replication_factor)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), replication_factor=replication_factor)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     with variable_scope.variable_scope("ipu", use_resource=True, reuse=False):
 

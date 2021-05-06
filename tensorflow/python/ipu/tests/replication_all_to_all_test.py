@@ -33,8 +33,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[8])
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("1",
-                                                          replication_factor=8)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("1")
 
     def my_graph(x):
       with ops.device("/device:IPU:0"):
@@ -81,8 +80,7 @@ class TestAllGather(test_util.TensorFlowTestCase):
       updates = array_ops.placeholder(np.float32, shape=[16, 128])
       scale = array_ops.placeholder(np.float32, shape=[])
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("2",
-                                                          replication_factor=8)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("2")
 
     def my_graph(idx, updates, scale):
       zero = 0.0
@@ -141,8 +139,7 @@ class TestAllToAll(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[8])
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("3",
-                                                          replication_factor=8)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("3")
 
     def my_graph(x):
       with ops.device("/device:IPU:0"):

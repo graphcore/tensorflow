@@ -542,7 +542,6 @@ class _IpuModelBase(KerasModel):
           prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
           "outfeed",
-          replication_factor=self.replication_factor,
           outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(

@@ -29,8 +29,7 @@ def run_collective_ops(inputs, generate_collective_ops, num_replicas):
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name="infeed", replication_factor=num_replicas)
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name="outfeed", replication_factor=num_replicas)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
     def my_net(x):
       y = generate_collective_ops(x)
