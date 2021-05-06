@@ -35,8 +35,7 @@ class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract
     dataset = dataset_ops.Dataset.from_tensor_slices((data,))
     infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name="infeed", replication_factor=num_local_replicas)
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name="outfeed", replication_factor=num_local_replicas)
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
     def my_body(acc, x):
       index = math_ops.cast(replication_index(), np.float32)

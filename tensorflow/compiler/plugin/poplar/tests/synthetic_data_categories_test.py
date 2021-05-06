@@ -186,10 +186,8 @@ def memory_test_graph(flags=""):
       inputs = inputs_fn()
 
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset,
-                                                     generate_feed_name(),
-                                                     replication_factor=1)
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(generate_feed_name(),
-                                                        replication_factor=1)
+                                                     generate_feed_name())
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(generate_feed_name())
 
       with variable_scope.variable_scope("ipu", use_resource=True,
                                          reuse=False):

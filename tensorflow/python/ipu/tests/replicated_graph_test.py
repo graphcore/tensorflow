@@ -189,7 +189,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+        feed_name=next_feed_id())
 
     def body(v, x):
       v = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)
@@ -244,7 +244,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+        feed_name=next_feed_id())
 
     def body(v, x):
       out = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)
@@ -310,7 +310,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+        feed_name=next_feed_id())
 
     def body(v, x):
       out = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)
@@ -438,7 +438,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+        feed_name=next_feed_id())
 
     def body(x):
       outfeed = outfeed_queue.enqueue(x)
@@ -514,7 +514,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
         replication_factor=2,
         data_to_prefetch=3)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+        feed_name=next_feed_id())
 
     def body(v, x):
       v = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)

@@ -413,7 +413,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         "infeed_test_distributed_batch_norm",
         replication_factor=2)
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        "outfeed_test_distributed_batch_norm", replication_factor=2)
+        "outfeed_test_distributed_batch_norm")
 
     def my_net():
       return pipelining_ops.pipeline(
