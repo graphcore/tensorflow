@@ -662,16 +662,16 @@ stage_1 {
 pipeline {
   arg0 = f32[1,4,4,2] parameter(0)
   arg1 = f32[1,4,4,1] parameter(1)
-  call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=stage_0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=stage_0, frontend_attributes={CALL_CONFIG_TYPE="PipelineStage"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   get-tuple-element_0 = f32[1,4,4,2] get-tuple-element(call), index=0
   get-tuple-element_1 = f32[1,4,4,2] get-tuple-element(call), index=1
-  ROOT call2 = (f32[1,4,4,2], f32[1,4,4,2]) call(get-tuple-element_0, get-tuple-element_1), to_apply=stage_1, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  ROOT call2 = (f32[1,4,4,2], f32[1,4,4,2]) call(get-tuple-element_0, get-tuple-element_1), to_apply=stage_1, frontend_attributes={CALL_CONFIG_TYPE="PipelineStage"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
 }
 
 ENTRY cluster {
   arg0 = f32[1,4,4,2] parameter(0)
   arg1 = f32[1,4,4,1] parameter(1)
-  ROOT call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2]) call(arg0, arg1), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
 

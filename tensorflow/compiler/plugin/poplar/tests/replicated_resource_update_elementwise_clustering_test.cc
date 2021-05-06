@@ -1354,7 +1354,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
     arg1 = f16[128] parameter(1)
 
     add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)
@@ -1494,7 +1494,7 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
     arg1 = f16[128] parameter(1)
 
     add.1 = f16[128] add(input, arg0)
-    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
+    call = (f16[128],f16[128]) call(add.1, arg0, arg1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_ON\"}}}"
     gte0 = f16[128] get-tuple-element(call), index=0
     gte1 = f16[128] get-tuple-element(call), index=1
     ROOT r = (f16[128],f16[128]) tuple(gte0, gte1)

@@ -21,8 +21,8 @@ from tensorflow.python.ipu.utils import DeviceConnectionType
 from tensorflow.python.ops import variables
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python import ops
 from tensorflow.python.client import session
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import array_ops

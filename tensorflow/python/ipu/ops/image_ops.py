@@ -18,8 +18,8 @@ Image operations
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
-from tensorflow.python import ops
-from tensorflow.python import dtypes
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
 
 

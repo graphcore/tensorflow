@@ -16,11 +16,11 @@
 import os
 import numpy as np
 from tensorflow.python import keras
-from tensorflow.python import ops
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu import ipu_compiler

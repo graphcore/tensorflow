@@ -190,7 +190,7 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -542,10 +542,10 @@ tf_py_test(
     shard_count = 5,
     tags = ["hw_poplar_test"],
     deps = [
-        "//tensorflow/python/keras:layers",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -1361,11 +1361,11 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/image_ops_test.py"],
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

@@ -20,9 +20,9 @@ from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python import ipu
-from tensorflow.python import ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
