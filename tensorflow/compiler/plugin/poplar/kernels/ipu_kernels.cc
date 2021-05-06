@@ -115,6 +115,8 @@ class IpuResetSeedOp : public OpKernel {
   explicit IpuResetSeedOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device", &dev_name_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("seed", &seed_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("identical_replicas", &identical_replicas_));
   }
   ~IpuResetSeedOp() override{};
 
@@ -130,12 +132,14 @@ class IpuResetSeedOp : public OpKernel {
     OP_REQUIRES(ctx, parsed_name.has_id,
                 errors::InvalidArgument("Invalid device name %s", dev_name_));
 
-    OP_REQUIRES_OK(ctx, p->ResetSeed(parsed_name.id, seed_));
+    OP_REQUIRES_OK(ctx,
+                   p->ResetSeed(parsed_name.id, seed_, identical_replicas_));
   }
 
  private:
   std::string dev_name_;
   int seed_;
+  bool identical_replicas_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IpuResetSeedOp);
 };

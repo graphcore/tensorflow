@@ -173,12 +173,13 @@ StatusOr<int64> PoplarPlatform::GetNumIpusForDevice(int ordinal) {
   return e->GetOrCreatePoplarTarget().getNumIPUs();
 }
 
-Status PoplarPlatform::ResetSeed(int ordinal, int seed) {
+Status PoplarPlatform::ResetSeed(int ordinal, int seed,
+                                 bool identical_replicas) {
   if (ordinal < VisibleDeviceCount()) {
     TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
                         ExecutorForDevice(ordinal));
     auto* e = static_cast<PoplarExecutor*>(executor->implementation());
-    e->ResetSeed(seed);
+    e->ResetSeed(seed, identical_replicas);
     return Status::OK();
   }
   return xla::InternalError("Invalid ordinal on seed reset: %d", ordinal);

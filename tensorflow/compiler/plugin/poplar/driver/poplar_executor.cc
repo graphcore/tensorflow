@@ -377,6 +377,11 @@ std::string GetExecutableCachePath() {
   return path;
 }
 
+std::unique_ptr<SeedGenerator> CreateDefaultSeedGenerator() {
+  static std::random_device rd;
+  return absl::make_unique<DistinctReplicaSeedGenerator>(rd());
+}
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -442,11 +447,9 @@ PoplarExecutor::PoplarExecutor()
       device_attached_(false),
       poplar_device_hash_(0),
       configured_(false),
+      seed_generator_(CreateDefaultSeedGenerator()),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
   TENSORFLOW_TRACEPOINT();
-  // TODO should this use the time/ms?
-  static std::random_device rd;
-  seed_generator_.Seed(rd());
 }
 
 PoplarExecutor::~PoplarExecutor() { TENSORFLOW_TRACEPOINT(); }
@@ -3328,7 +3331,7 @@ void PoplarExecutor::ConnectSeedCallback() {
   for (int replica_id = 0; replica_id < current_replication_factor_;
        ++replica_id) {
     auto callback = [&generator, replica_id](void* ptr) mutable {
-      reinterpret_cast<uint64_t*>(ptr)[0] = generator.Get(replica_id);
+      reinterpret_cast<uint64_t*>(ptr)[0] = generator->Get(replica_id);
     };
 
     current_engine_->connectStreamToCallback(GetRandomNumberSeedStream(),
@@ -3336,7 +3339,13 @@ void PoplarExecutor::ConnectSeedCallback() {
   }
 }
 
-void PoplarExecutor::ResetSeed(int seed) { seed_generator_.Seed(seed); }
+void PoplarExecutor::ResetSeed(int seed, bool identical_replicas) {
+  if (identical_replicas) {
+    seed_generator_ = absl::make_unique<IdenticalReplicaSeedGenerator>(seed);
+  } else {
+    seed_generator_ = absl::make_unique<DistinctReplicaSeedGenerator>(seed);
+  }
+}
 
 std::string PoplarExecutor::GetCycleCounterStream() {
   return "__cycle_count_stream";
@@ -3658,7 +3667,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
       // Before executing the main program, prepare the random seeds for each
       // replica.
-      seed_generator_.PrepareSeedsForReplicas(current_replication_factor_);
+      seed_generator_->PrepareSeedsForReplicas(current_replication_factor_);
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();

@@ -1159,7 +1159,10 @@ def set_experimental_multi_replica_distribution_options(
   return opts
 
 
-def reset_ipu_seed(seed, device="/device:IPU:0", cpu_device="cpu"):
+def reset_ipu_seed(seed,
+                   device="/device:IPU:0",
+                   cpu_device="cpu",
+                   experimental_identical_replicas=False):
   """Reset the seed used to generate stateful random numbers and perform
   stochastic rounding.
 
@@ -1167,6 +1170,13 @@ def reset_ipu_seed(seed, device="/device:IPU:0", cpu_device="cpu"):
     seed: The new random number generator seed.
     device: The device to which the seed will be applied.
     cpu_device: The CPU device which is on the same hardware to the IPU device.
+    experimental_identical_replicas: Whether to seed all the local replicas
+      identically. Note that to generate identical sequences of random numbers
+      on all replicas, the Poplar engine option `"target.deterministicWorkers"`
+      must also be set to `"portable"`. Also note that for multi-replica
+      distribution with multiple processes, the same seed must be passed to
+      each process to ensure that all the replicas globally get the same seed.
+      WARNING: This flag is experimental and subject to change.
 
   Returns:
     None
@@ -1174,7 +1184,8 @@ def reset_ipu_seed(seed, device="/device:IPU:0", cpu_device="cpu"):
   g = ops.Graph()
   with g.as_default():
     with ops.device(cpu_device):
-      cfg_op = gen_ipu_ops.ipu_reset_seed(device, seed)
+      cfg_op = gen_ipu_ops.ipu_reset_seed(
+          device, seed, identical_replicas=experimental_identical_replicas)
 
   with session_lib.Session(graph=g) as sess:
     sess.run(cfg_op)
