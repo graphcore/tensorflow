@@ -64,7 +64,8 @@ In the above example we create an IPU system configuration with pre-compile mode
 for a single IPU device (IPU version 2) and with remote buffers enabled, with
 the rest of the program unchanged.
 
-.. Note:: It is important to check whether the system you are pre-compiling for
+.. note::
+  It is important to check whether the system you are pre-compiling for
   supports remote buffers as this is required for features such as optimizer state
   offloading.
 

@@ -15,9 +15,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SEED_GENERATOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SEED_GENERATOR_H_
 
-#include "tensorflow/compiler/xla/types.h"
+#include <random>
 
-#include <mutex>
+#include "tensorflow/compiler/xla/types.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -29,18 +29,42 @@ namespace poplarplugin {
 
 class SeedGenerator {
  public:
-  // Seed the underlying random number generator.
-  void Seed(unsigned seed);
+  virtual ~SeedGenerator() = default;
 
   // Prepare `replication_factor` seeds to draw from.
-  void PrepareSeedsForReplicas(int64 replication_factor);
+  virtual void PrepareSeedsForReplicas(int64 replication_factor) = 0;
 
   // Get the seed value for the `replica_idx` IPU replica device.
-  uint64 Get(int64 replica_idx) const;
+  virtual uint64 Get(int64 replica_idx) const = 0;
+};
+
+class DistinctReplicaSeedGenerator : public SeedGenerator {
+ public:
+  explicit DistinctReplicaSeedGenerator(unsigned seed);
+
+  void PrepareSeedsForReplicas(int64 replication_factor) override;
+
+  uint64 Get(int64 replica_idx) const override;
 
  private:
-  // Used for storage of the values.
+  // The next value for each replica.
   std::vector<uint64> buffer_;
+
+  // The generator from which the values are drawn from.
+  std::mt19937_64 seed_generator_;
+};
+
+class IdenticalReplicaSeedGenerator : public SeedGenerator {
+ public:
+  explicit IdenticalReplicaSeedGenerator(unsigned seed);
+
+  void PrepareSeedsForReplicas(int64 replication_factor) override;
+
+  uint64 Get(int64 replica_idx) const override;
+
+ private:
+  // The next value for all replicas.
+  uint64 value_;
 
   // The generator from which the values are drawn from.
   std::mt19937_64 seed_generator_;

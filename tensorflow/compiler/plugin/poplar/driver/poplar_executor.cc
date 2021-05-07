@@ -377,6 +377,11 @@ std::string GetExecutableCachePath() {
   return path;
 }
 
+std::unique_ptr<SeedGenerator> CreateDefaultSeedGenerator() {
+  static std::random_device rd;
+  return absl::make_unique<DistinctReplicaSeedGenerator>(rd());
+}
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -402,7 +407,7 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
       tf_shapes(shapes.size()),
       callback_to_io_thread_queues(shapes.size()) {
   CHECK_EQ(shapes.size(), tf_data_types.size());
-  int64 replication_factor = config.replication_factor();
+  replication_factor = config.replication_factor();
   for (uint64 i = 0; i < shapes.size(); i++) {
     tf_data_types[i] = static_cast<tensorflow::DataType>(
         outfeed_info.config.tf_data_types()[i]);
@@ -442,11 +447,9 @@ PoplarExecutor::PoplarExecutor()
       device_attached_(false),
       poplar_device_hash_(0),
       configured_(false),
+      seed_generator_(CreateDefaultSeedGenerator()),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
   TENSORFLOW_TRACEPOINT();
-  // TODO should this use the time/ms?
-  static std::random_device rd;
-  seed_generator_.Seed(rd());
 }
 
 PoplarExecutor::~PoplarExecutor() { TENSORFLOW_TRACEPOINT(); }
@@ -3208,6 +3211,25 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
   }
 }
 
+int64 PoplarExecutor::GetReplicationFactorForOutfeed(
+    const std::string& feed_id) const {
+  OutfeedContext* outfeed_context = nullptr;
+  std::lock_guard<std::mutex> outfeed_lock(outfeeds_mutex_);
+
+  auto iter = outfeed_contexts_.find(feed_id);
+  if (iter == outfeed_contexts_.end()) {
+    LOG(WARNING)
+        << "Trying to get replication factor for the outfeed queue with id="
+        << feed_id
+        << " which has not executed yet. Make sure to execute the "
+           "program with the outfeed before trying to dequeue an outfeed.";
+    return 1;
+  }
+
+  outfeed_context = iter->second.get();
+  return outfeed_context->replication_factor;
+}
+
 Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
   std::unique_lock<std::mutex> l(outfeeds_mutex_);
   for (auto& outfeed_info : outfeed_infos) {
@@ -3217,9 +3239,9 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
       if (!existing_feed->second->Matches(outfeed_info)) {
         return xla::FailedPrecondition(
             "Outfeed with id='%s' already exists but with a different tensor "
-            "shape. Consider changing the `feed_name` in IPUOutfeedQueue. "
-            "The Poplar backend requires all outfeeds in the same TensorFlow "
-            "device to have unique names.",
+            "shape or replication factor. Consider changing the `feed_name` "
+            "in IPUOutfeedQueue. The Poplar backend requires all outfeeds in "
+            "the same TensorFlow device to have unique names.",
             outfeed_id.c_str());
       }
     } else {
@@ -3310,7 +3332,7 @@ void PoplarExecutor::ConnectSeedCallback() {
   for (int replica_id = 0; replica_id < current_replication_factor_;
        ++replica_id) {
     auto callback = [&generator, replica_id](void* ptr) mutable {
-      reinterpret_cast<uint64_t*>(ptr)[0] = generator.Get(replica_id);
+      reinterpret_cast<uint64_t*>(ptr)[0] = generator->Get(replica_id);
     };
 
     current_engine_->connectStreamToCallback(GetRandomNumberSeedStream(),
@@ -3318,7 +3340,13 @@ void PoplarExecutor::ConnectSeedCallback() {
   }
 }
 
-void PoplarExecutor::ResetSeed(int seed) { seed_generator_.Seed(seed); }
+void PoplarExecutor::ResetSeed(int seed, bool identical_replicas) {
+  if (identical_replicas) {
+    seed_generator_ = absl::make_unique<IdenticalReplicaSeedGenerator>(seed);
+  } else {
+    seed_generator_ = absl::make_unique<DistinctReplicaSeedGenerator>(seed);
+  }
+}
 
 std::string PoplarExecutor::GetCycleCounterStream() {
   return "__cycle_count_stream";
@@ -3640,7 +3668,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
       // Before executing the main program, prepare the random seeds for each
       // replica.
-      seed_generator_.PrepareSeedsForReplicas(current_replication_factor_);
+      seed_generator_->PrepareSeedsForReplicas(current_replication_factor_);
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();

@@ -13,21 +13,31 @@
 # limitations under the License.
 # =============================================================================
 """
-IPU configuration classes and utilities
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Configuration utilities
+~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 import ast
 import collections
 import difflib
+from enum import Enum
 import inspect
+import os
 import pydoc
+import typing
+import numpy as np
 
+from tensorflow.python.eager.context import executing_eagerly
+from tensorflow.compiler.plugin.poplar.driver import config_pb2
+from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.python.client import session as session_lib
+from tensorflow.python.framework import ops
 from tensorflow.python.platform import tf_logging as logging
 
 
-def annotation_to_str(node):
+def _annotation_to_str(node):
   """
   Construct a type hint string from an AST annotation.
   """
@@ -36,19 +46,19 @@ def annotation_to_str(node):
   if isinstance(node, ast.Str):
     return node.s
   if isinstance(node, ast.Attribute):
-    return f"{annotation_to_str(node.value)}.{annotation_to_str(node.attr)}"
+    return f"{_annotation_to_str(node.value)}.{_annotation_to_str(node.attr)}"
   if isinstance(node, ast.Subscript):
-    return f"{annotation_to_str(node.value)}[{annotation_to_str(node.slice)}]"
+    return f"{_annotation_to_str(node.value)}[{_annotation_to_str(node.slice)}]"
   if isinstance(node, ast.Slice):
 
     def helper(v):
-      return annotation_to_str(getattr(node, v, ast.Str("")))
+      return _annotation_to_str(getattr(node, v, ast.Str("")))
 
     return ":".join(map(helper, ['lower', 'upper', 'step']))
   if isinstance(node, ast.Index):
-    return annotation_to_str(node.value)
+    return _annotation_to_str(node.value)
   if isinstance(node, ast.Tuple):
-    return ', '.join(map(annotation_to_str, node.elts))
+    return ', '.join(map(_annotation_to_str, node.elts))
   if isinstance(node, ast.Ellipsis):
     return "..."
   if isinstance(node, ast.Name):
@@ -56,7 +66,7 @@ def annotation_to_str(node):
   raise Exception(f"Unhandled {node} when converting type hint to string.")
 
 
-def get_type_check_fn_from_AST_type_hints(node):
+def _get_type_check_fn_from_AST_type_hints(node):
   """
   Function that parses the type hints in an AST AnnAssign node and converts them
   into a callable that checks the type of a value `v` against the type hints.
@@ -154,27 +164,27 @@ def get_type_check_fn_from_AST_type_hints(node):
   return helper(node.annotation)
 
 
-def called_from_instance_init(instance, calling_frame):
+def _called_from_instance_init(instance, calling_frame):
   """ Helper to check a calling_frame is in an instance's __init__ """
   from_init = inspect.getframeinfo(calling_frame).function == "__init__"
   from_this = calling_frame.f_locals.get('self') is instance
   return from_init and from_this
 
 
-def build_full_attribute_name_from_call_stack(init_frame):
+def _build_full_attribute_name_from_call_stack(init_frame):
   """
   Given a frame in a call stack that points to an assignment which is inside
   a config structure, traverse up the structure by following the assignments to
   build the full name of the attribute relative to the base of the config
   structure. For example, given the following config structure:
   ```
-  class NestedConfig(ConfigBase):
+  class NestedConfig(_ConfigBase):
     def __init__(self):
       self.attribute = 1
 
-  class ExampleConfig(ConfigBase):
+  class ExampleConfig(_ConfigBase):
     def __init__(self):
-      nested_config = NestedConfig(ConfigBase)
+      nested_config = NestedConfig(_ConfigBase)
   ```
   And a call frame that points to the `self.attribute = 1` assignment, this
   function goes up the assignment stack, seeing that `NestedConfig` is being
@@ -186,7 +196,7 @@ def build_full_attribute_name_from_call_stack(init_frame):
   while True:
     # Get the variable name of the current assignment via the AST.
     # We could do it with linecache too but this feels more robust.
-    assignment_node = get_assignment_node_from_call_frame(cur_frame)
+    assignment_node = _get_assignment_node_from_call_frame(cur_frame)
     if isinstance(assignment_node, ast.AnnAssign):
       name = assignment_node.target.attr
     else:
@@ -196,14 +206,14 @@ def build_full_attribute_name_from_call_stack(init_frame):
 
     # Finish if we reached the root of the nested structure.
     parent_class = cur_frame.f_back.f_locals.get('self', None)
-    if not isinstance(parent_class, ConfigBase):
+    if not isinstance(parent_class, _ConfigBase):
       break
     # Go up the assignment stack until we reach the config root.
     cur_frame = cur_frame.f_back
   return ".".join(name_parts), len(name_parts)
 
 
-def get_docstring_above_calling_line(call_frame):
+def _get_docstring_above_AST_node(filename, node):
   """
   Given a frame in a call stack that points to a line in a file's source code,
   find the full docstring above that line, if any.
@@ -220,9 +230,8 @@ def get_docstring_above_calling_line(call_frame):
   # Find the docstring by looking for the AST node for the line above the
   # assigning statement. We have to use the AST node since the docstring
   # could be over a number of source lines.
-  assignment_file = call_frame.f_code.co_filename
-  source_index = get_source_index(assignment_file)
-  nodes = source_index.get(call_frame.f_lineno - 1, [])
+  source_index = _get_source_index(filename)
+  nodes = source_index.get(node.lineno - 1, [])
   # (Docstrings are Exprs with a Str in them in AST)
   if len(nodes) == 2 and isinstance(nodes[0], ast.Expr) and isinstance(
       nodes[0].value, ast.Str):
@@ -230,7 +239,7 @@ def get_docstring_above_calling_line(call_frame):
   return "No description provided."
 
 
-def get_assignment_type_and_checker(assign_node, rhs):
+def _get_assignment_type_and_checker(assign_node, rhs):
   """
   Given an AST assignment node, get the type of the RHS of the assignment as
   a string and also build a function that will check a value against the type of
@@ -243,9 +252,9 @@ def get_assignment_type_and_checker(assign_node, rhs):
   # Find possible types...
   if isinstance(assign_node, ast.AnnAssign):
     # ...from Python's type hint annotations
-    check_type_fn = get_type_check_fn_from_AST_type_hints(assign_node)
+    check_type_fn = _get_type_check_fn_from_AST_type_hints(assign_node)
     # Reconstruct the type hint string from the AST node.
-    attr_type = annotation_to_str(assign_node.annotation)
+    attr_type = _annotation_to_str(assign_node.annotation)
   else:
     # ...from the initial value
     check_type_fn = lambda value: type(value) == type(rhs)  # pylint: disable=unidiomatic-typecheck
@@ -253,17 +262,65 @@ def get_assignment_type_and_checker(assign_node, rhs):
   return attr_type, check_type_fn
 
 
+_FILENAME_SOURCE_INDEXES = {}
+
+
+def _get_source_index(filename):
+  """
+  Helper to get a mapping from the line numbers in a file `filename` to the
+  parsed AST nodes for each line. Caches results.
+  """
+  if filename not in _FILENAME_SOURCE_INDEXES:
+    # Get the AST for the file.
+    with open(filename, 'r') as f:
+      tree = ast.parse(f.read())
+
+    # Create a mapping from AST node line numbers to AST nodes.
+    source_index = collections.defaultdict(list)
+    for node in ast.walk(tree):
+      if hasattr(node, "lineno"):
+        source_index[node.lineno].append(node)
+
+      # Also add parent references so we can go up the AST.
+      if not hasattr(node, 'parent'):
+        node.parent = None
+      for child in ast.iter_child_nodes(node):
+        child.parent = node
+
+    _FILENAME_SOURCE_INDEXES[filename] = source_index
+  return _FILENAME_SOURCE_INDEXES[filename]
+
+
+def _get_assignment_node_from_call_frame(frame):
+  """
+  Helper to get the Assign or AnnAssign AST node for a call frame.
+  The call frame will point to a specific file and line number, and we use the
+  source index to retrieve the AST nodes for that line.
+  """
+  filename = frame.f_code.co_filename
+  # Go up the AST from a node in the call frame line until we find an Assign or
+  # AnnAssign, since the (Ann)Assign may be over multiple lines.
+  nodes_in_line = _get_source_index(filename).get(frame.f_lineno, [])
+  cur_node = nodes_in_line[0]
+  while cur_node:
+    if isinstance(cur_node, (ast.Assign, ast.AnnAssign)):
+      return cur_node
+    cur_node = cur_node.parent
+  raise Exception("Could not find AST assignment node in the line"
+                  f" {filename}:{frame.f_lineno}")
+
+
 _DEPRECATIONS = {}
 
 
 def deprecate_config_attribute(name, msg):
   """
-  Class decorator to deprecate an attribute in a nested ConfigBase structure.
+  Class decorator to deprecate an attribute in a nested _ConfigBase structure.
   Stores the deprecation in the class's DEPRECATIONS attribute so it can be
   used later when we determine attribute metadata on initialization.
 
   Args:
-    name: The name of the attribute on the ConfigBase this decorates to
+    name: The name of the attribute on the _ConfigBase this decorates to
           deprecate.
     msg: The deprecation message to show in documentation and warnings.
   """
@@ -292,57 +349,19 @@ def deprecate_config_attributes(to_deprecate):
   return cls_wrapper
 
 
-_FILENAME_SOURCE_INDEXES = {}
+def running_on_ipu_model():
+  """ Check if XLA is configured to run on the ipu model.
 
-
-def get_source_index(filename):
+  Returns:
+    True if XLA is configured to run on the ipu model.
+    False if XLA is configured to run on real hardware.
   """
-  Helper to get a mapping from the line numbers in a file `filename` to the
-  parsed AST nodes for each line. Caches results.
-  """
-  if filename not in _FILENAME_SOURCE_INDEXES:
-    # Get the AST for the file.
-    with open(filename, 'r') as f:
-      tree = ast.parse(f.read())
-
-    # Create a mapping from AST node line numbers to AST nodes.
-    source_index = collections.defaultdict(list)
-    for node in ast.walk(tree):
-      if hasattr(node, "lineno"):
-        source_index[node.lineno].append(node)
-
-      # Also add parent references so we can go up the AST.
-      if not hasattr(node, 'parent'):
-        node.parent = None
-      for child in ast.iter_child_nodes(node):
-        child.parent = node
-
-    _FILENAME_SOURCE_INDEXES[filename] = source_index
-  return _FILENAME_SOURCE_INDEXES[filename]
-
-
-def get_assignment_node_from_call_frame(frame):
-  """
-  Helper to get the Assign or AnnAssign AST node for a call frame.
-  The call frame will point to a specific file and line number, and we use the
-  source index to retrieve the AST nodes for that line.
-  """
-  filename = frame.f_code.co_filename
-  # Go up the AST from a node in the call frame line until we find an Assign or
-  # AnnAssign, since the (Ann)Assign may be over multiple lines.
-  nodes_in_line = get_source_index(filename).get(frame.f_lineno, [])
-  cur_node = nodes_in_line[0]
-  while cur_node:
-    if isinstance(cur_node, (ast.Assign, ast.AnnAssign)):
-      return cur_node
-    cur_node = cur_node.parent
-  raise Exception("Could not find AST assignment node in the line"
-                  f" {filename}:{frame.f_lineno}")
+  return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
 
 
 class AttributeMetadata:
   """
-  Encapsulates the metadata for an attribute in a nested ConfigBase structure.
+  Encapsulates the metadata for an attribute in a nested _ConfigBase structure.
 
   Args:
     name: The full name of the attribute, relative to the structure's root.
@@ -448,29 +467,29 @@ class AttributeMetadata:
     return '\n'.join(["   " * (self._depth + 1) + l for l in lines]) + '\n\n'
 
 
-class ConfigBase(object):
+class _ConfigBase(object):
   """
   A class that can be used to create a user-friendly hierarchical structure of
   attributes that can be converted into a protobuf for the Poplar XLA backend.
   Non-root classes in the structure are hidden from the user so all attributes
   are accessed with chained dot notation from the root class.
 
-  To use, create a root ConfigBase with some (typed) attributes:
+  To use, create a root _ConfigBase with some (typed) attributes:
   ```
-  class Config(ConfigBase):
+  class Config(_ConfigBase):
     def __init__(self):
       self.option1: int = 1
       self.option2: typing.Union[int, str] = 2
       self._finalize_base_config()
   ```
 
-  The root can then have ConfigBase attributes itself, building the hierarchy:
+  The root can then have _ConfigBase attributes itself, building the hierarchy:
   ```
-  class _HiddenCategoryClass(ConfigBase):
+  class _HiddenCategoryClass(_ConfigBase):
     def __init__(self):
       self.option3 = 3
 
-  class Config(ConfigBase):
+  class Config(_ConfigBase):
     def __init__(self):
       self.option1: int = 1
       self.option2: typing.Union[int, str] = 2
@@ -493,7 +512,6 @@ class ConfigBase(object):
     config.optoin1 = 2
     >>> "Did you mean 'option1'?"
     ```
-
 
     - Attributes are type-checked on setting, based on either their initial
       value's type or their type hints:
@@ -518,7 +536,7 @@ class ConfigBase(object):
   documentation, as well as being available to users through the attribute's
   metadata (__doc__). If an attribute isn't given a docstring, it will be
   assigned "No description provided." by default.
-  Since nested ConfigBase attributes are also attributes, they can also be
+  Since nested _ConfigBase attributes are also attributes, they can also be
   given docstrings to e.g. describe those general "categories".
 
 
@@ -532,7 +550,7 @@ class ConfigBase(object):
 
   Some examples of supported type hints:
   ```
-  class _B(ConfigBase):
+  class _B(_ConfigBase):
     def __init__(self):
 
       # This can only take integers
@@ -565,7 +583,7 @@ class ConfigBase(object):
   deprecation message, e.g:
   ```
   @deprecate_config_attribute("a", "'a' will be removed soon.")
-  class _B(ConfigBase):
+  class _B(_ConfigBase):
       ...
   ```
   Deprecation messages will be a warning that looks like:
@@ -582,8 +600,8 @@ class ConfigBase(object):
   Documentation
   ~~~~~~~~~~~~~
 
-  Sphinx documentation is automatically generated for an entire ConfigBase
-  config from the structure and the docstrings. The nested ConfigBase *classes*
+  Sphinx documentation is automatically generated for an entire _ConfigBase
+  config from the structure and the docstrings. The nested _ConfigBase *classes*
   are hidden from the user; they are purely an implementation detail used to
   allow the Pythonic interaction with the base config, so all nested configs and
   attributes are listed under the base class in the documentation.
@@ -603,7 +621,7 @@ class ConfigBase(object):
   ~~~~~~~~~~
 
   Documentation is generated and deprecation is propagated when
-  ConfigBase._finalize_base_config is called at the end of the base config
+  _ConfigBase._finalize_base_config is called at the end of the base config
   initializer. It doesn't need to be called anywhere else.
 
   """
@@ -637,21 +655,22 @@ class ConfigBase(object):
     This is an internal setter used to build the config.
     """
     # Construct the full name of the attribute in the config structure.
-    full_name, depth = build_full_attribute_name_from_call_stack(caller_frame)
-
-    # Find the docstring above the assignment statement.
-    docstring = get_docstring_above_calling_line(caller_frame)
+    full_name, depth = _build_full_attribute_name_from_call_stack(caller_frame)
 
     # Find deprecation through earlier registration on _DEPRECATIONS.
     deprecated_msg = _DEPRECATIONS.get((self.__class__, k), None)
 
     # Find type string and type checking function from AST node.
-    assign_node = get_assignment_node_from_call_frame(caller_frame)
-    attr_type, type_checker = get_assignment_type_and_checker(assign_node, v)
+    assign_node = _get_assignment_node_from_call_frame(caller_frame)
+    attr_type, type_checker = _get_assignment_type_and_checker(assign_node, v)
+
+    # Find the docstring above the line of the assignment node.
+    filename = caller_frame.f_code.co_filename
+    docstring = _get_docstring_above_AST_node(filename, assign_node)
 
     # Hide default and types for categories.
     default = v
-    if isinstance(v, ConfigBase):
+    if isinstance(v, _ConfigBase):
       # Keep track of nested configs for convenience.
       self._nested_configs.append(k)
       default = None
@@ -703,7 +722,7 @@ class ConfigBase(object):
     # Only allow creating new attributes in the __init__ of this class.
     caller_frame = inspect.currentframe().f_back
     if k not in self.__dict__:
-      if not called_from_instance_init(self, caller_frame):
+      if not _called_from_instance_init(self, caller_frame):
         # Call the failing getter for a suggestion and exception.
         self.__getattr__(k)
 
@@ -712,7 +731,7 @@ class ConfigBase(object):
 
   def _to_protobuf(self, pb):
     """
-    Convert nested ConfigBases to a protobuf.
+    Convert nested _ConfigBases to a protobuf.
     If an inheritor wants to modify the protobuf, it must implement this method.
     If it also contains nested configs, it should call this method too to
     recurse into the nested configs to allow them to modify the protobuf too.
@@ -721,7 +740,7 @@ class ConfigBase(object):
       getattr(self, config_name)._to_protobuf(pb)  # pylint: disable=protected-access
 
   def _create_protobuf(self):
-    """ Create an IpuOptions protobuf from this ConfigBase """
+    """ Create an IpuOptions protobuf from this _ConfigBase """
     pb = IpuOptions()
     self._to_protobuf(pb)  # pylint: disable=protected-access
     return pb
@@ -785,7 +804,7 @@ class ConfigBase(object):
             metadata for. Must be its full name relative to the config
             this method is being called on.
     Returns:
-      An `_AttributeMetadata` object containing the metadata for the attribute.
+      An `AttributeMetadata` object containing the metadata for the attribute.
     """
     try:
       parts = attr.split('.')
@@ -797,3 +816,1235 @@ class ConfigBase(object):
       return config._user_attributes[parts[-1]]  # pylint: disable=protected-access
     except (IndexError, ValueError, KeyError) as e:
       raise ValueError(f"Could not get attribute metadata for '{attr}': {e}")
+
+
+def _poplar_options_to_protobuf(opts, pb_target):
+  """
+  Populate a protobuf field `pb_target` with the options from an options
+  dictionary `opts`.
+  """
+  for option_name, value in opts.items():
+    opt = pb_target.add()
+    opt.option = option_name
+    opt.value = value
+
+
+class SelectionOrder(Enum):
+  """Depending on the communication pattern of the model, the order in
+  which the IPUs are selected and mapped to shards can impact the performance.
+
+  For example, given a model which executes on multiple IPUs:
+
+  .. code-block:: python
+
+    def sharded_graph(pa, pb, pc, pd):
+      with ipu.scopes.ipu_shard(0):
+        o1 = pa + pb
+      with ipu.scopes.ipu_shard(1):
+        o2 = o1 + pc
+      with ipu.scopes.ipu_shard(2):
+        o3 = o2 + pd
+        return o3
+
+  and a typical machine with 8 Graphcore C2 cards:
+
+  .. code-block:: none
+
+     _______               _______
+    |       |             |       |
+    |  14   |=============|  15   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  12   |=============|  13   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  10   |=============|  11   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   8   |=============|   9   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   6   |=============|   7   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   4   |=============|   5   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   2   |=============|   3   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   0   |=============|   1   |
+    |_______|             |_______|
+
+  (where each numbered square represents an IPU with the given device ID and the
+  == and || connections represent IPUs being directly connected via IPU-Links)
+
+  We can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
+  and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 2 in that order, then the
+  communication between shards 1 and 2 would not have a direct connection via an
+  IPU-Link and would have to perform a "hop" through an intermediate IPU.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 3 in that order, then the
+  communication between shards 1 and 2 would have a direct connection via an
+  IPU-Link which will reduce the communication cost.
+
+  This Enum class is used to control the order in which the IPUs are selected.
+  Currently, the following IPU selection orderings are supported:
+
+  * `AUTO`: automatically try and select the best selection given the network.
+  * `ZIGZAG`: follow the natural ordering of IPUs. In the above example, the
+    IPUs would be selected in the following order:
+    `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`.
+  * `SNAKE`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after. In the above example,
+    the IPUs would be selected in the following order:
+    `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
+  * `HOOF`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after and the last and first
+    shard are on the same C2 cards. In the above example, the IPUs would be
+    selected in the following order:
+    `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
+
+  The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
+  pipelined models.
+  """
+  AUTO = config_pb2.IpuSelectionOrder.Value("AUTO")
+  ZIGZAG = config_pb2.IpuSelectionOrder.Value("ZIGZAG")
+  SNAKE = config_pb2.IpuSelectionOrder.Value("SNAKE")
+  HOOF = config_pb2.IpuSelectionOrder.Value("HOOF")
+
+
+class ExecutionProfileType(Enum):
+  """The execution profile type indicates the desired information in the
+  execution profile.
+
+  * `NO_PROFILE` indicates that there should be no execution profiling.
+  * `DEVICE_PROFILE` indicates that the execution profile should contain only
+    device wide events.
+  * `IPU_PROFILE` indicates that the profile should contain IPU level
+    execution events.
+  * `TILE_PROFILE` indicates that the profile should contain Tile level
+    execution events.
+  """
+  NO_PROFILE = config_pb2.IpuExecutionProfileType.Value("NO_PROFILE")
+  DEVICE_PROFILE = config_pb2.IpuExecutionProfileType.Value("DEVICE_PROFILE")
+  IPU_PROFILE = config_pb2.IpuExecutionProfileType.Value("IPU_PROFILE")
+  TILE_PROFILE = config_pb2.IpuExecutionProfileType.Value("TILE_PROFILE")
+
+
+class DeviceConnectionType(Enum):
+  """Enumeration to describe the mechanism used to attach to the Poplar
+  device.
+
+  * `ALWAYS` indicates that the system will attach when configuring the
+    device.
+  * `ON_DEMAND` will defer connection to when the IPU is needed.
+  * `PRE_COMPILE` will never try to attach to a device and anything which is
+    meant to be executed on the device will return all zeros. Used to
+    pre-compile Poplar programs on machines without IPUs. For more information,
+    see :ref:`precompiling_executables`.
+  * `NEVER` will never try to attach to a device.
+  """
+  ALWAYS = config_pb2.IpuDeviceConnectionType.ALWAYS
+  ON_DEMAND = config_pb2.IpuDeviceConnectionType.ON_DEMAND
+  PRE_COMPILE = config_pb2.IpuDeviceConnectionType.PRE_COMPILE
+  NEVER = config_pb2.IpuDeviceConnectionType.NEVER
+
+
+class MergeRemoteBuffersBehaviour(Enum):
+  """The remote buffers merging behaviour indicates when or if compatible remote
+  buffers should be merged.
+
+  * `NO_MERGING` indicates that there should be no merging.
+  * `MERGE` indicates that all compatible remote buffers will be merged.
+  * `IF_BENEFICIAL` indicates that compatible remote buffers will only
+    be merged when it is considered beneficial for code re-use.
+  """
+  NO_MERGING = threestate_pb2.ThreeState.Value("THREESTATE_OFF")
+  MERGE = threestate_pb2.ThreeState.Value("THREESTATE_ON")
+  IF_BENEFICIAL = threestate_pb2.ThreeState.Value("THREESTATE_UNDEFINED")
+
+
+class SchedulingAlgorithm(Enum):
+  """Controls the algorithm that the scheduler uses.
+
+  * `CHOOSE_BEST` compares several of the scheduling algorithms below and
+    selects the one that leads to the lowest predicted overall peak liveness.
+    This can sometimes produce incorrect results because the overall peak
+    liveness isn't always a good measure for the maximum liveness on one tile of
+    the processor.
+  * `CLUSTERING` groups clusters of operations together in order to look through
+    stretches of instructions with potentially high liveness.
+  * `POST_ORDER` schedules the instructions in the order which is obtained by
+    walking the graph in 'post order'.
+  * `LOOK_AHEAD` looks ahead a number of operations from any schedulable one, as
+    given by the :ref:`maximum scheduler lookahead depth
+    <scheduling.maximum_scheduler_lookahead_depth>` and :ref:`maximum scheduler
+    search space size <scheduling.maximum_scheduler_search_space_size>` options.
+    It attempts to look through areas of high liveness.
+  * `SHORTEST_PATH` gives priority to the shortest path to the root.
+  """
+  CHOOSE_BEST = config_pb2.IpuSchedulingAlgorithm.Value("CHOOSE_BEST")
+  CLUSTERING = config_pb2.IpuSchedulingAlgorithm.Value("CLUSTERING")
+  POST_ORDER = config_pb2.IpuSchedulingAlgorithm.Value("POST_ORDER")
+  LOOK_AHEAD = config_pb2.IpuSchedulingAlgorithm.Value("LOOK_AHEAD")
+  SHORTEST_PATH = config_pb2.IpuSchedulingAlgorithm.Value("SHORTEST_PATH")
+
+
+class KeyId:
+  def __init__(self, key=0, start_id=-1):
+    self.key = key
+    self.start_id = start_id
+
+
+class VerificationOptions:
+  """Store pairs of key / id to use for each type of data used in the graph.
+  Does nothing unless verified transfers have been enabled by calling
+  `set_transfer_options(opts, use_verified_transfers=True)`
+  and an instance of this class has been set by calling
+  `set_verification_options`:
+
+  .. code-block:: python
+
+    o = VerificationOptions()
+    o.inputs.key = 1
+    o.infeeds["infeed"].key = 3
+    set_verification_options(opts, o)
+
+  """
+  def __init__(self):
+    self.inputs = KeyId()
+    self.input_parameters = KeyId()
+    self.outputs = KeyId()
+    self.output_parameters = KeyId()
+    self.infeeds = collections.defaultdict(KeyId)
+    self.outfeeds = collections.defaultdict(KeyId)
+    self.checkpoint_in = KeyId(0, 0)
+    self.checkpoint_out = KeyId(0, 0)
+
+
+# pylint: disable=pointless-string-statement
+class _MultiReplicaDistributionConfig(_ConfigBase):
+  def __init__(self):
+    """
+    The index of the current process being configured.
+    """
+    self.process_index = 0
+    """
+    The total number of processes. When set to 0 (default), multi-replica
+    distribution will not be used.
+    """
+    self.process_count = 0
+
+  def _to_protobuf(self, pb):
+    if running_on_ipu_model() and self.process_count > 0:
+      raise Exception(
+          "Multi-replica distribution is not supported on the IPU model.")
+
+    if self.process_count and not (0 <= self.process_index <
+                                   self.process_count):
+      raise ValueError(
+          f"{self._get_full_name('process_index')} must be in the range"
+          f" [0, {self._get_full_name('process_count')}).")
+
+    pb.multi_replica_process_index = self.process_index
+    pb.multi_replica_process_count = self.process_count
+
+
+class _ExperimentalConfig(_ConfigBase):
+  def __init__(self):
+    """
+    The data which is streamed to/from the device might be stored in different
+    layouts on the device and on the host. If so, rearrangement is performed on
+    the device by default. By enabling this option the rearrangement will be
+    performed on the host at the expense of latency.
+    """
+    self.always_rearrange_copies_on_the_host = False
+    """
+    When set to true,
+    :py:class:`~tensorflow.python.ipu.embedding_ops.HostEmbedding` will make use
+    of Poplar remote buffers.
+    """
+    self.enable_remote_buffer_embedding = False
+    """
+    Sub-category containing configuration options controlling multi replica
+    distribution. This will use the Poplar runtime replica subset feature to let
+    multiple processes collaborate on executing the same Poplar program by
+    executing a subset of the global replicas each.
+
+    The total global replication factor will be equal to the local replication
+    factor multiplied by the :ref:`process_count
+    <experimental.multi_replica_distribution.process_count>`.
+    """
+    self.multi_replica_distribution = _MultiReplicaDistributionConfig()
+
+  def _to_protobuf(self, pb):
+    pb.speed_size_config.always_rearrange_copies_on_the_host = \
+        self.always_rearrange_copies_on_the_host
+    pb.enable_experimental_remote_buffer_embedding = \
+        self.enable_remote_buffer_embedding
+
+    # Go deeper into nested configs.
+    super()._to_protobuf(pb)  # pylint: disable=protected-access
+
+
+class _FloatingPointBehaviourConfig(_ConfigBase):
+  def __init__(self):
+    """
+    If True, a floating point invalid operation (defined by IEEE 754)
+    will cause an exception.
+    """
+    self.inv = False
+    """
+    If True, a floating point divide by zero operation will cause an exception.
+    """
+    self.div0 = False
+    """
+    If True, a floating point overflow will cause an exception.
+    """
+    self.oflo = False
+    """
+    If True, stochastic rounding will be enabled.
+    """
+    self.esr = False
+    """
+    If True, Not-a-Number (NaN) on overflow mode will be enabled.
+    """
+    self.nanoo = False
+    """
+    If True, unconditionally enables all floating point behaviour options
+    (:ref:`inv <floating_point_behaviour.inv>`,
+    :ref:`div0 <floating_point_behaviour.div0>`,
+    :ref:`oflo <floating_point_behaviour.oflo>`,
+    :ref:`esr <floating_point_behaviour.esr>`,
+    :ref:`nanoo <floating_point_behaviour.nanoo>`) when the IPUConfig is
+    configured.
+    """
+    self.set_all = False
+
+  def _to_protobuf(self, pb):
+    for opt in ['inv', 'div0', 'oflo', 'esr', 'nanoo']:
+      val = getattr(self, opt) if not self.set_all else True
+      setattr(pb.floating_point_behaviour, opt, val)
+
+
+class _IOTilesConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Number of tiles to reserve for I/O.
+    """
+    self.num_io_tiles = 0
+    """
+    Whether to place TensorFlow I/O operations on the I/O tiles.
+    """
+    self.place_ops_on_io_tiles = False
+    """
+    Proportion of I/O tiles' memory which can be used to store data in, with the
+    remaining memory assumed to be used by code. If the size of data which is to
+    be stored on I/O tiles exceeds the total I/O tiles memory multiplied by this
+    proportion, then a warning message will appear and the operations will not
+    be placed on I/O tiles.
+    """
+    self.available_memory_proportion = 0.9
+
+  def _to_protobuf(self, pb):
+    if self.place_ops_on_io_tiles and self.num_io_tiles == 0:
+      raise ValueError("Cannot place ops on I/O tiles when"
+                       f" {self._get_full_name('num_io_tiles')} == 0")
+
+    pb.num_io_tiles = self.num_io_tiles
+    pb.place_ops_on_io_tiles = self.place_ops_on_io_tiles
+    pb.io_tile_available_memory_proportion = self.available_memory_proportion
+
+
+class _IPUDeviceConnectionConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Configure when to attach to the device. For example, you can use this to
+    compile and cache a program without attaching to an IPU, and then later run
+    on a real IPU device without recompiling. Setting the connection type
+    doesn't impact the ability to profile a model. For possible values, see
+    :py:class:`~tensorflow.python.ipu.config.DeviceConnectionType`.
+
+    .. code-block:: python
+
+      # Compile without attaching to the device.
+      config = IPUConfig()
+      config.device_connection.type = DeviceConnectionType.ON_DEMAND
+    """
+    self.type = DeviceConnectionType.ALWAYS
+    """
+    Version of the IPU hardware to use (string). Must be one of "ipu1", "ipu2"
+    or "" (default). Only required if the
+    :ref:`connection type <device_connection.type>` provided is
+    `DeviceConnectionType.PRE_COMPILE` or `DeviceConnectionType.NEVER`.
+    """
+    self.version = ""
+    """
+    When :ref:`connection type <device_connection.type>` is
+    `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
+    `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate whether
+    remote buffers are enabled and supported in the system which will eventually
+    be used to execute the compiled programs.
+    """
+    self.enable_remote_buffers = False
+
+  def _to_protobuf(self, pb):
+    if self.type in [
+        DeviceConnectionType.PRE_COMPILE, DeviceConnectionType.NEVER
+    ] and self.version == "":
+      raise ValueError(
+          f"{self._get_full_name('version')} must be set when"
+          f" {self._get_full_name('type')} is DeviceConnectionType.NEVER or"
+          " DeviceConnectionType.PRE_COMPILE")
+
+    pb.device_connection_type = self.type.value
+    pb.ipu_version = self.version
+    pb.enable_remote_buffers_without_device = self.enable_remote_buffers
+
+
+class _IPUModelConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Whether or not to compile IPU code for modelling.
+    """
+    self.compile_ipu_code = True
+    """
+    The number of tiles per IPU Model device. When set to 0 (the default),
+    Poplar will use the standard number of tiles for the chosen
+    :ref:`version <ipu_model.version>`.
+    """
+    self.tiles_per_ipu = 0
+    """
+    Specify the IPU version to be used by the IPU Model. Options are "ipu1" or
+    "ipu2" (default).
+    """
+    self.version = "ipu2"
+
+  def _to_protobuf(self, pb):
+    if self.version == "" and running_on_ipu_model():
+      raise ValueError(
+          f"{self._get_full_name('version')} must be set when using the"
+          " IPUModel.")
+
+    pb.ipu_model_config.compile_ipu_code = self.compile_ipu_code
+    pb.ipu_model_config.tiles_per_ipu = self.tiles_per_ipu
+    pb.ipu_model_config.ipu_model_version = self.version
+
+
+class _MatmulConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Controls whether or not the "Pass" type of the MatMul is passed to PopLibs.
+    When set to True, PopLibs will not be told about the type of the MatMuls in
+    the graph. This can save memory in some circumstances, such as large batch
+    ResNet models. See `matMul` in the PopLibs API reference.
+    """
+    self.clear_pass_type = False
+    """
+    Set the PopLibs matrix multiplication options for the session. Must be a
+    dictionary of valid PopLibs matrix multiplication options. See `matMul` in
+    the PopLibs API reference for the full list of options. The options will be
+    applied to all matmul operations in the session graph during compilation.
+
+    Of note is the "availableMemoryProportion" flag, which indicates the
+    proportion of tile memory to be made available as temporary memory for
+    matrix multiplications (float between 0 and 1.0). Less temporary memory will
+    generally result in a matrix multiplication that takes more cycles to
+    complete. However, because always live memory (such as control code and
+    vertex state) is not tracked when planning it, a matrix multiplication using
+    less temporary memory may use more memory overall, due to an increase of
+    always live memory.
+    """
+    self.poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    pb.clear_matmul_pass_type = self.clear_pass_type
+    _poplar_options_to_protobuf(self.poplar_options, pb.matmul_options)
+
+
+class _ConvolutionConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Set the PopLibs convolution options for the session. Must be a dictionary of
+    valid PopLibs convolution options. See `createWeights` in the PopLibs API
+    reference for the full list of options. The options will be applied to all
+    convolution operations in the session graph during compilation.
+
+    Of note is the "availableMemoryProportion" flag, which indicates the
+    proportion of tile memory to be made available as temporary memory for
+    convolutions (float between 0 and 1.0). Less temporary memory will generally
+    result in a convolution that takes more cycles to complete. However, because
+    always live memory (such as control code and vertex state) is not tracked
+    when planning it, a convolution using less temporary memory may use more
+    memory overall, due to an increase of always live memory.
+    """
+    self.poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    _poplar_options_to_protobuf(self.poplar_options, pb.convolution_options)
+
+
+class _PoolingConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Set the PopLibs pooling compilation options for the session. Must be a
+    dictionary of valid PopLibs pooling options. See `pool` in the PopLibs API
+    reference for the full list of options. The options will be applied to all
+    pooling operations in the session graph during compilation.
+    """
+    self.poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    _poplar_options_to_protobuf(self.poplar_options, pb.pooling_options)
+
+
+class _NormsExperimentalConfig(_ConfigBase):
+  def __init__(self):
+    """
+    When executing fused batch-norms for training, this option specifies
+    how many replicas to aggregate the batch statistics across. For example, if
+    a model is being executed across four replicas and this option is set to
+    two, replicas 0 and 1 will be grouped together and replicas 2 and 3 will be
+    grouped together and the batch norm statistics will be synchronously
+    all-reduced every time the layer is executed (including any recomputation)
+    across the replicas within a group. This option should not be used when
+    using model parallelism (pipelining) and it is not supported with I/O tiles.
+    """
+    self.distributed_batch_norm_replica_group_size = 1
+
+  def _to_protobuf(self, pb):
+    if self.distributed_batch_norm_replica_group_size < 1:
+      raise ValueError(
+          f"{self._get_full_name('distributed_batch_norm_replica_group_size')}"
+          " must be at least 1.")
+
+    pb.experimental_distributed_batch_norm_replica_group_size = \
+        self.distributed_batch_norm_replica_group_size
+
+
+class _NormConfig(_ConfigBase):
+  def __init__(self):
+    """
+    If True, computes the mean minus the activations first before
+    computing the variance. The implementation with this flag set to True is
+    slower than when set to False.
+    """
+    self.use_stable_statistics = False
+    """
+    Sub-category containing experimental configuration options for
+    normalizations that may be changed or removed with short or no notice.
+    """
+    self.experimental = _NormsExperimentalConfig()
+
+  def _to_protobuf(self, pb):
+    pb.use_stable_norm_statistics = self.use_stable_statistics
+
+    # Go deeper into nested configs.
+    super()._to_protobuf(pb)  # pylint: disable=protected-access
+
+
+class _OptimizationConfig(_ConfigBase):
+  def __init__(self):
+    """
+    If True (default), prefetching of data for data streams on the host will be
+    overlapped with execution on the IPU.
+    """
+    self.prefetch_data_streams = True
+    """
+    If True, fuse embedding lookups which are on the same tensor. This might
+    improve performance but increase memory usage.
+    """
+    self.combine_embedding_lookups = False
+    """
+    If True, fuse matmul operations if they share the same weights or the same
+    input.
+    """
+    self.combine_matmuls = False
+    """
+    If True (default), operations in the graph which are the same but with
+    different input tensors may be outlined. This means the same code will be
+    re-used to execute them, reducing the amount of program code, but their
+    inputs will be exchanged into a common memory location to do so, increasing
+    execution time. If you care more about speed than memory, these
+    optimizations can be disabled by setting this option to False.
+    """
+    self.enable_graph_outlining = True
+    """
+    If True, this flag will merge the streamed host to device input copies into
+    one larger copy.  This may reduce the time to copy data from the host, at
+    the expense of increasing the live tensor memory on the device.
+    """
+    self.merge_infeed_io_copies = False
+    """
+    The maximum number of bytes that can be waiting before a cross replica sum
+    op is scheduled. 0 (default) means that they are scheduled immediately.
+    This value represents an always-live vs not-always-live trade off -
+    increasing the max_cross_replica_sum_buffer_size will lead to larger
+    temporary buffers in the cross replica sums, but fewer cross replica sums
+    overall and therefore less control code. If your model contains a lot of
+    trainable variables, then it is strongly advised to consider adjusting this
+    option.
+    """
+    self.maximum_cross_replica_sum_buffer_size = 0
+    """
+    The maximum number of bytes that can be waiting before a reduce scatter op
+    is scheduled.
+    """
+    self.maximum_reduce_scatter_buffer_size = 0
+    """
+    The maximum number of bytes that can be waiting before an inter IPU copy
+    between IPUs is scheduled.
+    """
+    self.maximum_inter_ipu_copies_buffer_size = 0
+    """
+    The maximum number of bytes that can be waiting before a cluster of
+    send/recv instructions to/from the host is scheduled. These are lowered to
+    stream copies that can be merged by Poplar.
+    """
+    self.maximum_send_recv_cluster_size = 0
+    """
+    The minimum size (in bytes) a tensor must be in order to be considered for
+    being stored in remote memory.
+    """
+    self.minimum_remote_tensor_size = 128
+    """
+    Whether to merge compatible remote buffers. Merging of remote buffers can
+    allow for more code re-use if the only difference between computations are
+    the remote buffers being accessed. Must be a
+    :py:class:`~tensorflow.python.ipu.config.MergeRemoteBuffersBehaviour`.
+    """
+    self.merge_remote_buffers = MergeRemoteBuffersBehaviour.IF_BENEFICIAL
+    """
+    If True (default), more aggressive optimizations will be done on embedding
+    lookups.
+    """
+    self.enable_gather_simplifier = True
+    """
+    Defines the block size for the triangular solver expander. The processing
+    within each block is performed on a single tile. The control code for
+    performing computations over blocks is unrolled on the device. For a matrix
+    of rank ``N`` and block size `B``, there are ``log2(N/B)`` iterations of the
+    control code. The choice of this parameter therefore has to balance between
+    the amount of data in a tile (lower value is better, gives better
+    parallelism) and the amount of control code (larger value is better, less
+    control code). A value of 0 (default) selects an implementation defined
+    default.
+    """
+    self.triangular_solve_expander_block_size = 0
+    """
+    Defines the block size for the Cholesky factoriser. The processing within
+    each block is performed on a single tile. The control code for performing
+    computations over blocks are unrolled on the device. For a matrix of rank
+    ``N`` and block size ``B``, there are ``N/B`` iterations of the control
+    code. The choice of this parameter therefore has to balance between the
+    amount of data in a tile (lower value is better, gives better parallelism)
+    and the amount of control code (larger value is better, less control code).
+    A value of 0 (default) selects an implementation defined default.
+    """
+    self.cholesky_block_size = 0
+    """
+    Enables optimizations which allow arbitrary reassociations and
+    transformations of mathematical operations with no accuracy guarantees.
+    Enabling this option can result in incorrect output for programs that depend
+    on an exact implementation of IEEE floating point for maths functions. It
+    may, however, yield faster code for programs that do not require the
+    guarantees of these specifications.
+    """
+    self.enable_fast_math = False
+
+  def _to_protobuf(self, pb):
+    pb.prefetch_data_streams = self.prefetch_data_streams
+    pb.enable_multi_slice_combiner = self.combine_embedding_lookups
+    pb.enable_matmul_combiner = self.combine_matmuls
+    pb.speed_size_config.disable_graph_outlining = not \
+        self.enable_graph_outlining
+    pb.speed_size_config.merge_infeed_io_copies = self.merge_infeed_io_copies
+    pb.max_cross_replica_sum_buffer_size = \
+        self.maximum_cross_replica_sum_buffer_size
+    pb.max_reduce_scatter_buffer_size = self.maximum_reduce_scatter_buffer_size
+    pb.max_inter_ipu_copies_buffer_size = \
+        self.maximum_inter_ipu_copies_buffer_size
+    pb.max_send_recv_cluster_size = self.maximum_send_recv_cluster_size
+    pb.minimum_remote_tensor_size = self.minimum_remote_tensor_size
+    pb.remote_buffer_merging_mode = self.merge_remote_buffers.value
+    pb.disable_gather_simplifier = not self.enable_gather_simplifier
+    pb.triangular_solve_expander_block_size = \
+        self.triangular_solve_expander_block_size
+    pb.cholesky_block_size = self.cholesky_block_size
+    pb.enable_fast_math = self.enable_fast_math
+
+
+class _ProfilingConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Enable compilation reports, and IPU trace events.
+    """
+    self.profiling = False
+    """
+    Enable IPU trace events without Poplar reports.
+    """
+    self.enable_ipu_events = False
+    """
+    Enable the Poplar textual report summary.
+    """
+    self.use_poplar_text_report = False
+    """
+    Enable the Poplar CBOR reports.
+    """
+    self.use_poplar_cbor_report = False
+    """
+    Include Poplar execution profiles in the execution events. Can only be
+    enabled if `profiling` is also enabled. If set, can be `True`, 'False`
+    or a member of the
+    :py:class:`~tensorflow.python.ipu.config.ExecutionProfileType` enumeration.
+    A `True` value corresponds to `ExecutionProfileType.DEVICE_PROFILE`.
+    """
+    self.profile_execution: typing.Union[
+        ExecutionProfileType, bool] = ExecutionProfileType.NO_PROFILE
+    """
+    Create the Poplar serialized graph and include in the IPU compilation trace
+    events.
+    """
+    self.enable_poplar_serialized_graph = False
+    """
+    Only produce an execution report on every Nth execution. 0 = One report
+    only.
+    """
+    self.report_every_nth_execution = 0
+    """
+    The maximum size of Poplar profiles to include in the profile events.
+    """
+    self.max_report_size = 0x10000000
+    """
+    When set, reports will be written to files in this directory, instead of
+    being written into the events.  The events will contain the full paths of
+    the report files.
+    """
+    self.report_directory = ""
+    """
+    A dictionary of Poplar option flags for the graph report generation.
+    """
+    self.graph_poplar_options = {}
+    """
+    A dictionary of Poplar option flags for the execution report generation.
+    """
+    self.execution_poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    if self.profiling and self.enable_ipu_events:
+      raise Exception(
+          f"{self._get_full_name('profiling')} and"
+          f" {self._get_full_name('enable_ipu_events')} cannot be used"
+          " together.")
+
+    profile_execution = self.profile_execution
+    if isinstance(profile_execution, (np.bool_, bool)):
+      if profile_execution:
+        profile_execution = ExecutionProfileType.DEVICE_PROFILE
+      else:
+        profile_execution = ExecutionProfileType.NO_PROFILE
+    if (profile_execution != ExecutionProfileType.NO_PROFILE
+        and not self.profiling):
+      raise Exception(f"{self._get_full_name('profiling')} is required when"
+                      f" {self._get_full_name('profile_execution')} is set")
+
+    pb.profiling.enable_ipu_trace_events = self.profiling or \
+        self.enable_ipu_events
+    pb.profiling.enable_compilation_trace = self.profiling
+    pb.profiling.enable_io_trace = self.profiling
+    pb.profiling.execution_trace_type = profile_execution.value
+    pb.profiling.enable_poplar_reports_text = self.use_poplar_text_report
+    pb.profiling.enable_poplar_reports_cbor = self.use_poplar_cbor_report
+    pb.profiling.enable_poplar_graph = self.enable_poplar_serialized_graph
+    pb.profiling.report_every_nth_execution = self.report_every_nth_execution
+    pb.profiling.max_report_size = self.max_report_size
+    pb.profiling.report_directory = self.report_directory
+    _poplar_options_to_protobuf(self.graph_poplar_options,
+                                pb.profiling.graph_options)
+    _poplar_options_to_protobuf(self.execution_poplar_options,
+                                pb.profiling.execution_options)
+
+
+class _SchedulingConfig(_ConfigBase):
+  def __init__(self):
+    """
+    A :py:class:`~tensorflow.python.ipu.config.SchedulingAlgorithm`.
+    If `SchedulingAlgorithm.CHOOSE_BEST` (default), several schedules will be
+    created and the one with the lowest predicted liveness chosen.
+    Setting this to a specific scheduling algorithm forces the compiler to use
+    that algorithm when ordering the instructions.
+    """
+    self.algorithm = SchedulingAlgorithm.CHOOSE_BEST
+    """
+    Controls how far the ``LOOK_AHEAD`` scheduling algorithm can look beyond a
+    given scheduling decision to understand the max-liveness implications. This
+    search space grows very quickly and can take an unacceptable amount of time
+    for large values. Only for `SchedulingAlgorithm.LOOK_AHEAD`.
+    """
+    self.maximum_scheduler_lookahead_depth = 5
+    """
+    The upper-limit to the size of the ``LOOK_AHEAD`` scheduling algorithm's
+    search space to guarantee that it will terminate in a reasonable amount of
+    time. Only for `SchedulingAlgorithm.LOOK_AHEAD`.
+    """
+    self.maximum_scheduler_search_space_size = 64
+
+  def _to_protobuf(self, pb):
+    pb.speed_size_config.scheduler_selection = self.algorithm.value
+    pb.max_scheduler_lookahead_depth = self.maximum_scheduler_lookahead_depth
+    pb.max_scheduler_search_space_size = \
+        self.maximum_scheduler_search_space_size
+
+
+class _VerifiedTransfersConfig(_ConfigBase):
+  def __init__(self):
+    """
+    If True, use Poplar's verified transfers feature.
+    """
+    self.enabled = False
+    """
+    A :py:class:`~tensorflow.python.ipu.config.VerificationOptions` object that
+    contains the keys and ids to use for verified transfers. Has no effect
+    unless :ref:`verified transfers are enabled
+    <verified_transfers.enabled>`.
+    """
+    self.key_id_pairs = VerificationOptions()
+
+  def _to_protobuf(self, pb):
+    pb.verified_transfers.enabled = self.enabled
+
+    def _cp_key_and_id(src, dst):
+      dst.key = src.key
+      dst.start_id = src.start_id
+
+    for attr in [
+        "inputs", "input_parameters", "outputs", "output_parameters",
+        "checkpoint_in", "checkpoint_out"
+    ]:
+      _cp_key_and_id(getattr(self.key_id_pairs, attr),
+                     getattr(pb.verified_transfers, attr))
+
+    for name, options in self.key_id_pairs.infeeds.items():
+      _cp_key_and_id(options, pb.verified_transfers.infeeds[name])
+
+    for name, options in self.key_id_pairs.outfeeds.items():
+      _cp_key_and_id(options, pb.verified_transfers.outfeeds[name])
+
+
+class IPUConfig(_ConfigBase):
+  """
+  A nested Python structure containing all IPU configuration options, organized
+  into sub-categories.
+  This docstring is overwritten when an IPUConfig instance is created.
+  """
+  def __init__(self):
+    """
+    Whether or not to recompute instructions during training.
+    If this is enabled then we will attempt to pattern match
+    instructions/pipeline stages in the forward pass and recompute them in the
+    backward pass to avoid having to preserve activations which increase the
+    maximum memory liveness. Enabling this option can reduce memory usage at
+    the expense of extra computation. Stateful operations cannot be recomputed.
+    """
+    self.allow_recompute = False
+    """
+    The order in which IPUs are selected and mapped to physical IPU devices when
+    using multi-IPU devices. Must be one of
+    :py:class:`~tensorflow.python.ipu.config.SelectionOrder`.
+    """
+    self.selection_order = SelectionOrder.AUTO
+    """
+    Specifies the directory in which serialized Poplar executables will be
+    saved. The value must be a valid path. The default ("") disables executable
+    serialization.
+    """
+    self.serialization_output_folder = ""
+    """
+    Set the Poplar compilation options for the session. Must be a
+    dictionary of valid Poplar compilation flags. See the `Engine` class in the
+    Poplar API reference for the full list of options.
+    """
+    self.compilation_poplar_options = {}
+    """
+    Set the IPU options for the Graphcore Communication Library. Must be a
+    dictionary of valid GCL options. See the `allReduce` function in the GCL API
+    reference for the full list of options. The options will be applied to all
+    applicable GCL collective operations in the graph during compilation.
+    """
+    self.gcl_poplar_options = {}
+    """
+    Configure the IPUs to be used by the session.
+    The configuration describes a system consisting of multiple TensorFlow
+    devices, each with control of one of more IPUs. The devices will be labeled
+    ``/device:IPU:0``, ``/device:IPU:1`` and so on.
+
+    Each device can control a specific number of IPUs, given by the ``num_ipus``
+    parameter. The system will automatically select IPU configurations from the
+    available IPUs, where they match the desired number of IPUs.
+
+    Examples:
+
+    .. code-block:: python
+
+      config = IPUConfig()
+
+      # Create a single TensorFlow device, with one IPU
+      config.auto_select_ipus = 1
+
+      # Create two TensorFlow devices, with two IPUs per device.
+      config.auto_select_ipus = [2, 2]
+
+      # Create two TensorFlow devices, with one IPU in the first device and two
+      # IPUs in the second device.
+      config.auto_select_ipus = [1, 2]
+    """
+    self.auto_select_ipus: typing.Union[int, typing.List[int], typing.
+                                        Tuple[int, ...]] = []
+    """
+    Configure the IPUs to be used by the session.
+
+    The configuration describes a system consisting of multiple TensorFlow
+    devices, each with control of one of more IPUs. The TensorFlow devices will
+    be labeled ``/device:IPU:0``, ``/device:IPU:1`` and so on.
+
+    Each TensorFlow device uses a specific configuration consisting of one or
+    more IPUs from the list of devices.  These can be found by running the
+    Graphcore utility ``gc-info -l``.  For instance, the following listing shows
+    the device configurations available on a system with 16 IPUs.
+
+    .. code-block:: shell
+
+        user@host:~$ gc-info -l
+        Graphcore device listing:
+
+        -+- Id:  [0], type:      [PCIe], PCI Domain: [0000:1a:00.0]
+        -+- Id:  [1], type:      [PCIe], PCI Domain: [0000:1b:00.0]
+        -+- Id:  [2], type:      [PCIe], PCI Domain: [0000:23:00.0]
+        -+- Id:  [3], type:      [PCIe], PCI Domain: [0000:24:00.0]
+        -+- Id:  [4], type:      [PCIe], PCI Domain: [0000:3d:00.0]
+        -+- Id:  [5], type:      [PCIe], PCI Domain: [0000:3e:00.0]
+        -+- Id:  [6], type:      [PCIe], PCI Domain: [0000:43:00.0]
+        -+- Id:  [7], type:      [PCIe], PCI Domain: [0000:44:00.0]
+        -+- Id:  [8], type:      [PCIe], PCI Domain: [0000:8b:00.0]
+        -+- Id:  [9], type:      [PCIe], PCI Domain: [0000:8c:00.0]
+        -+- Id: [10], type:      [PCIe], PCI Domain: [0000:8e:00.0]
+        -+- Id: [11], type:      [PCIe], PCI Domain: [0000:8f:00.0]
+        -+- Id: [12], type:      [PCIe], PCI Domain: [0000:b8:00.0]
+        -+- Id: [13], type:      [PCIe], PCI Domain: [0000:b9:00.0]
+        -+- Id: [14], type:      [PCIe], PCI Domain: [0000:ba:00.0]
+        -+- Id: [15], type:      [PCIe], PCI Domain: [0000:bb:00.0]
+        -+- Id: [16], type: [Multi IPU]
+        |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+        |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+        -+- Id: [17], type: [Multi IPU]
+        |--- PCIe Id:  [4], DNC Id: [0], PCI Domain: [0000:3d:00.0]
+        |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:43:00.0]
+        -+- Id: [18], type: [Multi IPU]
+        |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+        |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+        -+- Id: [19], type: [Multi IPU]
+        |--- PCIe Id:  [2], DNC Id: [0], PCI Domain: [0000:23:00.0]
+        |--- PCIe Id:  [0], DNC Id: [1], PCI Domain: [0000:1a:00.0]
+        -+- Id: [20], type: [Multi IPU]
+        |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+        |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+        -+- Id: [21], type: [Multi IPU]
+        |--- PCIe Id: [12], DNC Id: [0], PCI Domain: [0000:b8:00.0]
+        |--- PCIe Id: [14], DNC Id: [1], PCI Domain: [0000:ba:00.0]
+        -+- Id: [22], type: [Multi IPU]
+        |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+        |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+        -+- Id: [23], type: [Multi IPU]
+        |--- PCIe Id: [10], DNC Id: [0], PCI Domain: [0000:8e:00.0]
+        |--- PCIe Id:  [8], DNC Id: [1], PCI Domain: [0000:8b:00.0]
+        -+- Id: [24], type: [Multi IPU]
+        |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+        |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+        |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+        |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+        -+- Id: [25], type: [Multi IPU]
+        |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+        |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+        |--- PCIe Id:  [2], DNC Id: [2], PCI Domain: [0000:23:00.0]
+        |--- PCIe Id:  [0], DNC Id: [3], PCI Domain: [0000:1a:00.0]
+        -+- Id: [26], type: [Multi IPU]
+        |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+        |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+        |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+        |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+        -+- Id: [27], type: [Multi IPU]
+        |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+        |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+        |--- PCIe Id: [10], DNC Id: [2], PCI Domain: [0000:8e:00.0]
+        |--- PCIe Id:  [8], DNC Id: [3], PCI Domain: [0000:8b:00.0]
+        -+- Id: [28], type: [Multi IPU]
+        |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+        |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+        |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+        |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+        |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+        |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+        |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+        |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+        -+- Id: [29], type: [Multi IPU]
+        |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+        |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+        |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+        |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+        |--- PCIe Id:  [9], DNC Id: [4], PCI Domain: [0000:8c:00.0]
+        |--- PCIe Id: [11], DNC Id: [5], PCI Domain: [0000:8f:00.0]
+        |--- PCIe Id: [10], DNC Id: [6], PCI Domain: [0000:8e:00.0]
+        |--- PCIe Id:  [8], DNC Id: [7], PCI Domain: [0000:8b:00.0]
+        -+- Id: [30], type: [Multi IPU]
+        |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+        |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+        |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+        |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+        |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+        |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+        |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+        |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+        |--- PCIe Id: [13], DNC Id: [8], PCI Domain: [0000:b9:00.0]
+        |--- PCIe Id: [15], DNC Id: [9], PCI Domain: [0000:bb:00.0]
+        |--- PCIe Id: [12], DNC Id: [10], PCI Domain: [0000:b8:00.0]
+        |--- PCIe Id: [14], DNC Id: [11], PCI Domain: [0000:ba:00.0]
+        |--- PCIe Id:  [9], DNC Id: [12], PCI Domain: [0000:8c:00.0]
+        |--- PCIe Id: [11], DNC Id: [13], PCI Domain: [0000:8f:00.0]
+        |--- PCIe Id: [10], DNC Id: [14], PCI Domain: [0000:8e:00.0]
+        |--- PCIe Id:  [8], DNC Id: [15], PCI Domain: [0000:8b:00.0]
+
+    Examples based on the listing above:
+
+    .. code-block:: python
+
+        config = IPUConfig()
+
+        # Create a single TensorFlow device with 1 IPU at PCI address
+        # 0000:1a:00.0 by using IPU configuration index 0
+        config.select_ipus = [0]
+
+        # Create a single TensorFlow device with 1 IPU at PCI address
+        # 0000:8b:00.0 by using IPU configuration index 8
+        config.select_ipus = [8]
+
+        # Create two TensorFlow devices, with one IPU each, being devices at
+        # indices 0 and 1
+        config.select_ipus = [0, 1]
+
+        # Create two TensorFlow devices, with four IPUs each. The device
+        # configurations at indices 24 (0000:3e:00.0, 0000:44:00.0,
+        # 0000:3d:00.0, 000:43:00.0) and 25 (0000:24:00.0, 0000:1b:00.0,
+        # 0000:23:00.0, 00:1a:00.0)
+        config.select_ipus = [24, 25]
+
+        # Create four TensorFlow devices each with one IPU, at addresses
+        # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
+        config.select_ipus = [0, 1, 2, 3]
+    """
+    self.select_ipus: typing.Union[typing.List[int], typing.
+                                   Tuple[int, ...]] = []
+    """
+    Sub-category containing configuration options that affect convolutions.
+    """
+    self.convolutions = _ConvolutionConfig()
+    """
+    Sub-category containing configuration options to control when to attach to
+    IPU devices.
+    """
+    self.device_connection = _IPUDeviceConnectionConfig()
+    """
+    Sub-category containing experimental configuration options that may be
+    changed or removed with short or no notice.
+    """
+    self.experimental = _ExperimentalConfig()
+    """
+    Sub-category containing configuration options that affect the floating point
+    behaviour of the IPU devices, including stochastic rounding and behaviour
+    when an overflow is encountered during execution. For more information,
+    see :ref:`controlling-half-unit`.
+    """
+    self.floating_point_behaviour = _FloatingPointBehaviourConfig()
+    """
+    Sub-category containing configuration options that affect parallel I/O on
+    a subset of tiles. For more information, see :ref:`i-o-tiles`.
+    """
+    self.io_tiles = _IOTilesConfig()
+    """
+    Sub-category containing configuration options related to the IPU model. Note
+    that these will only have an effect if you are running with the IPU model
+    enabled. For more information, see :ref:`env-var-section`.
+    """
+    self.ipu_model = _IPUModelConfig()
+    """
+    Sub-category containing configuration options that affect matmuls.
+    """
+    self.matmuls = _MatmulConfig()
+    """
+    Sub-category containing configuration options that affect normalizations.
+    Note that these options will be applied to all normalisation operations
+    encountered (Fused Batch Norm, IPU Specific Group Norm, IPU Specific Layer
+    Norm and IPU Specific Instance Norm).
+    """
+    self.norms = _NormConfig()
+    """
+    Sub-category containing configuration options that control a variety of
+    optimizations made when lowering the TensorFlow graph to Poplar.
+    """
+    self.optimizations = _OptimizationConfig()
+    """
+    Sub-category containing configuration options that affect pooling
+    operations.
+    """
+    self.pooling = _PoolingConfig()
+    """
+    DEPRECATED: Profiling through the IPUConfig API is deprecated.
+    """
+    self._profiling = _ProfilingConfig()
+    """
+    Sub-category containing configuration options that affect the scheduling of
+    operations in the graph during compilation.
+    """
+    self.scheduling = _SchedulingConfig()
+    """
+    DEPRECATED: Verified transfers through the IPUConfig API is deprecated.
+    Set the pairs or key / id to use for each type of data used in the graph
+    when verified transfers are enabled.
+    """
+    self._verified_transfers = _VerifiedTransfersConfig()
+    # This only needs to be called in this base config, not nested configs. It
+    # generates the docstring of this class and propagates deprecation.
+    self._finalize_base_config()  # pylint: disable=protected-access
+
+  def _to_protobuf(self, pb):
+    # Only one of (auto_)select_ipus can be set.
+    if (self.auto_select_ipus and self.select_ipus):
+      raise Exception(
+          "Only one of `auto_select_ipus` and `select_ipus` can be set.")
+    if isinstance(self.auto_select_ipus, int):
+      self.auto_select_ipus = [self.auto_select_ipus]
+    if len(set(self.select_ipus)) != len(self.select_ipus):
+      raise ValueError("All MultiIPU indices in `select_ipus` must be unique.")
+    if self.select_ipus and running_on_ipu_model():
+      raise Exception("When using the IPUModel, the devices to attach to can"
+                      " only be specified with `auto_select_ipus`.")
+
+    # distributed_batch_norm_replica_group_size is not supported with I/O tiles.
+    if self.io_tiles.num_io_tiles > 0 and \
+        self.norms.experimental.distributed_batch_norm_replica_group_size > 1:
+      raise ValueError(
+          "norms.experimental.distributed_batch_norm_replica_group_size is not"
+          " supported with I/O tiles.")
+
+    pb.creator_id = config_pb2.IpuOptionsCreator.IPU_UTILS
+
+    pb.speed_size_config.allow_recompute = self.allow_recompute
+    pb.selection_order = self.selection_order.value
+    pb.serialization_folder = self.serialization_output_folder
+    _poplar_options_to_protobuf(self.compilation_poplar_options,
+                                pb.compilation_options)
+    _poplar_options_to_protobuf(self.gcl_poplar_options, pb.gcl_options)
+
+    for device_index in self.select_ipus:
+      dev = pb.device_config.add()
+      dev.cfg_index = device_index
+    for device_count in self.auto_select_ipus:
+      dev = pb.device_config.add()
+      dev.auto_count = device_count
+
+    # Go deeper into nested configs.
+    super()._to_protobuf(pb)  # pylint: disable=protected-access
+
+  def configure_ipu_system(self, device="cpu"):
+    """
+    Configure the IPU system with this config.
+
+    Args:
+      device: The CPU device which is local to the IPU hardware.
+    """
+    configure_ipu_system(self, device)
+
+
+# pylint: enable=pointless-string-statement
+
+# Sphinx imports the IPUConfig to inspect its docstring in order to generate
+# documentation, but it doesn't instantiate it. We need to instantiate it once
+# here to generate the class docstring from the config structure.
+IPUConfig()
+
+
+def configure_ipu_system(config, device="cpu"):
+  """Configure an IPU system with an IPUConfig or IpuOptions instance.
+
+  Args:
+    config: An IPUConfig instance or IpuOptions configuration protobuf.
+    device: The TensorFlow virtual CPU device which is local to the IPU
+            hardware.
+
+  Returns:
+    None
+  """
+  if isinstance(config, IPUConfig):
+    config = config._create_protobuf()  # pylint: disable=protected-access
+
+  if not isinstance(config, config_pb2.IpuOptions):
+    raise TypeError("`config` must be an IpuOptions instance.")
+
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(device):
+      cfg_op = gen_ipu_ops.ipu_configure_hardware(config.SerializeToString())
+
+  with session_lib.Session(graph=g) as sess:
+    sess.run(cfg_op)
+
+
+def get_ipu_config(session=None):
+  """Get the configuration of an IPU system.
+
+  Args:
+    session: An optional session on which to execute.
+
+  Returns:
+    A list of IpuOption instances, one for each PoplarExecutor.
+  """
+  configurations = None
+
+  # Get the serialized output.
+  if executing_eagerly():
+    assert not session, "No session is required for eager execution."
+    configurations = gen_ipu_ops.ipu_get_configuration().numpy()
+  else:
+    s = session if session else session_lib.Session()
+    configurations = s.run(gen_ipu_ops.ipu_get_configuration())
+
+  # Deserialize and determine if a valid config exists,
+  # i.e. user has successfully called ipu_configure_hardware.
+  deserialized = []
+  valid = False
+  for conf in configurations:
+    # Deserialize.
+    opt = IpuOptions()
+    opt.ParseFromString(conf)
+    deserialized.append(opt)
+
+    valid |= len(opt.device_config) > 0
+
+  if not valid:
+    raise RuntimeError("No IPU devices configured.")
+
+  return deserialized

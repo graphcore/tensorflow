@@ -329,6 +329,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;
   outfeed_config.ParseFromString(outfeed->outfeed_config());
+  outfeed_config.set_replication_factor(res.local_replication_factor);
 
   size_t io_batch_size = std::max<size_t>(1, outfeed_config.io_batch_size());
   // Only batch size 1 is supported for verified transfers as we need to
@@ -336,17 +337,6 @@ StatusOr<poplar::program::Program> CreateOutfeed(
   if (res.use_verified_transfers && io_batch_size != 1) {
     return InvalidArgument(
         "Only io_batch_size = 1 is supported for verified transfers.");
-  }
-
-  // The data feed replication factor must match the local replication factor.
-  if (res.local_replication_factor != outfeed_config.replication_factor()) {
-    return xla::FailedPrecondition(
-        "Current program has been created with replication_factor %d, however "
-        "the IPUOutfeedQueue has been configured with replication_factor %d. "
-        "Either reduce the number of IPUs in your TensorFlow device, or set "
-        "the `replication_factor` to %d when creating IPUOutfeedQueue.",
-        res.local_replication_factor, outfeed_config.replication_factor(),
-        res.local_replication_factor);
   }
 
   FeedInfo info(outfeed_config.feed_id(), outfeed_config,

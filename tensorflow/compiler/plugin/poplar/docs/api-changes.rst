@@ -95,6 +95,12 @@ The ``recompute`` and ``block_recompute`` utility ops have been deprecated and w
 in release 2.2. Automatic recomputation of casts will remain.
 
 
+IPUOutfeedQueue replication_factor deprecated
+''''''''''''''''''''''''''''''''
+
+The ``replication_factor`` argument of ``IPUOutfeedQueue`` has been deprecated and will be removed in
+release 2.2. The replication factor is now automatically set based on the model being executed.
+
 CTC loss ops deprecated
 ''''''''''''''''''''''''''''''''
 
@@ -141,6 +147,19 @@ Changes to configuration API
     The default value has also changed - the default is now
     ``MergeRemoteBuffersBehaviour.IF_BENEFICIAL``, while before it was
     ``False`` (disabled by default).
+
+The following functions and classes have moved to a new file
+``tensorflow/python/ipu/config.py``, but they are still accessible from
+``tensorflow/python/ipu/utils.py`` as usual:
+  - ``configure_ipu_system``
+  - ``get_ipu_config``
+  - ``SelectionOrder``
+  - ``ExecutionProfileType``
+  - ``DeviceConnectionType``
+  - ``MergeRemoteBuffersBehaviour``
+  - ``SchedulingAlgorithm``
+  - ``KeyId``
+  - ``VerificationOptions``
 
 Support for grouped collectives
 '''''''''''''''''''''''''''''''

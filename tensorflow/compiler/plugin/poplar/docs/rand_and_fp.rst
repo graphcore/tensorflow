@@ -6,6 +6,8 @@ stochastic rounding in hardware.  The IPU extensions to TensorFlow expose this
 floating point functionality through the functions described below.
 See the :ref:`api-section` for more detail.
 
+.. _controlling-half-unit:
+
 Controlling the half-precision floating-point unit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

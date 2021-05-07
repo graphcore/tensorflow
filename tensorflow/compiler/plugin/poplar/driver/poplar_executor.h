@@ -642,6 +642,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
       const std::string& feed_id, const PoplarFeedConfig_Mode& mode);
 
+  int64 GetReplicationFactorForOutfeed(const std::string& feed_id) const;
+
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
   bool HasOutfeed(const std::string& feed_id) const;
@@ -692,7 +694,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   tensorflow::Rendezvous* GetRendezvous();
 
-  void ResetSeed(int seed);
+  void ResetSeed(int seed, bool identical_replicas);
 
   static std::string GetCycleCounterStream();
 
@@ -1023,6 +1025,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
     std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
+    int64 replication_factor;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
     std::recursive_mutex mutex;
@@ -1043,7 +1046,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::mutex host_embeddings_mutex_;
 
-  SeedGenerator seed_generator_;
+  std::unique_ptr<SeedGenerator> seed_generator_;
 
   std::string ReportFileExtension() const;
 

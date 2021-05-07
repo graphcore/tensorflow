@@ -47,14 +47,12 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           [add],
           feed_id=feed_name,
-          replication_factor=1,
           io_batch_size=1,
           output_shapes=[shape])
 
     with ops.device('cpu'):
       outfeed = gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           feed_id=feed_name,
-          replication_factor=1,
           output_types=[np.float32],
           output_shapes=[shape])
 
@@ -85,14 +83,12 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           [add, sub],
           feed_id=feed_name,
-          replication_factor=1,
           io_batch_size=1,
           output_shapes=[shape_1, shape_2])
 
     with ops.device('cpu'):
       outfeed = gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           feed_id=feed_name,
-          replication_factor=1,
           output_types=[np.float32, np.float32],
           output_shapes=[shape_1, shape_2])
 
@@ -137,7 +133,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           [add, sub],
           feed_id=feed_name,
-          replication_factor=1,
           io_batch_size=1,
           outfeed_mode='get_last',
           output_shapes=[shape_1, shape_2])
@@ -145,7 +140,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       outfeed = gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           feed_id=feed_name,
-          replication_factor=1,
           outfeed_mode='get_last',
           output_types=[np.float32, np.float32],
           output_shapes=[shape_1, shape_2])
@@ -184,7 +178,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           [add],
           feed_id=feed_name,
-          replication_factor=1,
           io_batch_size=1,
           outfeed_mode='all',
           output_shapes=[shape])
@@ -192,7 +185,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       outfeed_all = gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           feed_id=feed_name,
-          replication_factor=1,
           output_types=[np.float32],
           output_shapes=[shape])
 
@@ -226,7 +218,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           [add],
           feed_id=feed_name,
-          replication_factor=1,
           io_batch_size=1,
           outfeed_mode='get_last',
           output_shapes=[shape])
@@ -234,7 +225,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       outfeed_last = gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           feed_id=feed_name,
-          replication_factor=1,
           outfeed_mode='get_last',
           output_types=[np.float32],
           output_shapes=[shape])

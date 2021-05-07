@@ -75,19 +75,24 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 }
 
 void GetFeedConfig(OpKernelConstruction* ctx,
-                   xla::poplarplugin::PoplarFeedConfig& config) {
+                   xla::poplarplugin::PoplarFeedConfig& config,
+                   bool set_replication_factor = false) {
   std::string feed_id;
-  int64 replication_factor;
   int64 io_batch_size;
   int64 prefetch_depth;
   std::vector<tensorflow::DataType> types;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
-  OP_REQUIRES_OK(ctx, ctx->GetAttr("replication_factor", &replication_factor));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("io_batch_size", &io_batch_size));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("prefetch_depth", &prefetch_depth));
   config.set_feed_id(feed_id);
-  config.set_replication_factor(replication_factor);
+
+  if (set_replication_factor) {
+    int64 replication_factor;
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("replication_factor", &replication_factor));
+    config.set_replication_factor(replication_factor);
+  }
   config.set_io_batch_size(io_batch_size);
   config.set_prefetch_depth(prefetch_depth);
 
@@ -138,7 +143,7 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
  public:
   explicit PopDatastreamInfeedDequeueOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
-    GetFeedConfig(ctx, config_);
+    GetFeedConfig(ctx, config_, /*set_replication_factor*/ true);
     XlaShapesFromAttr(ctx, xla_shapes_);
   }
 
@@ -171,7 +176,7 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
   explicit IPUCreateDatasetIteratorOp(OpKernelConstruction* ctx)
       : OpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
-    GetFeedConfig(ctx, config_);
+    GetFeedConfig(ctx, config_, /*set_replication_factor*/ true);
 
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
@@ -336,6 +341,9 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
 
+    const auto replication_factor =
+        poplar_executor->GetReplicationFactorForOutfeed(config_.feed_id());
+
     // Get all the tensors which were stored in the outfeed.
     // Note that this call will block until we can acquire a lock on the
     // outfeed.
@@ -349,6 +357,9 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
         // Insert an extra dimension to the shape to represent the number of
         // iterations.
         TensorShape tensor_shape = tensor_shapes_[i];
+        if (replication_factor > 1) {
+          tensor_shape.InsertDim(0, replication_factor);
+        }
         tensor_shape.InsertDim(0, outfeed_tensors.size());
         Tensor* output_tensor = nullptr;
         OP_REQUIRES_OK(ctx,
