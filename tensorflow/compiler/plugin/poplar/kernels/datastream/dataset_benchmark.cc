@@ -206,8 +206,9 @@ class DatasetBenchmark : public OpKernel {
 
     xla::poplarplugin::InfeedAllocator infeed_allocator;
     xla::poplarplugin::InfeedIterator infeed_iterator(
-        flr, params, dataset, &infeed_allocator,
-        /* replication factor */ 1, shapes_, "benchmark");
+        flr, params, dataset, &infeed_allocator, shapes_, "benchmark");
+
+    infeed_iterator.SetReplicationFactor(1);
 
     Json::Value stats_json;
     {

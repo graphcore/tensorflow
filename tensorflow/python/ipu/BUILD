@@ -1601,7 +1601,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/sharded_and_replicated_test.py"],
     # Shard count needs to match the number of tests.
-    shard_count = 3,
+    shard_count = 5,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow:tensorflow_py",

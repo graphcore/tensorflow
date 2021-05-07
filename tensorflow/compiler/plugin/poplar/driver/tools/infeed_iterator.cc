@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -31,6 +32,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/renamed_device.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function_handle_cache.h"
+#include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/kernels/data/unbounded_thread_pool.h"
 #include "tensorflow/core/platform/cpu_info.h"
 #include "tensorflow/core/platform/mem.h"
@@ -107,14 +109,12 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
                                tensorflow::data::IteratorContext::Params params,
                                tensorflow::data::DatasetBase* dataset,
                                InfeedAllocator* infeed_allocator,
-                               int64 replication_factor,
                                const std::vector<xla::Shape>& shapes,
                                const std::string& feed_id)
-    : replication_factor_(replication_factor),
+    : replication_factor_(0),
       shapes_(shapes),
       infeed_allocator_(infeed_allocator),
-      infeed_queues_(replication_factor),
-      infeed_queues_ptrs_(replication_factor) {
+      buffer_position_(-1) {
   // Respect the user request for the number of threads.
   const int num_threads = PoplarXlaFlags::Get().max_infeed_threads > 0
                               ? PoplarXlaFlags::Get().max_infeed_threads
@@ -219,17 +219,6 @@ InfeedIterator::InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
   if (!s.ok()) {
     LOG(FATAL) << s.ToString();
   }
-
-  // Create the queues.
-  for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
-    for (uint64 i = 0; i < shapes.size(); i++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
-      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue(),
-                                              tensorflow::port::AlignedFree);
-      infeed_queues_ptrs_[replica_id].emplace_back(
-          infeed_queues_[replica_id].back().get());
-    }
-  }
 }
 
 InfeedIterator::~InfeedIterator() {
@@ -248,9 +237,42 @@ Status InfeedIterator::GetNext(std::vector<tensorflow::Tensor>* outputs,
   if (cancellation_manager_.IsCancelled()) {
     *end_of_sequence = true;
   } else {
-    TF_RETURN_IF_ERROR(
-        iterator_->GetNext(iterator_ctx_.get(), outputs, end_of_sequence));
+    // Here we preload N (buffer_size) elements every N calls, yielding one of
+    // those values every time.
+    auto buffer_size_ = buffer_.size();
+    if (buffer_position_ == buffer_size_) {
+      // We need to load elements.
+      if (!iterator_) {
+        *end_of_sequence = true;
+        return Status::OK();
+      }
+
+      *end_of_sequence = false;
+      uint32 buffer_idx = 0;
+      for (uint32 i = 0; i < buffer_size_ && !*end_of_sequence; ++i) {
+        TF_RETURN_IF_ERROR(iterator_->GetNext(iterator_ctx_.get(), &buffer_[i],
+                                              end_of_sequence));
+        if (!*end_of_sequence) {
+          buffer_idx++;
+        } else {
+          iterator_.reset();
+        }
+      }
+
+      // We could not load enough data hence we are dropping it.
+      if (buffer_idx < buffer_size_) {
+        *end_of_sequence = true;
+        return Status::OK();
+      }
+      buffer_position_ = 0;
+    }
+    // Set the output.
+    *outputs = std::move(buffer_[buffer_position_]);
+    // We can move the buffer position.
+    ++buffer_position_;
+    *end_of_sequence = false;
   }
+
   return Status::OK();
 }
 
@@ -264,6 +286,37 @@ void InfeedIterator::SignalAllQueuesToEnd() {
   for (auto& queues : infeed_queues_ptrs_) {
     for (auto& queue : queues) {
       queue->SignalEndOfQueue();
+    }
+  }
+}
+
+bool InfeedIterator::HasReplicationFactor() const {
+  return replication_factor_ > 0;
+}
+
+int64 InfeedIterator::ReplicationFactor() const { return replication_factor_; }
+
+void InfeedIterator::SetReplicationFactor(int64 replication_factor) {
+  CHECK_GT(replication_factor, 0);
+
+  replication_factor_ = replication_factor;
+  buffer_position_ = replication_factor;
+  buffer_.resize(replication_factor);
+
+  infeed_queues_ptrs_.resize(replication_factor);
+  infeed_queues_.resize(replication_factor);
+
+  // Create the queues.
+  for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+    infeed_queues_ptrs_[replica_id].clear();
+    infeed_queues_[replica_id].clear();
+
+    for (uint64 i = 0; i < shapes_.size(); i++) {
+      void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
+      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue(),
+                                              tensorflow::port::AlignedFree);
+      infeed_queues_ptrs_[replica_id].emplace_back(
+          infeed_queues_[replica_id].back().get());
     }
   }
 }
