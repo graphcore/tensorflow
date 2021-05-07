@@ -2718,16 +2718,15 @@ StatusOr<bool> PoplarExecutor::CheckMoveDeviceToHostRequired(
   // b)   the engine is changing _or_
   // c)   output buffer isn't an input to the current engine _or_
   // d)   output buffer isn't currently in the right place for the new input
-  bool do_device_to_host = false;
   for (const auto& tc : allocations_) {
     if (tc->on_device == true && !tc->output_handle.empty()) {
       if (engine_changed || args_map_.count(tc->input_handle) == 0 ||
           tc != args_map_.at(tc->input_handle).tc) {
-        do_device_to_host = true;
+        return true;
       }
     }
   }
-  return do_device_to_host;
+  return false;
 }
 
 // Check if there is tensor/arg of current executable on device.
@@ -2830,7 +2829,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
   TENSORFLOW_TRACEPOINT();
   if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
     // Make sure all the allocations are marked as on host.
-    for (const auto& tc : allocations_) {
+    for (auto* tc : allocations_) {
       tc->on_device = false;
     }
 
@@ -2916,18 +2915,30 @@ Status PoplarExecutor::MoveDeviceToHost() {
     }
 
     // Post process upload
-    for (const auto& tc : allocations_) {
+    for (auto* tc : allocations_) {
       if (tc->on_device == true && !tc->output_handle.empty()) {
         PostProcessBuffer(tc);
       }
 
-      tc->in_memory_remote_parameter_info = absl::nullopt;
-      tc->on_device = false;
-      tc->output_handle.clear();
-      tc->input_handle.clear();
+      TF_RETURN_IF_ERROR(ResetTensorControlState(tc));
     }
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Device to host] ", e);
+  }
+  return Status::OK();
+}
+
+Status PoplarExecutor::ResetTensorControlState(TensorControl* tc) {
+  tc->in_memory_remote_parameter_info = absl::nullopt;
+  tc->on_device = false;
+  tc->output_handle.clear();
+  tc->input_handle.clear();
+  return Status::OK();
+}
+
+Status PoplarExecutor::ResetOnDeviceBuffers() {
+  for (auto* tc : allocations_) {
+    TF_RETURN_IF_ERROR(ResetTensorControlState(tc));
   }
   return Status::OK();
 }
@@ -3703,6 +3714,9 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
       // right format on the host
       PostProcessStreamedVariablesDeviceToHost();
     } catch (const std::exception& e) {
+      StopIOThreads();
+      TF_CHECK_OK(ResetOnDeviceBuffers());
+      current_engine_ = nullptr;
       return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
     }
 

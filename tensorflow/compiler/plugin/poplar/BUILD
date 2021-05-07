@@ -3865,6 +3865,8 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/multi_run_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 3,
+    tags = ["hw_poplar_test"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
