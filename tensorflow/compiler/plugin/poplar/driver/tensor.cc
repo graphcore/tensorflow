@@ -888,6 +888,15 @@ StatusOr<poplar::Tensor> AddTensorForTarget(
   TF_ASSIGN_OR_RETURN(out,
                       PathTransform(graph, source, resources, out, input_index,
                                     tensor_target.backward_path, {debug_info}));
+
+  const auto shapes = FlattenedXlaShape(source.instruction->shape());
+  TF_ASSIGN_OR_RETURN(
+      auto src_type,
+      PoplarDataType(shapes[source.flattened_output_tuple_index]));
+
+  if (src_type != out.elementType()) {
+    return graph.clone(src_type, out, {debug_info});
+  }
   return out;
 }
 

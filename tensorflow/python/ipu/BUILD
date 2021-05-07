@@ -1046,6 +1046,20 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "utils_test_v2",
+    size = "medium",
+    srcs = ["tests/utils_test_v2.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
     name = "utils_use_synthetic_data_for_test",
     size = "medium",
     srcs = ["tests/utils_use_synthetic_data_for_test.py"],
@@ -1916,6 +1930,7 @@ test_suite(
         "user_ops_test",
         "utils_get_config_test",
         "utils_test",
+        "utils_test_v2",
         "utils_use_synthetic_data_for_test",
     ],
 )
