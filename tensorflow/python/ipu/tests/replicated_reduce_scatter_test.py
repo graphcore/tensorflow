@@ -31,7 +31,7 @@ class TestReplicatedReduceScatter(test_util.TensorFlowTestCase):
       num_replicas = 4
 
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name="outfeed", replication_factor=num_replicas)
+          feed_name="outfeed")
 
       def my_net(*xs):
         y = [

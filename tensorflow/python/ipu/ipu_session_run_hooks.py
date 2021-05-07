@@ -81,9 +81,7 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     self._formatter = formatter
 
     self._outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=feed_name,
-        outfeed_mode=logging_mode,
-        replication_factor=replication_factor)
+        feed_name=feed_name, outfeed_mode=logging_mode)
 
     self._dequeue_op = None
     self._deleter_op = None

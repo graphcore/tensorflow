@@ -145,7 +145,7 @@ class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
         acts_val, scale_val, offset_val, epsilon, replicas, group_size)
 
     fwd_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=generate_feed_name(), replication_factor=replicas)
+        feed_name=generate_feed_name())
 
     def fwd_fn(acts, scale, offset):
       # Slice out the input based on the replica index.
@@ -207,7 +207,7 @@ class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
         batch_size, group_size)
 
     grad_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=generate_feed_name(), replication_factor=replicas)
+        feed_name=generate_feed_name())
 
     def grad_fn(grad, acts, scale, mean, var):
       # Slice out the values based on replica index.

@@ -157,8 +157,7 @@ class PipelineTester(object):
       inputs = inputs_fn()
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), replication_factor=replication_factor)
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          next_feed_id(), replication_factor=replication_factor)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
       if device_mapping is None:
         device_mapping = range(len(stages))
@@ -270,8 +269,7 @@ class PipelineTester(object):
       inputs = inputs_fn()
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), replication_factor=replication_factor)
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          next_feed_id(), replication_factor=replication_factor)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
       def opt_fn(loss):
         global_replication_factor = replication_factor * (process_count or 1)

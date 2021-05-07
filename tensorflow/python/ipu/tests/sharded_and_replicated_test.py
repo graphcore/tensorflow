@@ -55,7 +55,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, feed_name=next_feed_id(), replication_factor=2)
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name=next_feed_id(), replication_factor=2)
+          feed_name=next_feed_id())
 
       def body(v, x):
         with ipu.scopes.ipu_shard(0):
