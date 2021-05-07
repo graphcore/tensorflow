@@ -876,6 +876,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status MoveDeviceToHost();
   Status MoveHostToDevice();
 
+  Status ResetTensorControlState(TensorControl* tc);
+  Status ResetOnDeviceBuffers();
+
   // Functions which connect the streams to/from device
   void ConnectStreamedVariablesHostToDevice();
   void ConnectStreamedVariablesDeviceToHost();

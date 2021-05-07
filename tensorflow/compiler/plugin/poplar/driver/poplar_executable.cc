@@ -125,7 +125,8 @@ Status PoplarExecutable::ExecuteComputeFunction(
   }
 
   // Decrement the reference counter for all buffers once the execution is
-  // completed so that they can be deallocated if required.
+  // completed so that they can be deallocated if required (this applies even
+  // if the execution didn't complete successfully).
   TF_RETURN_IF_ERROR(PoplarExecutor::DecrementBufferReferenceCount(
       *result_buffer, result_shape()));
   for (int64 i = 0; i != argument_buffers.size(); ++i) {
