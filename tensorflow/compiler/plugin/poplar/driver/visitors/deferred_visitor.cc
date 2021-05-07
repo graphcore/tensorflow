@@ -502,8 +502,6 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
 
   xla::poplarplugin::PoplarFeedConfig infeed_config;
   infeed_config.ParseFromString(infeed->infeed_config());
-  infeed_config.set_replication_factor(resources_.local_replication_factor);
-
   // Multiple infeed queues are not supported.
   if (absl::c_any_of(resources_.annotations.infeed_infos,
                      [&](const FeedInfo& info) {
@@ -512,6 +510,18 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
     return xla::FailedPrecondition(
         "Currently multiple IPUInfeedQueue in the same program are not "
         "supported.");
+  }
+
+  // The data feed replication factor must match the local replication factor.
+  if (resources_.local_replication_factor !=
+      infeed_config.replication_factor()) {
+    return xla::FailedPrecondition(
+        "Current program has been created with replication_factor %d, however "
+        "the IPUInfeedQueue has been configured with replication_factor %d. "
+        "Either reduce the number of IPUs in your TensorFlow device, or set "
+        "the `replication_factor` to % d when creating IPUInfeedQueue.",
+        resources_.local_replication_factor, infeed_config.replication_factor(),
+        resources_.local_replication_factor);
   }
 
   std::vector<Shape> shapes = FlattenedXlaShape(infeed->infeed_shape());

@@ -120,7 +120,7 @@ class InfeedIterator {
   InfeedIterator(tensorflow::FunctionLibraryRuntime* flr,
                  tensorflow::data::IteratorContext::Params params,
                  tensorflow::data::DatasetBase* dataset,
-                 InfeedAllocator* infeed_allocator_,
+                 InfeedAllocator* infeed_allocator_, int64 replication_factor,
                  const std::vector<xla::Shape>& shapes,
                  const std::string& feed_id);
 
@@ -135,13 +135,8 @@ class InfeedIterator {
 
   void SignalAllQueuesToEnd();
 
-  bool HasReplicationFactor() const;
-
-  int64 ReplicationFactor() const;
-  void SetReplicationFactor(int64 replication_factor);
-
  private:
-  int64 replication_factor_;
+  const int64 replication_factor_;
   std::vector<Shape> shapes_;
 
   // Not owned.
@@ -179,12 +174,6 @@ class InfeedIterator {
   std::vector<std::vector<InfeedQueueStorage>> infeed_queues_;
   // Used by the accessor.
   std::vector<std::vector<InfeedQueue*>> infeed_queues_ptrs_;
-
-  // Stores the next position in the buffer we should read from. If equal to
-  // buffer_size we need to load more data.
-  size_t buffer_position_ = -1;
-  // Internal storage.
-  std::vector<std::vector<tensorflow::Tensor>> buffer_;
 };
 
 }  // namespace poplarplugin

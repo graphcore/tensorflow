@@ -949,36 +949,6 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
   }
 }
 
-Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
-  for (auto& infeed_info : infeed_infos) {
-    // Set from the compiler resources in DeferredVisitor::HandleInfeed.
-    const int64 replication_factor = infeed_info.config.replication_factor();
-    const std::string& feed_id = infeed_info.config.feed_id();
-
-    auto iter = infeed_iterators_.find(feed_id);
-    if (iter == infeed_iterators_.end()) {
-      return FailedPrecondition(
-          "Trying to access an infeed dataset iterator which has not been"
-          " created. Did you initialize the infeed_queue '%s' ?",
-          feed_id);
-    }
-
-    auto* infeed_iterator = iter->second.get();
-    if (!infeed_iterator->HasReplicationFactor()) {
-      infeed_iterator->SetReplicationFactor(replication_factor);
-    } else if (infeed_iterator->ReplicationFactor() != replication_factor) {
-      return FailedPrecondition(
-          "Iterator for feed %s has already been setup with a replication "
-          "factor of %d when it should have %d."
-          "Infeeds can not be shared across graphs with different "
-          "replication factors. Please create a new InfeedQueue.",
-          feed_id, infeed_iterator->ReplicationFactor(), replication_factor);
-    }
-  }
-
-  return Status::OK();
-}
-
 void PoplarExecutor::ConnectOutfeedToStreamCallback(
     const OutfeedInfos& outfeed_infos) {
   TENSORFLOW_TRACEPOINT();
@@ -3160,7 +3130,8 @@ void PoplarExecutor::CreateInfeedIterator(
                   "the same TensorFlow device to have unique names.";
   } else {
     infeed_iterators_[feed_id] = absl::make_unique<InfeedIterator>(
-        flr, params, dataset, GetInfeedAllocator(), shapes, feed_id);
+        flr, params, dataset, GetInfeedAllocator(), config.replication_factor(),
+        shapes, feed_id);
   }
 }
 
@@ -3641,7 +3612,6 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
       const auto& infeed_infos = executable.GetInfeedInfos();
       if (!infeed_infos.empty()) {
-        TF_RETURN_IF_ERROR(SetupInfeedReplication(infeed_infos));
         ConnectInfeedsToStreamCallback(infeed_infos);
       }
 
