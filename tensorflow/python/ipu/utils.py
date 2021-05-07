@@ -805,7 +805,7 @@ def set_io_tile_options(opts,
   return opts
 
 
-def set_gcl_options(opts, gcl_options):
+def set_gcl_options(opts, gcl_options=None):
   """Set the IPU options for the Graphcore Communication Library.
 
   Args:
