@@ -75,8 +75,7 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 }
 
 void GetFeedConfig(OpKernelConstruction* ctx,
-                   xla::poplarplugin::PoplarFeedConfig& config,
-                   bool set_replication_factor = false) {
+                   xla::poplarplugin::PoplarFeedConfig& config) {
   std::string feed_id;
   int64 io_batch_size;
   int64 prefetch_depth;
@@ -86,13 +85,6 @@ void GetFeedConfig(OpKernelConstruction* ctx,
   OP_REQUIRES_OK(ctx, ctx->GetAttr("io_batch_size", &io_batch_size));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("prefetch_depth", &prefetch_depth));
   config.set_feed_id(feed_id);
-
-  if (set_replication_factor) {
-    int64 replication_factor;
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("replication_factor", &replication_factor));
-    config.set_replication_factor(replication_factor);
-  }
   config.set_io_batch_size(io_batch_size);
   config.set_prefetch_depth(prefetch_depth);
 
@@ -143,7 +135,7 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
  public:
   explicit PopDatastreamInfeedDequeueOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
-    GetFeedConfig(ctx, config_, /*set_replication_factor*/ true);
+    GetFeedConfig(ctx, config_);
     XlaShapesFromAttr(ctx, xla_shapes_);
   }
 
@@ -176,7 +168,7 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
   explicit IPUCreateDatasetIteratorOp(OpKernelConstruction* ctx)
       : OpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
-    GetFeedConfig(ctx, config_, /*set_replication_factor*/ true);
+    GetFeedConfig(ctx, config_);
 
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
