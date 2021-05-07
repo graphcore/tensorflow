@@ -23,6 +23,7 @@ namespace tensorflow {
 REGISTER_OP("PopDatastreamInfeedDequeue")
     .Output("outputs: output_types")
     .Attr("feed_id: string")
+    .Attr("replication_factor: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("io_batch_size: int = 1")
@@ -37,6 +38,8 @@ outputs: A list of tensors that will be provided using the infeed mechanism.
 feed_id: The id of the iterator used for this dequeue.
 output_types: The element types of each element in `outputs`.
 output_shapes: The shapes of each tensor in `outputs`.
+replication_factor: the number of replica graphs that this operation will
+  feed.
 io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
@@ -54,6 +57,7 @@ REGISTER_OP("IPUCreateDatasetIterator")
     .Input("input_dataset: variant")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
+    .Attr("replication_factor: int = 1")
     .Attr("io_batch_size: int = 1")
     .Attr("prefetch_depth: int = 1")
     .Attr("output_types: list(type) >= 1")

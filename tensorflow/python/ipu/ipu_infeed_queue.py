@@ -23,7 +23,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import loops
-from tensorflow.python.util import deprecation
+from tensorflow.python.ipu.data.ops import dataset_ops as ipu_dataset_ops
 
 
 class IPUInfeedQueue:
@@ -88,12 +88,6 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-  _replication_factor_deprecated_instructions = """No change needed.
-  replication_factor is now set automatically based on the model."""
-
-  @deprecation.deprecated_args(None,
-                               _replication_factor_deprecated_instructions,
-                               "replication_factor")
   def __init__(self,
                dataset,
                feed_name,
@@ -111,6 +105,8 @@ class IPUInfeedQueue:
         all IPUInfeedQueues and IPUOutfeedQueues.
       device_ordinal: ordinal of the IPU device on which this queue will be
         used. By default the queue will be used on "/device/IPU:0".
+      replication_factor: the number of replicated graphs this infeed will be
+        used in.
       data_to_prefetch: the amount of data to prefetch.
         Defaults to 1, no prefetch.
         If set to non-1 (and non-0) each time we sync with the CPU we will
@@ -159,6 +155,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
               prefetch_depth))
 
     with ops.device('/device:CPU:0'):
+      self._replication_factor = replication_factor
       self._dataset = dataset
       self._structure = dataset_ops.get_structure(self._dataset)
       self._flat_structure = dataset._flat_structure
@@ -168,7 +165,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # We use max to clamp 0/1 to the same value.
       self._io_batch_size = max(1, data_to_prefetch)
 
-      # Batch the dataset to take prefetch into account.
+      # Batch the dataset to take replication and prefetch into account.
 
       if self._io_batch_size != 1:
         self._dataset = self._dataset.batch(self._io_batch_size,
@@ -177,6 +174,10 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # Apply the dataset options - do this before replica handling to make sure
       # all the optimizations can be applied.
       self._dataset = self._dataset._apply_options()  # pylint: disable=protected-access
+
+      if self._replication_factor != 1:
+        self._dataset = ipu_dataset_ops.BufferDataset(self._dataset,
+                                                      self._replication_factor)
 
       # ID used for differentiating between datasets.
       self._id = str(feed_name)
@@ -196,6 +197,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
           self._init_op = gen_pop_datastream_ops.ipu_create_dataset_iterator(
               input_dataset=ds_variant,
               feed_id=self._id,
+              replication_factor=self._replication_factor,
               device_ordinal=self._device_ordinal,
               **self._dataset._flat_structure)  # pylint: disable=protected-access
 
@@ -217,6 +219,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     """
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
+        replication_factor=self._replication_factor,
         io_batch_size=self._io_batch_size,
         prefetch_depth=self._prefetch_depth,
         **self._flat_structure)
@@ -258,6 +261,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
         return gen_pop_datastream_ops.ipu_create_dataset_iterator(
             input_dataset=ds_variant,
             feed_id=self._id,
+            replication_factor=self._replication_factor,
             device_ordinal=self._device_ordinal,
             **self._dataset._flat_structure)  # pylint: disable=protected-access
 

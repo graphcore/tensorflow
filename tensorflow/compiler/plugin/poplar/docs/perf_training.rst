@@ -140,6 +140,14 @@ For instance, if a graph is sharded over two IPUs, and you specify eight IPUs
 to the ``auto_select_ipus`` function, then the graph will be replicated four
 times.
 
+Data feeds
+__________
+
+When used with a replicated graph, the ``IPUInfeedQueue`` and
+``IPUOutfeedQueue`` classes require the number of
+replicas to be passed into the constructor in the ``replication_factor``
+parameter.
+
 Performing parameter updates
 ____________________________
 

@@ -165,10 +165,10 @@ class DatasetExtractor : public OpKernel {
 
     xla::poplarplugin::InfeedAllocator infeed_allocator;
     xla::poplarplugin::InfeedIterator infeed_iterator(
-        flr, params, dataset, &infeed_allocator, shapes_, "extractor");
+        flr, params, dataset, &infeed_allocator,
+        /* replication factor */ 1, shapes_, "extractor");
 
     // We only ever have a single replica.
-    infeed_iterator.SetReplicationFactor(1);
     auto queues = infeed_iterator.GetInfeedQueues();
     ipu::BinaryWriter writer{filename_};
     std::vector<ipu::FeedWriter> output_streams;
