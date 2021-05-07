@@ -193,8 +193,8 @@ std::unique_ptr<HloComputation> CreateSumReduction(const Shape& shape) {
 
 struct PoplarReplicaGroupsHloTest : public HloTestBase {
   std::unique_ptr<VerifiedHloModule> CreateModuleWithReplicaGroups(
-      const PoplarReplicaGroups& groups) {
-    auto module = CreateNewVerifiedModule("test");
+      const PoplarReplicaGroups& groups, int64 replica_count) {
+    auto module = CreateNewVerifiedModule("test", replica_count);
     auto shape = ShapeUtil::MakeShape(xla::F32, {});
 
     auto builder = HloComputation::Builder("entry");
@@ -215,12 +215,12 @@ struct PoplarReplicaGroupsHloTest : public HloTestBase {
 TEST_F(PoplarReplicaGroupsHloTest, VerifyModulesWithReplicaGroups) {
   // Check that the HloVerifier accepts the XLA replica groups that we produce.
 
-  auto consecutive =
-      CreateModuleWithReplicaGroups(PoplarReplicaGroups::Consecutive(4));
+  auto consecutive = CreateModuleWithReplicaGroups(
+      PoplarReplicaGroups::Consecutive(4), /*replica_count=*/4);
   consecutive->VerifyOrAddFailure("consecutive");
 
-  auto orthogonal =
-      CreateModuleWithReplicaGroups(PoplarReplicaGroups::Orthogonal(4));
+  auto orthogonal = CreateModuleWithReplicaGroups(
+      PoplarReplicaGroups::Orthogonal(4), /*replica_count=*/8);
   orthogonal->VerifyOrAddFailure("orthogonal");
 }
 

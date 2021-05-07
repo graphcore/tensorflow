@@ -1370,10 +1370,14 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   }
   )";
 
+  const int64 partition_replication_factor = 2;
+  const int64 global_replication_factor = 8;
+
   auto config = GetModuleConfigForTest();
   config.set_resource_input_count(2);
   config.set_input_mapping({0, 1});
   config.set_resource_update_to_input_index({0, 1});
+  config.set_replica_count(global_replication_factor);
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
 
@@ -1388,9 +1392,6 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
       CHECK_NOTNULL(FindInstruction(module.get(), "arg2_new"));
   HloInstruction* arg1_new =
       CHECK_NOTNULL(FindInstruction(module.get(), "arg1_new"));
-
-  const uint64 partition_replication_factor = 2;
-  const uint64 global_replication_factor = 8;
 
   CompilerAnnotations annotations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(
