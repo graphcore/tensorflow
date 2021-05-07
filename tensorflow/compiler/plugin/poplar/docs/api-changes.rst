@@ -95,11 +95,12 @@ The ``recompute`` and ``block_recompute`` utility ops have been deprecated and w
 in release 2.2. Automatic recomputation of casts will remain.
 
 
-IPUOutfeedQueue replication_factor deprecated
-''''''''''''''''''''''''''''''''
+IPUOutfeedQueue/IPUOutfeedQueue replication_factor deprecated
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-The ``replication_factor`` argument of ``IPUOutfeedQueue`` has been deprecated and will be removed in
-release 2.2. The replication factor is now automatically set based on the model being executed.
+The ``replication_factor`` argument of ``IPUInfeedQueue``and ``IPUOutfeedQueue`` has been deprecated
+and will be removed in release 2.2. The replication factor is now automatically set based on the model
+being executed.
 
 CTC loss ops deprecated
 ''''''''''''''''''''''''''''''''
