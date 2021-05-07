@@ -184,6 +184,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_graph_dumper.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_pipeline.h"
+#include "tensorflow/compiler/xla/service/hlo_verifier.h"
 #include "tensorflow/compiler/xla/service/map_inliner.h"
 #include "tensorflow/compiler/xla/service/reshape_mover.h"
 #include "tensorflow/compiler/xla/service/sort_simplifier.h"
@@ -1263,6 +1264,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         absl::make_unique<PVTICompilerStats>();
     HloPassPipeline pipeline("OptimizerPipeline",
                              optimizer_compiler_stats.get());
+
+    if (PoplarXlaFlags::Get().enable_hlo_verifier) {
+      pipeline.AddInvariantChecker<HloVerifier>(
+          /*layout_sensitive=*/false, /*allow_mixed_precision=*/false);
+    }
+
     if (!poplar_executor->RetainControlDependencies()) {
       pipeline.AddPass<DependencyReplacer>(false);
     }

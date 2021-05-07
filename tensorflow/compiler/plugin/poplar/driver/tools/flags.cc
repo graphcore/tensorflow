@@ -128,6 +128,9 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"sync_replica_start",
        "Whether to synchronise the starting point of each replica's main "
        "program."},
+      {"enable_hlo_verifier",
+       "Whether to run the HLO verifier as an invariant checker before and "
+       "after every HLO pass."},
       {"allow_nans", "will allow NaNs."}};
   return flag_usage;
 }
@@ -171,6 +174,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(on_demand_device_poll_time)
     ADD_FLAG(on_demand_device_timeout)
     ADD_FLAG(sync_replica_start)
+    ADD_FLAG(enable_hlo_verifier)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)
