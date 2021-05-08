@@ -117,6 +117,10 @@ class PoplarXlaFlags {
   // Synchronise the starting point of each replica's main program.
   bool sync_replica_start = false;
 
+  // Whether to run the HLO verifier as an invariant checker before and after
+  // every HLO pass.
+  bool enable_hlo_verifier = false;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

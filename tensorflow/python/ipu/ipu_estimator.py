@@ -812,8 +812,7 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
     else:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
           _FeedIdAllocator.alloc_outfeed_id(mode),
-          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL,
-          replication_factor=replication_factor)
+          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
       hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
 
     if config.ipu_run_config.ipu_options is None:
