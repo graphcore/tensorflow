@@ -24,6 +24,7 @@ from functools import reduce
 import json as js
 import re
 import os
+import tempfile
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -186,6 +187,86 @@ class TensorMap(object):
                                                               mappings)
         mappings[tensor.id] = tensor.name
     return mappings
+
+
+# Helps with generating and cleaning up report files for tests.
+class ReportHelper(object):
+  def __init__(self, test):
+    self._test = test
+    self._directory = tempfile.mkdtemp(prefix="tf_report_")
+    self._setup_called = False
+
+  # Sets autoReport engine options in the ipu config.
+  def set_autoreport_options(self, cfg):
+    self._setup_called = True
+    options = {
+        "autoReport.directory": self._directory,
+        "autoReport.outputGraphProfile": "true",
+    }
+    return utils.set_compilation_options(cfg, options)
+
+  # Returns the path to the report file.
+  # Raises an exception if no report has been generated.
+  def find_report(self):
+    if not os.path.exists(self._directory):
+      if not self._setup_called:
+        raise Exception("To use this helper you must setup the poplar " +
+                        "autoReport options with set_autoreport_options")
+      raise Exception(
+          f"Report directory does not exist: {self._directory}\n" +
+          "Either no report has been generated or the directory was deleted.")
+    files = [f for f in os.listdir(self._directory) if f.endswith(".pop")]
+    if len(files) > 1:
+      message = f"More than one report file present in {self._directory}:"
+      message += "".join(f"\n   {f}" for f in files)
+      raise Exception(message)
+    if not files:
+      raise Exception(f"No report files found in {self._directory}")
+
+    return os.path.join(self._directory, files[0])
+
+  # Delete the report directory and all report files inside it.
+  def clear_reports(self):
+    self._cleanup_called = True
+    if os.path.exists(self._directory):
+      for f in os.listdir(self._directory):
+        if f.endswith(".pop"):
+          os.remove(os.path.join(self._directory, f))
+      os.rmdir(self._directory)
+
+  # Automatically clean up report files when this instance is destroyed.
+  def __del__(self):
+    self.clear_reports()
+
+  # Asserts all the compute sets match a pattern in the whitelist and also
+  # asserts that all the whitelist patterns match at least one compute set.
+  def assert_all_compute_sets_and_list(self, report, ok):
+    not_in_whitelist = []
+    not_in_report = []
+    whitelist = ['*' + x + '*' for x in ok]
+
+    for expected in whitelist:
+      if (not any(
+          fnmatch.fnmatch(actual.name, expected)
+          for actual in report.compilation.computeSets)):
+        not_in_report.append(expected)
+    for actual in report.compilation.computeSets:
+      if (not any(
+          fnmatch.fnmatch(actual.name, expected) for expected in whitelist)):
+        not_in_whitelist.append(actual.name)
+
+    error_msg = "\n"
+    if not_in_report:
+      error_msg = "Whitelist items [%s] not found in compute sets:\n\t%s" % (
+          ",".join(not_in_report), "\n\t".join(
+              cs.name for cs in report.compilation.computeSets))
+    if not_in_report and not_in_whitelist:
+      error_msg += "\n"
+    if not_in_whitelist:
+      error_msg += "Compute sets items [%s] not found in whitelist:\n\t%s" % (
+          ",".join(not_in_whitelist), "\n\t".join(ok))
+
+    self._test.assertFalse(not_in_report + not_in_whitelist, error_msg)
 
 
 class ReportJSON(object):

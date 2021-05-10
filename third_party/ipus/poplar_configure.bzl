@@ -39,11 +39,13 @@ def _poplar_autoconf_impl(repository_ctx):
                 fail("Cannot find poplar bin path.")
 
             repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poplar")
+            repository_ctx.symlink(poplar_base + "/lib/python", "poplar/lib/python")
             repository_ctx.symlink(poplar_base + "/bin", "poplar/poplar/bin")
             repository_ctx.symlink(poplar_base + "/python", "poplar/poplar/python")
 
             if repository_ctx.path(poplar_base + "/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/lib64", "poplar/lib64/poplar")
+                repository_ctx.symlink(poplar_base + "/lib64/python", "poplar/lib64/python")
 
             if tf_custom_poplibs_available == "False":
                 repository_ctx.symlink(poplar_base + "/include", "poplar/poplar/include")
@@ -91,6 +93,8 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/openmpi/bin", "poplar/openmpi/bin")
             repository_ctx.symlink(poplar_base + "/openmpi/lib", "poplar/openmpi/lib")
             repository_ctx.symlink(poplar_base + "/openmpi/include", "poplar/openmpi/include")
+            repository_ctx.symlink(poplar_base + "/libpva/lib", "poplar/libpva/lib")
+            repository_ctx.symlink(poplar_base + "/libpva/include", "poplar/libpva/include")
             repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/popdist/lib")
             repository_ctx.symlink(poplar_base + "/popdist/python", "poplar/popdist/python")
             repository_ctx.symlink(poplar_base + "/poprun/bin", "poplar/poprun/bin")
@@ -102,6 +106,8 @@ def _poplar_autoconf_impl(repository_ctx):
                 repository_ctx.symlink(poplar_base + "/openmpi/lib64", "poplar/openmpi/lib64")
             if repository_ctx.path(poplar_base + "/popdist/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/popdist/lib64", "poplar/popdist/lib64")
+            if repository_ctx.path(poplar_base + "/libpva/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/libpva/lib64", "poplar/libpva/lib64")
 
             repository_ctx.symlink(poplar_base + "/gcl/include", "poplar/gcl/include")
             repository_ctx.symlink(poplar_base + "/gcl/lib", "poplar/lib/gcl")
