@@ -49,6 +49,7 @@ def poprun_py_test(
         # device acquisition (by the instances).
         tags = tags + ["exclusive", "hw_poplar_test"],
         args = [
+            "$(location @local_config_poplar//poplar:mpirun)",
             "$(location @local_config_poplar//poplar:poprun)",
             "--num-replicas",
             str(num_replicas),
@@ -62,6 +63,9 @@ def poprun_py_test(
             "{PYTHON_INTERPRETER}",
             "$(location {})".format(main),
         ] + args,
-        data = ["@local_config_poplar//poplar:poprun"],
+        data = [
+            "@local_config_poplar//poplar:mpirun",
+            "@local_config_poplar//poplar:poprun",
+        ],
         **kwargs
     )
