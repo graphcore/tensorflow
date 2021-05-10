@@ -187,7 +187,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(3, shape)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
+        dataset, feed_name=next_feed_id())
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -242,7 +242,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(3, shape)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
+        dataset, feed_name=next_feed_id())
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -308,7 +308,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(3, shape)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
+        dataset, feed_name=next_feed_id())
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -436,7 +436,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     dataset = dataset_ops.Dataset.from_tensor_slices([1, 2, 3, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
+        dataset, feed_name=next_feed_id())
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -474,10 +474,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(3, shape)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset,
-        feed_name=next_feed_id(),
-        replication_factor=2,
-        data_to_prefetch=3)
+        dataset, feed_name=next_feed_id(), data_to_prefetch=3)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
