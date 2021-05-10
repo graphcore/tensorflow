@@ -201,193 +201,216 @@ void AllocationFinder::FindConsumers(
   path.emplace_back(tgt);
 
   for (auto user : tgt->users()) {
-    int64 op_index = user->operand_index(tgt);
-    // The backward path does not contain the source.
-    std::vector<const HloInstruction*> backward_path = path;
-    backward_path.erase(std::begin(backward_path));
+    int repeated_operand_offset = 0;
+    auto& operands = user->operands();
 
-    auto tensor_target =
-        TensorTarget(user, op_index, backward_path, permutation);
+    // How many times `user` has `tgt` as an operand.
+    const std::size_t operand_count = absl::c_count(operands, tgt);
 
-    switch (user->opcode()) {
-      case HloOpcode::kCholesky:
-      case HloOpcode::kConvolution:
-      case HloOpcode::kDot:
-      case HloOpcode::kScatter:
-      case HloOpcode::kTriangularSolve:
-      case HloOpcode::kGather: {
-        const auto allocating_indices =
-            CallHloInstructionExtension<AllocatingIndicesExtension>(user);
-        if (allocating_indices.count(op_index)) {
-          AddTensorTarget(src, tensor_target);
-        }
-        break;
-      }
-      case HloOpcode::kDynamicSlice: {
-        if (op_index == 0) {
-          const SliceInfo slice_info =
-              GetSliceInfo(user->operand(0)->shape(), user->shape());
-          // If the DynamicSlice has a valid permutation, and a single slice
-          // dimension, then request for it to be sliceable in that dimension.
-          if (tensor_target.permutation && slice_info.sliced_dims.size() == 1) {
-            tensor_target.sliceable_dimension =
-                (*tensor_target.permutation)[slice_info.sliced_dims[0]];
+    for (std::size_t i = 0u; i < operand_count; ++i) {
+      // Find the next position where tgt is an operand of user.
+      auto op_itr = std::find(operands.begin() + repeated_operand_offset,
+                              operands.end(), tgt);
+      int64 op_index = std::distance(operands.begin(), op_itr);
+      repeated_operand_offset = op_index + 1;
+
+      // The backward path does not contain the source.
+      std::vector<const HloInstruction*> backward_path = path;
+      backward_path.erase(std::begin(backward_path));
+
+      auto tensor_target =
+          TensorTarget(user, op_index, backward_path, permutation);
+
+      switch (user->opcode()) {
+        case HloOpcode::kCholesky:
+        case HloOpcode::kConvolution:
+        case HloOpcode::kDot:
+        case HloOpcode::kScatter:
+        case HloOpcode::kTriangularSolve:
+        case HloOpcode::kGather: {
+          const auto allocating_indices =
+              CallHloInstructionExtension<AllocatingIndicesExtension>(user);
+          if (allocating_indices.count(op_index)) {
+            AddTensorTarget(src, tensor_target);
           }
-          AddTensorTarget(src, tensor_target);
+          break;
         }
-        break;
-      }
-      case HloOpcode::kDynamicUpdateSlice: {
-        if (op_index == 0 || op_index == 1) {
-          const SliceInfo slice_info =
-              GetSliceInfo(user->shape(), user->operand(1)->shape());
-
-          // If the DynamicUpdateSlice has a valid permutation, and a single
-          // slice dimension, then request for it to be sliceable in that
-          // dimension.
-          if (op_index == 0 && tensor_target.permutation &&
-              slice_info.sliced_dims.size() == 1) {
-            tensor_target.sliceable_dimension =
-                (*tensor_target.permutation)[slice_info.sliced_dims[0]];
-          }
-          AddTensorTarget(src, tensor_target);
-        }
-        break;
-      }
-      case HloOpcode::kCall: {
-        // This also handles repeat loops which are represented as a Call
-        // operation.
-        HloComputation* comp = user->to_apply();
-        HloInstruction* param = comp->parameter_instruction(op_index);
-        FindConsumers(src, param, index, permutation);
-        break;
-      }
-      case HloOpcode::kFusion: {
-        HloComputation* comp = user->fused_instructions_computation();
-        if (IsPopOpsFusion(user)) {
-          if (IsPopOpsFusion(user, "zero_pad")) {
-            FindConsumers(src, user, index, permutation);
-          } else if (IsPopOpsFusion(user, "implicit")) {
-            // Look through implicit elementwise ops if the shape dimensions
-            // match.
-            if (user->shape() == user->operand(op_index)->shape()) {
-              FindConsumers(src, user, index, permutation);
-            }
-          }
-        }
-        break;
-      }
-      case HloOpcode::kCustomCall: {
-        if (IsPoplibsHloCustomOp(user)) {
-          auto poplar_inst = Cast<HloPoplarInstruction>(user);
-          auto allocating_indexes = poplar_inst->AllocatingIndices();
-
-          if (allocating_indexes.count(op_index)) {
-            // Request that the tensor for operand 0 should be allocated to be
-            // sliceable on dimension 0 if we have a valid dimension
-            // permutation.
-            const bool is_multi_update =
-                IsPoplarInstruction(PoplarOp::MultiUpdate)(user) ||
-                IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(user);
-            if (op_index == 0 && tensor_target.permutation &&
-                (IsPoplarInstruction(PoplarOp::MultiSlice)(user) ||
-                 is_multi_update)) {
-              CHECK(!tensor_target.permutation->empty());
+        case HloOpcode::kDynamicSlice: {
+          if (op_index == 0) {
+            const SliceInfo slice_info =
+                GetSliceInfo(user->operand(0)->shape(), user->shape());
+            // If the DynamicSlice has a valid permutation, and a single slice
+            // dimension, then request for it to be sliceable in that dimension.
+            if (tensor_target.permutation &&
+                slice_info.sliced_dims.size() == 1) {
               tensor_target.sliceable_dimension =
-                  (*tensor_target.permutation)[0];
+                  (*tensor_target.permutation)[slice_info.sliced_dims[0]];
             }
             AddTensorTarget(src, tensor_target);
-            if (op_index == 0 && is_multi_update) {
-              // In order to use slice plan for MultiSlice and MultiUpdate
-              // instructions, we have to ensure that tensor allocated for
-              // specific instruction has been allocated with equivalent slice
-              // plan. MultiUpdate/MultiUpdateAdd operand 0 is in-place, so
-              // it's possible to look through its consumers and find all
-              // instruction which may use this tensor later.
+          }
+          break;
+        }
+        case HloOpcode::kDynamicUpdateSlice: {
+          if (op_index == 0 || op_index == 1) {
+            const SliceInfo slice_info =
+                GetSliceInfo(user->shape(), user->operand(1)->shape());
+
+            // If the DynamicUpdateSlice has a valid permutation, and a single
+            // slice dimension, then request for it to be sliceable in that
+            // dimension.
+            if (op_index == 0 && tensor_target.permutation &&
+                slice_info.sliced_dims.size() == 1) {
+              tensor_target.sliceable_dimension =
+                  (*tensor_target.permutation)[slice_info.sliced_dims[0]];
+            }
+            AddTensorTarget(src, tensor_target);
+          }
+          break;
+        }
+        case HloOpcode::kConditional: {
+          // Ignore the predicate/branch index.
+          if (op_index != 0) {
+            HloComputation* comp = user->branch_computation(op_index - 1);
+            HloInstruction* param = comp->parameter_instruction(0);
+            FindConsumers(src, param, index, permutation);
+          }
+          break;
+        }
+        case HloOpcode::kCall: {
+          // This also handles repeat loops which are represented as a Call
+          // operation.
+          HloComputation* comp = user->to_apply();
+          HloInstruction* param = comp->parameter_instruction(op_index);
+          FindConsumers(src, param, index, permutation);
+          break;
+        }
+        case HloOpcode::kFusion: {
+          HloComputation* comp = user->fused_instructions_computation();
+          if (IsPopOpsFusion(user)) {
+            if (IsPopOpsFusion(user, "zero_pad")) {
               FindConsumers(src, user, index, permutation);
+            } else if (IsPopOpsFusion(user, "implicit")) {
+              // Look through implicit elementwise ops if the shape dimensions
+              // match.
+              if (user->shape() == user->operand(op_index)->shape()) {
+                FindConsumers(src, user, index, permutation);
+              }
+            }
+          }
+          break;
+        }
+        case HloOpcode::kCustomCall: {
+          if (IsPoplibsHloCustomOp(user)) {
+            auto poplar_inst = Cast<HloPoplarInstruction>(user);
+            auto allocating_indexes = poplar_inst->AllocatingIndices();
+
+            if (allocating_indexes.count(op_index)) {
+              // Request that the tensor for operand 0 should be allocated to be
+              // sliceable on dimension 0 if we have a valid dimension
+              // permutation.
+              const bool is_multi_update =
+                  IsPoplarInstruction(PoplarOp::MultiUpdate)(user) ||
+                  IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(user);
+              if (op_index == 0 && tensor_target.permutation &&
+                  (IsPoplarInstruction(PoplarOp::MultiSlice)(user) ||
+                   is_multi_update)) {
+                CHECK(!tensor_target.permutation->empty());
+                tensor_target.sliceable_dimension =
+                    (*tensor_target.permutation)[0];
+              }
+              AddTensorTarget(src, tensor_target);
+              if (op_index == 0 && is_multi_update) {
+                // In order to use slice plan for MultiSlice and MultiUpdate
+                // instructions, we have to ensure that tensor allocated for
+                // specific instruction has been allocated with equivalent slice
+                // plan. MultiUpdate/MultiUpdateAdd operand 0 is in-place, so
+                // it's possible to look through its consumers and find all
+                // instruction which may use this tensor later.
+                FindConsumers(src, user, index, permutation);
+              }
+            } else {
+              // Look through.
+              if ((IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
+                   op_index == 0) ||
+                  (IsAnyScaledInplace(user) && op_index < 2)) {
+                FindConsumers(src, user, index, permutation);
+                break;
+              }
             }
           } else {
-            // Look through.
-            if ((IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
-                 op_index == 0) ||
-                (IsAnyScaledInplace(user) && op_index < 2)) {
+            auto shapes = FlattenedXlaShape(src.instruction->shape());
+            if (shapes[src.flattened_output_tuple_index] == user->shape()) {
               FindConsumers(src, user, index, permutation);
-              break;
             }
           }
-        } else {
-          auto shapes = FlattenedXlaShape(src.instruction->shape());
-          if (shapes[src.flattened_output_tuple_index] == user->shape()) {
+          break;
+        }
+        case HloOpcode::kWhile: {
+          HloComputation* comp = user->while_body();
+          HloInstruction* param = comp->parameter_instruction(op_index);
+          FindConsumers(src, param, index, permutation);
+          break;
+        }
+        case HloOpcode::kTuple: {
+          int64 new_index = InsertIntoTuple(user->shape(), op_index, index);
+          FindConsumers(src, user, new_index, permutation);
+          break;
+        }
+        case HloOpcode::kGetTupleElement: {
+          int64 tuple_index = user->tuple_index();
+          int64 new_index = ExtractFromTuple(tgt->shape(), tuple_index, index);
+          if (new_index != -1) {
+            FindConsumers(src, user, new_index, permutation);
+          }
+          break;
+        }
+        case HloOpcode::kReshape: {
+          // Can look through reshapes, but cannot track dimension permutation.
+          FindConsumers(src, user, index, absl::nullopt);
+          break;
+        }
+        case HloOpcode::kTranspose: {
+          absl::optional<std::vector<int64>> new_permutation;
+          if (permutation) {
+            // Permute the dimensions according to the transpose.
+            new_permutation = std::vector<int64>(permutation->size());
+            const std::vector<int64> transpose_permutation = user->dimensions();
+            for (int64 d = 0; d != permutation->size(); ++d) {
+              (*new_permutation)[d] = (*permutation)[transpose_permutation[d]];
+            }
+          }
+          FindConsumers(src, user, index, new_permutation);
+          break;
+        }
+        case HloOpcode::kConvert: {
+          FindConsumers(src, user, index, permutation);
+          break;
+        }
+        case HloOpcode::kConcatenate: {
+          FindConsumers(src, user, index, permutation);
+          break;
+        }
+        case HloOpcode::kSlice: {
+          if (IsUniformSingleDimSlice(user)) {
             FindConsumers(src, user, index, permutation);
           }
+          break;
         }
-        break;
-      }
-      case HloOpcode::kWhile: {
-        HloComputation* comp = user->while_body();
-        HloInstruction* param = comp->parameter_instruction(op_index);
-        FindConsumers(src, param, index, permutation);
-        break;
-      }
-      case HloOpcode::kTuple: {
-        int64 new_index = InsertIntoTuple(user->shape(), op_index, index);
-        FindConsumers(src, user, new_index, permutation);
-        break;
-      }
-      case HloOpcode::kGetTupleElement: {
-        int64 tuple_index = user->tuple_index();
-        int64 new_index = ExtractFromTuple(tgt->shape(), tuple_index, index);
-        if (new_index != -1) {
-          FindConsumers(src, user, new_index, permutation);
-        }
-        break;
-      }
-      case HloOpcode::kReshape: {
-        // Can look through reshapes, but cannot track dimension permutation.
-        FindConsumers(src, user, index, absl::nullopt);
-        break;
-      }
-      case HloOpcode::kTranspose: {
-        absl::optional<std::vector<int64>> new_permutation;
-        if (permutation) {
-          // Permute the dimensions according to the transpose.
-          new_permutation = std::vector<int64>(permutation->size());
-          const std::vector<int64> transpose_permutation = user->dimensions();
-          for (int64 d = 0; d != permutation->size(); ++d) {
-            (*new_permutation)[d] = (*permutation)[transpose_permutation[d]];
+        case HloOpcode::kPad: {
+          if (op_index == 0) {
+            FindConsumers(src, user, index, permutation);
           }
+          break;
         }
-        FindConsumers(src, user, index, new_permutation);
-        break;
-      }
-      case HloOpcode::kConvert: {
-        FindConsumers(src, user, index, permutation);
-        break;
-      }
-      case HloOpcode::kConcatenate: {
-        FindConsumers(src, user, index, permutation);
-        break;
-      }
-      case HloOpcode::kSlice: {
-        if (IsUniformSingleDimSlice(user)) {
-          FindConsumers(src, user, index, permutation);
+        default: {
+          auto shapes = FlattenedXlaShape(src.instruction->shape());
+          // Ignore the element type (paths can contain casts).
+          if (shapes[src.flattened_output_tuple_index].dimensions() ==
+              user->shape().dimensions()) {
+            FindConsumers(src, user, index, permutation);
+          }
+          break;
         }
-        break;
-      }
-      case HloOpcode::kPad: {
-        if (op_index == 0) {
-          FindConsumers(src, user, index, permutation);
-        }
-        break;
-      }
-      default: {
-        auto shapes = FlattenedXlaShape(src.instruction->shape());
-        // Ignore the element type (paths can contain casts).
-        if (shapes[src.flattened_output_tuple_index].dimensions() ==
-            user->shape().dimensions()) {
-          FindConsumers(src, user, index, permutation);
-        }
-        break;
       }
     }
   }
