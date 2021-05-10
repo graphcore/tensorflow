@@ -539,7 +539,6 @@ class _IpuModelBase(KerasModel):
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
           ds,
           "infeed",
-          replication_factor=self.replication_factor,
           prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
           "outfeed",
