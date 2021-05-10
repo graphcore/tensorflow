@@ -24,6 +24,7 @@ import math
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import model as ipu_model
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.keras.layers import Layer
@@ -929,7 +930,7 @@ class PipelineStage(object):
       raise ValueError("%d is not a valid pipeline stage.")
 
     strategy = distribution_strategy_context.get_strategy()
-    if not strategy:
+    if not isinstance(strategy, ipu_strategy.IPUStrategy):
       raise RuntimeError("PipelineStage may only be used from "
                          "within an IPUStrategy context.")
 
