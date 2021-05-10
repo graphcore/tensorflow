@@ -701,6 +701,25 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   VLOG(1) << "Processing " << inst->name();
+  poplar::program::Sequence seq({}, debug_name_and_id);
+  TensorOrRemoteBufferVectors inputs =
+      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
+
+  DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+
+  TF_ASSIGN_OR_RETURN(auto prog,
+                      CreateConditionalOp(res, inst, deferred_inputs, output,
+                                          tensor_map, debug_name_and_id));
+  seq.add(prog);
+
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateConditionalOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgRBVectors& deferred_inputs, const xla::Shape& output,
+    TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
+  VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq({}, debug_name_and_id);
@@ -722,23 +741,28 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
                                    inst->name().c_str());
   }
 
-  TensorOrRemoteBufferVectors inputs =
-      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor pred = inputs[0][0].AsTensor();
-
   std::vector<std::shared_ptr<DeferredVisitor>> bodies(n_branches);
   const auto& comps = inst->called_computations();
 
   // Compile each branch into a sequence
   for (auto b = 0; b < n_branches; b++) {
-    CHECK_EQ(inputs[b + 1].size(), CountShapes(inst->operand(b + 1)->shape()));
-    TensorOrRemoteBufferVectors body_inputs = {inputs[b + 1]};
+    CHECK_EQ(deferred_inputs[b + 1].size(),
+             CountShapes(inst->operand(b + 1)->shape()));
+    DeferredArgRBVectors body_inputs = {deferred_inputs[b + 1]};
     TF_ASSIGN_OR_RETURN(bodies[b],
                         res.subcomputation_cache.GetOrCompileSubcomputation(
-                            res, body_inputs, comps[b]));
+                            res, body_inputs, comps[b], true));
+
+    // Make sure any deferred inputs to the instruction are pushed up.
+    TF_RETURN_IF_ERROR(bodies[b]->PropagateDeferredAllocationsOperand(
+        inst, b + 1, 0, body_inputs[0], debug_name_and_id));
   }
 
+  TensorOrRemoteBufferVectors inputs =
+      GetAllInstructionInputs(res, inst, seq, tensor_map, debug_name_and_id);
+
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor pred = inputs[0][0].AsTensor();
   unsigned int output_count = bodies[0]->outputs().size();
 
   // Add final output tensors for the conditional op

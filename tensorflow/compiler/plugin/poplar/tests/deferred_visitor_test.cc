@@ -930,6 +930,121 @@ ENTRY main {
             p1_2_ts[0].getContiguousRegions());
 }
 
+TEST_F(DeferredVisitorTest, TestConditional) {
+  const std::string hlo_string = R"(
+HloModule module
+true_fn (arg_tuple.11: (f32[2,2], f32[2,2], f32[2,2])) -> (f32[2,2]) {
+  arg_tuple.11 = (f32[2,2], f32[2,2], f32[2,2]) parameter(0)
+  get-tuple-element.12 = f32[2,2] get-tuple-element(arg_tuple.11), index=0
+  get-tuple-element.13 = f32[2,2] get-tuple-element(arg_tuple.11), index=1
+  dot.15 = f32[2,2] dot(get-tuple-element.12, get-tuple-element.13), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT tuple.16 = (f32[2,2]) tuple(dot.15)
+}
+
+false_fn (arg_tuple.18: (f32[2,2], f32[2,2], f32[2,2])) -> (f32[2,2]) {
+  arg_tuple.18 = (f32[2,2], f32[2,2], f32[2,2]) parameter(0)
+  get-tuple-element.19 = f32[2,2] get-tuple-element(arg_tuple.18), index=0
+  get-tuple-element.21 = f32[2,2] get-tuple-element(arg_tuple.18), index=2
+  dot.22 = f32[2,2] dot(get-tuple-element.19, get-tuple-element.21), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT tuple.23 = (f32[2,2]) tuple(dot.22)
+}
+
+ENTRY main (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]) -> f32[2,2] {
+  arg3.4 = pred[] parameter(3), parameter_replication={false}
+  arg0.1 = f32[2,2] parameter(0), parameter_replication={false}
+  arg1.2 = f32[2,2] parameter(1), parameter_replication={false}
+  arg2.3 = f32[2,2] parameter(2), parameter_replication={false}
+  tuple.9 = (f32[2,2], f32[2,2], f32[2,2]) tuple(arg0.1, arg1.2, arg2.3)
+  conditional.24 = (f32[2,2]) conditional(arg3.4, tuple.9, tuple.9), true_computation=true_fn, false_computation=false_fn
+  ROOT get-tuple-element.25 = f32[2,2] get-tuple-element(conditional.24), index=0
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  auto entry_computation = module->entry_computation();
+
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  VLOG(0) << module->ToString();
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+  auto entry_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("main");
+  auto true_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("true_fn");
+  auto false_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation("false_fn");
+
+  HloInstruction* dot_15 = FindInstruction(module.get(), "dot.15");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto dot_15_ts,
+      FindInstructionOutputTensors(true_tensor_map, *resources.get(), dot_15));
+  ASSERT_EQ(dot_15_ts.size(), 1);
+
+  HloInstruction* dot_22 = FindInstruction(module.get(), "dot.22");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto dot_22_ts,
+      FindInstructionOutputTensors(false_tensor_map, *resources.get(), dot_22));
+  ASSERT_EQ(dot_22_ts.size(), 1);
+
+  HloInstruction* cond = FindInstruction(module.get(), "conditional.24");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto cond_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), cond));
+  ASSERT_EQ(cond_ts.size(), 1);
+
+  HloInstruction* arg0_1 = FindInstruction(module.get(), "arg0.1");
+  HloInstruction* arg1_2 = FindInstruction(module.get(), "arg1.2");
+  HloInstruction* arg2_3 = FindInstruction(module.get(), "arg2.3");
+
+  poplar::Tensor gte0_1_tensor =
+      FindInstructionOutputs(entry_tensor_map, *resources.get(), arg0_1)[0];
+  poplar::Tensor gte1_2_tensor =
+      FindInstructionOutputs(entry_tensor_map, *resources.get(), arg1_2)[0];
+  poplar::Tensor gte2_3_tensor =
+      FindInstructionOutputs(entry_tensor_map, *resources.get(), arg2_3)[0];
+
+  HloInstruction* get_tuple_element_12 =
+      FindInstruction(module.get(), "get-tuple-element.12");
+  HloInstruction* get_tuple_element_13 =
+      FindInstruction(module.get(), "get-tuple-element.13");
+
+  poplar::Tensor get_tuple_element_12_tensor = FindInstructionOutputs(
+      true_tensor_map, *resources.get(), get_tuple_element_12)[0];
+  poplar::Tensor get_tuple_element_13_tensor = FindInstructionOutputs(
+      true_tensor_map, *resources.get(), get_tuple_element_13)[0];
+
+  HloInstruction* get_tuple_element_19 =
+      FindInstruction(module.get(), "get-tuple-element.19");
+  HloInstruction* get_tuple_element_21 =
+      FindInstruction(module.get(), "get-tuple-element.21");
+
+  poplar::Tensor get_tuple_element_19_tensor = FindInstructionOutputs(
+      false_tensor_map, *resources.get(), get_tuple_element_19)[0];
+  poplar::Tensor get_tuple_element_21_tensor = FindInstructionOutputs(
+      false_tensor_map, *resources.get(), get_tuple_element_21)[0];
+
+  // Check the common input is the same in both branches.
+  // True case:
+  EXPECT_EQ(gte0_1_tensor.getContiguousRegions(),
+            get_tuple_element_12_tensor.getContiguousRegions());
+  // False case:
+  EXPECT_EQ(gte0_1_tensor.getContiguousRegions(),
+            get_tuple_element_19_tensor.getContiguousRegions());
+  // For completeness, check that the true and false case are the same too.
+  EXPECT_EQ(get_tuple_element_12_tensor.getContiguousRegions(),
+            get_tuple_element_19_tensor.getContiguousRegions());
+
+  // Check the per-branch rhs is the same as the correspoding entry argument.
+  // True case:
+  EXPECT_EQ(gte1_2_tensor.getContiguousRegions(),
+            get_tuple_element_13_tensor.getContiguousRegions());
+  // False case:
+  EXPECT_EQ(gte2_3_tensor.getContiguousRegions(),
+            get_tuple_element_21_tensor.getContiguousRegions());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
