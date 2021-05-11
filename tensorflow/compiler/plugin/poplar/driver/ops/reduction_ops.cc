@@ -392,10 +392,30 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
           tiles.push_back(i);
         }
       }
-      // Map the reduce output to the same number of tiles
-      poputil::mapTensorLinearly(
-          graph, out, 0,
-          std::max<unsigned>(1, out.numElements() / tiles.size()));
+
+      // Map the reduce output to the same number of tiles preventing subatomic
+      // stores.
+      auto get_lcm = [](uint32 a, uint32 b) {
+        if (a > b) {
+          return (a / tensorflow::MathUtil::GCD<uint32>(a, b)) * b;
+        } else if (a < b) {
+          return (b / tensorflow::MathUtil::GCD<uint32>(b, a)) * a;
+        } else {
+          return a;
+        }
+      };
+
+      const uint32 element_size =
+          graph.getTarget().getTypeSize(out.elementType());
+      const uint32 element_bound =
+          get_lcm(element_size, graph.getTarget().getAtomicStoreGranularity()) /
+          element_size;
+
+      uint32 grain_size =
+          std::max<uint32>(element_bound, out.numElements() / tiles.size());
+      grain_size += grain_size % element_bound;
+
+      poputil::mapTensorLinearly(graph, out, 0, grain_size);
     }
 
     popops::reduceWithOutput(graph, to_reduce, out, reduction_dims,
