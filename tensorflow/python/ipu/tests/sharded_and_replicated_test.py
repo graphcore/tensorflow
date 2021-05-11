@@ -20,6 +20,7 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
@@ -267,7 +268,7 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
     cls.base_cfg = tu.add_hw_ci_connection_options(cfg)
 
   @staticmethod
-  def create_body_2shards(outfeed_queue):
+  def create_body_2shards(outfeed_queue=None):
     def body_sharded(v, x):
       with ipu.scopes.ipu_shard(0):
         z = v + x
@@ -275,17 +276,21 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_shard(1):
         z = (ipu.ops.cross_replica_ops.cross_replica_sum(z) +
              ipu.ops.cross_replica_ops.cross_replica_sum(y))
-        outfeed = outfeed_queue.enqueue(z)
-      return (z, outfeed)
+        if outfeed_queue:
+          outfeed = outfeed_queue.enqueue(z)
+          return (z, outfeed)
+      return z
 
     return body_sharded
 
   @staticmethod
-  def create_body_not_sharded(outfeed_queue):
+  def create_body_not_sharded(outfeed_queue=None):
     def body_not_sharded(v, x):
       v = ipu.ops.cross_replica_ops.cross_replica_sum(v + x)
-      outfeed = outfeed_queue.enqueue(v)
-      return (v, outfeed)
+      if outfeed_queue:
+        outfeed = outfeed_queue.enqueue(v)
+        return (v, outfeed)
+      return v
 
     return body_not_sharded
 
@@ -350,6 +355,42 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
       outfed_result = sess.run(outfeed_queue_not_sharded.dequeue())
       # The second dimension contains the replication factor
       self.assertEqual(outfed_result.shape[1], 4)
+
+  @tu.test_uses_ipus(num_ipus=4)
+  def testCantReuseInfeedWhenMixingReplicationFactors(self):
+
+    cfg = ipu.utils.auto_select_ipus(self.base_cfg, 4)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with sl.Session() as sess:
+      shape = [2]
+      dataset = tu.create_single_increasing_dataset(3, shape)
+
+      shared_infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, feed_name=next_feed_id())
+      sess.run(shared_infeed_queue.initializer)
+
+      # Setup/run the first program with a replication factor of 2
+      body_sharded = self.create_body_2shards()
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        result_sharded = ipu.ipu_compiler.compile(self.create_network(
+            body_sharded, shape, shared_infeed_queue),
+                                                  inputs=[])
+
+      # This setups up shared_infeed_queue with a replication factor of 2
+      sess.run(result_sharded)
+
+      # Setup/run the second program with a replication factor of 4
+      body_not_sharded = self.create_body_not_sharded()
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        result_not_sharded = ipu.ipu_compiler.compile(self.create_network(
+            body_not_sharded, shape, shared_infeed_queue),
+                                                      inputs=[])
+
+      # This should error since our infeed queue is already setup with a
+      # different replication factor
+      self.assertRaises(errors.FailedPreconditionError, sess.run,
+                        result_not_sharded)
 
 
 if __name__ == "__main__":

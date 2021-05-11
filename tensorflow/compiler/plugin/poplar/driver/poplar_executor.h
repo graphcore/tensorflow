@@ -925,6 +925,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // HostToDevice FIFO
   void ConnectInfeedsToStreamCallback(const InfeedInfos& infeed_infos);
 
+  Status SetupInfeedReplication(const InfeedInfos& infeed_infos);
+
   // Connect buffers provided by transfer manager to Poplar
   // deviceToHostFIFO()
   void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos);
