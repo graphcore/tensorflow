@@ -118,8 +118,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def test_identical_replica_seeds(self):
     inp = array_ops.placeholder(np.float32, [1000])
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed',
-                                                    replication_factor=2)
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed')
 
     with ipu.scopes.ipu_scope('/device:IPU:0'):
       device_op = outfeed.enqueue(math_ops.cast(inp, dtype=np.float16))
