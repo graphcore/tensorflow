@@ -27,6 +27,11 @@ REGISTER_OP("IpuClearAllXlaCompilationCaches")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
 
+REGISTER_OP("IpuResetDevices")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs)
+    .Doc("Detach and clear IPU devices.");
+
 REGISTER_OP("IpuResetSeed")
     .Attr("device: string")
     .Attr("seed: int")

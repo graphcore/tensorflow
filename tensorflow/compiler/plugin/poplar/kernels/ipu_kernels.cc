@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ipu_devices.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -109,6 +110,25 @@ class IpuClearAllXlaCompilationCaches : public OpKernel {
 REGISTER_KERNEL_BUILDER(
     Name("IpuClearAllXlaCompilationCaches").Device(DEVICE_CPU),
     IpuClearAllXlaCompilationCaches);
+
+class IpuResetDevicesOp : public OpKernel {
+ public:
+  explicit IpuResetDevicesOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+
+    auto* poplar_platform =
+        static_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
+    OP_REQUIRES_OK(ctx, poplar_platform->ResetExecutors());
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuResetDevicesOp);
+};
+REGISTER_KERNEL_BUILDER(Name("IpuResetDevices").Device(DEVICE_CPU),
+                        IpuResetDevicesOp);
 
 class IpuResetSeedOp : public OpKernel {
  public:

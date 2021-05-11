@@ -218,6 +218,20 @@ void PoplarPlatform::ResetXfeedManagers() {
   }
 }
 
+Status PoplarPlatform::ResetExecutors() {
+  for (int ordinal = 0, num_devices = VisibleDeviceCount();
+       ordinal < num_devices; ordinal++) {
+    TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
+                        ExecutorForDevice(ordinal));
+
+    auto* poplar_executor =
+        static_cast<PoplarExecutor*>(executor->implementation());
+    poplar_executor->Reset();
+  }
+
+  return Status::OK();
+}
+
 static void InitializePoplarPlatform() {
   std::unique_ptr<se::Platform> platform(new PoplarPlatform);
   SE_CHECK_OK(se::MultiPlatformManager::RegisterPlatform(std::move(platform)));
