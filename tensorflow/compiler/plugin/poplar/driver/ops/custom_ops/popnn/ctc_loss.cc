@@ -294,6 +294,7 @@ class CTCBeamSearchWithLogitsOp : public CTCBeamSearchOpBase {
         popnn::ctc_infer::beamSearchDecoderLogits(
             graph, data, input_lengths, prog, blank_class, beam_width,
             top_paths, plan, debug_name_and_id);
+
     // Op def expects signed integer type tensors
     result.label_lengths = popops::cast(graph, result.label_lengths,
                                         poplar::INT, prog, debug_name_and_id);
@@ -317,11 +318,25 @@ class CTCBeamSearchWithLogProbsOp : public CTCBeamSearchOpBase {
       const popnn::ctc::Plan& plan,
       const poplar::DebugNameAndId& debug_name_and_id) const override {
     CTCBeamSearchOpBase::BeamSearchReturns result;
+
+    poplar::Tensor input_lengths =
+        data_lengths.elementType() == poplar::UNSIGNED_INT
+            ? data_lengths
+            : popops::cast(graph, data_lengths, poplar::UNSIGNED_INT, prog,
+                           debug_name_and_id);
+
     std::tie(result.label_probabilities, result.label_lengths,
              result.decoded_labels) =
         popnn::ctc_infer::beamSearchDecoderLogProbabilities(
-            graph, data, data_lengths, prog, blank_class, beam_width, top_paths,
-            plan, debug_name_and_id);
+            graph, data, input_lengths, prog, blank_class, beam_width,
+            top_paths, plan, debug_name_and_id);
+
+    // Op def expects signed integer type tensors
+    result.label_lengths = popops::cast(graph, result.label_lengths,
+                                        poplar::INT, prog, debug_name_and_id);
+    result.decoded_labels = popops::cast(graph, result.decoded_labels,
+                                         poplar::INT, prog, debug_name_and_id);
+    return result;
   }
 };
 
