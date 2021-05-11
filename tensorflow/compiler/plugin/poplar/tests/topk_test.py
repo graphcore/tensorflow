@@ -39,98 +39,96 @@ def _get_random_input(dtype, shape):
   else:
     info_fn = np.finfo
     random_fn = np.random.uniform
-  return random_fn(info_fn(dtype).min, info_fn(dtype).max,
-                   size=shape).astype(dtype)
+
+  n = len(np.empty(shape).flatten())
+  s = set()
+  while len(s) < n:
+    data = random_fn(info_fn(dtype).min, info_fn(dtype).max,
+                     size=n).astype(dtype)
+    s.update(data.flatten())
+
+  data = np.array(list(s), dtype=dtype)
+  data = data[0:n]
+  return data.reshape(shape)
 
 
 class ArgTopK(xla_test.XLATestCase, parameterized.TestCase):
+  configured = False
+
+  def __configureIPU(self):
+    if not self.configured:
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+      self.configured = True
+
   @parameterized.named_parameters(*TESTCASES)
   def testTopKBasic(self, dtype):
     def model(a):
       return nn.top_k(a, k=10, sorted=True)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [100])
+    input_ = _get_random_input(dtype, (100))
 
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
+    def executeModel(device):
+      with self.session() as sess:
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [100])
 
-    tu.configure_ipu_system()
+        with ops.device(device):
+          out = model(pa)
 
-    input = _get_random_input(dtype, (100))
-    # IPU Run
-    with self.session() as sess:
-      fd = {pa: input}
-      ipu_result = sess.run(out, fd)
+        fd = {pa: input_}
+        return sess.run(out, fd)
 
-    with ops.device("/device:CPU:0"):
-      out = model(pa)
-
-    with self.session() as sess:
-      fd = {pa: input}
-      cpu_result = sess.run(out, fd)
-      self.assertAllClose(cpu_result, ipu_result)
+    ipu_result = executeModel('/device:IPU:0')
+    cpu_result = executeModel('/device:CPU:0')
+    self.assertAllClose(cpu_result, ipu_result)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxMultiDimensional(self, dtype):
     def model(a, k):
       return nn.top_k(a, k=k, sorted=True)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
-      p_k = array_ops.placeholder(np.int32, shape=())
+    def executeModel(input_, k, device):
+      with self.session() as sess:
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
+          p_k = array_ops.placeholder(np.int32, shape=())
 
-    with ops.device("/device:IPU:0"):
-      out = model(pa, p_k)
+        with ops.device(device):
+          out = model(pa, p_k)
 
-    tu.configure_ipu_system()
+        fd = {pa: input_, p_k: k}
+        return sess.run(out, fd)
 
     for k in range(6):
-      input = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
-      with ops.device("/device:IPU:0"):
-        out = model(pa, p_k)
-
-      with self.session() as sess:
-        fd = {pa: input, p_k: k}
-        ipu_result = sess.run(out, fd)
-
-      with ops.device("/device:CPU:0"):
-        out = model(pa, p_k)
-
-      with self.session() as sess:
-        fd = {pa: input, p_k: k}
-        cpu_result = sess.run(out, fd)
-        self.assertAllClose(cpu_result, ipu_result)
+      input_ = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
+      ipu_result = executeModel(input_, k, '/device:IPU:0')
+      cpu_result = executeModel(input_, k, '/device:CPU:0')
+      self.assertAllClose(cpu_result, ipu_result)
 
   @parameterized.named_parameters(*TESTCASES)
   def testTopkSort(self, dtype):
     def model(a, k):
       return nn.top_k(a, k=k, sorted=True)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [100])
-      p_k = array_ops.placeholder(np.int32, shape=())
+    input_ = _get_random_input(dtype, (100))
 
-    with ops.device("/device:IPU:0"):
-      out = model(pa, p_k)
+    def executeModel(device):
+      with self.session() as sess:
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [100])
+          p_k = array_ops.placeholder(np.int32, shape=())
 
-    tu.configure_ipu_system()
+        with ops.device(device):
+          out = model(pa, p_k)
 
-    input = _get_random_input(dtype, (100))
-    with ops.device("/device:IPU:0"):
-      out = model(pa, p_k)
+        fd = {pa: input_, p_k: 100}
+        return sess.run(out, fd)
 
-    with self.session() as sess:
-      fd = {pa: input, p_k: 100}
-      ipu_result = sess.run(out, fd)
-
-    with ops.device("/device:CPU:0"):
-      out = model(pa, p_k)
-
-    with self.session() as sess:
-      fd = {pa: input, p_k: 100}
-      cpu_result = sess.run(out, fd)
-
+    ipu_result = executeModel('/device:IPU:0')
+    cpu_result = executeModel('/device:CPU:0')
     self.assertAllClose(cpu_result, ipu_result)
 
 
