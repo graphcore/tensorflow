@@ -341,6 +341,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static StatusOr<std::size_t> AttachToPoplarDevice(
       absl::Span<const poplar::Device> device_list, int32 ordinal,
       bool wait_for_device);
+  void DetachFromPoplarDevice();
 
   bool PoplarDeviceIsAttached() const;
   bool HasPoplarTarget() const;
@@ -617,6 +618,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   bool HaveCachedExecutable(const ModuleFilenames& filenames) const;
 
   ModuleFilenames GetModuleFilenames(const HloModule& module) const;
+
+  // Cleanup function called before the IPU device configurations are
+  // reset.
+  void Reset();
 
   void AboutToFreeEngine(poplar::Engine* engine);
 
@@ -944,6 +949,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void ConnectCycleCounterCallback();
 
+  void ResetOptionFlags();
+  void ResetConfiguration();
+  void ResetReports();
+  void ResetHandles();
+
   int ordinal_;
 
   std::vector<std::unique_ptr<IOThread>> io_threads_;
@@ -970,6 +980,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     void SetDeviceAndTarget(poplar::Device&& device);
     void SetTarget(const poplar::Target& target);
     void ClearDevice();
+    void Clear();
     std::recursive_mutex& Mutex();
 
    private:

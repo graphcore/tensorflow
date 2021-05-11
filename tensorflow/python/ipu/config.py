@@ -32,6 +32,7 @@ from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.platform import tf_logging as logging
@@ -1987,13 +1988,14 @@ class IPUConfig(_ConfigBase):
 IPUConfig()
 
 
-def configure_ipu_system(config, device="cpu"):
+def configure_ipu_system(config, device="cpu", reset_configuration=True):
   """Configure an IPU system with an IPUConfig or IpuOptions instance.
 
   Args:
     config: An IPUConfig instance or IpuOptions configuration protobuf.
     device: The TensorFlow virtual CPU device which is local to the IPU
             hardware.
+    reset_configuration: Whether to reset any existing IPU configurations.
 
   Returns:
     None
@@ -2004,6 +2006,21 @@ def configure_ipu_system(config, device="cpu"):
   if not isinstance(config, config_pb2.IpuOptions):
     raise TypeError("`config` must be an IpuOptions instance.")
 
+  try:
+    existing_configs = get_ipu_config()
+  except RuntimeError:
+    reset_configuration = False
+  else:
+    # get_ipu_config returns the same config for all executors.
+    config_changed = existing_configs[0] != config
+    reset_configuration &= config_changed
+
+  if reset_configuration:
+    logging.warn(
+        "Resetting existing IPU configuration before applying new configuration"
+    )
+    reset_ipu_configuration()
+
   g = ops.Graph()
   with g.as_default():
     with ops.device(device):
@@ -2011,6 +2028,38 @@ def configure_ipu_system(config, device="cpu"):
 
   with session_lib.Session(graph=g) as sess:
     sess.run(cfg_op)
+
+
+def reset_ipu_configuration():
+  """ Reset the IPU configuration in preparation for it to be reconfigured.
+  Blocks until all currently configured IPU devices have finished executing.
+
+  Note that this function does not currently support reseting IPUs that are
+  running in parallel python threads.
+  """
+  sync_ops = []
+
+  try:
+    configs = get_ipu_config()
+  except RuntimeError:
+    # No devices have been configured.
+    return
+
+  g = ops.Graph()
+  with g.as_default():
+    # get_ipu_config returns 1 config per executor
+    for i in range(len(configs)):
+      device_name = f"/device:IPU:{i}"
+      with ops.device(device_name):
+        sync_ops.append(gen_poputil_ops.device_sync())
+
+    with ops.device("CPU"):
+      with ops.control_dependencies(sync_ops):
+        # Wait for sync to complete before clearing.
+        sync_ops.append(gen_ipu_ops.ipu_reset_devices())
+
+  with session_lib.Session(graph=g) as sess:
+    sess.run(sync_ops)
 
 
 def get_ipu_config(session=None):
@@ -2029,8 +2078,14 @@ def get_ipu_config(session=None):
     assert not session, "No session is required for eager execution."
     configurations = gen_ipu_ops.ipu_get_configuration().numpy()
   else:
-    s = session if session else session_lib.Session()
-    configurations = s.run(gen_ipu_ops.ipu_get_configuration())
+    if session:
+      configurations = session.run(gen_ipu_ops.ipu_get_configuration())
+    else:
+      g = ops.Graph()
+      with g.as_default():
+        with ops.device("CPU"):
+          with session_lib.Session(graph=g) as s:
+            configurations = s.run(gen_ipu_ops.ipu_get_configuration())
 
   # Deserialize and determine if a valid config exists,
   # i.e. user has successfully called ipu_configure_hardware.
