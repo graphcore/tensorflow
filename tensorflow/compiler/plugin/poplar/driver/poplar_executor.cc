@@ -1436,6 +1436,11 @@ bool PoplarExecutor::IPUConfig::TargetConfigured() const {
 
 void PoplarExecutor::IPUConfig::ClearDevice() { device_.reset(); }
 
+void PoplarExecutor::IPUConfig::Clear() {
+  device_.reset();
+  target_.reset();
+}
+
 std::recursive_mutex& PoplarExecutor::IPUConfig::Mutex() { return mutex_; }
 
 const poplar::Target& PoplarExecutor::IPUConfig::Target() {
@@ -1649,6 +1654,18 @@ Status PoplarExecutor::AttachToPoplarDevice() {
   return Status::OK();
 }
 
+void PoplarExecutor::DetachFromPoplarDevice() {
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+  if (PoplarDeviceIsAttached()) {
+    VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
+            << ordinal_;
+
+    ipu_.Device().detach();
+    ipu_.ClearDevice();
+    device_attached_ = false;
+  }
+}
+
 Status PoplarExecutor::CreatePoplarTarget() {
   TENSORFLOW_TRACEPOINT();
   bool has_user_config = (current_config_.device_config_size() > 0);
@@ -1802,20 +1819,16 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   if (!DeviceConfigurationsEqual(cfg, current_config_) && has_user_config) {
     XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
                           "\nNew config: " + cfg.DebugString());
-    return InternalError(
-        "IPU system configuration can only be set once within a process. "
-        "To use multiple configurations, use separate Python processes for "
-        "each.");
+    return FailedPrecondition(
+        "IPU system configuration has already been set in this process, "
+        "but it should have been reset automatically by the call to "
+        "'tensorflow.python.ipu.config.configure_ipu_system'.");
   }
   if (device_attached_) {
     if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
       // If there is no config associated to the open device then it is a CPU
       // device: dettach from it and initialize a Poplar device instead.
-      VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
-              << ordinal_;
-      ipu_.Device().detach();
-      ipu_.ClearDevice();
-      device_attached_ = false;
+      DetachFromPoplarDevice();
     } else {
       VLOG(1) << "Poplar device: type " << GetDeviceTargetName() << " ordinal "
               << ordinal_ << " is already configured: staying attached to it.";
@@ -3132,6 +3145,51 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
       PostProcessBuffer(output.second.tc);
     }
   }
+}
+
+void PoplarExecutor::Reset() {
+  std::lock_guard<std::recursive_mutex> lock(ipu_.Mutex());
+
+  AboutToFreeEngine(current_engine_);
+  StopIOThreads();
+  DetachFromPoplarDevice();
+  GetAndResetExecutorStatus();
+
+  // Note that we don't reset the IO feeds as that would require the
+  // infeeds to be reinitialised. Similarly for host embeddings.
+  ResetOptionFlags();
+  ResetConfiguration();
+  ResetReports();
+  ResetHandles();
+}
+
+void PoplarExecutor::ResetOptionFlags() {
+  option_flags_.clear();
+  conv_options_.clear();
+  matmul_options_.clear();
+  pooling_options_.clear();
+  graph_options_.clear();
+  execution_options_.clear();
+  gcl_options_.clear();
+}
+
+void PoplarExecutor::ResetConfiguration() {
+  ipu_.Clear();
+  current_config_.Clear();
+
+  configured_ = false;
+  poplar_device_hash_ = 0;
+  current_replication_factor_ = 1;
+}
+
+void PoplarExecutor::ResetReports() {
+  reports_.clear();
+  cluster_report_directories_.clear();
+}
+
+void PoplarExecutor::ResetHandles() {
+  args_map_.clear();
+  outputs_map_.clear();
 }
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
