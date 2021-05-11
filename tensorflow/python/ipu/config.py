@@ -2057,6 +2057,7 @@ def reset_ipu_configuration():
       with ops.control_dependencies(sync_ops):
         # Wait for sync to complete before clearing.
         sync_ops.append(gen_ipu_ops.ipu_reset_devices())
+        sync_ops.append(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
 
   with session_lib.Session(graph=g) as sess:
     sess.run(sync_ops)
