@@ -182,6 +182,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "reconfigure_ipu_test",
+    size = "small",
+    srcs = ["tests/reconfigure_ipu_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+    shard_count = 7,
+)
+
+tf_py_test(
     name = "gcl_test",
     size = "medium",
     srcs = ["tests/gcl_test.py"],
@@ -192,7 +207,6 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    shard_count = 2,
     tags = ["hw_poplar_test"],
 )
 
@@ -207,7 +221,6 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    shard_count = 6,  # as can't have differing config in same process
 )
 
 tf_py_test(
@@ -1045,7 +1058,6 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 5,
 )
 
 tf_py_test(
@@ -1531,6 +1543,7 @@ test_suite(
         "random_constant_matmul_test",
         "random_number_generation_test",
         "recompute_suggestion_test",
+        "reconfigure_ipu_test",
         "reductions_test",
         "replicated_graph_test",
         "replicated_index_test",

@@ -19,7 +19,8 @@ import sys
 
 
 def main():
-  poprun_command = sys.argv[1:]
+  mpirun_path = sys.argv[1]
+  poprun_command = sys.argv[2:]
 
   # Parse the arguments we need for figuring out the number of IPUs required.
   parser = argparse.ArgumentParser()
@@ -37,7 +38,10 @@ def main():
         file=sys.stderr)
     return
 
-  subprocess.check_call(poprun_command)
+  env = os.environ.copy()
+  # Make sure that the desired mpirun binary is found first on the PATH.
+  env["PATH"] = "{}:{}".format(os.path.dirname(mpirun_path), env["PATH"])
+  subprocess.check_call(poprun_command, env=env)
 
 
 if __name__ == "__main__":

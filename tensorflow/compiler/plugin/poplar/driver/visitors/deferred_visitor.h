@@ -273,6 +273,7 @@ class DeferredVisitor : public FullVisitor {
   Status HandleCall(HloInstruction* inst) final;
   Status HandleWhile(HloInstruction* inst) final;
   Status HandleCustomCall(HloInstruction* inst) final;
+  Status HandleConditional(HloInstruction* inst) final;
 
   // Finish visit always sets the output tensors and moves the tensor map and
   // then calls FinishDeferedAllocationVisit.
@@ -283,6 +284,12 @@ class DeferredVisitor : public FullVisitor {
   virtual Status PropagateDeferredAllocations(
       const HloInstruction* callsite_inst,
       const DeferredArgRBVectors& callsite_inputs,
+      const poplar::DebugNameAndId& debug_name_and_id);
+
+  virtual Status PropagateDeferredAllocationsOperand(
+      const HloInstruction* callsite_inst, int64 operand_idx,
+      int64 parameter_idx,
+      const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id);
 
   poplar::program::Sequence GetSequence(
@@ -395,6 +402,12 @@ class DeferredVisitor : public FullVisitor {
       const DeferredArgRBVectors& callsite_inputs, std::vector<bool> add_clone,
       const poplar::DebugNameAndId& debug_name_and_id);
 
+  Status PropagateDeferredAllocationsOperand(
+      const HloInstruction* callsite_inst, int64 operand_idx,
+      int64 parameter_idx,
+      const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
+      bool add_clone, const poplar::DebugNameAndId& debug_name_and_id);
+
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
   bool InputIsUsedInThisComputation(const HloInstruction* inst,
@@ -466,6 +479,12 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   Status PropagateDeferredAllocations(
       const HloInstruction* callsite_inst,
       const DeferredArgRBVectors& callsite_inputs,
+      const poplar::DebugNameAndId& debug_name_and_id) override;
+
+  Status PropagateDeferredAllocationsOperand(
+      const HloInstruction* callsite_inst, int64 operand_idx,
+      int64 parameter_idx,
+      const std::vector<absl::optional<TensorOrRemoteBuffer>>& callsite_input,
       const poplar::DebugNameAndId& debug_name_and_id) override;
 
   // If the visitor operator is allowed to reallocate inputs, then copies from

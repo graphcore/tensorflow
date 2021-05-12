@@ -5135,6 +5135,76 @@ ENTRY main {
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 }
 
+TEST_F(AllocationFinderTest, LookThroughConditional) {
+  std::string hlo = R"(
+HloModule module
+cond_true_9__.10 (arg_tuple.11: (f32[2,2], f32[2,2], f32[2,2])) -> (f32[2,2]) {
+  arg_tuple.11 = (f32[2,2], f32[2,2], f32[2,2]) parameter(0)
+  get-tuple-element.12 = f32[2,2] get-tuple-element(arg_tuple.11), index=0
+  get-tuple-element.13 = f32[2,2] get-tuple-element(arg_tuple.11), index=1
+  dot.15 = f32[2,2] dot(get-tuple-element.12, get-tuple-element.13), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT tuple.16 = (f32[2,2]) tuple(dot.15)
+}
+
+cond_false_10__.17 (arg_tuple.18: (f32[2,2], f32[2,2], f32[2,2])) -> (f32[2,2]) {
+  arg_tuple.18 = (f32[2,2], f32[2,2], f32[2,2]) parameter(0)
+  get-tuple-element.19 = f32[2,2] get-tuple-element(arg_tuple.18), index=0
+  get-tuple-element.21 = f32[2,2] get-tuple-element(arg_tuple.18), index=2
+  dot.22 = f32[2,2] dot(get-tuple-element.19, get-tuple-element.21), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT tuple.23 = (f32[2,2]) tuple(dot.22)
+}
+
+ENTRY cluster_14155272572172615694__.29 (arg0.1: f32[2,2], arg1.2: f32[2,2], arg2.3: f32[2,2], arg3.4: pred[]) -> f32[2,2] {
+  arg3.4 = pred[] parameter(3), parameter_replication={false}
+  arg0.1 = f32[2,2] parameter(0), parameter_replication={false}
+  arg1.2 = f32[2,2] parameter(1), parameter_replication={false}
+  arg2.3 = f32[2,2] parameter(2), parameter_replication={false}
+  tuple.9 = (f32[2,2], f32[2,2], f32[2,2]) tuple(arg0.1, arg1.2, arg2.3)
+  conditional.24 = (f32[2,2]) conditional(arg3.4, tuple.9, tuple.9), true_computation=cond_true_9__.10, false_computation=cond_false_10__.17
+  ROOT get-tuple-element.25 = f32[2,2] get-tuple-element(conditional.24), index=0
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module0.ok());
+  auto* module_ptr = module0.ValueOrDie().get();
+
+  auto resources = CompilerResources::CreateTestDefault(module_ptr);
+
+  CompilerAnnotations annotations(module_ptr);
+
+  EXPECT_TRUE(AllocationFinder(annotations).Run(module_ptr).ValueOrDie());
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 7);
+
+  const auto entry = module_ptr->entry_computation();
+  const auto arg0_1 = entry->parameter_instruction(0);
+  const auto arg1_2 = entry->parameter_instruction(1);
+  const auto arg2_3 = entry->parameter_instruction(2);
+
+  const auto true_fn = module_ptr->GetComputationWithName("cond_true_9__.10");
+  const auto dot_15 = true_fn->GetInstructionWithName("dot.15");
+
+  const auto false_fn =
+      module_ptr->GetComputationWithName("cond_false_10__.17");
+  const auto dot_22 = false_fn->GetInstructionWithName("dot.22");
+
+  auto t1 = annotations.tensor_allocation_map.at(TensorLocation{arg0_1, 0});
+  EXPECT_EQ(t1.tgt, dot_15);
+  EXPECT_EQ(t1.input_index, 0ll);
+  EXPECT_EQ(t1.sliceable_dimension, absl::nullopt);
+
+  auto t2 = annotations.tensor_allocation_map.at(TensorLocation{arg1_2, 0});
+  EXPECT_EQ(t2.tgt, dot_15);
+  EXPECT_EQ(t2.input_index, 1ll);
+  EXPECT_EQ(t2.sliceable_dimension, absl::nullopt);
+
+  auto t3 = annotations.tensor_allocation_map.at(TensorLocation{arg2_3, 0});
+  EXPECT_EQ(t3.tgt, dot_22);
+  EXPECT_EQ(t3.input_index, 1ll);
+  EXPECT_EQ(t3.sliceable_dimension, absl::nullopt);
+}
+
 // // TODO:
 // // - can forward path traverse in-place ops
 // // - is forward path rejected when going through non-layout preserving

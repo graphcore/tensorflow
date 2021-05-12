@@ -99,6 +99,10 @@ class PoplarPlatform : public se::Platform {
 
   void ResetXfeedManagers();
 
+  // Reset all the StreamExecutors. It is the callers responsibility
+  // to ensure the StreamExecutors are not in use when being reset.
+  Status ResetExecutors();
+
  private:
   // This platform's name.
   std::string name_;

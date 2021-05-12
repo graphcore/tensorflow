@@ -155,8 +155,7 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), replication_factor=replication_factor)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
       if device_mapping is None:
@@ -267,8 +266,7 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), replication_factor=replication_factor)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
       def opt_fn(loss):

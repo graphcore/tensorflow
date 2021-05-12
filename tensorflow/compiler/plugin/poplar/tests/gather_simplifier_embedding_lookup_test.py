@@ -21,6 +21,7 @@ from absl.testing import parameterized
 import os
 import numpy as np
 import test_utils as tu
+import pva
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
@@ -42,6 +43,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.parameters(range(1, 10))
   def testGatherLookupRandomize(self, y_0):
+    report_helper = tu.ReportHelper(self)
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
@@ -50,6 +52,8 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     self.assertTrue(cfg.disable_gather_simplifier)
     cfg = utils.set_optimization_options(cfg, gather_simplifier=True)
     self.assertFalse(cfg.disable_gather_simplifier)
+    cfg = report_helper.set_autoreport_options(cfg)
+
     utils.configure_ipu_system(cfg)
 
     # Set test range shape.
@@ -70,18 +74,14 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
                          (w_0, w_1))
         cpu_take = array_ops.gather(w_i, y_i)
 
-        report = tu.ReportJSON(self, sess=sess, configure_device=False)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[w, y])
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       ipu_gather_simplifier = sess.run(r, {y: y_i, w: w_i})
       self.assertAllClose(ipu_gather_simplifier[0], cpu_take)
 
-      report.parse_log()
-      # pylint: disable=line-too-long
+      report = pva.openReport(report_helper.find_report())
 
       # This tests gather simplifier hlo pass for embedding_lookup case.
       # It checks if "embedding_lookup/gather*/multiSlice" string was
@@ -94,7 +94,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
       if y_0 == 1:
         ok = ok[:-1]
       # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+      report_helper.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

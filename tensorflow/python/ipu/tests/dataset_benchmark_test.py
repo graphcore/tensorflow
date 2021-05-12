@@ -46,9 +46,7 @@ class DatasetBenchmarkTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testWithInfeed(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
-                                                       "f",
-                                                       replication_factor=8)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "f")
     benchmark_op = ipu.dataset_benchmark.infeed_benchmark(infeed_queue, 5, 256)
 
     with self.session() as sess:
