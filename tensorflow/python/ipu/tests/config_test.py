@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import copy
 import typing
 
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -525,6 +526,15 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
     self.assertEqual(
         config2.get_attribute_metadata("attr0").deprecated_msg,
         "config2 message")
+
+  def testDeepCopy(self):
+    """ Check we can deepcopy a config """
+    test_config = TestConfig()
+    test_config.attr0 = [5]
+    test_config.nested1.attr1 = [2]
+    config_copy = copy.deepcopy(test_config)
+    self.assertFalse(test_config.attr0 is config_copy.attr0)
+    self.assertFalse(test_config.nested1.attr1 is config_copy.nested1.attr1)
 
 
 # pylint: enable=pointless-string-statement
