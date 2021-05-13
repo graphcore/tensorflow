@@ -231,6 +231,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/io_tiles_test.py"],
     shard_count = 6,  # as can't have differing config in same process
+    shard_count = 4,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -416,7 +417,7 @@ tf_py_test(
     name = "keras_model_test",
     size = "large",
     srcs = ["tests/keras/keras_model_test.py"],
-    shard_count = 4,
+    shard_count = 12,
     deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -431,7 +432,7 @@ tf_py_test(
     name = "keras_functional_model_test",
     size = "large",
     srcs = ["tests/keras/keras_functional_model_test.py"],
-    shard_count = 8,
+    shard_count = 12,
     deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -875,7 +876,7 @@ tf_py_test(
     name = "ipu_strategy_test",
     size = "large",
     srcs = ["tests/ipu_strategy_test.py"],
-    shard_count = 2,
+    shard_count = 4,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

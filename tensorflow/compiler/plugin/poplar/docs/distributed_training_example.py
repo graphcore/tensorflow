@@ -37,10 +37,10 @@ def input_fn(mode, input_context=None):  # pylint: disable=unused-argument
 
 def model_fn(features, labels, mode):
   model = tf.keras.Sequential([
-      tf.keras.layers.Conv2D(32, 3, activation="relu"),
+      tf.keras.layers.Conv2D(8, 3, activation="relu"),
       tf.keras.layers.MaxPooling2D(),
       tf.keras.layers.Flatten(),
-      tf.keras.layers.Dense(64, activation="relu"),
+      tf.keras.layers.Dense(8, activation="relu"),
       tf.keras.layers.Dense(10)
   ])
   logits = model(features, training=mode == tf.estimator.ModeKeys.TRAIN)

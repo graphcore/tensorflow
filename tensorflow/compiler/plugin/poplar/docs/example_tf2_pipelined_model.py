@@ -36,14 +36,14 @@ def get_model():
   input_layer = Input(shape=(80), dtype=dtypes.int32, batch_size=32)
 
   with ipu.keras.PipelineStage(0):
-    x = Embedding(max_features, 128)(input_layer)
-    x = LSTM(128, dropout=0.2)(x)
+    x = Embedding(max_features, 64)(input_layer)
+    x = LSTM(64, dropout=0.2)(x)
 
   with ipu.keras.PipelineStage(1):
-    a = Dense(16, activation='relu')(x)
+    a = Dense(8, activation='relu')(x)
 
   with ipu.keras.PipelineStage(2):
-    b = Dense(16, activation='relu')(x)
+    b = Dense(8, activation='relu')(x)
 
   with ipu.keras.PipelineStage(3):
     x = Concatenate()([a, b])
@@ -67,7 +67,7 @@ parser.add_argument('--steps-per-epoch',
                     help="Number of steps in each epoch.")
 parser.add_argument('--epochs',
                     type=int,
-                    default=10,
+                    default=3,
                     help="Number of epochs to run.")
 args = parser.parse_args()
 

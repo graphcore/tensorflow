@@ -39,26 +39,20 @@ def create_model():
   inputs = keras.Input(shape=(32, 32, 3), name="img")
 
   # Block 1.
-  x = keras.layers.Conv2D(32, 3, activation="relu")(inputs)
-  x = keras.layers.Conv2D(64, 3, activation="relu")(x)
+  x = keras.layers.Conv2D(8, 3, activation="relu")(inputs)
+  x = keras.layers.Conv2D(16, 3, activation="relu")(x)
   block_1_output = keras.layers.MaxPooling2D(3)(x)
 
   # Block 2.
-  x = keras.layers.Conv2D(64, 3, activation="relu",
+  x = keras.layers.Conv2D(16, 3, activation="relu",
                           padding="same")(block_1_output)
-  x = keras.layers.Conv2D(64, 3, activation="relu", padding="same")(x)
+  x = keras.layers.Conv2D(16, 3, activation="relu", padding="same")(x)
   block_2_output = keras.layers.add([x, block_1_output])
 
   # Block 3.
-  x = keras.layers.Conv2D(64, 3, activation="relu",
-                          padding="same")(block_2_output)
-  x = keras.layers.Conv2D(64, 3, activation="relu", padding="same")(x)
-  block_3_output = keras.layers.add([x, block_2_output])
-
-  # Block 4.
-  x = keras.layers.Conv2D(64, 3, activation="relu")(block_3_output)
+  x = keras.layers.Conv2D(16, 3, activation="relu")(block_2_output)
   x = keras.layers.GlobalAveragePooling2D()(x)
-  x = keras.layers.Dense(256, activation="relu")(x)
+  x = keras.layers.Dense(64, activation="relu")(x)
   # Use IPU specific dropout for improved performance.
   x = ipu.keras.layers.Dropout(0.5)(x)
   x = keras.layers.Dense(10)(x)
