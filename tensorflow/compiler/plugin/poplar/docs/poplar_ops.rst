@@ -83,3 +83,12 @@ The set of sequence slicing ops provided for the IPU.
 See :py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice`,
 :py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice_unpack` and
 :py:func:`tensorflow.python.ipu.slicing_ops.sequence_slice_pack`.
+
+Histogram
+~~~~~~~~~~~~~~
+
+The set of histogram ops provided for the IPU.
+
+See :py:func:`tensorflow.python.ipu.statistics_ops.histogram`,
+:py:func:`tensorflow.python.ipu.statistics_ops.histogram_update` and
+:py:func:`tensorflow.python.ipu.statistics_ops.fixed_width_bins`.

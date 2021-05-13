@@ -260,6 +260,11 @@ It is also possible to access the operators via the
   :special-members: __init__
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.statisics_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
 .. Poprand
 
 .. automodule:: tensorflow.python.ipu.rand_ops
