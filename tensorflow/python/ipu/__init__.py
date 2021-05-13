@@ -45,6 +45,7 @@ from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import slicing_ops
 from tensorflow.python.ipu.ops import slicing_ops_grad
+from tensorflow.python.ipu.ops import statistics_ops
 from tensorflow.python.ipu.ops import summary_ops
 
 from tensorflow.python.ipu import data

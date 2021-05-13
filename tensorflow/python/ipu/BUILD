@@ -26,6 +26,7 @@ py_library(
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
         "ops/slicing_ops.py",
+        "ops/statistics_ops.py",
         "ops/summary_ops.py",
     ],
     srcs_version = "PY2AND3",
@@ -138,6 +139,7 @@ py_library(
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/slicing_ops.py",
+        "ops/statistics_ops.py",
         "ops/summary_ops.py",
         "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
@@ -1478,6 +1480,24 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 12,
+)
+
+tf_py_test(
+    name = "histogram_test",
+    size = "medium",
+    srcs = ["tests/histogram_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+    shard_count = 8,
 )
 
 test_suite(
