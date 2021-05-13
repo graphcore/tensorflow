@@ -16,6 +16,7 @@
 from functools import partial
 import numpy as np
 import absl.testing
+from absl.testing import parameterized
 
 from tensorflow.python.client import session as se
 from tensorflow.python.framework import constant_op
@@ -35,6 +36,7 @@ from tensorflow.python.ipu.ops import nn_ops
 from tensorflow.python.ipu.ops.nn_ops import _compute_sampled_logits
 
 from tensorflow.nn import ctc_beam_search_decoder as tf_ctc_beam_search
+from tensorflow import sparse
 
 
 class ComputeSampledLogitsTest(test_util.TensorFlowTestCase):
@@ -395,7 +397,31 @@ class NonLinearityTest(test_util.TensorFlowTestCase,
                               rtol=test_type[1])
 
 
-class PopnnCTCLossTest(test_util.TensorFlowTestCase):
+class BeamSearchParams:
+  def __init__(self, b, t, nc, bw, tp, l, s):
+    self.batch_size = b
+    self.max_time = t
+    self.num_classes = nc
+    self.beam_width = bw
+    self.top_paths = tp
+    self.length_init = l
+    self.seed = s
+
+  def __str__(self):
+    return "BeamSearchParams: " + str(
+        (self.batch_size, self.max_time, self.num_classes, self.beam_width,
+         self.top_paths, self.length_init, self.seed))
+
+
+def create_beam_search_params():
+  return [
+      BeamSearchParams(2, 10, 32, 16, 1, 3, 0),
+      BeamSearchParams(2, 10, 32, 16, 1, 5, 1),
+      BeamSearchParams(2, 10, 32, 16, 3, 5, 2)
+  ]
+
+
+class PopnnCTCLossTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   @staticmethod
   def create_input_values(batch_size, max_time, num_classes, max_label_length,
                           label_length):
@@ -770,48 +796,73 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
                            blank_index=blank_index,
                            out_dtype=out_dtype)
 
+  @parameterized.parameters(create_beam_search_params())
   @test_util.deprecated_graph_mode_only
-  def testCTCBeamSearch(self):
-    batch_size = 8
-    label_length = 5
-    max_label_length = 2 * label_length + 1
-    max_time = max_label_length
-    num_classes = 7
-    beam_width = 5
-    top_paths = 3
+  def testCTCBeamSearch(self, params):
+    batch_size = params.batch_size
+    max_time = params.max_time
+    num_classes = params.num_classes
+    beam_width = params.beam_width
+    top_paths = params.top_paths
+    length_init = params.length_init
+    seed = params.seed
+    blank_index = num_classes - 1  # updstream version is always num classes - 1
     in_dtype = np.float32
 
-    input_data = np.full([max_time, batch_size, num_classes],
-                         0.5,
-                         dtype=in_dtype)
-    input_length_data = np.full([batch_size], 1, dtype=np.uint32)  #pylint: disable=unused-variable
-    signed_input_length_data = np.full([batch_size], 1, dtype=np.int32)
+    np.random.seed(seed)
+    input_data = np.random.rand(max_time, batch_size, num_classes)
+    signed_input_length_data = np.full([batch_size],
+                                       length_init,
+                                       dtype=np.int32)
     inputs = array_ops.placeholder(in_dtype,
                                    shape=[max_time, batch_size, num_classes])
     signed_input_length = array_ops.placeholder(np.int32, shape=[batch_size])
 
-    with se.Session() as sess:  #pylint: disable=unused-variable
+    with se.Session() as sess:
       with ipu.scopes.ipu_scope("/device:IPU:0"):
 
-        a, b, c = ipu.ops.nn_ops.ctc_beam_search_decoder(  #pylint: disable=unused-variable
+        a, b, c = ipu.ops.nn_ops.ctc_beam_search_decoder(
             inputs,
             signed_input_length,
-            blank_index=0,
+            blank_index=blank_index,
+            top_paths=top_paths,
+            beam_width=beam_width,
+            name="BeamSearch")
+
+        log_probs = tf_nn_ops.log_softmax_v2(inputs, axis=2)
+        d, e, f = ipu.ops.nn_ops.ctc_beam_search_decoder_with_log_probs(
+            log_probs,
+            signed_input_length,
+            blank_index=blank_index,
             top_paths=top_paths,
             beam_width=beam_width,
             name="BeamSearch")
 
         # Need to wait for poplibs implmentation of ctc inference before can
         # actually call it
-        # probs, lengths, decoded = sess.run([a, b, c],
-        #              feed_dict={inputs: input_data,
-        #                       signed_input_length: signed_input_length_data})
+        probs, lengths, decoded, probs2, lengths2, decoded2 = sess.run(
+            [a, b, c, d, e, f],
+            feed_dict={
+                inputs: input_data,
+                signed_input_length: signed_input_length_data
+            })
 
     with se.Session() as sess2:
       d, l = tf_ctc_beam_search(inputs,
                                 signed_input_length,
                                 beam_width=beam_width,
                                 top_paths=top_paths)
+      # The upstream version returns a list of sparse tensors,
+      # need to change this into a dense tensor by padding it
+      # with the blank index
+      d = [sparse.to_dense(t, default_value=blank_index) for t in d]
+
+      for i, t in enumerate(d):
+        paddings = [[0, 0], [0, max_time - array_ops.shape(t)[1]]]
+        t = array_ops.pad(t, paddings, constant_values=blank_index)
+        d[i] = array_ops.reshape(t, [batch_size, 1, max_time])
+
+      d = array_ops.concat(d, 1)
 
       ex_decoded, ex_probs = sess2.run(  #pylint: disable=unused-variable
           [d, l],
@@ -820,8 +871,21 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase):
               signed_input_length: signed_input_length_data
           })
 
-    #self.assertEqual(probs, ex_probs)
-    #self.assertEqual(decoded, ex_decoded)
+    # self consistency checks
+    self.assertAllClose(probs, probs2)
+    self.assertAllClose(lengths, lengths2)
+    self.assertAllClose(decoded, decoded2)
+
+    # after the length for ipu version is just junk values
+    for b in range(batch_size):
+      for p in range(top_paths):
+        l = lengths2[b][p]
+        for t in range(l, max_time):
+          decoded2[b][p][t] = blank_index
+
+    # Check against upstream version now both have same form
+    self.assertAllClose(probs2, ex_probs)
+    self.assertAllClose(decoded2, ex_decoded)
 
 
 if __name__ == "__main__":

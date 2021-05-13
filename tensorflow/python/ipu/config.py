@@ -19,6 +19,7 @@ Configuration utilities
 
 import ast
 import collections
+import copy
 import difflib
 from enum import Enum
 import inspect
@@ -817,6 +818,14 @@ class _ConfigBase(object):
       return config._user_attributes[parts[-1]]  # pylint: disable=protected-access
     except (IndexError, ValueError, KeyError) as e:
       raise ValueError(f"Could not get attribute metadata for '{attr}': {e}")
+
+  def __deepcopy__(self, memo):
+    cls = self.__class__
+    new = cls.__new__(cls)
+    memo[id(self)] = new
+    for k, v in self.__dict__.items():
+      new.__dict__[k] = copy.deepcopy(v, memo)
+    return new
 
 
 def _poplar_options_to_protobuf(opts, pb_target):
@@ -2057,6 +2066,7 @@ def reset_ipu_configuration():
       with ops.control_dependencies(sync_ops):
         # Wait for sync to complete before clearing.
         sync_ops.append(gen_ipu_ops.ipu_reset_devices())
+        sync_ops.append(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
 
   with session_lib.Session(graph=g) as sess:
     sess.run(sync_ops)
