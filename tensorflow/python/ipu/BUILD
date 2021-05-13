@@ -236,6 +236,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
+    shard_count = 4,
 )
 
 tf_py_test(
@@ -421,7 +422,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 4,
+    shard_count = 12,
 )
 
 tf_py_test(
@@ -436,7 +437,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
     ],
-    shard_count = 8,
+    shard_count = 12,
 )
 
 tf_py_test(
@@ -877,7 +878,7 @@ tf_py_test(
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
-    shard_count = 2,
+    shard_count = 4,
 )
 
 tf_py_test(

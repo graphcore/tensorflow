@@ -3716,6 +3716,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/conv3d_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 2,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -4870,7 +4871,7 @@ py_test(
     name = "distributed_training_example",
     size = "large",
     srcs = ["docs/distributed_training_example.py"],
-    args = ["--num-steps=100"],
+    args = ["--num-steps=10"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4881,7 +4882,7 @@ horovod_py_test(
     name = "distributed_training_horovod_example",
     size = "large",
     srcs = ["docs/distributed_training_horovod_example.py"],
-    args = ["--num-steps=100"],
+    args = ["--num-steps=10"],
     main = "docs/distributed_training_horovod_example.py",
     num_processes = 2,
     deps = [

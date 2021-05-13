@@ -1024,33 +1024,33 @@ class IPUModelTest(test.TestCase):
       C = keras.initializers.Constant(0.1)
       return [
           # Test Embedding.
-          keras.layers.Embedding(10, 2, embeddings_initializer=C),
+          keras.layers.Embedding(4, 2, embeddings_initializer=C),
           keras.layers.Dense(2, kernel_initializer=C),
 
           # Test Dropout.
           keras.layers.Dropout(0.5),
-          keras.layers.Dense(20, kernel_initializer=C),
+          keras.layers.Dense(4, kernel_initializer=C),
 
           # Test LSTM.
-          keras.layers.LSTM(5, kernel_initializer=C, recurrent_initializer=C),
+          keras.layers.LSTM(2, kernel_initializer=C, recurrent_initializer=C),
 
           # Test Layer Norm.
           keras.layers.LayerNormalization(),
-          keras.layers.Dense(20, kernel_initializer=C),
-          keras.layers.Reshape((10, 2)),
+          keras.layers.Dense(8, kernel_initializer=C),
+          keras.layers.Reshape((4, 2)),
 
           # Test GRU.
-          keras.layers.GRU(5, kernel_initializer=C, recurrent_initializer=C)
+          keras.layers.GRU(2, kernel_initializer=C, recurrent_initializer=C)
       ]
 
     # Create some test data.
-    data = np.ones((96, 10), dtype=np.int32)
+    data = np.ones((16, 4), dtype=np.int32)
 
     # Compute IPU model output, uses layer replacement.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.Sequential(f(),
-                               gradient_accumulation_count=8,
+                               gradient_accumulation_count=4,
                                layer_replacement=True)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)

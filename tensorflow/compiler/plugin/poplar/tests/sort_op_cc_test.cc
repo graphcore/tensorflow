@@ -95,7 +95,7 @@ TEST(Sort, OneDimension) {
   Graph graph(device);
   popops::addCodelets(graph);
 
-  const std::size_t tensor_size = 1024;
+  const std::size_t tensor_size = 256;
 
   Tensor a = graph.addVariable(FLOAT, {tensor_size}, "input");
   poputil::mapTensorLinearly(graph, a);
@@ -131,7 +131,7 @@ TEST(SortInt, OneDimension) {
   Graph graph(device);
   popops::addCodelets(graph);
 
-  const std::size_t tensor_size = 1024;
+  const std::size_t tensor_size = 256;
 
   Tensor a = graph.addVariable(INT, {tensor_size}, "input");
   poputil::mapTensorLinearly(graph, a);
@@ -167,7 +167,7 @@ TEST(SortKV, OneDimension) {
   Graph graph(device);
   popops::addCodelets(graph);
 
-  const std::size_t tensor_size = 1024;
+  const std::size_t tensor_size = 256;
 
   Tensor k = graph.addVariable(FLOAT, {tensor_size}, "key");
   Tensor v = graph.addVariable(FLOAT, {tensor_size}, "value");
@@ -210,7 +210,7 @@ TEST(Sort, TwoDimension) {
   Graph graph(device);
   popops::addCodelets(graph);
 
-  const std::size_t tensor_size = 32;
+  const std::size_t tensor_size = 8;
 
   Tensor a = graph.addVariable(FLOAT, {tensor_size, tensor_size}, "input");
   poputil::mapTensorLinearly(graph, a);
@@ -253,7 +253,7 @@ TEST(Sort, ThreeDimension) {
   Graph graph(device);
   popops::addCodelets(graph);
 
-  const std::size_t tensor_size = 64;
+  const std::size_t tensor_size = 16;
 
   Tensor a =
       graph.addVariable(FLOAT, {tensor_size, tensor_size, tensor_size}, "key");

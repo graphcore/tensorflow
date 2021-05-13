@@ -17,6 +17,8 @@ import time
 
 import numpy as np
 
+from absl.testing import parameterized
+
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
@@ -32,6 +34,17 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 
+OUTFEED_ASYNC_TEST_CASES = [{
+    'testcase_name': '_delay_0',
+    'delay': 0
+}, {
+    'testcase_name': '_delay_0.001',
+    'delay': 0.001
+}, {
+    'testcase_name': '_delay_1',
+    'delay': 1
+}]
+
 
 def _get_compiled_modules(trace_events):
   compiled_modules = []
@@ -43,7 +56,7 @@ def _get_compiled_modules(trace_events):
   return compiled_modules
 
 
-class IPUStrategyTest(test_util.TensorFlowTestCase):
+class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   @test_util.run_v2_only
   def test_create_variable(self):
     # IPU 0 should be the default.
@@ -267,8 +280,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
     def mnist_model():
       model = keras.models.Sequential()
-      model.add(keras.layers.Conv2D(32, (3, 3)))
-      model.add(keras.layers.Conv2D(64, (3, 3)))
+      model.add(keras.layers.Conv2D(8, (3, 3)))
       model.add(keras.layers.Dropout(0.25))
       model.add(keras.layers.Flatten())
       model.add(keras.layers.Dense(num_classes, activation='softmax'))
@@ -317,15 +329,14 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
   @test_util.run_v2_only
   def test_keras_mnist_model_compile_fit_fixed_input(self):
-    num_examples = 100
-    batch_size = 10
+    num_examples = 20
+    batch_size = 2
     num_classes = 10
     num_epochs = 3
 
     def mnist_model():
       model = keras.models.Sequential()
-      model.add(keras.layers.Conv2D(32, (3, 3), input_shape=[28, 28, 1]))
-      model.add(keras.layers.Conv2D(64, (3, 3)))
+      model.add(keras.layers.Conv2D(8, (3, 3), input_shape=[28, 28, 1]))
       model.add(keras.layers.Flatten())
       model.add(keras.layers.Dense(num_classes, activation='softmax'))
       return model
@@ -498,9 +509,10 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
       result = strategy.experimental_run_v2(concrete_function, args=[inputs])
       self.assertEqual(result, inputs)
 
+  @parameterized.named_parameters(*OUTFEED_ASYNC_TEST_CASES)
   @test_util.run_v2_only
-  def test_outfeed_async_dequeue_eager(self):
-    num_iterations = 1000
+  def test_outfeed_async_dequeue_eager(self, delay):
+    num_iterations = 500
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
@@ -513,42 +525,36 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategy()
 
-    def test_with_delay(delay):
-      with strategy.scope():
-        # Async dequeue function that will run during main thread training loop
-        dequeued_samples = []
+    with strategy.scope():
+      # Async dequeue function that will run during main thread training loop
+      dequeued_samples = []
 
-        def dequeue():
-          counter = 0
-          while counter != num_iterations:
-            # Create a varying speed differential between the threads
-            time.sleep(delay)
-            r = outfeed_queue.dequeue().numpy()
-            if r.size:
-              for t in r:
-                dequeued_samples.append((counter, t))
-                counter += 1
+      def dequeue():
+        counter = 0
+        while counter != num_iterations:
+          # Create a varying speed differential between the threads
+          time.sleep(delay)
+          r = outfeed_queue.dequeue().numpy()
+          if r.size:
+            for t in r:
+              dequeued_samples.append((counter, t))
+              counter += 1
 
-        # Start the training loop
-        for i, x in zip(range(num_iterations), dataset):
-          strategy.experimental_run_v2(training_step, args=[x[0]])
-          # Once the model is compiled, start the dequeuing thread
-          if i == 0:
-            dequeue_thread = Thread(target=dequeue)
-            dequeue_thread.start()
+      # Start the training loop
+      for i, x in zip(range(num_iterations), dataset):
+        strategy.experimental_run_v2(training_step, args=[x[0]])
+        # Once the model is compiled, start the dequeuing thread
+        if i == 0:
+          dequeue_thread = Thread(target=dequeue)
+          dequeue_thread.start()
 
-        # Wait for the dequeuing thread to finish
-        dequeue_thread.join()
+      # Wait for the dequeuing thread to finish
+      dequeue_thread.join()
 
-        # Verify the dequeued samples
-        for i, sample in enumerate(dequeued_samples):
-          self.assertEqual(sample[0], i)
-          self.assertEqual(sample[1], i)
-
-    # Test with varying speed differences
-    test_with_delay(0)
-    test_with_delay(0.001)
-    test_with_delay(1)
+      # Verify the dequeued samples
+      for i, sample in enumerate(dequeued_samples):
+        self.assertEqual(sample[0], i)
+        self.assertEqual(sample[1], i)
 
 
 if __name__ == "__main__":
