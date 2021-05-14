@@ -306,4 +306,6 @@ message IpuOptions {
   int64 experimental_distributed_batch_norm_replica_group_size = 42;
 
   double io_tile_available_memory_proportion = 43;
+
+  bool auto_assign_report_subdirectories = 44;
 };
