@@ -335,8 +335,8 @@ In addition to the `tensorflow.python.ipu.optimizers` namespace, it is also poss
 .. note:: The `ipu.optimizers` optimizer classes can only be used with subclasses of `tensorflow.compat.v1.train.Optimizer`.
 
 .. automodule:: tensorflow.python.ipu.optimizers
-  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, MapGradientOptimizer, ShardedOptimizer
-  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, MapGradientOptimizer, ShardedOptimizer
+  :members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
+  :imported-members: CrossReplicaOptimizer, CrossReplicaGradientAccumulationOptimizer, CrossReplicaGradientAccumulationOptimizerV2, GradientAccumulationOptimizer, GradientAccumulationOptimizerV2, IpuOptimizer, MapGradientOptimizer, ShardedOptimizer
   :special-members: __init__
 
 .. _sharding-api:

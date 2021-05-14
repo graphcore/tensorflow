@@ -158,6 +158,7 @@ py_library(
         "optimizers/__init__.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
+        "optimizers/ipu_optimizer.py",
         "optimizers/map_gradient_optimizer.py",
         "optimizers/sharded_optimizer.py",
         "scopes.py",

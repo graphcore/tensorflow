@@ -20,36 +20,25 @@ Optimizer wrapper for sharded graphs
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import sharding
 from tensorflow.python.training import optimizer
-from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
+from tensorflow.python.ipu.optimizers import IpuOptimizer
 
 
-class ShardedOptimizer(optimizer.Optimizer):
+class ShardedOptimizer(IpuOptimizer):
   def __init__(self, optimizer):
     """Construct a new sharded optimizer.
 
     Args:
       optimizer: The optimizer to wrap.
     """
-    if isinstance(optimizer, OptimizerV2):
-      raise ValueError("Should use optimizers in ipu.keras.optimizers "
-                       "to wrap V2 optimizers")
-
-    super(ShardedOptimizer, self).__init__(False, name="ShardedOptimizer")
-    self._optimizer = optimizer
+    super(ShardedOptimizer, self).__init__(optimizer, name="ShardedOptimizer")
 
   def compute_gradients(self, loss, var_list=None, **kwargs):
     kwargs['colocate_gradients_with_ops'] = True
-    ret = self._optimizer.compute_gradients(loss, var_list=var_list, **kwargs)
+    ret = self._opt.compute_gradients(loss, var_list=var_list, **kwargs)
     sharding.propagate_sharding(ops.get_default_graph())
     return ret
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-    ret = self._optimizer.apply_gradients(grads_and_vars, global_step, name)
+    ret = self._opt.apply_gradients(grads_and_vars, global_step, name)
     sharding.propagate_sharding(ops.get_default_graph())
     return ret
-
-  def get_slot_names(self, *args, **kwargs):
-    return self._optimizer.get_slot_names(*args, **kwargs)
-
-  def variables(self):
-    return self._optimizer.variables()
