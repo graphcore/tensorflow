@@ -81,20 +81,21 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
       ipu_gather_simplifier = sess.run(r, {y: y_i, w: w_i})
       self.assertAllClose(ipu_gather_simplifier[0], cpu_take)
 
-      report = pva.openReport(report_helper.find_report())
+    report_helper.assert_num_reports(1)
+    report = pva.openReport(report_helper.find_reports()[0])
 
-      # This tests gather simplifier hlo pass for embedding_lookup case.
-      # It checks if "embedding_lookup/gather*/multiSlice" string was
-      # replaced by embedding_lookup/multi-slice/*/multiSlice".
-      ok = [
-          'embedding_lookup/multi-slice/output/multiSlice/*',
-          '__seed/set/setMasterSeed',
-          'host-exchange-local-copy-',
-      ]
-      if y_0 == 1:
-        ok = ok[:-1]
-      # pylint: enable=line-too-long
-      report_helper.assert_all_compute_sets_and_list(report, ok)
+    # This tests gather simplifier hlo pass for embedding_lookup case.
+    # It checks if "embedding_lookup/gather*/multiSlice" string was
+    # replaced by embedding_lookup/multi-slice/*/multiSlice".
+    ok = [
+        'embedding_lookup/multi-slice/output/multiSlice/*',
+        '__seed/set/setMasterSeed',
+        'host-exchange-local-copy-',
+    ]
+    if y_0 == 1:
+      ok = ok[:-1]
+    # pylint: enable=line-too-long
+    report_helper.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

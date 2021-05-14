@@ -4118,7 +4118,6 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 9,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -5024,7 +5023,6 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/auto_report_directory_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 1,
     tags = ["exclusive"],
     deps = [
         ":ipu_ops_py",

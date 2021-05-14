@@ -24,6 +24,8 @@ from functools import reduce
 import json as js
 import re
 import os
+import pathlib
+import shutil
 import tempfile
 import numpy as np
 
@@ -193,8 +195,23 @@ class TensorMap(object):
 class ReportHelper(object):
   def __init__(self, test):
     self._test = test
-    self._directory = tempfile.mkdtemp(prefix="tf_report_")
+    self._directory = tempfile.mkdtemp(prefix=f"tf_{type(test).__name__}_")
     self._setup_called = False
+
+  def _find_report_subdirectories(self):
+    # Find all subdirectories in the report directory.
+    directory = pathlib.Path(self._directory)
+    if not directory.exists():
+      if not self._setup_called:
+        raise RuntimeError("To use this helper you must setup the poplar " +
+                           "autoReport options with set_autoreport_options.")
+      raise IOError(
+          f"Report directory does not exist: {self._directory}\nEither " +
+          "no reports have been generated or the directory was deleted.")
+    return directory.glob('tf_report_*/')
+
+  def _find_report_files_in_subdirectory(self, directory):
+    return directory.glob("*.pop")
 
   # Sets autoReport engine options in the ipu config.
   def set_autoreport_options(self, cfg):
@@ -203,40 +220,38 @@ class ReportHelper(object):
         "autoReport.directory": self._directory,
         "autoReport.outputGraphProfile": "true",
     }
-    return utils.set_compilation_options(cfg, options)
+    cfg = utils.set_compilation_options(cfg, options)
+    cfg.auto_assign_report_subdirectories = True
+    return cfg
 
-  # Returns the path to the report file.
-  # Raises an exception if no report has been generated.
-  def find_report(self):
-    if not os.path.exists(self._directory):
-      if not self._setup_called:
-        raise Exception("To use this helper you must setup the poplar " +
-                        "autoReport options with set_autoreport_options")
-      raise Exception(
-          f"Report directory does not exist: {self._directory}\n" +
-          "Either no report has been generated or the directory was deleted.")
-    files = [f for f in os.listdir(self._directory) if f.endswith(".pop")]
-    if len(files) > 1:
-      message = f"More than one report file present in {self._directory}:"
-      message += "".join(f"\n   {f}" for f in files)
-      raise Exception(message)
-    if not files:
-      raise Exception(f"No report files found in {self._directory}")
+  # Finds and returns the paths to generated report files.
+  # Asserts the number of reports found is equal to assert_count.
+  def find_reports(self):
+    paths = []
+    for d in self._find_report_subdirectories():
+      files_ = list(self._find_report_files_in_subdirectory(d))
+      # Only expect 1 report file per report subdirectory.
+      if len(files_) != 1:
+        raise IOError(f"Expected 1 report file in each report " +
+                      f"subdirectory but found {len(files_)} in {d}:" +
+                      "".join(f"\n   {f.name}" for f in files_))
+      # Add report file absolute path to result.
+      paths.append(str(files_[0]))
 
-    return os.path.join(self._directory, files[0])
+    return paths
 
-  # Delete the report directory and all report files inside it.
+  # Delete the report directory and all contents.
   def clear_reports(self):
-    self._cleanup_called = True
-    if os.path.exists(self._directory):
-      for f in os.listdir(self._directory):
-        if f.endswith(".pop"):
-          os.remove(os.path.join(self._directory, f))
-      os.rmdir(self._directory)
+    shutil.rmtree(self._directory)
 
   # Automatically clean up report files when this instance is destroyed.
   def __del__(self):
-    self.clear_reports()
+    # Ignore errors to clean up as much as possible.
+    shutil.rmtree(self._directory, ignore_errors=True)
+
+  # Asserts the number of reports found matches the number given.
+  def assert_num_reports(self, n):
+    self._test.assertLen(self.find_reports(), n)
 
   # Asserts all the compute sets match a pattern in the whitelist and also
   # asserts that all the whitelist patterns match at least one compute set.

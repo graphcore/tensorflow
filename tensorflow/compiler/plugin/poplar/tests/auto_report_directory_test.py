@@ -22,6 +22,7 @@ from pathlib import Path
 import re
 import shutil
 import numpy as np
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -59,9 +60,6 @@ def createSimpleGraph():
   with ipu.scopes.ipu_scope("/device:IPU:0"):
     run_op = ipu.ipu_compiler.compile(simple_net, inputs=[x])
 
-  cfg = ipu.utils.create_ipu_config()
-  ipu.utils.configure_ipu_system(cfg)
-
   return run_op, x
 
 
@@ -79,6 +77,11 @@ class AutoReportDirTest(xla_test.XLATestCase):
 
   def testAutoReportDirNotCreated(self):
     with test.mock.patch.dict("os.environ", add_to_poplar_engine_options({})):
+
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
@@ -91,6 +94,10 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
@@ -113,6 +120,11 @@ class AutoReportDirTest(xla_test.XLATestCase):
             "autoReport.all": "true",
             "autoReport.directory": "./tommyFlowers"
         })):
+
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
@@ -133,6 +145,10 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
@@ -146,6 +162,41 @@ class AutoReportDirTest(xla_test.XLATestCase):
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
         repdirs = find_files_by_substring(os.getcwd(), REPORT_DIR_PREFIX)
         self.assertTrue(len(repdirs) == num_dirs)
+
+  def testAutoAssignReportSubdirectoriesAllowsMultipleReports(self):
+    report_helper = tu.ReportHelper(self)
+    cfg = ipu.utils.create_ipu_config()
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    cfg = report_helper.set_autoreport_options(cfg)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with self.session() as sess:
+      run_graph_op_1, x_1 = createSimpleGraph()
+      sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
+      # Assert one report generated.
+      report_helper.assert_num_reports(1)
+
+      run_graph_op_2, x_2 = createSimpleGraph()
+      sess.run(run_graph_op_2, {x_2: np.full((2, 2), 10)})
+      # Assert second report does not override first.
+      report_helper.assert_num_reports(2)
+
+  def testAutoAssignReportSubdirectoriesSubdirectoryReused(self):
+    report_helper = tu.ReportHelper(self)
+    cfg = ipu.utils.create_ipu_config()
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    cfg = report_helper.set_autoreport_options(cfg)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with self.session() as sess:
+      run_graph_op_1, x_1 = createSimpleGraph()
+      sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
+      # Assert one report generated.
+      report_helper.assert_num_reports(1)
+
+      sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
+      # Assert report from rerun overrides report from previous run.
+      report_helper.assert_num_reports(1)
 
 
 if __name__ == "__main__":
