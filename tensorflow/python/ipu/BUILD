@@ -223,6 +223,7 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
+    shard_count = 4,
 )
 
 tf_py_test(
