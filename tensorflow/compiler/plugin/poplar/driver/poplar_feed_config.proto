@@ -24,13 +24,10 @@ message PoplarFeedConfig {
 	// XLA PrimitveType to TF DataType.
 	repeated tensorflow.DataType tf_data_types = 4;
 
-	// The amount of data we should batch each time we sync with the host.
-	int64 io_batch_size = 5;
-
 	// How many elements to prefetch.
-	int64 prefetch_depth = 6;
+	int64 prefetch_depth = 5;
 
 	// Whether the feed sequence is reusable because this feed id has multiple
 	// uses.
-	bool reusable = 7;
+	bool reusable = 6;
 };

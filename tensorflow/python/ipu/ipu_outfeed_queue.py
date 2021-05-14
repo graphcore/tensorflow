@@ -65,10 +65,14 @@ class IPUOutfeedQueue:
 
   _replication_factor_deprecated_instructions = """No change needed.
   replication_factor is now set automatically based on the model."""
+  _io_batch_size_deprecated_instructions = """Accumulate the results manually or
+  use accumulate_outfeed when using pipelining."""
 
   @deprecation.deprecated_args(None,
                                _replication_factor_deprecated_instructions,
                                "replication_factor")
+  @deprecation.deprecated_args(None, _io_batch_size_deprecated_instructions,
+                               "io_batch_size")
   def __init__(
       self,
       feed_name,
@@ -87,11 +91,7 @@ class IPUOutfeedQueue:
           returned by the outfeed when the dequeue operation is run.
         device_ordinal: ordinal of the IPU device on which this queue will be
           used. By default the queue will be used on "/device/IPU:0".
-        io_batch_size: Output tensors will be batched into this number of samples
-          before being sent to the host.  This reduces the amount of
-          device->host communication at the expense of needing to store the
-          tensors on the device, and the extra computation required to operate
-          the batching.
+        io_batch_size: Deprecated.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -113,7 +113,6 @@ class IPUOutfeedQueue:
 
     self._outfeed_all = self._outfeed_mode == IPUOutfeedMode.ALL
     self._device_ordinal = device_ordinal
-    self._io_batch_size = max(1, io_batch_size)
     self._feed_name = str(feed_name)
 
     self._operations = []
@@ -216,8 +215,7 @@ class IPUOutfeedQueue:
           flat_tensors,
           output_shapes=self._flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
-          feed_id=self._feed_name,
-          io_batch_size=self._io_batch_size)
+          feed_id=self._feed_name)
 
     self._operations.append(outfeed_op)
     self._enqueuing_thread = threading.get_ident()
