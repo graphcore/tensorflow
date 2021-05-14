@@ -176,14 +176,14 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     def stage1(img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
-        x = conv(img, 7, 2, 16)
+        x = conv(img, 3, 2, 4)
         x = nn.relu(x)
         x = max_pool(x, ksize=3, stride=2)
         return x, label
 
     def stage2(x, label):
       with variable_scope.variable_scope("stage2", use_resource=True):
-        x = block("b", 2, 64, 1, x)
+        x = block("b", 2, 4, 1, x)
         return x, label
 
     def stage3(x, label):

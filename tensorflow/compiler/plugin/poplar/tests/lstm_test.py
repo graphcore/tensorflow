@@ -18,6 +18,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
+
 import os
 import numpy as np
 import test_utils as tu
@@ -44,8 +46,8 @@ from tensorflow.keras.layers import LSTM
 dataType = np.float32
 batch_size = 1
 seq_len = 3
-input_size = 5
-num_channels = 8
+input_size = 3
+num_channels = 4
 
 
 def _get_variable(name, shape, initializer):
@@ -70,7 +72,37 @@ def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
                   dtype=dataType))
 
 
-class LSTMTest(xla_test.XLATestCase):
+def _layerInferenceTestCases():
+  cases = []
+  for h_init in [0., 1.]:
+    for c_init in [0., 1.]:
+      cases.append({
+          'testcase_name': 'h_init_%f_c_init%f' % (h_init, c_init),
+          'h_init': h_init,
+          'c_init': c_init
+      })
+  return cases
+
+
+def _activationTestCases():
+  cases = []
+  for activation in ['tanh', 'relu', 'softmax', 'sigmoid', 'hard_sigmoid']:
+    for recurrent_activation in ['softmax', 'sigmoid', 'hard_sigmoid']:
+      cases.append({
+          'testcase_name':
+          '%s_%s' % (activation, recurrent_activation),
+          'activation':
+          activation,
+          'recurrent_activation':
+          recurrent_activation
+      })
+  return cases
+
+
+LAYER_WEIGHT_CASES = _layerInferenceTestCases()
+
+
+class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=W0223
   def _LSTMLayerCPU(self,
                     inputs,
                     weights_value,
@@ -186,41 +218,44 @@ class LSTMTest(xla_test.XLATestCase):
     # Check that the whole outupt sequence matches
     self.assertAllClose(popnn_out, ref_out)
 
-  def testLSTMLayerInference(self):
+  @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
+  def testLSTMLayerInferenceAllZeroWeight(self, h_init, c_init):
     tu.ReportJSON(self, eager_mode=True)
     np.random.seed(0)
     # Run with all-0 weights
     weight0 = 1.
-    for h_init in [0., 1.]:
-      for c_init in [0., 1.]:
-        self._RunInferenceComparison('ones',
-                                     input_value=0.,
-                                     forget_bias=0.,
-                                     weights_value=weight0,
-                                     h_value=h_init,
-                                     c_value=c_init)
+    self._RunInferenceComparison('ones',
+                                 input_value=0.,
+                                 forget_bias=0.,
+                                 weights_value=weight0,
+                                 h_value=h_init,
+                                 c_value=c_init)
 
+  @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
+  def testLSTMLayerInferenceAllOneWeight(self, h_init, c_init):
+    tu.ReportJSON(self, eager_mode=True)
+    np.random.seed(0)
     # Run with all-1 weights
     weight1 = 1.
-    for h_init in [0., 1.]:
-      for c_init in [0., 1.]:
-        self._RunInferenceComparison('ones',
-                                     input_value=0.,
-                                     forget_bias=0.,
-                                     weights_value=weight1,
-                                     h_value=h_init,
-                                     c_value=c_init)
+    self._RunInferenceComparison('ones',
+                                 input_value=0.,
+                                 forget_bias=0.,
+                                 weights_value=weight1,
+                                 h_value=h_init,
+                                 c_value=c_init)
 
+  @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
+  def testLSTMLayerInferenceRandomWeight(self, h_init, c_init):
+    tu.ReportJSON(self, eager_mode=True)
+    np.random.seed(0)
     # Run with random weights
     for weight in np.random.rand(3):
-      for h_init in [0., 1.]:
-        for c_init in [0., 1.]:
-          self._RunInferenceComparison('rand',
-                                       input_value=0.,
-                                       forget_bias=0.,
-                                       weights_value=weight,
-                                       h_value=h_init,
-                                       c_value=c_init)
+      self._RunInferenceComparison('rand',
+                                   input_value=0.,
+                                   forget_bias=0.,
+                                   weights_value=weight,
+                                   h_value=h_init,
+                                   c_value=c_init)
 
   def _RunLSTMLayerTraining(self, name, input_value, forget_bias,
                             weights_value, h_value, c_value, training_steps,
@@ -295,23 +330,23 @@ class LSTMTest(xla_test.XLATestCase):
         device_string="/device:CPU:0")
     self.assertAllClose(popnn_losses, ref_losses)
 
-  def testLSTMLayerTraining(self):
+  @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
+  def testLSTMLayerTraining(self, h_init, c_init):
     tu.ReportJSON(self, eager_mode=True)
     np.random.seed(42)
 
     # Run with random weights
     for weight in np.random.rand(3):
-      for h_init in [0., 1.]:
-        for c_init in [0., 1.]:
-          self._RunTrainingComparison('rand',
-                                      input_value=0.,
-                                      forget_bias=0.,
-                                      weights_value=weight,
-                                      h_value=h_init,
-                                      c_value=c_init,
-                                      training_steps=3)
+      self._RunTrainingComparison('rand',
+                                  input_value=0.,
+                                  forget_bias=0.,
+                                  weights_value=weight,
+                                  h_value=h_init,
+                                  c_value=c_init,
+                                  training_steps=2)
 
-  def testLSTMActivations(self):
+  @parameterized.named_parameters(*_activationTestCases())
+  def testLSTMActivations(self, activation, recurrent_activation):
     input_value = 0.7
     weights_value = 0.3
     h_value = 0.5
@@ -353,12 +388,10 @@ class LSTMTest(xla_test.XLATestCase):
         sess.run(variables.global_variables_initializer())
         return sess.run(lstm_output_seq, fd)
 
-    for activation in ['tanh', 'relu', 'softmax', 'sigmoid', 'hard_sigmoid']:
-      for recurrent_activation in ['softmax', 'sigmoid', 'hard_sigmoid']:
-        output_cpu = run(self._LSTMLayerCPU, activation, recurrent_activation)
-        output_ipu = run(self._LSTMLayer, activation, recurrent_activation)
+    output_cpu = run(self._LSTMLayerCPU, activation, recurrent_activation)
+    output_ipu = run(self._LSTMLayer, activation, recurrent_activation)
 
-        self.assertAllClose(output_cpu, output_ipu)
+    self.assertAllClose(output_cpu, output_ipu)
 
   def testLSTMCached(self):
     with self.session() as sess:

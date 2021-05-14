@@ -19,9 +19,9 @@ def model_fn(mode, params):
   is_training = mode == tf.estimator.ModeKeys.TRAIN
 
   def stage1(features, labels):
-    partial = Conv2D(32, (3, 3), padding="same")(features)
+    partial = Conv2D(16, (3, 3), padding="same")(features)
     partial = Activation("relu")(partial)
-    partial = Conv2D(32, (3, 3))(partial)
+    partial = Conv2D(16, (3, 3))(partial)
     partial = Activation("relu")(partial)
     partial = MaxPooling2D(pool_size=(2, 2))(partial)
     partial = Dropout(0.25)(partial, training=is_training)
@@ -29,15 +29,15 @@ def model_fn(mode, params):
     return partial, labels
 
   def stage2(partial, labels):
-    partial = Conv2D(64, (3, 3), padding="same")(partial)
+    partial = Conv2D(32, (3, 3), padding="same")(partial)
     partial = Activation("relu")(partial)
-    partial = Conv2D(64, (3, 3))(partial)
+    partial = Conv2D(32, (3, 3))(partial)
     partial = Activation("relu")(partial)
     partial = MaxPooling2D(pool_size=(2, 2))(partial)
     partial = Dropout(0.25)(partial, training=is_training)
 
     partial = Flatten()(partial)
-    partial = Dense(512)(partial)
+    partial = Dense(256)(partial)
     partial = Activation("relu")(partial)
     partial = Dropout(0.5)(partial, training=is_training)
     logits = Dense(NUM_CLASSES)(partial)

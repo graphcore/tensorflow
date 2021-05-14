@@ -310,6 +310,7 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
     ],
+    shard_count = 8,
 )
 
 tf_py_test(
