@@ -3501,23 +3501,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "infeed_prefetch_test",
-    size = "large",
-    srcs = ["tests/infeed_prefetch_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":ipu_ops_py",
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "simple_network_test",
     size = "large",
     srcs = ["tests/simple_network_test.py"],
@@ -5201,7 +5184,6 @@ test_suite(
         "hlo_poplar_buffer_util_test",
         "host_compute_barrier_inserter_test",
         "host_compute_schedule_optimizer_test",
-        "infeed_prefetch_test",
         "inplace_test",
         "instruction_extensions_test",
         "inter_ipu_copy_inserter_test",
