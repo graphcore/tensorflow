@@ -5302,6 +5302,7 @@ test_suite(
         "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
         "topk_onehot_test",
+        "topk_test",
         "triangular_solve_test",
         "update_op_dependencies_test",
         "variable_test",
