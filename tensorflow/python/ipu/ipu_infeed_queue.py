@@ -94,6 +94,8 @@ class IPUInfeedQueue:
   @deprecation.deprecated_args(None,
                                _replication_factor_deprecated_instructions,
                                "replication_factor")
+  @deprecation.deprecated_args(None, "Use prefetch_depth instead.",
+                               "data_to_prefetch")
   def __init__(self,
                dataset,
                feed_name,
@@ -111,21 +113,7 @@ class IPUInfeedQueue:
         all IPUInfeedQueues and IPUOutfeedQueues.
       device_ordinal: ordinal of the IPU device on which this queue will be
         used. By default the queue will be used on "/device/IPU:0".
-      data_to_prefetch: the amount of data to prefetch.
-        Defaults to 1, no prefetch.
-        If set to non-1 (and non-0) each time we sync with the CPU we will
-        return this number of dataset values rather than 1. This must not go
-        over the size of the dataset if it is not repeating, and will increment
-        the infeed by this amount each time so using the infeed in multiple
-        programs or loops should take into account that if `data_to_prefetch`
-        is not a factor of the previous iterations
-        then the next loop/program will not be starting at the iteration it
-        otherwise would be.
-        This will obviously increase the memory usage from having more batches
-        live at a given point but should give a speed up by having to make
-        fewer round trips to host memory. It may be that larger number of
-        batches should be prefetched at once in order to see any benefit as the
-        lookup itself has some overhead from internal copies.
+      data_to_prefetch: Deprecated.
       prefetch_depth: the number of elements Poplar will prefetch.
         The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is
@@ -164,15 +152,6 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._flat_structure = dataset._flat_structure
       self._device_ordinal = device_ordinal
       self._prefetch_depth = prefetch_depth
-
-      # We use max to clamp 0/1 to the same value.
-      self._io_batch_size = max(1, data_to_prefetch)
-
-      # Batch the dataset to take prefetch into account.
-
-      if self._io_batch_size != 1:
-        self._dataset = self._dataset.batch(self._io_batch_size,
-                                            drop_remainder=True)
 
       # Apply the dataset options - do this before replica handling to make sure
       # all the optimizations can be applied.
@@ -217,7 +196,6 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     """
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
-        io_batch_size=self._io_batch_size,
         prefetch_depth=self._prefetch_depth,
         **self._flat_structure)
     self._dequeued = True

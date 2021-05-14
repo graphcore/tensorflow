@@ -25,7 +25,6 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .Attr("feed_id: string")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
-    .Attr("io_batch_size: int = 1")
     .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
@@ -37,9 +36,6 @@ outputs: A list of tensors that will be provided using the infeed mechanism.
 feed_id: The id of the iterator used for this dequeue.
 output_types: The element types of each element in `outputs`.
 output_shapes: The shapes of each tensor in `outputs`.
-io_batch_size: the number of tensors which should be fetched from the host
-  in one go.  This reduces the host->device IO, at the cost of memory on the
-  device.
 prefetch_depth: the number of elements poplar will prefetch.
   The depth of the poplar datastream buffer size which may be prefetched
   before being read by the device. By default the prefetch_depth size is
@@ -54,7 +50,6 @@ REGISTER_OP("IPUCreateDatasetIterator")
     .Input("input_dataset: variant")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
-    .Attr("io_batch_size: int = 1")
     .Attr("prefetch_depth: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
@@ -73,7 +68,6 @@ REGISTER_OP("PopDatastreamOutfeedEnqueue")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("outfeed_mode: string='all'")
     .Attr("feed_id: string")
-    .Attr("io_batch_size: int")
     .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs)
@@ -86,9 +80,6 @@ output_types: The element types of each element in `outputs`.
 outfeed_mode: 'all' or 'get_last', default is 'all'. In 'all'-mode all outfed
   values are enqueued for reading on the host. In 'get_last'-mode a single
   value is queued to be passed to the host.
-io_batch_size: the number of tensors which should be fetched from the host
-  in one go.  This reduces the host->device IO, at the cost of memory on the
-  device.
 )doc");
 
 REGISTER_OP("PopDatastreamOutfeedDequeue")
@@ -98,7 +89,6 @@ REGISTER_OP("PopDatastreamOutfeedDequeue")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
     .Attr("outfeed_mode: string='all'")
-    .Attr("io_batch_size: int = 1")
     .Attr("prefetch_depth: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnknownShape)
@@ -113,9 +103,6 @@ output_shapes: The output_shapes of each tensor in `outputs`. If the first
   dimension is None, then the dequeue operation will output all outfed
   elements available.
 device_ordinal: The IPU device to use.
-io_batch_size: the number of tensors which should be fetched from the host
-  in one go.  This reduces the host->device IO, at the cost of memory on the
-  device.
 )doc");
 
 REGISTER_OP("IPUDeleteOutfeed")

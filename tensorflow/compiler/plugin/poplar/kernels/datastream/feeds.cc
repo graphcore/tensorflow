@@ -77,15 +77,12 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 void GetFeedConfig(OpKernelConstruction* ctx,
                    xla::poplarplugin::PoplarFeedConfig& config) {
   std::string feed_id;
-  int64 io_batch_size;
   int64 prefetch_depth;
   std::vector<tensorflow::DataType> types;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
-  OP_REQUIRES_OK(ctx, ctx->GetAttr("io_batch_size", &io_batch_size));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("prefetch_depth", &prefetch_depth));
   config.set_feed_id(feed_id);
-  config.set_io_batch_size(io_batch_size);
   config.set_prefetch_depth(prefetch_depth);
 
   OP_REQUIRES(
