@@ -353,7 +353,7 @@ class PipelineTester(object):
               for i in range(len(stages))
           ]
         report.assert_pipeline_stages_on_expected_ipu(device_mapping)
-        report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.3)
+        report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.5)
       out = out[0] if optimizer else out
       if return_report:
         return out, report

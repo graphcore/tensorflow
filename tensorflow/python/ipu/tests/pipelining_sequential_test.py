@@ -607,14 +607,14 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
     def stage1(img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
-        x = conv(img, 7, 2, 16)
+        x = conv(img, 3, 2, 4)
         x = nn.relu(x)
         x = max_pool(x, ksize=3, stride=2)
         return x, label
 
     def stage2(x, label):
       with variable_scope.variable_scope("stage2", use_resource=True):
-        x = block("b", 2, 64, 1, x)
+        x = block("b", 2, 4, 1, x)
         return x, label
 
     def stage3(x, label):
@@ -662,7 +662,7 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage1", use_resource=True):
         embedding = variable_scope.get_variable(
             "c",
-            shape=[10, 1216],
+            shape=[10, 12],
             dtype=np.float32,
             initializer=init_ops.constant_initializer(10.01),
             trainable=True)
