@@ -18,10 +18,10 @@ Optimizer wrapper that modifies gradients before application
 """
 
 from tensorflow.python.training import optimizer
-from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
+from tensorflow.python.ipu.optimizers import IpuOptimizer
 
 
-class MapGradientOptimizer(optimizer.Optimizer):
+class MapGradientOptimizer(IpuOptimizer):
   """
   This class enables modification of the computed gradients, before they are
   passed to the final optimizer for application.
@@ -75,13 +75,7 @@ class MapGradientOptimizer(optimizer.Optimizer):
       gradient_mapping_function: The function to be applied on the gradients and
         variables which are provided by `wrapped_optimizer.compute_gradients()`.
     """
-
-    if isinstance(wrapped_optimizer, OptimizerV2):
-      raise ValueError("Should use optimizers in "
-                       "ipu.keras.optimizers.MapGradientOptimizer "
-                       "to wrap V2 optimizers")
-    super(MapGradientOptimizer, self).__init__(False, name)
-    self._wrapped_optimizer = wrapped_optimizer
+    super(MapGradientOptimizer, self).__init__(wrapped_optimizer, name=name)
     self._gradient_mapping_function = gradient_mapping_function
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
@@ -101,28 +95,8 @@ class MapGradientOptimizer(optimizer.Optimizer):
     Returns:
       A list of (gradient, variable) pairs.
     """
-    grads_and_vars = self._wrapped_optimizer.compute_gradients(*args, **kwargs)
+    grads_and_vars = self._opt.compute_gradients(*args, **kwargs)
     grads_and_vars = [(self._gradient_mapping_function(x[0],
                                                        x[1].value()), x[1])
                       for x in grads_and_vars]
     return grads_and_vars
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
-  def get_name(self):
-    return self._wrapped_optimizer.get_name()
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
-  def apply_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
-    return self._wrapped_optimizer.apply_gradients(*args, **kwargs)
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
-  def get_slot(self, var, name):
-    return self._wrapped_optimizer.get_slot(var, name)
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
-  def get_slot_names(self):
-    return self._wrapped_optimizer.get_slot_names()
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
-  def variables(self):
-    return self._wrapped_optimizer.variables()

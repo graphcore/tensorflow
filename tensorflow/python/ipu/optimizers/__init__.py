@@ -19,6 +19,7 @@ Optimizer classes for the Graphcore IPU
 
 # pylint: disable=wildcard-import,unused-import
 
+from tensorflow.python.ipu.optimizers.ipu_optimizer import IpuOptimizer
 from tensorflow.python.ipu.optimizers.cross_replica_optimizer import CrossReplicaOptimizer
 from tensorflow.python.ipu.optimizers.map_gradient_optimizer import MapGradientOptimizer
 from tensorflow.python.ipu.optimizers.sharded_optimizer import ShardedOptimizer

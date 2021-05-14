@@ -20,8 +20,8 @@ Optimizer wrapper for replicated graphs
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.ipu.optimizers import IpuOptimizer
 from tensorflow.python.training import optimizer
-from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 
 
 def apply_cross_replica_op_single(grad, var):
@@ -39,7 +39,7 @@ def apply_cross_replica_op(grads_and_vars):
   return summed_grads_and_vars
 
 
-class CrossReplicaOptimizer(optimizer.Optimizer):
+class CrossReplicaOptimizer(IpuOptimizer):
   """An optimizer that averages gradients across IPU replicas."""
   def __init__(self, opt, name="CrossReplicaOptimizer"):
     """Construct a new cross-replica optimizer.
@@ -49,36 +49,7 @@ class CrossReplicaOptimizer(optimizer.Optimizer):
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaOptimizer".
     """
-
-    if isinstance(opt, OptimizerV2):
-      raise ValueError("Should use optimizer in "
-                       "ipu.keras.optimizers.CrossReplicaOptimizer "
-                       "to wrap V2 optimizers")
-
-    super(CrossReplicaOptimizer, self).__init__(False, name)
-    self._opt = opt
-
-  def compute_gradients(self, loss, var_list=None, **kwargs):
-    """Compute gradients of "loss" for the variables in "var_list".
-
-    This simply wraps the compute_gradients() from the real optimizer. The
-    gradients will be aggregated in the apply_gradients() so that user can
-    modify the gradients like clipping with per replica global norm if needed.
-    The global norm with aggregated gradients can be bad as one replica's huge
-    gradients can hurt the gradients from other replicas.
-
-    Args:
-      loss: A Tensor containing the value to minimize.
-      var_list: Optional list or tuple of `tf.Variable` to update to minimize
-        `loss`.  Defaults to the list of variables collected in the graph
-        under the key `GraphKey.TRAINABLE_VARIABLES`.
-      **kwargs: Keyword arguments for compute_gradients().
-
-    Returns:
-      A list of (gradient, variable) pairs.
-    """
-
-    return self._opt.compute_gradients(loss, var_list=var_list, **kwargs)
+    super(CrossReplicaOptimizer, self).__init__(opt, name=name)
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     """Apply gradients to variables.
@@ -103,35 +74,3 @@ class CrossReplicaOptimizer(optimizer.Optimizer):
     """
     summed_grads_and_vars = apply_cross_replica_op(grads_and_vars)
     return self._opt.apply_gradients(summed_grads_and_vars, global_step, name)
-
-  def get_slot(self, *args, **kwargs):
-    """Return a slot named "name" created for "var" by the Optimizer.
-
-    This simply wraps the get_slot() from the actual optimizer.
-
-    Args:
-      *args: Arguments for get_slot().
-      **kwargs: Keyword arguments for get_slot().
-
-    Returns:
-      The `Variable` for the slot if it was created, `None` otherwise.
-    """
-    return self._opt.get_slot(*args, **kwargs)
-
-  def get_slot_names(self, *args, **kwargs):
-    """Return a list of the names of slots created by the `Optimizer`.
-
-    This simply wraps the get_slot_names() from the actual optimizer.
-
-    Args:
-      *args: Arguments for get_slot().
-      **kwargs: Keyword arguments for get_slot().
-
-    Returns:
-      A list of strings.
-    """
-    return self._opt.get_slot_names(*args, **kwargs)
-
-  def variables(self):
-    """Forwarding the variables from the underlying optimizer."""
-    return self._opt.variables()

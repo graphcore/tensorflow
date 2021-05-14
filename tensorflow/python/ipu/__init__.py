@@ -73,6 +73,7 @@ from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.keras import losses
 
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import ipu_optimizer
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
