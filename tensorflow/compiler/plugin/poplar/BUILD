@@ -3645,6 +3645,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/conv_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 8,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -4203,6 +4204,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/outside_compilation_scope_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 8,
     tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
@@ -4306,7 +4308,7 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/lstm_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 6,
+    shard_count = 8,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

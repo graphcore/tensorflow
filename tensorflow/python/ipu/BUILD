@@ -308,6 +308,7 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
+    shard_count = 8,
 )
 
 tf_py_test(
