@@ -315,6 +315,7 @@ cc_library(
         "driver/tools/custom_ops/group_norm_grad.cc",
         "driver/tools/custom_ops/group_norm_stats.cc",
         "driver/tools/custom_ops/gru.cc",
+        "driver/tools/custom_ops/histogram.cc",
         "driver/tools/custom_ops/elementwise.cc",
         "driver/tools/custom_ops/execution_counter.cc",
         "driver/tools/custom_ops/hlo_extensions.cc",
@@ -505,6 +506,7 @@ cc_library(
         "driver/tools/custom_ops/execution_counter.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
+        "driver/tools/custom_ops/histogram.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
         "driver/tools/custom_ops/hlo_remote_buffer_info.h",
         "driver/tools/custom_ops/host_embedding.h",
@@ -691,6 +693,7 @@ cc_library(
         "driver/ops/custom_ops/popops/expression_helpers.cc",
         "driver/ops/custom_ops/popops/fusions.cc",
         "driver/ops/custom_ops/popops/gather_ops.cc",
+        "driver/ops/custom_ops/popops/histogram.cc",
         "driver/ops/custom_ops/popops/multi_slice.cc",
         "driver/ops/custom_ops/popops/normalise_image.cc",
         "driver/ops/custom_ops/popops/random.cc",
@@ -966,6 +969,7 @@ cc_library(
         "kernels/popnn/topk.cc",
         "kernels/popops/all_reduce.cc",
         "kernels/popops/all_to_all.cc",
+        "kernels/popops/histogram.cc",
         "kernels/popops/multi_slice.cc",
         "kernels/popops/normalise_image.cc",
         "kernels/popops/reduce_scatter.cc",
@@ -1140,6 +1144,7 @@ cc_library(
     srcs = [
         "ops/popops/all_to_all.cc",
         "ops/popops/cross_replica_sum.cc",
+        "ops/popops/histogram.cc",
         "ops/popops/multi_slice.cc",
         "ops/popops/normalise_image.cc",
         "ops/popops/reduce_scatter.cc",
@@ -3496,23 +3501,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "infeed_prefetch_test",
-    size = "large",
-    srcs = ["tests/infeed_prefetch_test.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        ":ipu_ops_py",
-        ":test_utils_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "simple_network_test",
     size = "large",
     srcs = ["tests/simple_network_test.py"],
@@ -3571,6 +3559,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/conv_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 8,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -3625,6 +3614,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/conv3d_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 2,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -4120,6 +4110,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/outside_compilation_scope_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 8,
     tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
@@ -4223,7 +4214,7 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/lstm_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 6,
+    shard_count = 8,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -4769,7 +4760,7 @@ py_test(
     name = "distributed_training_example",
     size = "large",
     srcs = ["docs/distributed_training_example.py"],
-    args = ["--num-steps=100"],
+    args = ["--num-steps=10"],
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -4780,7 +4771,7 @@ horovod_py_test(
     name = "distributed_training_horovod_example",
     size = "large",
     srcs = ["docs/distributed_training_horovod_example.py"],
-    args = ["--num-steps=100"],
+    args = ["--num-steps=10"],
     main = "docs/distributed_training_horovod_example.py",
     num_processes = 2,
     deps = [
@@ -5195,7 +5186,6 @@ test_suite(
         "hlo_poplar_buffer_util_test",
         "host_compute_barrier_inserter_test",
         "host_compute_schedule_optimizer_test",
-        "infeed_prefetch_test",
         "inplace_test",
         "instruction_extensions_test",
         "inter_ipu_copy_inserter_test",

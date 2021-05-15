@@ -107,6 +107,8 @@ enum PoplarOp {
   CTCBeamSearchWithLogits = 103;
   ScaledInplaceXbY = 104;
   ScaledInplaceaXbY = 105;
+  Histogram = 106;
+  HistogramUpdate = 107;
   
   // Supported Fusions.
   Conv_biasadd = 200;
