@@ -555,7 +555,7 @@ def ctc_loss(labels,
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
-    data: The data input [max_time, batch_size, num_classes] tensor
+    data: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of log probabilities.
     label_length: A tensor of shape [batch_size] containing the number of
         labels in each `labels` batch entry.
@@ -609,7 +609,7 @@ def ctc_loss_with_logits(labels,
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
-    logits: The data input [max_time, batch_size, num_classes] tensor
+    logits: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of logits.
     label_length: A tensor of shape [batch_size] containing the number of
         labels in each `labels` batch entry.
@@ -656,7 +656,7 @@ def ctc_loss_v2(labels,
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
-    logits: The data input [max_time, batch_size, num_classes] tensor
+    logits: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of logits.
     label_length: A tensor of shape [batch_size] containing the number of
         labels in each `labels` batch entry.
@@ -703,7 +703,7 @@ def ctc_loss_with_log_probs(labels,
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
-    data: The data input [max_time, batch_size, num_classes] tensor
+    data: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of log probabilities.
     label_length: A tensor of shape [batch_size] containing the number of
         labels in each `labels` batch entry.
@@ -774,7 +774,7 @@ def ctc_beam_search_decoder(logits,
         a list of dynamically sized tensors.
 
   Args:
-    logits: The data input [max_time, batch_size, num_classes] tensor
+    logits: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of logits.
     logit_length: A tensor of shape [batch_size] containing the number of
         timesteps in each `logits` batch entry.
@@ -819,7 +819,7 @@ def ctc_beam_search_decoder_with_log_probs(log_probs,
         label lengths in addition to the probabilites and decoded labels.
 
   Args:
-    log_probs: The data input [max_time, batch_size, num_classes] tensor
+    log_probs: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of log probabilities.
     input_lengths: A tensor of shape [batch_size] containing the number of
         timesteps in each `log_probs` batch entry.
