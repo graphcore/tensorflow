@@ -44,11 +44,12 @@ class Dropout(Layer):
       mask.
   """
   def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
-    super(Dropout, self).__init__(**kwargs)
     self.built = False
     self.seed = seed
     self.rate = rate
     self.noise_shape = noise_shape
+    self.ref = kwargs.pop("ref", True)
+    super(Dropout, self).__init__(**kwargs)
 
   # pylint: disable=useless-super-delegation
   def build(self, input_shape):
@@ -78,6 +79,7 @@ class Dropout(Layer):
                               seed=self.seed,
                               rate=self.rate,
                               noise_shape=self.noise_shape,
+                              ref=self.ref,
                               name=self.name)
 
     output = tf_utils.smart_cond(training, dropped_inputs,

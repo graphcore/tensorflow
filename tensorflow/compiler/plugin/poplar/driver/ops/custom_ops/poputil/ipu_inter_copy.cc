@@ -175,25 +175,33 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
       return FailedPrecondition("Mismatched sharding info on %s", inst->name());
     }
 
-    TF_ASSIGN_OR_RETURN(auto operand_tensors,
-                        FindInstructionInputTensors(tensor_map, res, inst, i,
-                                                    seq, {debug_info}, false));
+    auto operand_tensors = FindInstructionInputs(tensor_map, res, inst, i, seq,
+                                                 {debug_info}, false);
     const auto shapes = FlattenedXlaShape(src->shape());
     CHECK_EQ(src_sharding.size(), shapes.size());
     for (int64 index = 0; index < src_sharding.size();
          ++index, ++flat_tuple_index) {
       const int64 src_shard = src_sharding[index];
       const int64 dst_shard = dst_sharding[index];
+      if (operand_tensors[index].IsTensor()) {
+        TF_ASSIGN_OR_RETURN(
+            TensorCopyInfo copy_info,
+            GetTensorCopyInfo(res, operand_tensors[index], inst, src,
+                              flat_tuple_index, dst_shard, shapes[index],
+                              tensor_map, {debug_info}));
 
-      TF_ASSIGN_OR_RETURN(
-          TensorCopyInfo copy_info,
-          GetTensorCopyInfo(res, operand_tensors[index], inst, src,
-                            flat_tuple_index, dst_shard, shapes[index],
-                            tensor_map, {debug_info}));
-
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index,
-                                  copy_info.output));
-      copy_informations[src_shard][dst_shard].push_back(copy_info);
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index,
+                                    copy_info.output));
+        copy_informations[src_shard][dst_shard].push_back(copy_info);
+      } else if (operand_tensors[index].IsOpaque()) {
+        TF_CHECK_OK(AddOutput(tensor_map, inst, flat_tuple_index,
+                              operand_tensors[index]));
+      } else {
+        return FailedPrecondition(
+            "Cannot perform inter-ipu-copy on a RemoteBuffer for instruction "
+            "%s on operand %d tuple index %d",
+            inst->name(), i, index);
+      }
     }
   }
 

@@ -62,6 +62,15 @@ bool ContainsToken(const Shape& shape) {
   return false;
 }
 
+bool ContainsOpaque(const Shape& shape) {
+  if (shape.IsOpaque()) {
+    return true;
+  } else if (shape.IsTuple()) {
+    return absl::c_any_of(shape.tuple_shapes(), ContainsOpaque);
+  }
+  return false;
+}
+
 RecomputationInfo GetRecomputationInfo(const HloComputation* comp) {
   RecomputationInfo info;
 
@@ -245,6 +254,22 @@ StatusOr<bool> PipelineRecomputationStageInserter::RecomputePipeline(
       for (auto inst : recomp_info.to_cache) {
         if (contains_token(inst)) {
           LOG(INFO) << "   " << inst->ToString();
+        }
+      }
+      LOG(INFO) << "}";
+      continue;
+    }
+
+    auto contains_opaque = [](const HloInstruction* inst) {
+      return ContainsOpaque(inst->shape());
+    };
+
+    if (absl::c_any_of(fwd_stage->operands(), contains_opaque)) {
+      LOG(INFO) << "Cannot recompute pipeline stage " << stage_id
+                << " because it contains the following opaque shaped inputs {";
+      for (auto operand : fwd_stage->operands()) {
+        if (contains_opaque(operand)) {
+          LOG(INFO) << "   " << operand->ToString();
         }
       }
       LOG(INFO) << "}";

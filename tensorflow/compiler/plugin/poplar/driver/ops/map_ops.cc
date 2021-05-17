@@ -395,12 +395,121 @@ StatusOr<bool> ComputationHasIoTileInstructions(
   return false;
 }
 
+bool VerifyOpaqueUsers(const HloInstruction* param,
+                       const HloInstruction* root) {
+  // Matching instructions are trivially correct.
+  if (param == root) {
+    return true;
+  }
+
+  // Mismatched shapes can't be compatible.
+  if (param->shape() != root->shape()) {
+    return false;
+  }
+
+  // Any arrays can be compatible, so long as the shapes match.
+  if (param->shape().IsArray() && root->shape().IsArray()) {
+    return true;
+  }
+
+  // Any tokens can be compatible.
+  if (param->shape().IsToken() && root->shape().IsToken()) {
+    return true;
+  }
+
+  // Opaque, but not matching instructions is invalid.
+  if (param->shape().IsOpaque() && (param != root)) {
+    return false;
+  }
+
+  // For tuple shapes, we check the gte users. This is equivalent to the
+  // operands of the corresponding root tuple instructions.
+  if (param->shape().IsTuple() && root->shape().IsTuple()) {
+    auto users = param->users();
+
+    auto is_gte_pred = [](const HloInstruction* user) -> bool {
+      return user->opcode() == HloOpcode::kGetTupleElement;
+    };
+
+    // For a GTE user, we walk back to the operand at the tuple index.
+    auto handle_gte_user_pred = [&](const HloInstruction* user) -> bool {
+      if (user->tuple_index() < root->operand_count()) {
+        return VerifyOpaqueUsers(user, root->operand(user->tuple_index()));
+      }
+
+      return false;
+    };
+
+    // For a non-GTE user, we try all the operands.
+    auto handle_user_pred = [&](const HloInstruction* user) -> bool {
+      for (std::size_t i = 0; i < root->operand_count(); ++i) {
+        if (VerifyOpaqueUsers(user, root->operand(i))) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    auto itr = absl::c_stable_partition(users, is_gte_pred);
+    return std::all_of(users.begin(), itr, handle_gte_user_pred) &&
+           std::all_of(itr, users.end(), handle_user_pred);
+  }
+
+  return false;
+}
+
+/**
+ * We require any opaque arguments to a loop to be passed through in the same
+ * position. This is because the opaque values are propogated at compile-time,
+ * so don't really interact with the running loop. Requiring this makes the
+ * behaviour of opaque arguments consistent with runtime arguments.
+ */
+Status CheckLoopOpaqueAliasing(CompilerResources& res,
+                               const HloInstruction* inst) {
+  const HloComputation* loop_body = inst->to_apply();
+
+  const HloInstruction* root = loop_body->root_instruction();
+  const std::vector<HloInstruction*> params =
+      loop_body->parameter_instructions();
+
+  auto error = InternalErrorStrCat(
+      "Opaque type tensor passed to loop", inst->name(),
+      ", but does not alias the output. Input opaque tensors must appear in "
+      "the root instruction at the same position.");
+
+  // Check whether the input is opaque and whether it is passed through from the
+  // parameter.
+  if (root->shape().IsOpaque() && root != params[0]) {
+    return error;
+  }
+
+  // Ignore non-tuple loops.
+  if (root->opcode() != HloOpcode::kTuple) {
+    return Status::OK();
+  }
+
+  // For each input, check whether the input is opaque and whether it is passed
+  // through from the parameter to the root in the same position.
+  for (std::size_t i = 0u; i < params.size(); ++i) {
+    if (!VerifyOpaqueUsers(params[i], root->operand(i))) {
+      return error;
+    }
+  }
+
+  return Status::OK();
+}
+
 StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
     CompilerResources& res, const HloInstruction* inst,
     const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description,
     const ReallocateInputsInfo& reallocate_inputs_info,
     const poplar::DebugNameAndId& debug_name_and_id) {
+  // Check any opaque typed tensors are correctly connected to the root
+  // instruction.
+  TF_RETURN_IF_ERROR(CheckLoopOpaqueAliasing(res, inst));
+
   // If the repeat is only on a single IPU and has instructions on IO tiles,
   // then create an overlapping repeat visitor.
   TF_ASSIGN_OR_RETURN(bool has_io_tile_inst,
@@ -558,6 +667,8 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
             seq.add(poplar::program::Copy(inst_input.AsTensor(),
                                           comp_input.AsTensor(), false,
                                           debug_name_and_id));
+          } else if (comp_input.IsOpaque()) {
+            inst_input = comp_input.AsOpaque();
           } else if (comp_input.IsRemoteBuffer()) {
             return xla::FailedPrecondition(
                 "Unable to handle used remote buffer tensor in function call "
@@ -596,20 +707,22 @@ StatusOr<poplar::program::Program> CreateFunctionOp(
       }
       TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, flat_tuple_index, output));
     } else {
-      if (!output.IsTensor()) {
+      if (output.IsOpaque()) {
+        TF_RETURN_IF_ERROR(
+            AddOutput(tensor_map, inst, flat_tuple_index, output));
+      } else if (!output.IsTensor()) {
         return InternalErrorStrCat("Expected output at index ",
                                    shape_index.ToString(),
                                    " to be a Tensor object");
+      } else {
+        auto name = absl::StrCat("out/", flat_tuple_index);
+        poplar::Tensor cloned_output = poputil::duplicate(
+            graph, output.AsTensor(), seq, {debug_name_and_id, name},
+            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        TF_RETURN_IF_ERROR(
+            AddOutputTensor(tensor_map, inst, flat_tuple_index, cloned_output));
       }
-
-      auto name = absl::StrCat("out/", flat_tuple_index);
-      poplar::Tensor cloned_output = poputil::duplicate(
-          graph, output.AsTensor(), seq, {debug_name_and_id, name},
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-      TF_RETURN_IF_ERROR(
-          AddOutputTensor(tensor_map, inst, flat_tuple_index, cloned_output));
     }
-
     flat_tuple_index++;
   }
 
@@ -621,6 +734,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
     const xla::Shape& output, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
   poplar::program::Sequence seq({}, debug_name_and_id);
+
   // Get all the inputs.
   TF_ASSIGN_OR_RETURN(
       TensorOrRemoteBufferVectors inputs,
@@ -652,6 +766,10 @@ StatusOr<poplar::program::Program> CreatePipelineOp(
   int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   CHECK_EQ(inputs.size(), inst->operand_count());
+
+  // Check any opaque typed tensors are correctly connected to the root
+  // instruction.
+  TF_RETURN_IF_ERROR(CheckLoopOpaqueAliasing(res, inst));
 
   // Compile the pipeline.
   TF_ASSIGN_OR_RETURN(

@@ -353,6 +353,8 @@ class DeferredVisitor : public FullVisitor {
   virtual Status HandleParameterTensor(TensorLocation input_location,
                                        const Shape shape);
 
+  virtual Status PreProcessParameter(HloInstruction* parameter);
+
   // Allocates the input by trying to find an allocation target, otherwise tries
   // to use the `tensor_like` argument to create an input tensor.
   // Allocation location is the location where the tensor is actually allocated.

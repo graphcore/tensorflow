@@ -28,8 +28,10 @@ dataType = np.float32
 def _kerasIPUDropout(instance, x_val, rate=0.5, seed=None, training=True):
   with ops.device('/device:IPU:0'):
     x = array_ops.placeholder(x_val.dtype, x_val.shape)
-    output = ipu.layers.Dropout(dtype=dataType, rate=rate,
-                                seed=seed)(inputs=x, training=training)
+    output = ipu.layers.Dropout(dtype=dataType,
+                                rate=rate,
+                                seed=seed,
+                                ref=False)(inputs=x, training=training)
 
   with instance.test_session() as sess:
     return sess.run(output, {x: x_val})

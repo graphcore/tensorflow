@@ -182,6 +182,9 @@ Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
                              int64 n, poplar::RemoteBuffer rbuffer);
 
+Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
+                       absl::any token);
+
 /* This returns a [range) which correspond to the flat tuple indices of output
  * tensors.
  */
