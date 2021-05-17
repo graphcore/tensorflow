@@ -117,6 +117,7 @@ py_library(
         "keras/__init__.py",
         "keras/layer_replacement.py",
         "keras/layers/__init__.py",
+        "keras/layers/ctc.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
         "keras/layers/ipu_layer.py",
@@ -501,9 +502,9 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_ctc_loss_test",
+    name = "keras_ctc_test",
     size = "large",
-    srcs = ["tests/keras/keras_ctc_loss_test.py"],
+    srcs = ["tests/keras/keras_ctc_test.py"],
     deps = [
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
@@ -1903,7 +1904,7 @@ test_suite(
         "ipu_strategy_replicated_test",
         "ipu_strategy_test",
         "iteration_counter_test",
-        "keras_ctc_loss_test",
+        "keras_ctc_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_execution_parameters_test",

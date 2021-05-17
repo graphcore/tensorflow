@@ -70,8 +70,7 @@ class CTCLoss(layers.Layer):
     """
     Args:
       labels: The labels input [batch_size, max_label_length] tensor.
-      data: The data input [max_time, batch_size, num_classes] tensor The data
-          is expected in the form of log probabilities.
+      data: The data input [max_time, batch_size, num_classes].
       label_length: A tensor of shape [batch_size] containing the number of
           labels in each `labels` batch entry.
       data_length: A tensor of shape [batch_size] containing the number of

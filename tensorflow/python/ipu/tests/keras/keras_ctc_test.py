@@ -15,18 +15,57 @@
 """Test for IPU CTC Loss function."""
 
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data import Dataset
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import ctc_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.platform import test
+from tensorflow import sparse
+from tensorflow.nn import ctc_beam_search_decoder as cpu_ctc_beam_search_decoder
 
 dataType = np.float32
+
+
+# Only works using logits
+class CTCPredictionsCpu(layers.Layer):
+  def __init__(self, blank_index=0, beam_width=100, top_paths=1, name=None):
+    super().__init__(name)
+    self.blank_index = blank_index
+    self.beam_width = beam_width
+    self.top_paths = top_paths
+
+  @staticmethod
+  def mask_out_junk_values(predictions, blank_index, max_time):
+    predictions = [
+        sparse.to_dense(t, default_value=blank_index) for t in predictions
+    ]
+    for i, t in enumerate(predictions):
+      paddings = [[0, 0], [0, max_time - array_ops.shape(t)[1]]]
+      t = array_ops.pad(t, paddings, constant_values=blank_index)
+      predictions[i] = array_ops.reshape(t,
+                                         [array_ops.shape(t)[0], 1, max_time])
+    return array_ops.concat(predictions, 1)
+
+  def call(self, data, data_length, **kwargs):  # pylint: disable=W0221
+
+    predictions, probs = cpu_ctc_beam_search_decoder(
+        data,
+        data_length,
+        beam_width=self.beam_width,
+        top_paths=self.top_paths)
+    predictions = self.mask_out_junk_values(predictions, self.blank_index,
+                                            array_ops.shape(data)[0])
+
+    predictions = ipu.keras.layers.CTCPredictionsLayer._select_most_likely_path(  # pylint: disable=protected-access
+        probs, predictions, self.top_paths, None)
+    return predictions
 
 
 class CTCLossEndpointCpu(layers.Layer):
@@ -34,7 +73,12 @@ class CTCLossEndpointCpu(layers.Layer):
     super().__init__(name=name)
     self.blank_index = blank_index
 
-  def call(self, labels, logits, label_length, logit_length, **kwargs):  # pylint: disable=W0221
+  def call(self,
+           logits,
+           logit_length,
+           labels=None,
+           label_length=None,
+           **kwargs):  # pylint: disable=W0221
     loss = ctc_ops.ctc_loss_v2(labels,
                                logits,
                                label_length,
@@ -45,7 +89,33 @@ class CTCLossEndpointCpu(layers.Layer):
     return logits
 
 
-class CTCLossTest(test.TestCase):
+class CTCBeamSearchParams:
+  def __init__(self, params):
+    self.params = params
+
+
+def generate_beam_search_params():
+  A = CTCBeamSearchParams({
+      "batch_size": 4,
+      "actual_label_length": 2,
+      # randomly generated labels need 2n+1 time steps because there are
+      # implicit blank steps around repeated labels
+      "max_label_length": 5,
+      "max_time": 5,
+      "num_classes": 4,
+      "blank_index": 3,  # blank index should be num_classes - 1
+      "top_paths": 1,  # top paths must be less than beam width
+      "beam_width": 2,
+      "seed": 9,
+  })
+  B = CTCBeamSearchParams(dict(A.params))
+  B.params["top_paths"] = 3
+  B.params["beam_width"] = 4
+  B.params["seed"] = 10
+  return [("Greedy", A), ("TopPaths", B)]
+
+
+class CTCLossTest(test.TestCase, parameterized.TestCase):
   @staticmethod
   def get_params():
     return {
@@ -60,7 +130,46 @@ class CTCLossTest(test.TestCase):
     }
 
   @staticmethod
-  def create_model(loss_layer, model, ctc_params, log_softmax=False):
+  def create_predictions_model(predictions_layer,
+                               model,
+                               ctc_params,
+                               log_softmax=False):
+    batch_size = ctc_params["batch_size"]
+    num_classes = ctc_params["num_classes"]
+    max_time = ctc_params["max_time"]
+
+    logits = keras.layers.Input((max_time, num_classes),
+                                batch_size=batch_size,
+                                dtype=np.float32,
+                                name="logits")
+    logit_length = keras.layers.Input((),
+                                      batch_size=batch_size,
+                                      dtype=np.int32,
+                                      name="logit_length")
+    x = logits
+
+    dense_layer = layers.Dense(num_classes,
+                               activation='relu',
+                               kernel_initializer="identity",
+                               bias_initializer='ones')
+    x = dense_layer(x)
+
+    transpose_fn = lambda x: keras.backend.permute_dimensions(x, (1, 0, 2))
+    transpose_layer = layers.Lambda(transpose_fn)
+    x = transpose_layer(x)
+
+    if log_softmax:
+      log_softmax_fn = lambda x: nn_ops.log_softmax_v2(x, axis=2)
+      log_softmax_layer = layers.Lambda(log_softmax_fn)
+      x = log_softmax_layer(x)
+
+    predictions = predictions_layer(x, logit_length)
+    m = model(inputs=[logits, logit_length], outputs=predictions)
+    # No need to compile as we don't need any metrics, only the output.
+    return m
+
+  @staticmethod
+  def create_loss_model(loss_layer, model, ctc_params, log_softmax=False):
     batch_size = ctc_params["batch_size"]
     num_classes = ctc_params["num_classes"]
     max_label_length = ctc_params["max_label_length"]
@@ -110,10 +219,10 @@ class CTCLossTest(test.TestCase):
     return m
 
   @staticmethod
-  def create_endpoint_model(endpoint_layer,
-                            model,
-                            ctc_params,
-                            log_softmax=False):
+  def create_loss_endpoint_model(endpoint_layer,
+                                 model,
+                                 ctc_params,
+                                 log_softmax=False):
     batch_size = ctc_params["batch_size"]
     num_classes = ctc_params["num_classes"]
     max_label_length = ctc_params["max_label_length"]
@@ -151,7 +260,10 @@ class CTCLossTest(test.TestCase):
       log_softmax_layer = layers.Lambda(log_softmax_fn)
       x = log_softmax_layer(x)
 
-    x = endpoint_layer(labels, x, label_length, logit_length)
+    x = endpoint_layer(x,
+                       logit_length,
+                       labels=labels,
+                       label_length=label_length)
 
     m = model(inputs=[labels, logits, label_length, logit_length], outputs=x)
     m.compile('sgd')
@@ -164,10 +276,12 @@ class CTCLossTest(test.TestCase):
     max_label_length = ctc_params["max_label_length"]
     max_time = ctc_params["max_time"]
     actual_label_length = ctc_params["actual_label_length"]
+    blank_index = ctc_params["blank_index"]
 
     def data_generator():
       while True:
-        labels = np.random.randint(1, num_classes, size=[max_label_length])
+        labels = (np.random.randint(1, num_classes, size=[max_label_length]) \
+                     + blank_index) % num_classes
         logits = np.float32(
             np.random.randint(0, num_classes, size=[max_time, num_classes]))
         label_length = np.int32(actual_label_length)
@@ -191,8 +305,8 @@ class CTCLossTest(test.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_endpoint_model(loss_layer_cpu, keras.Model,
-                                           ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
+                                                ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
     strategy = ipu.ipu_strategy.IPUStrategy()
@@ -203,10 +317,10 @@ class CTCLossTest(test.TestCase):
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
-      model_ipu = self.create_model(loss_layer_ipu,
-                                    ipu.keras.Model,
-                                    ctc_params,
-                                    log_softmax=True)
+      model_ipu = self.create_loss_model(loss_layer_ipu,
+                                         ipu.keras.Model,
+                                         ctc_params,
+                                         log_softmax=True)
       loss_ipu = model_ipu.evaluate(dataset, steps=1)[0]
 
     self.assertEqual(np.size(loss_ipu), 1)
@@ -219,8 +333,8 @@ class CTCLossTest(test.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_endpoint_model(loss_layer_cpu, keras.Model,
-                                           ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
+                                                ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
     strategy = ipu.ipu_strategy.IPUStrategy()
@@ -232,8 +346,8 @@ class CTCLossTest(test.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],
                                          from_logits=True)
-      model_ipu = self.create_model(loss_layer_ipu, ipu.keras.Model,
-                                    ctc_params)
+      model_ipu = self.create_loss_model(loss_layer_ipu, ipu.keras.Model,
+                                         ctc_params)
       loss_ipu = model_ipu.evaluate(dataset, steps=1)[0]
 
     self.assertEqual(np.size(loss_ipu), 1)
@@ -246,8 +360,8 @@ class CTCLossTest(test.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_endpoint_model(loss_layer_cpu, keras.Model,
-                                           ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
+                                                ctc_params)
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
@@ -259,10 +373,10 @@ class CTCLossTest(test.TestCase):
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
-      model_ipu = self.create_model(loss_layer_ipu,
-                                    ipu.keras.Model,
-                                    ctc_params,
-                                    log_softmax=True)
+      model_ipu = self.create_loss_model(loss_layer_ipu,
+                                         ipu.keras.Model,
+                                         ctc_params,
+                                         log_softmax=True)
       history_ipu = model_ipu.fit(dataset, steps_per_epoch=1)
       loss_ipu = history_ipu.history["loss"]
       print(history_ipu)
@@ -278,8 +392,8 @@ class CTCLossTest(test.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_endpoint_model(loss_layer_cpu, keras.Model,
-                                           ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
+                                                ctc_params)
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
@@ -292,8 +406,8 @@ class CTCLossTest(test.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],
                                          from_logits=True)
-      model_ipu = self.create_model(loss_layer_ipu, ipu.keras.Model,
-                                    ctc_params)
+      model_ipu = self.create_loss_model(loss_layer_ipu, ipu.keras.Model,
+                                         ctc_params)
       history_ipu = model_ipu.fit(dataset, steps_per_epoch=1)
       loss_ipu = history_ipu.history["loss"]
       print(history_ipu)
@@ -301,6 +415,52 @@ class CTCLossTest(test.TestCase):
     self.assertEqual(np.size(loss_ipu), 1)
     self.assertAllClose(loss_cpu, loss_ipu)
     self.assertAllClose(model_cpu.get_weights(), model_ipu.get_weights())
+
+  @parameterized.named_parameters(generate_beam_search_params())
+  @test_util.run_v2_only
+  def testCTCPredictions(self, params):
+    ctc_params = params.params
+    beam_width = ctc_params["beam_width"]
+    top_paths = ctc_params["top_paths"]
+    blank_index = ctc_params[
+        "num_classes"] - 1  # cpu version has preset blank index
+
+    np.random.seed(ctc_params["seed"])
+    inputs = np.random.rand(ctc_params["batch_size"] * 20,
+                            ctc_params["max_time"], ctc_params["num_classes"])
+    input_lengths = np.full([ctc_params["batch_size"] * 20],
+                            ctc_params["max_time"] - 1,
+                            dtype=np.int32)
+
+    # CPU model
+    predictions_layer_cpu = CTCPredictionsCpu(blank_index=blank_index,
+                                              beam_width=beam_width,
+                                              top_paths=top_paths)
+    model_cpu = self.create_predictions_model(predictions_layer_cpu,
+                                              keras.Model, ctc_params)
+
+    cpu_predictions = model_cpu.predict(x=[inputs, input_lengths],
+                                        batch_size=ctc_params["batch_size"])
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # IPU model
+      predictions_layer_ipu = ipu.keras.layers.CTCPredictionsLayer(
+          blank_index=blank_index,
+          from_logits=True,
+          beam_width=beam_width,
+          top_paths=top_paths)
+      model_ipu = self.create_predictions_model(predictions_layer_ipu,
+                                                ipu.keras.Model, ctc_params)
+
+      ipu_predictions = model_ipu.predict(x=[inputs, input_lengths],
+                                          batch_size=ctc_params["batch_size"])
+
+    self.assertAllClose(cpu_predictions, ipu_predictions)
 
 
 if __name__ == '__main__':

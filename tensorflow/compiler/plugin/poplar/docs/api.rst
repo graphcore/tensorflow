@@ -159,8 +159,8 @@ Keras layers
 
 
 .. automodule:: tensorflow.python.ipu.keras.layers
-  :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense
-  :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense
+  :members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense, CTCInferenceLayer, CTCPredictionsLayer
+  :imported-members: Dropout, Embedding, GroupNormalization, InstanceNormalization, LayerNormalization, PopnnGRU, PopnnLSTM, SerialDense, CTCInferenceLayer, CTCPredictionsLayer
 
 Keras losses
 ^^^^^^^^^^^^

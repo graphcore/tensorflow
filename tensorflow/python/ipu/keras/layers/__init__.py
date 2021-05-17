@@ -17,6 +17,8 @@ Keras layer specializations for the Graphcore IPU
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.ipu.keras.layers.ctc import CTCInferenceLayer
+from tensorflow.python.ipu.keras.layers.ctc import CTCPredictionsLayer
 from tensorflow.python.ipu.keras.layers.dropout import Dropout
 from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm, InstanceNorm, LayerNorm
