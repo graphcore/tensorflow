@@ -649,7 +649,9 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       const std::string message =
           "Current configuration of the IPU devices does not support remote "
           "memory and therefore weight update only variables cannot be "
-          "offloaded to remote memory.";
+          "offloaded to remote memory."
+          "Consider setting 'enable_remote_buffer=True' when calling "
+          "'set_ipu_connection_type' if remote memory is supported.";
       switch (offload_info.offload) {
         case THREESTATE_OFF: {
           break;
