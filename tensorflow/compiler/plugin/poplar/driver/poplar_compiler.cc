@@ -1097,26 +1097,37 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         "'TF_POPLAR_FLAGS=--executable_cache_path=/path/to/storage'.");
   }
 
-  // Check for autoReport.directory value in ipu options.
-  auto auto_dir_itr = absl::c_find_if(
-      opt_flags, [&](const poplar::OptionFlags::OptionFlag& flag) {
-        return flag.first == "autoReport.directory";
-      });
-  absl::optional<std::string> auto_dir;
-  if (auto_dir_itr != opt_flags.end()) {
-    auto_dir = auto_dir_itr->second;
-  } else {
-    // Check for autoReport.directory value in POPLAR_ENGINE_OPTIONS.
-    auto_dir = GetPoplarEngineOption("autoReport.directory");
+  // Check for autoReport.directory value in POPLAR_ENGINE_OPTIONS.
+  // POPLAR_ENGINE_OPTIONS overrides values in opt_flags.
+  absl::optional<std::string> auto_dir =
+      GetPoplarEngineOption("autoReport.directory");
 
-    // If no preexisting value found then set a default.
-    if (!auto_dir.has_value()) {
-      auto_dir.emplace(
-          poplar_executor->GetModuleReportDirectory(module->name()));
-    }
-
+  if (auto_dir.has_value()) {
     // Set value in ipu options.
     opt_flags.set("autoReport.directory", *auto_dir);
+  } else {
+    // Check for autoReport.directory value in ipu options.
+    auto auto_dir_itr = absl::c_find_if(
+        opt_flags, [&](const poplar::OptionFlags::OptionFlag& flag) {
+          return flag.first == "autoReport.directory";
+        });
+    if (auto_dir_itr != opt_flags.end()) {
+      if (poplar_executor->GetAutoAssignReportSubdirectories()) {
+        // Add subdirectory to path.
+        auto_dir = tensorflow::io::JoinPath(
+            auto_dir_itr->second,
+            poplar_executor->GetModuleReportDirectory(module->name()));
+        // Update value in ipu options.
+        opt_flags.set("autoReport.directory", *auto_dir);
+      } else {
+        auto_dir = auto_dir_itr->second;
+      }
+    } else {
+      // If no preexisting value found then set a default.
+      auto_dir = poplar_executor->GetModuleReportDirectory(module->name());
+      // Set value in ipu options.
+      opt_flags.set("autoReport.directory", *auto_dir);
+    }
   }
 
   std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
