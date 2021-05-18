@@ -470,9 +470,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/conv2d/BiasAdd/fusion*/Op/Add',
           'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Transpose',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Transpose',
+          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
           'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
