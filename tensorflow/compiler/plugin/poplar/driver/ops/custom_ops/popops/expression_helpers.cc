@@ -117,10 +117,15 @@ StatusOr<ExpressionInput> GetElementwiseInput(
         TF_ASSIGN_OR_RETURN(auto expr_input,
                             GetTensorInput(res, inst, tensor_map, operand_idx,
                                            input_idx, seq, debug_name_and_id));
-        // Broadcast the tensor internally to the right shape.
-        TF_ASSIGN_OR_RETURN(expr_input.tensor,
-                            BroadcastTensor(*expr_input.tensor, input->shape(),
-                                            input->dimensions()));
+
+        // Allow passing scalars to the underlying op and let poplar broadcast.
+        if (expr_input.tensor->numElements() > 1) {
+          // Broadcast the tensor internally to the right shape.
+          TF_ASSIGN_OR_RETURN(
+              expr_input.tensor,
+              BroadcastTensor(*expr_input.tensor, input->shape(),
+                              input->dimensions()));
+        }
         return expr_input;
       }
     } else {
