@@ -227,7 +227,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*', 'Copy_', 'Conv2DBackpropInput/fusion*/Conv_2x2',
-          'Conv2DBackpropInput/fusion*/*Transpose'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
