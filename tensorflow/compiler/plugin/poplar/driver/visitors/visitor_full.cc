@@ -370,8 +370,8 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
 
-    TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
     if (out.IsTensor()) {
+      TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
       // Check shape
       if (!PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
         return xla::InternalErrorStrCat(
@@ -392,6 +392,7 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     }
 
     if (out.IsRemoteBuffer()) {
+      TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
       const auto merged_element_count = out.AsRemoteBuffer().numElements() *
                                         out.AsRemoteBuffer().getRepeats();
       CHECK_GT(out.NumMerged(), 0);
@@ -425,6 +426,15 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
             "Instruction ", inst->name(), " has mismatched Poplar (",
             out.AsRemoteBuffer().elementType().toString().cloneAsString(),
             ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+      }
+    }
+
+    if (out.IsOpaque()) {
+      if (!shape.IsOpaque()) {
+        return xla::InternalErrorStrCat(
+            "Instruction ", inst->name(),
+            " has mismatched Poplar (opaque) and XLA (", shape.ToString(),
+            ") type.");
       }
     }
   }

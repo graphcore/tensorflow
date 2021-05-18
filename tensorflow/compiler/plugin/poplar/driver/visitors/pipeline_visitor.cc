@@ -821,7 +821,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   size_t flat_tuple_index = 0;
   for (const auto& leaf : add_copies.leaves()) {
     auto output = pipeline_outputs[flat_tuple_index];
-    if (leaf.second && StageOutputsRequireCopies()) {
+    if (leaf.second && StageOutputsRequireCopies() && output.IsTensor()) {
       output = poputil::duplicate(
           graph, output, seq,
           {debug_name_and_id, absl::StrCat("output/", flat_tuple_index)},

@@ -26,7 +26,7 @@ dataType = np.float32
 
 
 def kerasIPUDropout(x, rate=0.5, seed=None, training=True):
-  layer = ipu.layers.Dropout(dtype=dataType, rate=rate, seed=seed)
+  layer = ipu.layers.Dropout(dtype=dataType, rate=rate, seed=seed, ref=False)
   layer.build(input_shape=None)
 
   return layer(inputs=x, training=training)

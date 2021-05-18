@@ -28,11 +28,13 @@ def _dropout_grad(op, *grads):
   noise_shape = op.get_attr("noise_shape")
 
   return [
-      gen_poprand_ops.ipu_dropout_with_seed(grads[0],
-                                            seed=seed,
-                                            rate=rate,
-                                            scale=scale,
-                                            noise_shape=noise_shape)[0]
+      gen_poprand_ops.ipu_dropout_with_seed_and_reference(
+          grads[0],
+          seed=seed,
+          reference=op.outputs[2],
+          rate=rate,
+          scale=scale,
+          noise_shape=noise_shape)[0]
   ]
 
 

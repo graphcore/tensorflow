@@ -50,6 +50,8 @@ class EntryVisitor : public DeferredVisitor {
 
   Status FinishDeferedAllocationVisit(HloInstruction* root) override;
 
+  Status PreProcessParameter(HloInstruction* parameter) override;
+
  private:
   Status StreamOutputs(HloInstruction* inst, uint64 start_idx,
                        TensorVector outputs);

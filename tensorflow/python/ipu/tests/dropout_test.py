@@ -78,11 +78,12 @@ TEST_CASES = build_test_cases()
 class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):
   @staticmethod
-  def _ipu_dropout(w, rate, seed, noise_shape):
+  def _ipu_dropout(w, rate, seed, noise_shape, ref):
     output = ipu.ops.rand_ops.dropout(w,
                                       rate=rate,
                                       seed=seed,
-                                      noise_shape=noise_shape)
+                                      noise_shape=noise_shape,
+                                      ref=ref)
     return [output]
 
   @staticmethod
@@ -109,7 +110,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       with self.assertRaisesRegex(ValueError, "must equal the rank of x."):
 
         def _wrong_length(w):
-          return self._ipu_dropout(w, 0.5, seed, [1])
+          return self._ipu_dropout(w, 0.5, seed, [1], False)
 
         r, input_data = self._setup_test(_wrong_length)
         _ = sess.run(r, {input_data: in_data})
@@ -117,7 +118,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       with self.assertRaisesRegex(ValueError, "Dimension mismatch"):
 
         def _wrong_dims(w):
-          return self._ipu_dropout(w, 0.5, seed, [8, 1, 16])
+          return self._ipu_dropout(w, 0.5, seed, [8, 1, 16], False)
 
         r, input_data = self._setup_test(_wrong_dims)
         _ = sess.run(r, {input_data: in_data})
@@ -126,14 +127,15 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testDropout(self, rate, seed, noise_shape):
     def _run_dropout(w):
-      return self._ipu_dropout(w, rate, seed, noise_shape)
+      return self._ipu_dropout(w, rate, seed, noise_shape, False)
 
     r, input_data = self._setup_test(_run_dropout)
 
     with sl.Session() as sess:
       in_data = np.random.rand(*DIMS)
       result = sess.run(r, {input_data: in_data})
-      percent_kept = np.count_nonzero(result) / np.count_nonzero(in_data)
+      percent_kept = np.count_nonzero(
+          np.array(result)) / np.count_nonzero(in_data)
 
       # There's a considerable amount for randomness so we have a reasonably
       # large dimensionality of test data to make sure the error is smaller.
@@ -148,7 +150,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testUserSeed(self, rate, seed, noise_shape):
     def _run_dropout(w):
-      return self._ipu_dropout(w, rate, seed, noise_shape)
+      return self._ipu_dropout(w, rate, seed, noise_shape, False)
 
     r, input_data = self._setup_test(_run_dropout)
 
@@ -170,7 +172,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testDropoutBackwardPass(self, rate, seed, noise_shape):
     def _run_dropout(w):
-      output = self._ipu_dropout(w, rate, seed, noise_shape)
+      output = self._ipu_dropout(w, rate, seed, noise_shape, True)
 
       largest = output
       cost = math_ops.square(largest)
@@ -197,7 +199,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testScaling(self, rate, seed, noise_shape):
     def _run_dropout(w):
-      return self._ipu_dropout(w, rate, seed, noise_shape)
+      return self._ipu_dropout(w, rate, seed, noise_shape, False)
 
     r, input_data = self._setup_test(_run_dropout)
 
