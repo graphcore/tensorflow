@@ -880,6 +880,23 @@ def skip_on_hw(func):
   return decorator(func)
 
 
+def skip_with_asan(reason):
+  """Test decorator for skipping tests which should not be run with AddressSanitizer."""
+  if not isinstance(reason, str):
+    raise TypeError("'reason' should be string, got {}".format(type(reason)))
+
+  def decorator(f):
+    def decorated(self, *args, **kwargs):
+      if "ASAN_OPTIONS" in os.environ:
+        self.skipTest(reason)
+
+      return f(self, *args, **kwargs)
+
+    return decorated
+
+  return decorator
+
+
 def skip_if_not_enough_ipus(self, num_ipus):
   num_available_ipus = get_ci_num_ipus()
   if num_available_ipus < num_ipus:

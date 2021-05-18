@@ -392,6 +392,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, tu.count_ipu_compilations(events0))
       self.assertEqual(1, tu.count_ipu_compilations(events1))
 
+  @tu.skip_with_asan("non-deterministic dlopen user ops addresses with asan")
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
