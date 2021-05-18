@@ -100,18 +100,6 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
         // TensorLists.
         TF_ASSIGN_OR_RETURN(arg.shape, builder->GetShape(ctx->Input(i)));
         arg.type = type;
-        if (IsTensorListInput(ctx, i)) {
-          // arg.initialized == false means that the element_shape of the list
-          // was not available at the time of building the list so an empty list
-          // was created instead.
-          TF_RETURN_IF_ERROR(
-              IsTensorListInitialized(ctx->Input(i), &arg.initialized));
-          if (!arg.initialized) {
-            return errors::Unimplemented(
-                "Uninitialized TensorLists are currently not supported: ",
-                arg.name);
-          }
-        }
         VLOG(2) << "Parameter type: " << DataTypeString(arg.type)
                 << " shape: " << arg.HumanString();
       }

@@ -319,17 +319,26 @@ StatusOr<poplar::program::Program> CreateCopy(
   poplar::program::Sequence seq({}, debug_name_and_id);
 
   poplar::Graph& graph = GetGraph(res, inst);
-  TF_ASSIGN_OR_RETURN(TensorVector inputs,
-                      FindInstructionInputTensors(tensor_map, res, inst, 0, seq,
-                                                  debug_name_and_id));
+  auto inputs =
+      FindInstructionInputs(tensor_map, res, inst, 0, seq, debug_name_and_id);
 
   for (int64 tuple_idx = 0; tuple_idx != static_cast<int64>(inputs.size());
        ++tuple_idx) {
-    poplar::Tensor out = poputil::duplicate(
-        graph, inputs[tuple_idx], seq,
-        {debug_name_and_id, std::to_string(tuple_idx)},
-        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
+    if (inputs[tuple_idx].IsTensor()) {
+      poplar::Tensor out = poputil::duplicate(
+          graph, inputs[tuple_idx], seq,
+          {debug_name_and_id, std::to_string(tuple_idx)},
+          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
+    } else if (inputs[tuple_idx].IsOpaque()) {
+      TF_CHECK_OK(
+          AddOutputOpaque(tensor_map, inst, tuple_idx, inputs[tuple_idx]));
+    } else {
+      return xla::FailedPrecondition(
+          "Found illegal remote buffer as the input to a copy instruction '%s' "
+          "at input %d.",
+          inst->name(), tuple_idx);
+    }
   }
   return seq;
 }

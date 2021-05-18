@@ -48,6 +48,10 @@ int64 ByteSizeOfIncludingTuple(const Shape& shape) {
     return result;
   }
 
+  if (shape.IsOpaque()) {
+    return 0;
+  }
+
   return ShapeUtil::ByteSizeOf(shape);
 }
 }  // namespace

@@ -45,11 +45,12 @@ class Dropout(Layer):
       mask.
   """
   def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
-    super(Dropout, self).__init__(**kwargs)
     self.built = False
     self.seed = seed
     self.rate = rate
     self.noise_shape = noise_shape
+    self.ref = kwargs.pop("ref", True)
+    super(Dropout, self).__init__(**kwargs)
 
     # For Keras -> IPU Keras layer substitution.
     self._maybe_store_args_kwargs(rate,
@@ -85,6 +86,7 @@ class Dropout(Layer):
                               seed=self.seed,
                               rate=self.rate,
                               noise_shape=self.noise_shape,
+                              ref=self.ref,
                               name=self.name)
 
     output = smart_cond.smart_cond(training, dropped_inputs,

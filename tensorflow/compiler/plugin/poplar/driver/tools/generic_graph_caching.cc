@@ -42,14 +42,28 @@ size_t GenericGraphCache::HloInstructionHash::operator()(
   return inst->Hash();
 }
 
+namespace {
+bool ContainsOpaque(const Shape& shape) {
+  if (shape.IsOpaque()) {
+    return true;
+  } else if (shape.IsTuple()) {
+    return absl::c_any_of(shape.tuple_shapes(), ContainsOpaque);
+  }
+  return false;
+}
+}  // namespace
+
 // The instruction will produce the same graph if it is identical apart from:
 // 1. Operand shapes - we just require to have the same shape.
 // 2. We ignore the inplace field in backend config.
+// 3. There is at least one opaque operand.
 bool GenericGraphCache::HloInstructionEquals::operator()(
     const HloInstruction* a, const HloInstruction* b) const {
   auto compare_operands = [](const HloInstruction* operand_a,
                              const HloInstruction* operand_b) {
-    return operand_a->shape() == operand_b->shape();
+    return operand_a->shape() == operand_b->shape() &&
+           !ContainsOpaque(operand_a->shape()) &&
+           !ContainsOpaque(operand_b->shape());
   };
 
   auto compare_comps = [](const HloComputation* comp_a,

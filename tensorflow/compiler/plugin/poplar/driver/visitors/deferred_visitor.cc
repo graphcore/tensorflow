@@ -338,6 +338,7 @@ Status DeferredVisitor::AddSequenceForInstruction(
 
 Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  TF_RETURN_IF_ERROR(PreProcessParameter(inst));
 
   const auto param_num = inst->parameter_number();
 
@@ -432,7 +433,8 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     return tensor;
   };
 
-  if (callsite_tensor && callsite_tensor->IsRemoteBuffer()) {
+  if (callsite_tensor &&
+      (callsite_tensor->IsRemoteBuffer() || callsite_tensor->IsOpaque())) {
     // Add the remote buffer to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] =
@@ -483,6 +485,10 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
         std::move(post_process_fn)));
   }
 
+  return Status::OK();
+}
+
+Status DeferredVisitor::PreProcessParameter(HloInstruction* parameter) {
   return Status::OK();
 }
 
@@ -755,7 +761,8 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
         TF_RETURN_IF_ERROR(
             AddOutputTensor(tensor_map, inst, output_tuple_index, output));
       } else if (inputs[operand_idx][i] &&
-                 inputs[operand_idx][i]->IsRemoteBuffer()) {
+                 (inputs[operand_idx][i]->IsRemoteBuffer() ||
+                  inputs[operand_idx][i]->IsOpaque())) {
         // If a tensor exists then just forward it.
         TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, output_tuple_index,
                                      *inputs[operand_idx][i]));
@@ -1618,9 +1625,13 @@ StatusOr<poplar::program::Sequence> InplaceDeferredVisitor::GetPreambleCopies(
           return FailedPrecondition("Input should have not been reallocated.");
         }
         VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
-        seq.add(poplar::program::Copy(callsite_inputs_[i][j]->AsTensor(),
-                                      computation_inputs_[i][j].AsTensor(),
-                                      false, debug_name_and_id));
+        if (callsite_inputs_[i][j]->IsTensor()) {
+          seq.add(poplar::program::Copy(callsite_inputs_[i][j]->AsTensor(),
+                                        computation_inputs_[i][j].AsTensor(),
+                                        false, debug_name_and_id));
+        } else {
+          *callsite_inputs_[i][j] = computation_inputs_[i][j].AsOpaque();
+        }
       }
     }
   }
@@ -1669,8 +1680,9 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
       reallocate_inputs_info_[param_num]
                              [input_location.flattened_output_tuple_index];
 
-  if (callsite_tensor && callsite_tensor->IsRemoteBuffer()) {
-    // Add the remote buffer to the computation inputs.
+  if (callsite_tensor &&
+      (callsite_tensor->IsRemoteBuffer() || callsite_tensor->IsOpaque())) {
+    // Add the remote buffer or opaque to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] =
                            *callsite_tensor;
@@ -1839,12 +1851,17 @@ InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         }
         VLOG(1) << "Adding a output to input copy in "
                 << debug_name_and_id.getPathName() << " for tuple index " << i;
-        // Get the input ready for the next iteration.
-        AddSequenceForAliasingCopy(
-            computation->root_instruction(),
-            poplar::program::Copy(unaliased_loop_outputs[i].AsTensor(),
-                                  loop_inputs[i].AsTensor(), false,
-                                  {debug_name_and_id}));
+        if (loop_inputs[i].IsOpaque()) {
+          // Opaque inputs are just forwarded because they never really alias
+          unaliased_loop_outputs[i] = loop_inputs[i].AsOpaque();
+        } else {
+          // Get the input ready for the next iteration.
+          AddSequenceForAliasingCopy(
+              computation->root_instruction(),
+              poplar::program::Copy(unaliased_loop_outputs[i].AsTensor(),
+                                    loop_inputs[i].AsTensor(), false,
+                                    {debug_name_and_id}));
+        }
         break;
       }
       case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:

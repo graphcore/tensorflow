@@ -216,6 +216,15 @@ class FifoOp : public PoplarOpDef {
     poplar::program::Sequence seq({}, debug_info);
     const std::string debug_name = GetDebugName(inst);
 
+    // Opaque inputs are compile-time constants, so pass through FIFOs.
+    if (inst->operand(0)->shape().IsOpaque()) {
+      auto output =
+          FindInstructionInputs(tensor_map, res, inst, 0, seq, {debug_info});
+      TF_CHECK_OK(AddOutputOpaque(tensor_map, inst, 0, output[0].AsOpaque()));
+
+      return seq;
+    }
+
     TF_ASSIGN_OR_RETURN(TensorVector inputs,
                         FindInstructionInputTensors(tensor_map, res, inst, 0,
                                                     seq, {debug_info}, false));

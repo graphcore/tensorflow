@@ -30,8 +30,21 @@ HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
                        float rate, float scale,
                        const std::vector<int64>& noise_shape)
     : HloPoplarInstruction(
-          ShapeUtil::MakeTupleShape({operand->shape(), seed->shape()}),
+          ShapeUtil::MakeTupleShape(
+              {operand->shape(), seed->shape(), ShapeUtil::MakeOpaqueShape()}),
           {operand, seed}, PoplarOp::Dropout, rate, scale, noise_shape),
+      scale(scale),
+      rate(rate),
+      noise_shape(noise_shape) {}
+
+HloDropout::HloDropout(HloInstruction* operand, HloInstruction* seed,
+                       HloInstruction* reference, float rate, float scale,
+                       const std::vector<int64>& noise_shape)
+    : HloPoplarInstruction(
+          ShapeUtil::MakeTupleShape(
+              {operand->shape(), seed->shape(), ShapeUtil::MakeOpaqueShape()}),
+          {operand, seed, reference}, PoplarOp::Dropout, rate, scale,
+          noise_shape),
       scale(scale),
       rate(rate),
       noise_shape(noise_shape) {}
@@ -69,15 +82,29 @@ std::vector<std::string> HloDropout::ExtraPoplarAttributesToStringImpl(
 std::unique_ptr<HloInstruction> HloDropout::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  CHECK_EQ(new_operands.size(), 2);
-  return absl::make_unique<HloDropout>(new_operands[0], new_operands[1], Rate(),
-                                       Scale(), NoiseShape());
+  CHECK_GT(new_operands.size(), 1);
+  CHECK_LT(new_operands.size(), 4);
+  if (new_operands.size() == 2) {
+    return absl::make_unique<HloDropout>(new_operands[0], new_operands[1],
+                                         Rate(), Scale(), NoiseShape());
+  } else {
+    return absl::make_unique<HloDropout>(new_operands[0], new_operands[1],
+                                         new_operands[2], Rate(), Scale(),
+                                         NoiseShape());
+  }
 }
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
     const std::vector<int64>& noise_shape) {
   return absl::make_unique<HloDropout>(operand, seed, rate, scale, noise_shape);
+}
+
+std::unique_ptr<HloInstruction> CreateDropout(
+    HloInstruction* operand, HloInstruction* seed, HloInstruction* reference,
+    float rate, float scale, const std::vector<int64>& noise_shape) {
+  return absl::make_unique<HloDropout>(operand, seed, reference, rate, scale,
+                                       noise_shape);
 }
 
 namespace {
@@ -96,8 +123,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutFactoryFunc(
     TF_ASSIGN_OR_RETURN(noise_shape,
                         attribute_map.GetAttributeInt64Vector("noise_shape"));
   }
-  return CreateDropout(call->mutable_operand(0), call->mutable_operand(1), rate,
-                       scale, noise_shape);
+
+  if (call->operand_count() == 2) {
+    return CreateDropout(call->mutable_operand(0), call->mutable_operand(1),
+                         rate, scale, noise_shape);
+  } else {
+    return CreateDropout(call->mutable_operand(0), call->mutable_operand(1),
+                         call->mutable_operand(2), rate, scale, noise_shape);
+  }
 }
 
 static HloPoplarInstructionFactory dropout_factory(PoplarOp::Dropout,

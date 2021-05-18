@@ -1666,7 +1666,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/dropout_hw_test.py"],
     # Shard count needs to match the number of tests.
-    shard_count = 6,
+    shard_count = 7,
     tags = ["hw_poplar_test"],
     deps = [
         ":pipelining_test_util",

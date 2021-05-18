@@ -212,6 +212,10 @@ namespace {
 std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
+  if (buffer.shape().IsOpaque()) {
+    return 0;
+  }
+
   return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
 }
 

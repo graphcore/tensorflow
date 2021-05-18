@@ -73,6 +73,23 @@ Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
                                    is_replica_partitioned, /*num_merged=*/1);
 }
 
+Status TensorMap::AddOutputOpaque(const HloInstruction* inst,
+                                  int64 output_index, absl::any opaque) {
+  VLOG(2) << "Adding output opaque for instruction " << inst->name()
+          << " at output index " << output_index;
+
+  TensorLocation location(inst, output_index);
+  auto it = _map.find(location);
+  if (it != _map.end()) {
+    return tensorflow::errors::Unknown(
+        StrCat("[Poplar] Output Opaque ", location.flattened_output_tuple_index,
+               " for ", GetDebugName(inst), " already exists"));
+  }
+  _map[location].tensor = opaque;
+  _map[location].name = inst->metadata().op_name();
+  return Status::OK();
+}
+
 Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
                             TensorOrRemoteBuffer torb) {
   VLOG(1) << "Adding output for instruction " << inst->name()
@@ -86,10 +103,11 @@ Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
                " for ", GetDebugName(inst), " already exists"));
   }
 
-  if (!torb.IsTensor() && !torb.IsRemoteBuffer()) {
-    return tensorflow::errors::Unknown(StrCat(
-        "[Poplar] Output ", location.flattened_output_tuple_index, " for ",
-        GetDebugName(inst), " is neither a tensor or a remote buffer."));
+  if (!torb.IsTensor() && !torb.IsRemoteBuffer() && !torb.IsOpaque()) {
+    return tensorflow::errors::Unknown(
+        StrCat("[Poplar] Output ", location.flattened_output_tuple_index,
+               " for ", GetDebugName(inst),
+               " is not a tensor, remote buffer, or an opaque type."));
   }
 
   _map[location].tensor = torb;

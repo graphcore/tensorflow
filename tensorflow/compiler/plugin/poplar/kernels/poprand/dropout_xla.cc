@@ -39,7 +39,12 @@ using namespace xla::poplarplugin;
 
 namespace tensorflow {
 
+template <bool WithSeed, bool WithRef, bool OutRef>
 class DropoutOp : public XlaOpKernel, public IpuOpKernel {
+  // Statically check that WithRef implies WithSeed
+  static_assert(!WithRef || WithSeed,
+                "WithSeed must be true when WithRef is true.");
+
  public:
   explicit DropoutOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx), IpuOpKernel() {
@@ -69,15 +74,30 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
+    std::vector<xla::XlaOp> operands = {input};
+
     // We are outputting both the output of the operation and the seed used so
     // we can reuse the seed in the backprop pass.
-    xla::XlaOp seed = GetSeed(ctx, b);
-    xla::Shape seed_shape = b->GetShape(seed).ConsumeValueOrDie();
-    const xla::Shape output_tuple_shape =
-        xla::ShapeUtil::MakeTupleShape({xla_shape, seed_shape});
+    if (WithSeed) {
+      operands.push_back(ctx->Input(1));
+    } else {
+      const xla::Shape seed_shape = xla::ShapeUtil::MakeShape(xla::S32, {2});
+      xla::XlaOp seed =
+          xla::CustomCall(b, PoplarOp_Name(PoplarOp::Seed), {}, seed_shape, "");
+      operands.push_back(seed);
+    }
+
+    // The reference tensor to get deterministic results in the backprop pass.
+    if (WithRef) {
+      operands.push_back(ctx->Input(2));
+    }
+
+    const xla::Shape output_tuple_shape = xla::ShapeUtil::MakeTupleShape(
+        {xla_shape, b->GetShape(operands[1]).ConsumeValueOrDie(),
+         xla::ShapeUtil::MakeOpaqueShape()});
 
     xla::XlaOp call_output =
-        xla::CustomCall(b, PoplarOp_Name(PoplarOp::Dropout), {input, seed},
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::Dropout), operands,
                         output_tuple_shape, attribute_map_.Serialise());
 
     // The actual dropout output.
@@ -88,35 +108,27 @@ class DropoutOp : public XlaOpKernel, public IpuOpKernel {
 
     ctx->SetOutput(0, output);
     ctx->SetOutput(1, seed_output);
-  }
-
- protected:
-  virtual xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
-                             xla::XlaBuilder* builder) {
-    const xla::Shape seed_shape = xla::ShapeUtil::MakeShape(xla::S32, {2});
-    xla::XlaOp seed = xla::CustomCall(builder, PoplarOp_Name(PoplarOp::Seed),
-                                      {}, seed_shape, "");
-    return HashSeedWithReplicaIndex(seed);
+    if (OutRef) {
+      xla::XlaOp ref_output = xla::GetTupleElement(call_output, 2);
+      ctx->SetOutput(2, ref_output);
+    }
   }
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(DropoutOp);
 };
-REGISTER_IPU_OP("IpuDropout", DropoutOp);
 
-class DropoutWithSeedOp : public DropoutOp {
- public:
-  explicit DropoutWithSeedOp(OpKernelConstruction* ctx) : DropoutOp(ctx) {}
+using IpuDropout = DropoutOp<false, false, true>;
+using IpuDropoutNoRef = DropoutOp<false, false, false>;
+using IpuDropoutWithSeed = DropoutOp<true, false, true>;
+using IpuDropoutWithSeedNoRef = DropoutOp<true, false, false>;
+using IpuDropoutWithSeedAndReference = DropoutOp<true, true, false>;
 
- protected:
-  xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
-                     xla::XlaBuilder* builder) override {
-    return ctx->Input(1);
-  }
-
- private:
-  TF_DISALLOW_COPY_AND_ASSIGN(DropoutWithSeedOp);
-};
-REGISTER_IPU_OP("IpuDropoutWithSeed", DropoutWithSeedOp);
+REGISTER_IPU_OP("IpuDropout", IpuDropout);
+REGISTER_IPU_OP("IpuDropoutNoRef", IpuDropoutNoRef);
+REGISTER_IPU_OP("IpuDropoutWithSeed", IpuDropoutWithSeed);
+REGISTER_IPU_OP("IpuDropoutWithSeedNoRef", IpuDropoutWithSeedNoRef);
+REGISTER_IPU_OP("IpuDropoutWithSeedAndReference",
+                IpuDropoutWithSeedAndReference);
 
 }  // namespace tensorflow

@@ -139,7 +139,8 @@ TensorOrRemoteBufferVector GetTensorsMaybeExpand(
                                               opt_tensors_end);
   TensorOrRemoteBufferVector outputs;
   for (auto tensor : tensor_vector) {
-    CHECK(tensor.tensor.IsTensor() || tensor.tensor.IsRemoteBuffer());
+    CHECK(tensor.tensor.IsTensor() || tensor.tensor.IsRemoteBuffer() ||
+          tensor.tensor.IsOpaque());
     if (tensor.tensor.IsTensor()) {
       if (expand_aliasing) {
         auto& graph = GetGraphWithOutputIndex(
@@ -897,6 +898,7 @@ StatusOr<poplar::Tensor> AddTensorForTarget(
   if (src_type != out.elementType()) {
     return graph.clone(src_type, out, {debug_info});
   }
+
   return out;
 }
 
@@ -1727,6 +1729,8 @@ StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
             GetRemoteBufferForInplaceOp(tensors[i][tuple_idx], res, inst,
                                         inplace_indexes[i], tuple_idx, seq,
                                         is_still_inplace));
+      } else if (tensors[i][tuple_idx].IsOpaque()) {
+        tensors[i][tuple_idx] = tensors[i][tuple_idx];
       } else {
         return xla::FailedPrecondition(
             "Unknown tensor type in instruction `%s` at %d:%d, expected a "
@@ -1752,6 +1756,11 @@ Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
                              int64 n, poplar::RemoteBuffer rbuffer) {
   return map.AddOutputRemoteBuffer(inst, n, rbuffer);
+}
+
+Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
+                       absl::any token) {
+  return map.AddOutputOpaque(inst, n, token);
 }
 
 }  // namespace poplarplugin
