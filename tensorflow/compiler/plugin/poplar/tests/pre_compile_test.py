@@ -20,6 +20,7 @@ import multiprocessing
 import os
 import tempfile
 import numpy as np
+import test_utils as tu
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, count_ipu_compilations
@@ -294,6 +295,7 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       # Expect no compilation due to exception.
       self.assertTrue(self._run_in_new_process(build_and_run_model))
 
+  @tu.skip_with_asan("non-deterministic dlopen user ops addresses with asan")
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
     def build_and_run_model():
