@@ -4131,7 +4131,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "gather_simplifier_embedding_lookup_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4765,7 +4765,7 @@ cc_binary(
 
 tf_xla_py_test(
     name = "clear_xla_cache_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/clear_xla_cache_test.py"],
     enabled_backends = ["poplar"],
     deps = [
