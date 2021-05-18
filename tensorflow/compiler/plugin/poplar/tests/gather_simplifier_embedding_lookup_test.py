@@ -41,7 +41,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
   def test_session(self):
     return 0
 
-  @parameterized.parameters(range(1, 10))
+  @parameterized.parameters(range(1, 10, 2))
   def testGatherLookupRandomize(self, y_0):
     report_helper = tu.ReportHelper(self)
     # Configure argument for targeting the IPU.
