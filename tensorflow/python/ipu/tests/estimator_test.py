@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import random
+from tensorflow.python.ipu.config import IPUConfig
 import shutil
 import glob
 
@@ -86,8 +87,8 @@ class IpuEstimatorTest(test_util.TensorFlowTestCase):
 
     shutil.rmtree("testlogs", True)
 
-    opts = utils.create_ipu_config()
-    utils.configure_ipu_system(opts)
+    opts = IPUConfig()
+    opts.configure_ipu_system()
 
     run_cfg = run_config.RunConfig()
 

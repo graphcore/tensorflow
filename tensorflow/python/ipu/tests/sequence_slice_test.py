@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 from absl.testing import parameterized
 
 from tensorflow.python import ipu
@@ -122,9 +123,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
   def testSlice(self, sequences, output_shape, num_elems, src_offsets,
                 dst_offsets, zero_unused):
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         input_ph = array_ops.placeholder(sequences.dtype, sequences.shape)
@@ -155,9 +156,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         input_ph = array_ops.placeholder(sequences.dtype, sequences.shape)
@@ -195,9 +196,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       dst_offsets,  #pylint: disable=unused-argument
       zero_unused):  #pylint: disable=unused-argument
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         input_ph = array_ops.placeholder(sequences.dtype, sequences.shape)
@@ -235,9 +236,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         input_ph = array_ops.placeholder(sequences.dtype, sequences.shape)
@@ -275,9 +276,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       dst_offsets,  #pylint: disable=unused-argument
       zero_unused):
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # First unpack the sequences contiguously.
       with ops.device('cpu'):
@@ -335,9 +336,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
       return
 
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         input_ph = array_ops.placeholder(sequences.dtype, sequences.shape)
@@ -458,9 +459,9 @@ class PopOpsSequenceSliceTest(test_util.TensorFlowTestCase,
     dst_offsets = src_offsets
 
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         dst_ph = array_ops.placeholder(sequences.dtype, sequences.shape)

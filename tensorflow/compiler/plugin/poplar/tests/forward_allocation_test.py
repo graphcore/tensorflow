@@ -30,6 +30,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class ForwardAllocationTest(xla_test.XLATestCase):
@@ -46,8 +47,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = gen_array_ops.reshape(y, [32]) + z
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -75,8 +76,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = array_ops.transpose(y, [1, 2, 3, 0]) + z
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -105,8 +106,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = y + z * s
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -133,8 +134,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
         with variable_scope.variable_scope("vs", use_resource=True):
           res = nn.conv1d(data, kernel, stride=1, padding="VALID")
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 

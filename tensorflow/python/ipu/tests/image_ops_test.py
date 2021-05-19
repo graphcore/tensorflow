@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -61,9 +62,9 @@ class ImageOpsTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         return ipu.ipu_compiler.compile(my_net), infeed, outfeed
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     with self.session() as sess:
 

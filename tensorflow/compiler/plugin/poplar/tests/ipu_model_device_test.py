@@ -30,6 +30,7 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuIpuModelTest(xla_test.XLATestCase):
@@ -40,8 +41,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb
 
-      opts = utils.create_ipu_config(profiling=True)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       result = sess.run(output, fd)
@@ -58,8 +60,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=False)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = False  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -107,8 +110,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([out1, out2]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=True, profile_execution=True)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.profile_execution = True  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -131,9 +136,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [480], name="b")
         output = pa + pb
 
-      opts = utils.create_ipu_config()
-      opts = utils.set_compilation_options(opts, {"some_option": "some_value"})
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.compilation_poplar_options = {'some_option': 'some_value'}
+      opts.configure_ipu_system()
 
       fd = {pa: np.zeros([480]), pb: np.zeros([480])}
       with self.assertRaisesRegex(errors.InvalidArgumentError,
@@ -195,11 +200,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=True,
-                                     profile_execution=True,
-                                     report_every_nth_execution=2,
-                                     use_poplar_text_report=False)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.profile_execution = True  # pylint: disable=protected-access
+      opts._profiling.report_every_nth_execution = 2  # pylint: disable=protected-access
+      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -228,11 +234,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=True,
-                                     profile_execution=True,
-                                     report_every_nth_execution=1,
-                                     use_poplar_text_report=False)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.profile_execution = True  # pylint: disable=protected-access
+      opts._profiling.report_every_nth_execution = 1  # pylint: disable=protected-access
+      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -276,11 +283,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=True,
-                                     profile_execution=True,
-                                     use_poplar_text_report=False,
-                                     use_poplar_cbor_report=True)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.profile_execution = True  # pylint: disable=protected-access
+      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
+      opts._profiling.use_poplar_cbor_report = True  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -306,8 +314,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      opts = utils.create_ipu_config(profiling=False, enable_ipu_events=True)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = False  # pylint: disable=protected-access
+      opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      opts.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)

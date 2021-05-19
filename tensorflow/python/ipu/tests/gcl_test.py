@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
@@ -57,15 +58,14 @@ class GclTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
@@ -100,15 +100,13 @@ class GclTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       compiled_model = ipu.ipu_compiler.compile(my_model, [inputs])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, num_replicas * num_shards)
-    cfg = ipu.utils.set_gcl_options(cfg,
-                                    gcl_options={
-                                        "useSynclessCollectives": "true",
-                                    })
-    cfg = ipu.utils.set_io_tile_options(cfg, num_io_tiles=128)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = num_replicas * num_shards
+    cfg.gcl_poplar_options = {'useSynclessCollectives': 'true'}
+    cfg.io_tiles.num_io_tiles = 128
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)

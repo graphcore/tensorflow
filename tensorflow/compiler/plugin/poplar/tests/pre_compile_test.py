@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import contextlib
+from tensorflow.python.ipu.config import IPUConfig
 import glob
 import multiprocessing
 import os
@@ -44,8 +45,8 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
 def _options_function(opts):
-  return ipu.utils.set_ipu_connection_type(
-      opts, ipu.utils.DeviceConnectionType.PRE_COMPILE, "ipu1")
+  opts.device_connection.version = 'ipu1'
+  opts.device_connection.type = ipu.utils.DeviceConnectionType.PRE_COMPILE
 
 
 @contextlib.contextmanager
@@ -216,9 +217,10 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      ipu_options = ipu.utils.create_ipu_config(profiling=True)
-      ipu_options = ipu.utils.auto_select_ipus(ipu_options, 1)
-      ipu_options = _options_function(ipu_options)
+      ipu_options = IPUConfig()
+      ipu_options._profiling.profiling = True  # pylint: disable=protected-access
+      ipu_options.auto_select_ipus = 1
+      _options_function(ipu_options)
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    ipu_options=ipu_options,

@@ -7,8 +7,8 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import cross_replica_optimizer
 from tensorflow.python.ipu import scopes
-from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import rnn_ops
+from tensorflow.python import ipu
 from tensorflow.python import keras
 
 path_to_file = keras.utils.get_file(
@@ -108,9 +108,9 @@ with scopes.ipu_scope('/device:IPU:0'):
   run_loop = ipu_compiler.compile(my_net, inputs=[])
 
 # Configure the hardware
-config = utils.create_ipu_config()
-config = utils.auto_select_ipus(config, replication_factor)
-utils.configure_ipu_system(config)
+config = ipu.config.IPUConfig()
+config.auto_select_ipus = replication_factor
+config.configure_ipu_system()
 
 with tf.Session() as sess:
   sess.run(tf.global_variables_initializer())

@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.platform import googletest
@@ -67,9 +68,9 @@ class IterationCounterTest(test_util.TensorFlowTestCase):
 
     dequeue = outfeed_queue.dequeue()
 
-    cfg = utils.create_ipu_config()
-    cfg = utils.auto_select_ipus(cfg, 1)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     with tu.ipu_session() as sess:
       sess.run(infeed_queue.initializer)

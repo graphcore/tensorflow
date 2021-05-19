@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import six
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -55,12 +56,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -94,12 +95,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -130,12 +131,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x, y])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -165,12 +166,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -206,12 +207,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
@@ -261,12 +262,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
@@ -327,12 +328,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
@@ -413,12 +414,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
         ]
 
     out = ipu.ipu_compiler.compile(my_graph, [])
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -453,12 +454,12 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_cross_replica_sum_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(infeed_queue.initializer)

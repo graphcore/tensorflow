@@ -1,4 +1,5 @@
 import argparse
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 import tensorflow as tf
 from tensorflow.python import ipu
@@ -74,8 +75,8 @@ hvd.init()
 # Create a Horovod strategy that places variables on the host.
 strategy = ipu_horovod_strategy.IPUHorovodStrategy(variables_on_host=True)
 
-ipu_options = ipu.utils.create_ipu_config()
-ipu.utils.auto_select_ipus(ipu_options, num_ipus=1)
+ipu_options = IPUConfig()
+ipu_options.auto_select_ipus = 1
 ipu_run_config = ipu.ipu_run_config.IPURunConfig(ipu_options=ipu_options)
 
 config = ipu.ipu_run_config.RunConfig(

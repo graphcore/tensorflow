@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 from absl.testing import parameterized
 
 from tensorflow.python import ipu
@@ -211,9 +212,9 @@ class PopOpsHistogramTest(test_util.TensorFlowTestCase,
   def testMakeHistogram(self, inputs, levels, absolute_of_input,
                         expected_distribution):
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         inputs_ph = array_ops.placeholder(inputs.dtype, inputs.shape)
@@ -236,9 +237,9 @@ class PopOpsHistogramTest(test_util.TensorFlowTestCase,
   def testUpdateHistogram(self, inputs, levels, absolute_of_input,
                           expected_distribution):
     with sl.Session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device('cpu'):
         inputs_ph = array_ops.placeholder(inputs.dtype, inputs.shape)

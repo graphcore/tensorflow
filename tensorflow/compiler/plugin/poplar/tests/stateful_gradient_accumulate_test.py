@@ -32,6 +32,7 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class StatefulGradientAccumulateTest(xla_test.XLATestCase):
@@ -58,8 +59,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -92,8 +93,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -125,8 +126,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -174,8 +175,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -224,8 +225,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])

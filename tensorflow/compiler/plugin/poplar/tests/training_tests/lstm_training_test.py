@@ -31,6 +31,7 @@ from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.ipu.config import IPUConfig
 
 dataType = np.float32
 
@@ -91,10 +92,11 @@ class LstmTrainingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc, py])
 
-      opts = ipu.utils.create_ipu_config(profiling=True,
-                                         use_poplar_text_report=True)
-      opts = ipu.utils.set_ipu_model_options(opts, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.use_poplar_text_report = True  # pylint: disable=protected-access
+      opts.ipu_model.compile_ipu_code = False
+      opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
       fd = {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape), py: y}

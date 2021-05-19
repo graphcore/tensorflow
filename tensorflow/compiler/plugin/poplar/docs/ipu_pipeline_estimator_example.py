@@ -1,4 +1,5 @@
 import argparse
+from tensorflow.python.ipu.config import IPUConfig
 import time
 
 import tensorflow.compat.v1 as tf
@@ -131,8 +132,8 @@ def parse_args():
 def create_ipu_estimator(args):
   num_ipus_in_pipeline = 2
 
-  ipu_options = ipu.utils.create_ipu_config()
-  ipu.utils.auto_select_ipus(ipu_options, num_ipus_in_pipeline)
+  ipu_options = IPUConfig()
+  ipu_options.auto_select_ipus = num_ipus_in_pipeline
 
   ipu_run_config = ipu.ipu_run_config.IPURunConfig(
       num_shards=num_ipus_in_pipeline,

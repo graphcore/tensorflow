@@ -32,6 +32,7 @@ from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylint: disable=abstract-method
@@ -61,8 +62,8 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
             send_device_incarnation=0,
             recv_device="/device:CPU:0")
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       sent, received = sess.run([send_op, recv_op], feed_dict={inputs: 1})
 
@@ -104,8 +105,8 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
                                                    send_device_incarnation=0,
                                                    recv_device="/device:CPU:0")
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       # Test it a couple of times to verify the communication channel is reusable.
       for i in range(2):
@@ -150,8 +151,8 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
                                                 send_device_incarnation=0,
                                                 recv_device="/device:CPU:0"))
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       received_values, device_value = sess.run(
           [received, device_out], feed_dict={inputs: np.ones((N, N))})

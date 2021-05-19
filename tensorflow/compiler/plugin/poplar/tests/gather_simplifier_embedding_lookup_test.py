@@ -31,6 +31,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variables
 from tensorflow.python.compiler.xla import xla
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
@@ -46,15 +47,11 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     report_helper = tu.ReportHelper(self)
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
-    cfg = utils.create_ipu_config()
-    self.assertFalse(cfg.disable_gather_simplifier)
-    cfg = utils.set_optimization_options(cfg, gather_simplifier=False)
-    self.assertTrue(cfg.disable_gather_simplifier)
-    cfg = utils.set_optimization_options(cfg, gather_simplifier=True)
-    self.assertFalse(cfg.disable_gather_simplifier)
-    cfg = report_helper.set_autoreport_options(cfg)
+    cfg = IPUConfig()
+    cfg.optimizations.enable_gather_simplifier = True
+    report_helper.set_autoreport_options(cfg)
 
-    utils.configure_ipu_system(cfg)
+    cfg.configure_ipu_system()
 
     # Set test range shape.
     w_0 = 5

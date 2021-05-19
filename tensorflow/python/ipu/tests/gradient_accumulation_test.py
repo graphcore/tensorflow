@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -108,16 +109,15 @@ def _gradient_accumulation_loop(test_wrapper,
 
     profiling = utils.running_on_ipu_model()
 
-    cfg = utils.create_ipu_config(profiling=profiling,
-                                  profile_execution=profiling)
-    cfg = utils.set_ipu_model_options(cfg,
-                                      compile_ipu_code=True,
-                                      tiles_per_ipu=128)
-    cfg = utils.set_optimization_options(
-        cfg, minimum_remote_tensor_size=minimum_remote_tensor_size)
-    cfg = utils.auto_select_ipus(cfg, replication_factor)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = profiling  # pylint: disable=protected-access
+    cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.optimizations.minimum_remote_tensor_size = minimum_remote_tensor_size
+    cfg.auto_select_ipus = replication_factor
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     utils.move_variable_initialization_to_cpu()
 
     session.run(variables.global_variables_initializer())
@@ -626,14 +626,14 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     dequeued_gradient = grad_outfeed_queue.dequeue()
 
     profiling = utils.running_on_ipu_model()
-    cfg = utils.create_ipu_config(profiling=profiling,
-                                  profile_execution=profiling)
-    cfg = utils.set_ipu_model_options(cfg,
-                                      compile_ipu_code=True,
-                                      tiles_per_ipu=128)
-    cfg = utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = profiling  # pylint: disable=protected-access
+    cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     utils.move_variable_initialization_to_cpu()
 
     with tu.ipu_session() as sess:

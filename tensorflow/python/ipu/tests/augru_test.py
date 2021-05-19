@@ -15,6 +15,7 @@
 """Tests covering augru used by the DIEN model."""
 
 from functools import partial
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.python.framework import test_util
@@ -60,9 +61,11 @@ class TestDIENAUGRU(test_util.TensorFlowTestCase):
     alphas_ph = array_ops.placeholder(shape=[seq_len, bs],
                                       dtype=self.model_dtype)
     gru_kernel = np.zeros((4, 6))
-    cfg = utils.create_ipu_config(profiling=False, profile_execution=False)
-    cfg = utils.auto_select_ipus(cfg, 1)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg._profiling.profile_execution = False  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
     utils.move_variable_initialization_to_cpu()
     with ops.device("/device:IPU:0"):
       time_major_model = partial(self.augru_model,

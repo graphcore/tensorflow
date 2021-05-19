@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -428,15 +429,15 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = utils.create_ipu_config(profiling=True,
-                                    profile_execution=True,
-                                    disable_graph_outlining=True)
-      cfg = utils.auto_select_ipus(cfg, 2)
-      cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
-      cfg = utils.set_norm_options(
-          cfg, experimental_distributed_batch_norm_replica_group_size=2)
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.optimizations.enable_graph_outlining = True
+      cfg.auto_select_ipus = 2
+      cfg.allow_recompute = True
+      cfg.norms.experimental.distributed_batch_norm_replica_group_size = 2
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()

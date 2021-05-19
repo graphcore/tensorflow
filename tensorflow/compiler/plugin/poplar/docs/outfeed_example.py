@@ -5,7 +5,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
-from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python import keras
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
@@ -51,9 +51,9 @@ with scopes.ipu_scope('/device:IPU:0'):
 dequeue_outfeed = outfeed_queue.dequeue()
 
 # Configure the hardware
-config = utils.create_ipu_config()
-config = utils.auto_select_ipus(config, 1)
-utils.configure_ipu_system(config)
+config = IPUConfig()
+config.auto_select_ipus = 1
+config.configure_ipu_system()
 
 with tf.Session() as sess:
   sess.run(tf.global_variables_initializer())

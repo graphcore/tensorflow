@@ -1606,6 +1606,14 @@ class _ProfilingConfig(_ConfigBase):
     A dictionary of Poplar option flags for the execution report generation.
     """
     self.execution_poplar_options = {}
+    """
+    When the autoReport.directory Poplar engine option is set through
+    IPUConfig.compilation_poplar_options and not through an environment
+    variable, this determines whether or not individual compiled clusters are
+    given their own sub-directories in the autoReport.directory by the
+    TensorFlow Poplar backend.
+    """
+    self.auto_assign_report_subdirectories = False
 
   def _to_protobuf(self, pb):
     if self.profiling and self.enable_ipu_events:
@@ -1636,6 +1644,8 @@ class _ProfilingConfig(_ConfigBase):
     pb.profiling.report_every_nth_execution = self.report_every_nth_execution
     pb.profiling.max_report_size = self.max_report_size
     pb.profiling.report_directory = self.report_directory
+    pb.auto_assign_report_subdirectories = \
+        self.auto_assign_report_subdirectories
     _poplar_options_to_protobuf(self.graph_poplar_options,
                                 pb.profiling.graph_options)
     _poplar_options_to_protobuf(self.execution_poplar_options,
