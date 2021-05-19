@@ -6,7 +6,8 @@ identifies that logical device. This can consist of one or more physical IPU
 devices, as described below.
 
 A Python context handler is available for setting up all appropriate scoping
-while creating the graph:
+when you create the graph. This will place all operations built inside it on the
+chosen Poplar XLA device:
 
 .. code-block:: python
   :linenos:
@@ -37,132 +38,217 @@ Device selection
 ~~~~~~~~~~~~~~~~
 
 Hardware configuration options enable you to select the number of IPU devices.
-By default, TensorFlow will create one device.  This device
-will be for a single IPU. The first available single IPU will be used.
+By default, TensorFlow will create one virtual device (``/device:IPU:0``) with
+a single IPU. The first available single IPU will be used.
 
-Two API calls are available for selecting the number and configuration
-of the IPU system:
+Two API options on the :py:class:`~tensorflow.python.ipu.config.IPUConfig` are
+available for controlling which or how many IPUs this virtual device will use:
 
-* ``auto_select_ipus`` allows the selection of a number of IPUs. The function
-  returns a single logical device containing the requested number of IPUs.
+* ``auto_select_ipus`` allows you to specify a quantity of
+  IPUs to use. The virtual device will be given that many IPUs.
 
-* ``select_ipus`` allows the selection of a specific IPU hardware devices using
-  ID numbers as returned by the ``gc-info`` tool.
+* ``select_ipus`` allows you to choose a specific IPU hardware
+  device using its ID. The device IDs can be seen with the ``gc-info`` command
+  line tool. An ID can represent a single IPU device or a larger "multi-IPU"
+  device that contains a group of closely connected single IPU devices.
 
-Both of these functions takes the options structure
-returned by the ``create_ipu_config`` function as the first argument .
+  For example, the largest single IPU device in a 16-IPU system has the ID 15,
+  while the largest multi-IPU device has the ID 30.
+  (See the `IPU Command Line Tools
+  <https://docs.graphcore.ai/projects/command-line-tools/>`_ document for
+  details of how device IDs map to available IPUs.)
 
-The second argument to ``auto_select_ipus`` is the number of IPUs required.
+You can also pass a list (or tuple) to either of these options. This will
+configure a separate TensorFlow virtual device for each value in the list
+(``/device:IPU:0``, ``/device:IPU:1``, and so on).
 
-The second argument to ``select_ipus`` is either an integer or a list.
-
-When a single integer is specified, this will be treated as the ID of the IPU
-device or devices to use. The ID specifies a single IPU, if it is in the range 0 to
-15. Larger numbers represent "multi-IPU" IDs that specify groups of closely
-connected IPUs.
-
-For example, to use all the IPUs in a 16-IPU system the
-appropriate ID is 30. (See the `IPU Command Line Tools
-<https://docs.graphcore.ai/projects/command-line-tools/>`_ document for details
-of how device IDs map to available IPUs.) This will allocate a single
-TensorFlow device (``/device:IPU:0``) configured with all 16 IPUs.
-
-You can also use a list of IDs as the argument to ``select_ipus``. This
-configures a TensorFlow device for each ID in the list (``/device:IPU:0``,
-``/device:IPU:1``, and so on). Again, each ID value can specify a single IPU or
-multiple IPUs.
-
-For more examples, see the documentation in :ref:`api-section`.
-
-Once the hardware structure has been specified, the API call
-``ipu.utils.configure_ipu_system`` must be used to attach to and initialise the
-hardware:
+Once the hardware structure has been specified, the
+:py:meth:`~tensorflow.python.ipu.config.IPUConfig.configure_ipu_system` method
+of the config object must be used to attach to and initialise the hardware:
 
 .. code-block:: python
   :linenos:
 
-  cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
-  cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-  cfg = ipu.utils.auto_select_ipus(cfg, NUM_IPUS)
-  ipu.utils.configure_ipu_system(cfg)
+  from tensorflow.python import ipu
 
+  cfg = ipu.config.IPUConfig()
+  # Select multi-IPU with device ID 30, which contains all 16 IPUs of a 16-IPU system.
+  cfg.select_ipus = 30
+  cfg.configure_ipu_system()
 
+This example will allocate a single TensorFlow virtual device
+(``/device:IPU:0``) which will use all 16 IPUs in a 16-IPU system.
 
-Configuring compilation options
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+For more examples, see the documentation for the options in the
+Python API: :ref:`auto_select_ipus <auto_select_ipus>`, :ref:`select_ipus <select_ipus>`.
 
-The ``create_ipu_config`` function has many options for system configuration.
-They are divided into roughly three categories:
+.. _configuring-section:
 
-1) Profiling and report generation.
-2) IO control.
-3) Graph creation.
+Configuring system options
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In addition to ``auto_select_ipus`` and ``select_ipus``, several other
-functions exist for configuring the hardware and compiler.
+In addition to ``auto_select_ipus`` and ``select_ipus``, the
+:py:class:`~tensorflow.python.ipu.config.IPUConfig` class has many other
+options for system configuration. The class is a nested structure of attributes
+which organises these options into several categories and sub-categories. To use
+it, instantiate it and treat its attributes like ordinary Python variables:
 
-* ``set_compilation_options`` sets general options to be passed to the Poplar
+.. code-block:: python
+  :linenos:
+
+  # Initialize an IPUConfig instance
+  cfg = ipu.config.IPUConfig()
+
+  # Ask for 2 IPUs on /device:IPU:0
+  cfg.auto_select_ipus = 2
+
+  # Change our mind and decide we need 4 IPUs instead. This is fine since
+  # setting any config attribute has no effect until the config is used to
+  # configure the IPU system
+  cfg.auto_select_ipus = 4
+
+  # Configure the system with the config, creating /device:IPU:0 with 4 IPUs
+  cfg.configure_ipu_system()
+
+Some attributes are not configuration options themselves, but rather names for
+general categories of grouped options. Categories cannot be set.
+You can access an arbitrarily nested attribute with chained dot notation, and
+an attribute's full name indicates exactly where it is in the
+:py:class:`~tensorflow.python.ipu.config.IPUConfig` nested structure.
+For example:
+
+.. code-block:: python
+  :linenos:
+
+  cfg = ipu.config.IPUConfig()
+
+  # Set the IPU Model version, which is in the "ipu_model" category
+  # Its full name is "ipu_model.version"
+  cfg.ipu_model.version = "ipu2"
+  print(cfg.ipu_model.version)  # ipu2
+
+  # Set the multi replica distribution process count, which is in the
+  # "multi_replica_distribution" sub-category of the "experimental" category
+  # of the config
+  cfg.experimental.multi_replica_distribution.process_count = 2
+  print(cfg.experimental.multi_replica_distribution.process_count)  # 2
+
+  # You cannot set to a category, since it's a grouping of options and is not an
+  # option itself
+  cfg.experimental = 2  # Will error
+
+  cfg.configure_ipu_system()
+
+Options are type checked when they're set and if an option cannot be
+found, then a similarly spelled one may be suggested. Additionally, setting to a
+deprecated option will give you a warning:
+
+.. code-block:: python
+  :linenos:
+
+  cfg = ipu.config.IPUConfig()
+
+  # Try to set an option to an incorrect type
+  cfg.ipu_model.version = True  # Will error immediately asking for a string
+  # Make a spelling mistake when writing the option name
+  cfg.ipu_model.vrsion = "ipu2"  # Will ask if you meant "version"
+
+The metadata for any attribute, including its default, allowed types,
+docstring, full name and whether or not it is deprecated can all be accessed
+through the
+:py:meth:`~tensorflow.python.ipu.config.IPUConfig.get_attribute_metadata`
+function, which takes a string representing the attribute's full name, relative
+to the category you are calling the function on. For example:
+
+.. code-block:: python
+  :linenos:
+
+  cfg = ipu.config.IPUConfig()
+
+  # Access by full name from the base config:
+  metadata = cfg.get_attribute_metadata("ipu_model.version")
+  # Access by name relative to the "ipu_model" sub-category:
+  metadata = cfg.ipu_model.get_attribute_metadata("version")
+
+  # Use the metadata
+  print(metadata.types)  # [str]
+  print(metadata.default)  # "ipu2"
+  print(metadata.deprecated)  # False indicates it is not deprecated
+  print(metadata.__doc__)  # "Specify the ipu version to be used by the..."
+
+  # Check a value against the option's type
+  metadata.check_type(5)  # Will fail, since this option needs a string.
+
+  # Print a deprecation message if the option is deprecated
+  metadata.warn_if_deprecated()
+
+This is useful for forwarding IPU configuration options to command line
+interfaces in applications. Note that you can also access the metadata of
+categories themselves, but the ``types`` and ``default`` fields will be empty.
+You can see a full description of the available metadata in the
+:py:class:`~tensorflow.python.ipu.config.AttributeMetadata` class.
+
+When you are finished adjusting the
+:py:class:`~tensorflow.python.ipu.config.IPUConfig` instance, use it to
+configure the IPU system by calling its
+:py:meth:`~tensorflow.python.ipu.config.IPUConfig.configure_ipu_system` method.
+The options set on an instance will not have any effect until this is done. Note
+that configuring the system does not alter the instance.
+For example:
+
+.. code-block:: python
+  :linenos:
+
+  cfg = ipu.config.IPUConfig()
+  cfg.auto_select_ipus = 4
+  cfg.ipu_model.compile_ipu_code = False
+  cfg.ipu_model.version = "ipu2"
+  cfg.scheduling.algorithm = ipu.config.SchedulingAlgorithm.Clustering
+  ...
+
+  cfg.configure_ipu_system()
+  # The IPU system can now be used.
+
+  # The config can still be accessed after configuration.
+  print(cfg.ipu_model.version)  # ipu2
+
+In addition to ``auto_select_ipus`` and ``select_ipus``, some other options on
+the :py:class:`~tensorflow.python.ipu.config.IPUConfig` which can be used to
+configure the hardware and compiler are highlighted below:
+
+* :ref:`allow_recompute <allow_recompute>` turns on recomputation, to reduce the memory requirement
+  of the model at the expense of speed.
+* :ref:`selection_order <selection_order>` to control the mapping between the "virtual" IPUs and
+  physical IPUs of a multi-IPU device.
+* :ref:`compilation_poplar_options <compilation_poplar_options>` sets general options to be passed to the Poplar
   compiler.
-* ``set_convolution_options``, ``set_matmul_options`` and
-  ``set_pooling_options`` pass specific options directly to the PopLibs
-  convolution and pooling operations.
-* ``set_report_options`` passes options directly to the Poplar
-  summary report generator.
-* ``set_ipu_model_options`` controls the Poplar IPU Model device type.
-* ``set_recomputation_options`` turns on recomputation, to reduce the memory
-  requirement at the expense of speed.
-* ``set_floating_point_behaviour_options`` controls the IPUs floating
-  point control register.
-* ``set_optimization_options`` controls the performance and memory use
-  trade offs.
+* :ref:`convolutions.poplar_options <convolutions.poplar_options>`, :ref:`matmuls.poplar_options <matmuls.poplar_options>` and
+  :ref:`pooling.poplar_options <pooling.poplar_options>` pass specific options directly to the PopLibs
+  convolution, matmul and pooling operations.
+* :ref:`ipu_model <ipu_model>` is a category containing options that control the Poplar IPU
+  Model device type.
+* :ref:`floating_point_behaviour <floating_point_behaviour>` is a category containing options that allow you
+  to configure the IPU device's floating point control register.
+* :ref:`optimizations <optimizations>` is a category containing options that can toggle various
+  optimizations, which generally have a performance or memory use trade-off.
+* :ref:`scheduling <scheduling>` contains options that specify and control the scheduling
+  algorithm the Poplar XLA backend uses to schedule the operations in the graph
+  before it is lowered to Poplar.
 
-More options are available on the ``create_ipu_config`` function itself. These
-mostly control specific features of the Poplar and PopLibs operations.
-Some of the main ones are described below:
-
-* ``scheduler_selection`` specifies the scheduling algorithm the Poplar XLA
-  backend uses to schedule the instructions in the graph during the compilation
-  stage.
-
-  The available algorithms are:
-  * ``CHOOSE_BEST`` (default), which compares several of the scheduling
-    algorithms below and selects the one that leads to the lowest predicted
-    overall peak liveness. This can sometimes produce incorrect results because
-    the overall peak liveness isn't always a good measure for the maximum
-    liveness on one tile of the processor.
-  * ``CLUSTERING``, which groups clusters of operations together in order to
-    look through stretches of instructions with potentially high liveness.
-  * ``POST_ORDER``, which schedules the instructions in the order which is
-    obtained by walking the graph in 'post order'.
-  * ``LOOK_AHEAD``, which looks ahead a number of operations from any
-    schedulable one, as given by the ``max_scheduler_lookahead_depth`` and
-    ``max_scheduler_search_space_size`` options. It attempts to look through
-    areas of high liveness.
-  * ``SHORTEST_PATH``, which gives priority to the shortest path to the root.
-
-* ``max_scheduler_lookahead_depth`` controls how far the ``LOOK_AHEAD``
-  scheduling algorithm can look beyond a given scheduling decision to understand
-  the max-liveness implications. This search space grows very quickly and can
-  take an unacceptable amount of time for large values.
-
-* ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
-  the ``LOOK_AHEAD`` scheduling algorithm's search space to guarantee that it
-  will terminate in a reasonable amount of time.
-
-See the documentation in :ref:`api-section` for more details.
+To view the full list, see
+:py:class:`~tensorflow.python.ipu.config.IPUConfig`.
 
 .. _env-var-section:
 
 TF_POPLAR_FLAGS environment variable
 ....................................
 
-The options passed through ``create_ipu_config`` and ``configure_ipu_system``
-can be directed at any machine in a TensorFlow cluster.  Some configuration
-options are provided by an environment variable called ``TF_POPLAR_FLAGS``.
+The options passed through the ``IPUConfig`` are tied to the application that
+uses that config to configure the IPU system.  Some configuration options are
+instead provided by an environment variable called ``TF_POPLAR_FLAGS``.
 
-If you set ``TF_POPLAR_FLAGS=--help`` and execute a TF session, it will output some
-help for each option. Some of the more common options are described below.
-For a full list, refer to  :ref:`api-section`.
+If you set ``TF_POPLAR_FLAGS=--help`` and execute a TF session, it will output
+some help for each option. The available options are described below:
 
 .. list-table:: TensorFlow configuration options
   :width: 100%
@@ -177,6 +263,7 @@ For a full list, refer to  :ref:`api-section`.
   * - ``--dump_text_reports_to_stdio``
     - If profiling is enabled, then a text summary of the profile will be dumped
       to standard output, in addition to the normal report processing.
+      DEPRECATED: Use the PopVision Graph Analyser to manually inspect profiles.
   * - :samp:`--executable_cache_path={path}`
     - Enables the Poplar executable cache.
       See :ref:`caching_executables`.

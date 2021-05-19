@@ -54,6 +54,7 @@ from tensorflow.python.ipu.config import (
 # pylint: enable=unused-import
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.util import deprecation
 
 
 def get_num_of_ipus_in_device(ipu_device, device="cpu"):
@@ -86,6 +87,12 @@ def running_on_ipu_model():
   return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
@@ -210,10 +217,6 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.disable_graph_outlining = \
       disable_graph_outlining
   if isinstance(scheduler_selection, str):
-    logging.warn(
-        "Passing a string for `scheduler_selection` is deprecated and will be"
-        " removed in a future release. The argument must now be a valid"
-        " `SchedulingAlgorithm`.")
     deprecation_mapping = {
         "": SchedulingAlgorithm.CHOOSE_BEST,
         "Clustering": SchedulingAlgorithm.CLUSTERING,
@@ -244,6 +247,12 @@ def create_ipu_config(profiling=False,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_serialization_options(opts, output_folder=""):
   """ Enable / disable the serialization to disk of the compiled executables.
 
@@ -268,6 +277,12 @@ def set_serialization_options(opts, output_folder=""):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_optimization_options(
     opts,
     combine_embedding_lookups=False,
@@ -277,7 +292,7 @@ def set_optimization_options(
     max_inter_ipu_copies_buffer_size=0,
     max_send_recv_cluster_size=0,
     minimum_remote_tensor_size=128,
-    merge_remote_buffers=MergeRemoteBuffersBehaviour.IF_BENEFICIAL,
+    merge_remote_buffers=MergeRemoteBuffersBehaviour.NO_MERGING,
     gather_simplifier=True,
     triangular_solve_expander_block_size=0,
     cholesky_block_size=0,
@@ -315,7 +330,7 @@ def set_optimization_options(
       of remote buffers can allow for more code re-use if the only difference
       between computations are the remote buffers being accessed. Must be a
       :py:class:`~tensorflow.python.ipu.config.MergeRemoteBuffersBehaviour`.
-      Defaults to `MergeRemoteBuffersBehaviour.IF_BENEFICIAL`.
+      Defaults to `MergeRemoteBuffersBehaviour.NO_MERGING`.
     gather_simplifier: Will enable more aggressive optimisations for embedding
       lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
@@ -355,14 +370,6 @@ def set_optimization_options(
 
   # Backwards compatibility
   if not isinstance(merge_remote_buffers, MergeRemoteBuffersBehaviour):
-    logging.warn(
-        "Passing a boolean or None value for `merge_remote_buffers` is"
-        " deprecated and will be removed in a future release. The argument must"
-        " now be a valid `MergeRemoteBuffersBehaviour`. The old values map to"
-        " the new values as follows:"
-        "  * True  -> MergeRemoteBuffersBehaviour.MERGE"
-        "  * False -> MergeRemoteBuffersBehaviour.NO_MERGING"
-        "  * None  -> MergeRemoteBuffersBehaviour.IF_BENEFICIAL")
     merge_remote_buffers = bool_to_three_state(merge_remote_buffers)
   else:
     merge_remote_buffers = merge_remote_buffers.value
@@ -385,6 +392,12 @@ def set_optimization_options(
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_norm_options(opts,
                      use_stable_statistics=False,
                      experimental_distributed_batch_norm_replica_group_size=1):
@@ -428,6 +441,12 @@ def set_norm_options(opts,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_transfer_options(opts, use_verified_transfers=False):
   """Set the IPU options related to Poplar data transfers.
 
@@ -443,6 +462,12 @@ def set_transfer_options(opts, use_verified_transfers=False):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_verification_options(opts, verification_options):
   """Set the pairs or key / id to use for each type of data used in the graph
      when verified transfers are enabled.
@@ -489,6 +514,12 @@ def set_verification_options(opts, verification_options):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_compilation_options(opts, compilation_options=None):
   """Set the IPU compilation options for the session.
 
@@ -523,6 +554,12 @@ def set_compilation_options(opts, compilation_options=None):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_convolution_options(opts, convolution_options=None):
   """Set the IPU convolution options for the session.
 
@@ -563,6 +600,12 @@ def set_convolution_options(opts, convolution_options=None):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
   """Set the IPU matrix multiplication options for the session.
 
@@ -607,6 +650,12 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_pooling_options(opts, pooling_options=None):
   """Set the IPU pooling compilation options for the session.
 
@@ -640,6 +689,12 @@ def set_pooling_options(opts, pooling_options=None):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_report_options(opts, graph_options=None, execution_options=None):
   """Set the options used to influence Poplar graph and execution reports
      generation.
@@ -687,6 +742,12 @@ def set_report_options(opts, graph_options=None, execution_options=None):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_ipu_model_options(opts,
                           compile_ipu_code=True,
                           tiles_per_ipu=None,
@@ -711,6 +772,12 @@ def set_ipu_model_options(opts,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_recomputation_options(opts, allow_recompute=True):  # pylint: disable=unused-argument
   """Set re-computation options.
 
@@ -732,6 +799,12 @@ def set_recomputation_options(opts, allow_recompute=True):  # pylint: disable=un
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_floating_point_behaviour_options(opts,
                                          inv=True,
                                          div0=True,
@@ -760,6 +833,12 @@ def set_floating_point_behaviour_options(opts,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_io_tile_options(opts,
                         num_io_tiles,
                         place_ops_on_io_tiles=None,
@@ -792,6 +871,12 @@ def set_io_tile_options(opts,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_gcl_options(opts, gcl_options=None):
   """Set the IPU options for the Graphcore Communication Library.
 
@@ -815,6 +900,12 @@ def set_gcl_options(opts, gcl_options=None):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def auto_select_ipus(opts, num_ipus):
   """Configure the IPUs to be used by the session.
 
@@ -882,6 +973,12 @@ def auto_select_ipus(opts, num_ipus):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def select_ipus(opts, indices):
   """Configure the IPUs to be used by the session.
 
@@ -1073,6 +1170,12 @@ def select_ipus(opts, indices):
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_ipu_connection_type(opts,
                             connection_type=DeviceConnectionType.ALWAYS,
                             ipu_version="",
@@ -1119,10 +1222,6 @@ def set_ipu_connection_type(opts,
 
   # Passing an int is deprecated
   if isinstance(ipu_version, int):
-    logging.warn(
-        "Passing an integer for ipu_version is deprecated and will be removed"
-        " in a future version. Pass a string that looks like 'ipu1' or 'ipu2'"
-        " instead.")
     ipu_version = "ipu" + str(ipu_version)
   opts.ipu_version = ipu_version
 
@@ -1131,6 +1230,12 @@ def set_ipu_connection_type(opts,
   return opts
 
 
+@deprecation.deprecated(
+    None, "Configuring IPU session options for TensorFlow has changed and this"
+    " function will be removed in a future release. Use an IPUConfig instance"
+    " instead. For more information on how to create an equivalent config in"
+    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
+    " TensorFlow documentation.")
 def set_experimental_multi_replica_distribution_options(
     opts, process_count, process_index):
   """This will use the Poplar runtime replica subset feature to let multiple

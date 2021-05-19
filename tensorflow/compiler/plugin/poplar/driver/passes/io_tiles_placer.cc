@@ -140,12 +140,12 @@ StatusOr<bool> IoTilesPlacer::RunOnComputation(HloComputation* comp,
         "Computation too large to fit on IO tiles, ", max_live_bytes,
         " >= ", target_io_bytes,
         ". Currently the number of IO tiles is set to ", num_io_tiles,
-        " with the available memory "
-        "proportion set to ",
+        " with the available memory"
+        " proportion set to ",
         AvailableMemoryProportion(),
-        ". To try and fit all the data into IO tiles you either need to "
-        "increase the number of IO tiles or the available memory proportion "
-        " using the `ipu.utils.set_io_tile_options`.");
+        ". To try and fit all the data into IO tiles you either need to"
+        " increase the number of IO tiles or the available memory proportion"
+        " using the `ipu.config.IPUConfig.io_tiles` category.");
   }
   return change;
 }

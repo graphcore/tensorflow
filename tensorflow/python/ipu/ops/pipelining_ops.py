@@ -220,9 +220,10 @@ class PipelineStageOptions:
   """
   A helper class which can be used to configure Poplar compilation options (such
   as 'availableMemoryProportion') inside a pipeline forward, backward and weight
-  update stage. This will override the global options set by
-  :func:`tensorflow.python.ipu.utils.set_convolution_options` and
-  :func:`tensorflow.python.ipu.utils.set_matmul_options`.
+  update stage. This will override the global options set by the
+  :ref:`convolution poplar options <convolutions.poplar_options>` and
+  :ref:`matmul poplar options <matmuls.poplar_options>` in the
+  :py:class:`~tensorflow.python.ipu.config.IPUConfig.`.
   """
   def __init__(self, convolution_options=None, matmul_options=None):
     """Creates an PipelineStageOptions object.
