@@ -15,9 +15,11 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
-#include <poplar/ReplicatedStreamMode.hpp>
+#include <queue>
 #include <string>
 #include <vector>
+
+#include <poplar/ReplicatedStreamMode.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -87,6 +89,25 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
   return Status::OK();
 }
 
+Status CheckNoOpaqueTypes(const HloInstruction* root) {
+  auto is_opaque =
+      [](const xla::ShapeUtil::IndexedShape& indexed_shape) -> bool {
+    return indexed_shape.shape.IsOpaque();
+  };
+  bool has_opaque =
+      absl::c_any_of(ShapeUtil::GetLeafShapes(root->shape()), is_opaque);
+
+  if (has_opaque) {
+    return xla::FailedPrecondition(
+        "Cannot return or take as an argument an opaque type in the entry "
+        "computation. This can be the happen when an IPU specific operation "
+        "(e.g. dropout) is used outside a compilation scope. Make sure to use "
+        "tf.function, ipu_compiler.compile, or don't use the IPU specific "
+        "operators.");
+  }
+
+  return Status::OK();
+}
 }  // namespace
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
@@ -109,6 +130,12 @@ Status EntryVisitor::AddSequenceForInstruction(
   }
 
   return DeferredVisitor::AddSequenceForInstruction(inst, seq);
+}
+
+Status EntryVisitor::PreProcessParameter(HloInstruction* parameter) {
+  TF_RETURN_IF_ERROR(CheckNoOpaqueTypes(parameter));
+
+  return Status::OK();
 }
 
 StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
@@ -232,6 +259,8 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     const uint64 flat_tuple_index_end =
         flat_tuple_index_start + layout_sub_shapes.size();
     output_tuple_index = flat_tuple_index_end;
+
+    TF_RETURN_IF_ERROR(CheckNoOpaqueTypes(root));
 
     // Check whether this is a dummy of inserted by a remote buffer - if it is
     // then we do not add copies/FIFO for it.

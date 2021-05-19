@@ -23,6 +23,23 @@ REGISTER_OP("IpuDropout")
     .Input("input: dtype")
     .Output("output: dtype")
     .Output("seed: int32")
+    .Output("reference: variant")
+    .Attr("dtype: {float16, float32, int32}")
+    .Attr("rate: float")
+    .Attr("scale: float")
+    .Attr("noise_shape: list(int) = []")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto in_shape = c->input(0);
+      c->set_output(0, in_shape);
+      c->set_output(1, c->MakeShape({2}));
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
+REGISTER_OP("IpuDropoutNoRef")
+    .Input("input: dtype")
+    .Output("output: dtype")
+    .Output("seed: int32")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("rate: float")
     .Attr("scale: float")
@@ -37,6 +54,42 @@ REGISTER_OP("IpuDropout")
 REGISTER_OP("IpuDropoutWithSeed")
     .Input("input: dtype")
     .Input("seed: int32")
+    .Output("output: dtype")
+    .Output("output_seed: int32")
+    .Output("reference: variant")
+    .Attr("dtype: {float16, float32, int32}")
+    .Attr("rate: float")
+    .Attr("scale: float")
+    .Attr("noise_shape: list(int) = []")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto in_shape = c->input(0);
+      auto seed_shape = c->input(1);
+      c->set_output(0, in_shape);
+      c->set_output(1, seed_shape);
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
+REGISTER_OP("IpuDropoutWithSeedNoRef")
+    .Input("input: dtype")
+    .Input("seed: int32")
+    .Output("output: dtype")
+    .Output("output_seed: int32")
+    .Attr("dtype: {float16, float32, int32}")
+    .Attr("rate: float")
+    .Attr("scale: float")
+    .Attr("noise_shape: list(int) = []")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto in_shape = c->input(0);
+      c->set_output(0, in_shape);
+      c->set_output(1, c->MakeShape({2}));
+      return Status::OK();
+    });
+
+REGISTER_OP("IpuDropoutWithSeedAndReference")
+    .Input("input: dtype")
+    .Input("seed: int32")
+    .Input("reference: variant")
     .Output("output: dtype")
     .Output("output_seed: int32")
     .Attr("dtype: {float16, float32, int32}")

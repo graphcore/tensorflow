@@ -27,6 +27,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/types/any.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
@@ -39,7 +40,8 @@ class HloInstruction;
 namespace poplarplugin {
 
 /**
- * A struct that can hold either a poplar tensor or a poplar remote buffer.
+ * A struct that can hold either a poplar tensor, a poplar remote buffer, or an
+ * opaque absl::any.
  *
  * The operator overloads are design so that it implicitely casts to the
  * appropriate type, when the context is unambiguous. This should minimise the
@@ -71,7 +73,13 @@ struct TensorOrRemoteBuffer {
         content_type(ContentType::RemoteBuffer) {}
 
   /**
-   * Construct with a remote buffer or tensor.
+   * Construct with an opaque absl::any.
+   */
+  explicit TensorOrRemoteBuffer(absl::any opaque)
+      : opaque_(opaque), content_type(ContentType::Opaque) {}
+
+  /**
+   * Construct with a remote buffer, tensor, or opaque.
    */
   TensorOrRemoteBuffer(const TensorOrRemoteBuffer& rhs) {
     switch (rhs.content_type) {
@@ -87,6 +95,10 @@ struct TensorOrRemoteBuffer {
         remote_buffer = rhs.remote_buffer;
         is_replica_partitioned = rhs.is_replica_partitioned;
         num_merged = rhs.num_merged;
+        break;
+      case ContentType::Opaque:
+        content_type = ContentType::Opaque;
+        opaque_ = rhs.opaque_;
         break;
     }
   }
@@ -110,7 +122,13 @@ struct TensorOrRemoteBuffer {
   int64 NumMerged() const { return num_merged; }
 
   /**
-   * Helper functions to force the cast to a poplar tensor when it is
+   * Helper function to test whether an opaque absl::any is stored in the
+   * element.
+   */
+  bool IsOpaque() const { return content_type == ContentType::Opaque; }
+
+  /**
+   * Helper function to force the cast to a poplar tensor when it is
    * unambiguous.
    */
   poplar::Tensor AsTensor() const {
@@ -119,12 +137,21 @@ struct TensorOrRemoteBuffer {
   }
 
   /**
-   * Helper functions to force the cast to a poplar remote buffer when it is
+   * Helper function to force the cast to a poplar remote buffer when it is
    * unambiguous.
    */
   poplar::RemoteBuffer AsRemoteBuffer() const {
     CHECK(content_type == ContentType::RemoteBuffer);
     return remote_buffer;
+  }
+
+  /**
+   * Helper function to force the cast to an opaque absl::any when it is
+   * unambiguous.
+   */
+  absl::any AsOpaque() const {
+    CHECK(content_type == ContentType::Opaque);
+    return opaque_;
   }
 
   /**
@@ -147,6 +174,10 @@ struct TensorOrRemoteBuffer {
         remote_buffer = rhs.remote_buffer;
         is_replica_partitioned = rhs.is_replica_partitioned;
         num_merged = rhs.num_merged;
+        break;
+      case ContentType::Opaque:
+        content_type = ContentType::Opaque;
+        opaque_ = rhs.opaque_;
         break;
     }
 
@@ -174,6 +205,15 @@ struct TensorOrRemoteBuffer {
   }
 
   /**
+   * Support assignment, like this is an opaque absl::any.
+   */
+  TensorOrRemoteBuffer& operator=(absl::any opaque) {
+    content_type = ContentType::Opaque;
+    opaque_ = opaque;
+    return *this;
+  }
+
+  /**
    * In a few places, tensor equality is checked. This operator overload allows
    * that code to continue working.
    */
@@ -184,6 +224,11 @@ struct TensorOrRemoteBuffer {
 
     if (IsTensor() && rhs.IsTensor()) {
       return AsTensor() == rhs.AsTensor();
+    }
+
+    if (IsOpaque() && rhs.IsOpaque()) {
+      // We can only do address comparison of absl::any objects.
+      return this == &rhs;
     }
 
     return false;
@@ -199,6 +244,7 @@ struct TensorOrRemoteBuffer {
    */
   poplar::Tensor tensor;
   poplar::RemoteBuffer remote_buffer;
+  absl::any opaque_;
 
   /**
    * Additional meta-data is stored here
@@ -206,7 +252,7 @@ struct TensorOrRemoteBuffer {
   bool is_replica_partitioned = false;
   int64 num_merged = 1;
 
-  enum class ContentType { Empty, Tensor, RemoteBuffer };
+  enum class ContentType { Empty, Tensor, RemoteBuffer, Opaque };
 
   ContentType content_type = ContentType::Empty;
 };
@@ -261,6 +307,8 @@ class TensorMap {
   Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
                                poplar::RemoteBuffer rbuffer,
                                bool is_replica_partitioned);
+  Status AddOutputOpaque(const HloInstruction* inst, int64 output_index,
+                         absl::any opaque);
   Status AddOutput(const HloInstruction* inst, int64 output_index,
                    TensorOrRemoteBuffer torb);
 

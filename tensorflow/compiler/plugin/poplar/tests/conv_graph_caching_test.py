@@ -233,8 +233,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
           'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/Convolve',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
+          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',
       ]
@@ -447,8 +446,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(8345558)
-      report.assert_max_tile_memory(7483)
+      report.assert_total_tile_memory(9951854, tolerance=0.2)
+      report.assert_max_tile_memory(7446, tolerance=0.2)
 
       # Would fail if there were two convolutions in the graph
       ok = ['__seed*', 'a/convolution', 'Copy_']

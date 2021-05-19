@@ -992,6 +992,7 @@ cc_library(
         "kernels/poputil/stateful_gradient_accumulate.cc",
         "kernels/poputil/user_operation.cc",
         "kernels/sendrecv_kernels.cc",
+        "kernels/shape_op.cc",
         "kernels/training_ops.cc",
     ],
     hdrs = [
@@ -3367,6 +3368,18 @@ xla_test(
 )
 
 xla_test(
+    name = "opaque_handling_test",
+    srcs = ["tests/opaque_handling_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "outline_remote_buffers_test",
     srcs = ["tests/outline_remote_buffers_test.cc"],
     backends = ["poplar"],
@@ -4021,7 +4034,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "gather_simplifier_embedding_lookup_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -4653,7 +4666,7 @@ cc_binary(
 
 tf_xla_py_test(
     name = "clear_xla_cache_test",
-    size = "small",
+    size = "large",
     srcs = ["tests/clear_xla_cache_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -5217,6 +5230,7 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
+        "opaque_handling_test",
         "outline_remote_buffers_test",
         "outside_compilation_scope_test",
         "pipeline_batch_serialization_buffer_inserter_test",

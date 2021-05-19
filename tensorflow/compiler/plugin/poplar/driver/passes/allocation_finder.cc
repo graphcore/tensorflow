@@ -440,6 +440,11 @@ StatusOr<bool> AllocationFinder::Run(HloModule* module) {
   for (const auto& comp : module->MakeComputationPostOrder()) {
     if (!IsPopOpsFusion(comp)) {
       for (auto allocation_location : FindAllocatingInstructions(comp)) {
+        // Skip over opaque types
+        if (allocation_location.shape.IsOpaque()) {
+          continue;
+        }
+
         // Starting dimensions permutation is just all the dimensions mapping to
         // themselves.
         std::vector<int64> permutation(allocation_location.shape.rank());
