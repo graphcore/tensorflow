@@ -4131,6 +4131,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 5,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
