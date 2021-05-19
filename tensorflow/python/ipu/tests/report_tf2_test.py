@@ -14,6 +14,7 @@
 # ==============================================================================
 
 from tensorflow.python import ipu
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.ops import summary_ops
 from tensorflow import function, constant, float32
@@ -23,9 +24,10 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
   @test_util.run_v2_only()
   def testSummary(self):
     # Create ipu config
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     # Create an IPU distribution strategy
     strategy = ipu.ipu_strategy.IPUStrategy()

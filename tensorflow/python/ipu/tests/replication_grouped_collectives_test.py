@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -43,12 +44,11 @@ def run_collective_ops(inputs, generate_collective_ops, num_replicas):
 
     dequeued = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_optimization_options(
-        cfg, max_reduce_scatter_buffer_size=10000)
-    cfg = ipu.utils.auto_select_ipus(cfg, num_replicas)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.optimizations.maximum_reduce_scatter_buffer_size = 10000
+    cfg.auto_select_ipus = num_replicas
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     sess.run(infeed_queue.initializer)
 

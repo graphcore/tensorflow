@@ -16,6 +16,7 @@
 
 import numpy as np
 from absl.testing import parameterized
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python import keras
@@ -311,9 +312,10 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
@@ -339,9 +341,10 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],
@@ -367,9 +370,10 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
@@ -399,9 +403,10 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],

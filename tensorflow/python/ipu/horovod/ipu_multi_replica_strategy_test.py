@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session
@@ -40,10 +41,14 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   def test_update_ipu_config(self):
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
-    config = ipu.utils.create_ipu_config()
-    config = strategy.update_ipu_config(config)
-    self.assertEqual(config.multi_replica_process_count, hvd.size())
-    self.assertEqual(config.multi_replica_process_index, hvd.rank())
+    config = IPUConfig()
+    strategy.update_ipu_config(config)
+    self.assertEqual(
+        config.experimental.multi_replica_distribution.process_count,
+        hvd.size())
+    self.assertEqual(
+        config.experimental.multi_replica_distribution.process_index,
+        hvd.rank())
 
   @test_util.deprecated_graph_mode_only
   def test_strategy(self):
@@ -78,9 +83,9 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
       value_allreduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
 
       with session.Session() as sess:
-        config = ipu.utils.create_ipu_config()
-        config = ipu.utils.auto_select_ipus(config, 1)
-        ipu.utils.configure_ipu_system(config)
+        config = IPUConfig()
+        config.auto_select_ipus = 1
+        config.configure_ipu_system()
 
         sess.run(v.initializer)
 

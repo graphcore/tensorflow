@@ -1,8 +1,8 @@
 from threading import Thread
 
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_strategy
-from tensorflow.python.ipu import utils
 from tensorflow import keras
 import tensorflow as tf
 
@@ -26,7 +26,8 @@ def training_step(features, labels, in_model, optimizer):
 
 
 # Configure the IPU devices
-utils.configure_ipu_system(utils.create_ipu_config())
+cfg = IPUConfig()
+cfg.configure_ipu_system()
 
 # Execute the graph
 strategy = ipu_strategy.IPUStrategy()

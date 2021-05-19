@@ -27,6 +27,7 @@ from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class DumpPoplarInfo(xla_test.XLATestCase):
@@ -51,10 +52,11 @@ class DumpPoplarInfo(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=False,
-                                        profile_execution=False)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = False  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = False  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.configure_ipu_system()
 
       fd = {pa: [1.] * 2048, pb: [2.] * 2048, pc: [3.] * 2048}
       result = sess.run(r[0], fd)

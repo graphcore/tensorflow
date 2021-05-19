@@ -14,6 +14,7 @@
 # =============================================================================
 
 from functools import partial
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.keras import layers
@@ -156,12 +157,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
@@ -287,12 +289,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -358,12 +361,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -427,12 +431,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -531,12 +536,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
                                                      inputs=[x, y])
 
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.set_ipu_model_options(cfg,
-                                      compile_ipu_code=True,
-                                      tiles_per_ipu=128)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
     utils.move_variable_initialization_to_cpu()
 
     #TODO(T10784) test how many IPU copies are here once we insert IPU copies.
@@ -616,12 +622,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       tu.move_variable_initialization_to_cpu()
@@ -679,12 +686,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(model, inputs=[])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       tu.move_variable_initialization_to_cpu()
@@ -1177,12 +1185,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
@@ -1336,12 +1345,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline_32 = ipu_compiler.compile(partial(my_net, np.float32),
                                            inputs=[1.0])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
@@ -1519,12 +1529,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
@@ -1653,12 +1664,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
@@ -1718,12 +1730,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net)
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -2033,12 +2046,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
       dequeued_gradient = grad_outfeed_queue.dequeue()
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       sess.run(infeed_queue.initializer)

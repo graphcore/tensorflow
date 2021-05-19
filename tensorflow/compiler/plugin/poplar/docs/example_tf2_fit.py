@@ -1,4 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
+from tensorflow.python.ipu.config import IPUConfig
 
 import tensorflow as tf
 
@@ -8,9 +9,9 @@ from tensorflow.python import ipu
 #
 # Configure the IPU system
 #
-cfg = ipu.utils.create_ipu_config()
-cfg = ipu.utils.auto_select_ipus(cfg, 1)
-ipu.utils.configure_ipu_system(cfg)
+cfg = IPUConfig()
+cfg.auto_select_ipus = 1
+cfg.configure_ipu_system()
 
 
 #

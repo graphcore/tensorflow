@@ -73,9 +73,9 @@ with scopes.ipu_scope('/device:IPU:0'):
 dequeue_outfeed = outfeed_queue.dequeue()
 
 # Configure the hardware
-config = utils.create_ipu_config()
-config = utils.auto_select_ipus(config, 1)
-utils.configure_ipu_system(config)
+config = ipu.config.IPUConfig()
+config.auto_select_ipus = 1
+config.configure_ipu_system()
 
 with tf.Session() as sess:
   sess.run(infeed_queue.initializer)

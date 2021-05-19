@@ -14,6 +14,8 @@
 # =============================================================================
 
 import math
+from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
@@ -209,25 +211,24 @@ class PipelineTester(object):
       # Execution profiles of code with dynamic control flow are not supported on real HW
       profiling = utils.running_on_ipu_model()
 
-      cfg = utils.create_ipu_config(profiling=profiling,
-                                    profile_execution=profiling)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = profiling  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
       if number_of_io_tiles > 0:
-        cfg = utils.set_io_tile_options(cfg, number_of_io_tiles, True)
+        cfg.io_tiles.num_io_tiles = number_of_io_tiles
+        cfg.io_tiles.place_ops_on_io_tiles = True
       num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
       num_ipus = num_ipus * replication_factor
       if tu.has_ci_ipus():
-        cfg = tu.add_hw_ci_connection_options(cfg)
-      cfg = utils.auto_select_ipus(cfg, num_ipus)
+        tu.add_hw_ci_connection_options(cfg)
+      cfg.auto_select_ipus = num_ipus
       if recomp:
-        cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
-      cfg = utils.set_optimization_options(
-          cfg,
-          merge_remote_buffers=merge_remote_buffers,
-          minimum_remote_tensor_size=minimum_remote_tensor_size)
-      utils.configure_ipu_system(cfg)
+        cfg.allow_recompute = True
+      cfg.optimizations.merge_remote_buffers = merge_remote_buffers
+      cfg.optimizations.minimum_remote_tensor_size = minimum_remote_tensor_size
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       session.run(variables.global_variables_initializer())
@@ -311,35 +312,36 @@ class PipelineTester(object):
       # Execution profiles of code with dynamic control flow are not supported
       # on real HW.
       profiling = utils.running_on_ipu_model()
-      cfg = utils.create_ipu_config(profiling=profiling,
-                                    profile_execution=profiling)
-      cfg = utils.set_ipu_model_options(cfg,
-                                        compile_ipu_code=True,
-                                        tiles_per_ipu=128)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = profiling  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = True
+      cfg.ipu_model.tiles_per_ipu = 128
       if number_of_io_tiles > 0:
-        cfg = utils.set_io_tile_options(cfg, number_of_io_tiles, True)
+        cfg.io_tiles.num_io_tiles = number_of_io_tiles
+        cfg.io_tiles.place_ops_on_io_tiles = True
 
       if ipu_id is None:
         num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
         num_ipus = num_ipus * replication_factor
-        cfg = utils.auto_select_ipus(cfg, num_ipus)
+        cfg.auto_select_ipus = num_ipus
       else:
-        cfg = utils.select_ipus(cfg, indices=[ipu_id])
+        cfg.select_ipus = [ipu_id]
 
       if process_count is not None:
         assert process_index is not None
-        cfg = utils.set_experimental_multi_replica_distribution_options(
-            cfg, process_count=process_count, process_index=process_index)
+        cfg.experimental.multi_replica_distribution.process_count = \
+            process_count
+        cfg.experimental.multi_replica_distribution.process_index = \
+            process_index
 
       if recomp:
-        cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
-      cfg = utils.set_optimization_options(
-          cfg,
-          merge_remote_buffers=merge_remote_buffers,
-          minimum_remote_tensor_size=minimum_remote_tensor_size)
+        cfg.allow_recompute = True
+      cfg.optimizations.merge_remote_buffers = merge_remote_buffers
+      cfg.optimizations.minimum_remote_tensor_size = minimum_remote_tensor_size
       if tu.has_ci_ipus():
-        cfg = tu.add_hw_ci_connection_options(cfg)
-      utils.configure_ipu_system(cfg)
+        tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()

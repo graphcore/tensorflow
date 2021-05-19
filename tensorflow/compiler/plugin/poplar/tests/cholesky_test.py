@@ -31,6 +31,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuXlaCholeskyTest(xla_test.XLATestCase):
@@ -39,12 +40,12 @@ class IpuXlaCholeskyTest(xla_test.XLATestCase):
 
   def __configureIPU(self):
     if not self.configured:
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      cfg = ipu.utils.set_optimization_options(
-          cfg, cholesky_block_size=IpuXlaCholeskyTest.BLOCK_SIZE)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.optimizations.cholesky_block_size = IpuXlaCholeskyTest.BLOCK_SIZE
+      cfg.configure_ipu_system()
       self.configured = True
 
   # Overriding abstract method.

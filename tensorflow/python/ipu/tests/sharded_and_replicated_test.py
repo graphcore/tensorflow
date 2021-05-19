@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+import copy
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -78,14 +80,13 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_optimization_options(
-          cfg,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+      cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
+      cfg.auto_select_ipus = 4
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
@@ -148,14 +149,13 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_optimization_options(
-          cfg,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+      cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
+      cfg.auto_select_ipus = 4
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
@@ -227,14 +227,13 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_optimization_options(
-          cfg,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+      cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
+      cfg.auto_select_ipus = 4
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
@@ -259,13 +258,13 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_optimization_options(
-        cfg,
-        max_cross_replica_sum_buffer_size=10000,
-        max_inter_ipu_copies_buffer_size=10000)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
+    cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
 
-    cls.base_cfg = tu.add_hw_ci_connection_options(cfg)
+    tu.add_hw_ci_connection_options(cfg)
+    cls.base_cfg = cfg
 
   @staticmethod
   def create_body_2shards(outfeed_queue=None):
@@ -307,9 +306,9 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
   def testOutfeedShapeWhenMixingReplicationFactors(self):
     ''' Check that we get the correct outfeed shape when running two programs
     with different replication factors'''
-
-    cfg = ipu.utils.auto_select_ipus(self.base_cfg, 4)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = copy.deepcopy(self.base_cfg)
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       shape = [2]
@@ -359,8 +358,9 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   def testCantReuseInfeedWhenMixingReplicationFactors(self):
 
-    cfg = ipu.utils.auto_select_ipus(self.base_cfg, 4)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = copy.deepcopy(self.base_cfg)
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       shape = [2]

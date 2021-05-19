@@ -40,6 +40,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 
 
 def compute_device_count(pipelining=False, sharded=False, replicated=False):
@@ -212,16 +213,15 @@ class ReportHelper(object):
   def _find_report_files_in_subdirectory(self, directory):
     return directory.glob("*.pop")
 
-  # Sets autoReport engine options in the ipu config.
+  # Sets autoReport engine options in the IPUConfig.
   def set_autoreport_options(self, cfg):
     self._setup_called = True
     options = {
         "autoReport.directory": self._directory,
         "autoReport.outputGraphProfile": "true",
     }
-    cfg = utils.set_compilation_options(cfg, options)
-    cfg.auto_assign_report_subdirectories = True
-    return cfg
+    cfg.compilation_poplar_options = options
+    cfg._profiling.auto_assign_report_subdirectories = True  # pylint: disable=protected-access
 
   # Finds and returns the paths to generated report files.
   # Asserts the number of reports found is equal to assert_count.
@@ -289,7 +289,7 @@ class ReportJSON(object):
                sess=None,
                profiling=True,
                compile_ipu_code=False,
-               tiles_per_ipu=None,
+               tiles_per_ipu=0,
                device_count_override=None,
                execution_trace=True,
                sharded=False,
@@ -329,46 +329,47 @@ class ReportJSON(object):
                  ), "Can't have both sharded enabled and device_count_override"
       # yapf: enable
 
-      opts = utils.create_ipu_config(
-          profiling=profiling,
-          use_poplar_text_report=False,
-          use_poplar_cbor_report=False,
-          profile_execution=execution_trace,
-          always_rearrange_copies_on_the_host=
-          always_rearrange_copies_on_the_host,
-          merge_infeed_io_copies=merge_infeed_io_copies)
+      opts = IPUConfig()
+      opts._profiling.profiling = profiling  # pylint: disable=protected-access
+      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
+      opts._profiling.use_poplar_cbor_report = False  # pylint: disable=protected-access
+      opts._profiling.profile_execution = execution_trace  # pylint: disable=protected-access
+      opts.experimental.always_rearrange_copies_on_the_host = \
+          always_rearrange_copies_on_the_host
+      opts.optimizations.merge_infeed_io_copies = merge_infeed_io_copies
 
-      opts = utils.set_optimization_options(
-          opts,
-          max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
-          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
-          triangular_solve_expander_block_size=
-          triangular_solve_expander_block_size,
-          minimum_remote_tensor_size=minimum_remote_tensor_size)
+      opts.optimizations.maximum_cross_replica_sum_buffer_size = \
+          max_cross_replica_sum_buffer_size
+      opts.optimizations.maximum_inter_ipu_copies_buffer_size = \
+          max_inter_ipu_copies_buffer_size
+      opts.optimizations.triangular_solve_expander_block_size = \
+          triangular_solve_expander_block_size
+      opts.optimizations.minimum_remote_tensor_size = \
+          minimum_remote_tensor_size
 
       device_count = device_count_override or compute_device_count(
           pipelining, sharded, replicated)
       if device_count:
-        opts = utils.auto_select_ipus(opts, device_count)
+        opts.auto_select_ipus = device_count
 
-      opts = utils.set_serialization_options(opts, serialization_folder)
-      opts = utils.set_ipu_model_options(opts, compile_ipu_code, tiles_per_ipu)
-      opts = utils.set_recomputation_options(opts,
-                                             allow_recompute=allow_recompute)
+      opts.serialization_output_folder = serialization_folder
+      opts.ipu_model.compile_ipu_code = compile_ipu_code
+      opts.ipu_model.tiles_per_ipu = tiles_per_ipu
+      opts.allow_recompute = allow_recompute
       if num_io_tiles > 0:
-        opts = utils.set_io_tile_options(opts, num_io_tiles, True)
+        opts.io_tiles.num_io_tiles = num_io_tiles
+        opts.io_tiles.place_ops_on_io_tiles = True
 
-      opts = utils.set_norm_options(
-          opts, use_stable_statistics=use_stable_norm_statistics)
+      opts.norms.use_stable_statistics = use_stable_norm_statistics
 
       if use_hw:
-        opts = add_hw_ci_connection_options(opts)
+        add_hw_ci_connection_options(opts)
 
       if set_opts_fn:
-        opts = set_opts_fn(opts)
+        set_opts_fn(opts)
 
       if not estimator_hook:
-        utils.configure_ipu_system(opts)
+        opts.configure_ipu_system()
       self.ipu_config = opts
 
   def create_ipu_event_trace(self):
@@ -828,9 +829,8 @@ def has_ci_ipus():
 
 
 def add_hw_ci_connection_options(opts):
-  return utils.set_ipu_connection_type(opts,
-                                       utils.DeviceConnectionType.ON_DEMAND,
-                                       enable_remote_buffers=True)
+  opts.device_connection.enable_remote_buffers = True
+  opts.device_connection.type = utils.DeviceConnectionType.ON_DEMAND
 
 
 def test_may_use_ipus_or_model(num_ipus, func=None):

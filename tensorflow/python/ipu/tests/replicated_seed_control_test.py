@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -53,13 +54,16 @@ class TestSeedControl(test_util.TensorFlowTestCase):
       out1 = math_ops.cast(inp, dtype=np.float16)
 
     # Configure the hardware
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [2, 2])
-    config = tu.add_hw_ci_connection_options(config)
-    config = ipu.utils.set_floating_point_behaviour_options(config)
-    config = ipu.utils.set_compilation_options(
-        config, {'target.deterministicWorkers': 'true'})
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [2, 2]
+    tu.add_hw_ci_connection_options(config)
+    config.floating_point_behaviour.inv = True
+    config.floating_point_behaviour.div0 = True
+    config.floating_point_behaviour.oflo = True
+    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.nanoo = True
+    config.compilation_poplar_options = {'target.deterministicWorkers': 'true'}
+    config.configure_ipu_system()
 
     with session_lib.Session() as sess:
 
@@ -125,14 +129,19 @@ class TestSeedControl(test_util.TensorFlowTestCase):
 
     dequeue_op = outfeed.dequeue()
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [2])
-    config = tu.add_hw_ci_connection_options(config)
-    config = ipu.utils.set_floating_point_behaviour_options(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [2]
+    tu.add_hw_ci_connection_options(config)
+    config.floating_point_behaviour.inv = True
+    config.floating_point_behaviour.div0 = True
+    config.floating_point_behaviour.oflo = True
+    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.nanoo = True
     # Portable determinism is required as the replicas use different IPUs.
-    config = ipu.utils.set_compilation_options(
-        config, {'target.deterministicWorkers': 'portable'})
-    ipu.utils.configure_ipu_system(config)
+    config.compilation_poplar_options = {
+        'target.deterministicWorkers': 'portable'
+    }
+    config.configure_ipu_system()
 
     with session_lib.Session() as sess:
 

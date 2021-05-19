@@ -32,6 +32,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
+from tensorflow.python.ipu.config import IPUConfig
 
 REPORT_DIR_PREFIX = "tf_report_"
 
@@ -43,7 +44,7 @@ def find_files_by_substring(directory, substring):
 def is_json(test_str):
   test_s = json.dumps(test_str)
   try:
-    json_object = json.loads(test_s)
+    json.loads(test_s)
   except json.decoder.JSONDecodeError:
     return False
   return True
@@ -78,9 +79,9 @@ class AutoReportDirTest(xla_test.XLATestCase):
   def testAutoReportDirNotCreated(self):
     with test.mock.patch.dict("os.environ", add_to_poplar_engine_options({})):
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
@@ -94,9 +95,9 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
@@ -121,9 +122,9 @@ class AutoReportDirTest(xla_test.XLATestCase):
             "autoReport.directory": "./tommyFlowers"
         })):
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
@@ -145,9 +146,9 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with self.session() as sess:
         run_graph_op, x = createSimpleGraph()
@@ -165,10 +166,10 @@ class AutoReportDirTest(xla_test.XLATestCase):
 
   def testAutoAssignReportSubdirectoriesAllowsMultipleReports(self):
     report_helper = tu.ReportHelper(self)
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = report_helper.set_autoreport_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
 
     with self.session() as sess:
       run_graph_op_1, x_1 = createSimpleGraph()
@@ -183,10 +184,10 @@ class AutoReportDirTest(xla_test.XLATestCase):
 
   def testAutoAssignReportSubdirectoriesSubdirectoryReused(self):
     report_helper = tu.ReportHelper(self)
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = report_helper.set_autoreport_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
 
     with self.session() as sess:
       run_graph_op_1, x_1 = createSimpleGraph()

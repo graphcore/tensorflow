@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 from tempfile import TemporaryDirectory
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -45,10 +46,10 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2Replicas4(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -119,10 +120,10 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
     cpu_predictions = model.predict(predict_ds, steps=12)
 
     # Predict on IPU with replication
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():

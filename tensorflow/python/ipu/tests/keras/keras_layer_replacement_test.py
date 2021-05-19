@@ -15,6 +15,7 @@
 """ Tests replacement of Keras layers with IPU Keras layers """
 
 from absl.testing import parameterized
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ones
 from tensorflow.python.framework import dtypes
@@ -301,9 +302,10 @@ class KerasLayerReplacementTest(test.TestCase, parameterized.TestCase):
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
       # Configure an IPU.
-      cfg = ipu_utils.create_ipu_config(profiling=True)
-      cfg = ipu_utils.auto_select_ipus(cfg, 1)
-      ipu_utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # Build model without layer replacement.
       model = Sequential(model_fn())

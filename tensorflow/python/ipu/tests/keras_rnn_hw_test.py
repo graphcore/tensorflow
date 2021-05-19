@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import constant_op
@@ -28,10 +29,10 @@ from tensorflow.python import ipu
 class RNNDropoutTest(test_util.TensorFlowTestCase):
   @staticmethod
   def _test(test, model_fn):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       with ipu.scopes.ipu_scope("/device:IPU:0"):

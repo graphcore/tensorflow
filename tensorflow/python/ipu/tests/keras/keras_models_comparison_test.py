@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
@@ -42,10 +43,10 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def test_sequential_and_pipeline(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     def stage1():
       return [
@@ -99,10 +100,10 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def test_functional_and_pipeline(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     def get_model(n=3, pipeline_stages=None):
       input_layer = keras.layers.Input(shape=(4))
@@ -161,10 +162,10 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def test_functional_and_sequential(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     # Multiple of replication_factor (4) * gradient_accumulation_count (8)
     dataset_length = 32

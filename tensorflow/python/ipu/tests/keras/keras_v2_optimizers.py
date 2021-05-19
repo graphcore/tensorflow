@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
@@ -86,10 +87,10 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
   def testCrossReplicaOptimizer(self):
     cross_replica_optimizer = CrossReplicaOptimizer(original_optimizer)
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, nipus)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = nipus
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     steps = 10
@@ -113,10 +114,10 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
   def testMapGradientOptimizer(self):
     quad_optimizer = IpuOptimizer(
         MapGradientOptimizer(original_optimizer, map_fn_quadratic))
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = create_model(True, quad_optimizer)
@@ -131,10 +132,10 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     quad_optimizer = MapGradientOptimizer(
         MapGradientOptimizer(original_optimizer, map_fn_quadratic), map_fn_add)
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = create_model(True, quad_optimizer)
@@ -151,10 +152,10 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     add_optimizer = CrossReplicaOptimizer(
         MapGradientOptimizer(original_optimizer, map_fn_add))
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, nipus)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = nipus
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = create_model(True, add_optimizer)
@@ -176,10 +177,10 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     self.assertFalse(isinstance(no_acc, GradientAccumulationOptimizer))
     self.assertFalse(isinstance(acc, keras.optimizer_v2.gradient_descent.SGD))
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = create_model(

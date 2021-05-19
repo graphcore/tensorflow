@@ -15,6 +15,7 @@
 """Comparative test of upstream Keras vs IPU Keras on MNIST."""
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python import cast
 from tensorflow.python import float32
 from tensorflow.python import ipu
@@ -99,9 +100,9 @@ class IPUKerasMNISTTest(test.TestCase):
   """
   @test_util.run_v2_only
   def testSequentialTraining(self):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     train_ds, _ = create_datasets()
 
@@ -131,9 +132,9 @@ class IPUKerasMNISTTest(test.TestCase):
 
   @test_util.run_v2_only
   def testSequentialPredictions(self):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     train_ds, test_ds = create_datasets()
 
@@ -170,9 +171,9 @@ class IPUKerasMNISTTest(test.TestCase):
 
   @test_util.run_v2_only
   def testModelTraining(self):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     train_ds, _ = create_datasets()
 
@@ -204,9 +205,9 @@ class IPUKerasMNISTTest(test.TestCase):
 
   @test_util.run_v2_only
   def testModelPredictions(self):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     train_ds, test_ds = create_datasets()
 

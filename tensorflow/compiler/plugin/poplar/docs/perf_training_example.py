@@ -1,8 +1,8 @@
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
-from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu.config import IPUConfig
 import tensorflow as tf
 
 # The dataset for feeding the graphs
@@ -32,9 +32,9 @@ def my_net():
 
 
 # Configure the hardware.
-config = utils.create_ipu_config()
-config = utils.auto_select_ipus(config, 1)
-utils.configure_ipu_system(config)
+config = IPUConfig()
+config.auto_select_ipus = 1
+config.configure_ipu_system()
 
 # Initialize the IPU default strategy.
 strategy = ipu_strategy.IPUStrategy()

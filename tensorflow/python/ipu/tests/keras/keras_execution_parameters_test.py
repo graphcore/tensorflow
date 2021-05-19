@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
@@ -47,10 +48,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.run_v2_only
   def testMismatchDatasetLengthToAccumulationCount(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -65,10 +66,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.run_v2_only
   def testMismatchDatasetLengthToStepsPerRun(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -83,10 +84,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=8)
   @test_util.run_v2_only
   def testMismatchDatasetLengthToReplicationFactor(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 8)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 8
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -101,10 +102,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=8)
   @test_util.run_v2_only
   def testMismatchDatasetLengthToValueCombination(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 8)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 8
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     # Only missmatched when considering all three of:
     # gradient_accumulation_count,
@@ -123,10 +124,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.run_v2_only
   def testMismatchStepsPerEpochToStepsPerRun(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -141,10 +142,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=8)
   @test_util.run_v2_only
   def testMismatchStepsPerEpochToReplicationFactor(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 8)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 8
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -159,10 +160,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def testMismatchStepsPerEpochToValueCombination(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     # Only missmatched when considering both steps_per_run, and
     # replication_factor: 24 % (4 * 4) != 0
@@ -179,10 +180,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataMismatchedStepsandReplicas(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -211,10 +212,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataMismatchStepsAndStepsPerRunAndReplicas(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -245,10 +246,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testEvaluateWithNumpyDataMismatchStepsAndStepsPerRunAndReplicas(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -280,10 +281,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testFitWithNumpyDataMismatchStepsAndStepsPerRunAndReplicas(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -319,10 +320,10 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataInsufficientSamplesForParameters(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 

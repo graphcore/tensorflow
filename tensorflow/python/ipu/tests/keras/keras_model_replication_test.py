@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
@@ -27,10 +28,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2Replicas2(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -61,10 +62,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2Replicas2Ga3DropsSamples(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -99,10 +100,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2Replicas2Steps2Ga1(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 
@@ -168,10 +169,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
       return ((input_1, input_2, input_3), (dense_3, dense_4))
 
     # IPU Test.
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -237,10 +238,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
     # IPU Test.
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 2)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
     with strategy.scope():

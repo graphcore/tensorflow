@@ -5,9 +5,9 @@ from tensorflow.python import ipu
 #
 # Configure the IPU system.
 #
-cfg = ipu.utils.create_ipu_config()
-cfg = ipu.utils.auto_select_ipus(cfg, 1)
-ipu.utils.configure_ipu_system(cfg)
+cfg = ipu.config.IPUConfig()
+cfg.auto_select_ipus = 1
+cfg.configure_ipu_system()
 
 #
 # Create the training and evaluation datasets.
