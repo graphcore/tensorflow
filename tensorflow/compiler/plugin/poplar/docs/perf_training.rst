@@ -128,17 +128,17 @@ Selecting the number of replicas
 ________________________________
 
 During system configuration, you specify the number of IPUs for the
-TensorFlow device using the ``auto_select_ipus()`` function, or the
-``select_ipus()`` function.
+TensorFlow device using the ``auto_select_ipus`` or ``select_ipus`` options on
+an :py:class:`~tensorflow.python.ipu.utils.IPUConfig` instance.
 
 A graph can be sharded across multiple IPUs (model parallelism), and then
 replicated across IPUs (data parallelism).  When specifying the number of IPUs
 in the system, you must specify a multiple of the number of shards used
 by the graph.
 
-For instance, if a graph is sharded over two IPUs, and you specify eight IPUs
-to the ``auto_select_ipus`` function, then the graph will be replicated four
-times.
+For instance, if a graph is sharded over two IPUs, and you set the
+``auto_select_ipus`` option to eight IPUs, then the graph will be replicated
+four times.
 
 Performing parameter updates
 ____________________________
@@ -399,6 +399,8 @@ be loaded into a JSON object using the native JSON library, for example:
 
 .. code-block:: python
 
+  import tensorflow as tf
+  from tensorflow.python import ipu
   import json
 
   # Create your tf.data.Dataset

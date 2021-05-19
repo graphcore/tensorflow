@@ -194,7 +194,7 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   hashable_config.clear_multi_replica_process_count();
   hashable_config.clear_multi_replica_process_index();
 
-  // Clear the target options set by `set_ipu_connection_type` that are already
+  // Clear the target options set by `IPUConfig.device_connection` already
   // included in the target hash. This allows for doing offline compilation
   // and then loading the executable onto a hardware device, given that it has
   // the same target configuration as the offline compilation target.

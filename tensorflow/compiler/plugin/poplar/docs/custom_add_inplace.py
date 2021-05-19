@@ -8,7 +8,7 @@ tf.disable_v2_behavior()
 
 # Configure argument for targeting the IPU
 cfg = ipu.utils.create_ipu_config()
-# cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
 cfg = ipu.utils.auto_select_ipus(cfg, 1)
 ipu.utils.configure_ipu_system(cfg)
 
