@@ -46,7 +46,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     report_helper = tu.ReportHelper(self)
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.create_ipu_config()
     self.assertFalse(cfg.disable_gather_simplifier)
     cfg = utils.set_optimization_options(cfg, gather_simplifier=False)
     self.assertTrue(cfg.disable_gather_simplifier)

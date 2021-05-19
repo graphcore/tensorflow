@@ -15,7 +15,7 @@ For example, this will not work:
 .. code-block:: python
 
   import tensorflow as tf
-  cfg = tf.python.ipu.create_ipu_config(...)
+  cfg = tf.python.ipu.config.IPUConfig() ...
 
 .. Note automodule:: tensorflow.python.ipu only imports ipu.outlined_function
 
@@ -53,8 +53,16 @@ For example, this will not work:
 
 .. automodule:: tensorflow.python.ipu.config
   :members:
-  :exclude-members: deprecate_config_attribute, deprecate_config_attributes, running_on_ipu_model
+  :exclude-members: deprecate_config_attribute, deprecate_config_attributes, running_on_ipu_model, IPUConfig, AttributeMetadata
 
+.. autoclass:: tensorflow.python.ipu.config.AttributeMetadata()
+  :members:
+
+
+.. autoclass:: tensorflow.python.ipu.config.IPUConfig
+
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.get_attribute_metadata()
+  .. automethod:: tensorflow.python.ipu.config.IPUConfig.configure_ipu_system()
 
 .. Looping utilities
 

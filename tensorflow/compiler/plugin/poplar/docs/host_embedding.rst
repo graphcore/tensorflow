@@ -62,10 +62,12 @@ functionality to store embedding tables in remote buffer memory
 IPU performs the lookup/update operations directly on the remote
 buffer memory and the host CPU is not involved.
 
-In :py:func:`tensorflow.python.ipu.utils.create_ipu_config` there is an option
-``enable_experimental_remote_buffer_embedding``. When this option is set to
-``True`` (defaults to ``False``), the IPU host embedding implementation will be
-globally changed to use remote buffer embeddings instead.
+Setting the :ref:`experimental.enable_remote_buffer_embedding
+<experimental.enable_remote_buffer_embedding>` option on an
+:py:class:`~tensorflow.python.ipu.config.IPUConfig` to ``True`` (defaults to
+``False``) and then configuring the IPU system with that config will cause the
+IPU host embedding implementation to globally use remote buffer embeddings
+instead.
 
 .. note::
 

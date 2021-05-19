@@ -411,6 +411,7 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
     # config, should also be deprecated and contain the note of their deprecated
     # parent.
     # A nested config or attribute at a depth d should be indented by that depth
+    # Options should not be repeated
 
     # pylint: disable=unsupported-membership-test
 
@@ -421,6 +422,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
         "      ", "         This is the docstring for attr0"
     ])
     self.assertTrue(attr0_desc in test_config.__doc__)
+    self.assertTrue(
+        test_config.__doc__.count(".. py:attribute:: attr0\n") == 1)
 
     # Basic config.
     nested1_desc = '\n'.join([
@@ -428,6 +431,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
         "         This is the docstring for the nested1 category"
     ])
     self.assertTrue(nested1_desc in test_config.__doc__)
+    self.assertTrue(
+        test_config.__doc__.count(".. py:attribute:: nested1\n") == 1)
 
     # Deprecated config.
     nested2_desc = '\n'.join([
@@ -438,6 +443,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
         "            This is a docstring that tests deprecating a nested config"
     ])
     self.assertTrue(nested2_desc in test_config.__doc__)
+    self.assertTrue(
+        test_config.__doc__.count(".. py:attribute:: nested1.nested2\n") == 1)
 
     # Deprecated attribute.
     attr1_desc = '\n'.join([
@@ -449,6 +456,8 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
         " have an effect.", "            This is the docstring for attr1"
     ])
     self.assertTrue(attr1_desc in test_config.__doc__)
+    self.assertTrue(
+        test_config.__doc__.count(".. py:attribute:: nested1.attr1\n") == 1)
 
     # Indirectly deprecated attribute (through parent config deprecation).
     attr2_desc = '\n'.join([
@@ -460,6 +469,9 @@ class ConfigBaseTest(test_util.TensorFlowTestCase):
         "               No description provided."
     ])
     self.assertTrue(attr2_desc in test_config.__doc__)
+    self.assertTrue(
+        test_config.__doc__.count(
+            ".. py:attribute:: nested1.nested1.nested2.attr2\n") == 1)
 
     # pylint: enable=unsupported-membership-test
 
@@ -613,6 +625,16 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
         Exception, "When using the IPUModel, the devices to attach to"):
       cfg.auto_select_ipus = []
       cfg._create_protobuf()
+
+  @tu.test_uses_ipus(1, allow_ipu_model=False)
+  def testSelectIPUsInteger(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(len(pb.device_config), 0)
+    cfg.select_ipus = 1
+    pb = cfg._create_protobuf()
+    self.assertEqual(len(pb.device_config), 1)
+    self.assertEqual(pb.device_config[0].cfg_index, 1)
 
   @tu.test_uses_ipus(1, allow_ipu_model=False)
   def testSelectIPUsList(self):
@@ -1276,6 +1298,7 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
   def testCheckMetadata(self):
     """ Check that a couple of the attributes' metadata are correct """
     cfg = ipu.config.IPUConfig()
+
     md = cfg.get_attribute_metadata("auto_select_ipus")
     self.assertEqual(md.name, "auto_select_ipus")
     self.assertTrue("Configure the IPUs to be used " in md.__doc__)
