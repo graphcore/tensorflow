@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
@@ -45,10 +46,10 @@ class TestAllGather(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [8])
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [8]
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     outfeed = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
@@ -97,10 +98,10 @@ class TestAllGather(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(my_graph, [idx, updates, scale])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [8])
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [8]
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     outfeed = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
@@ -153,10 +154,10 @@ class TestAllToAll(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [8])
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [8]
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     outfeed = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:

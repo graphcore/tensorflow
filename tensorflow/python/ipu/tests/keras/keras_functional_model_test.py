@@ -15,6 +15,7 @@
 """Tests for IPU Keras Model"""
 
 import sys
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -384,9 +385,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -408,9 +410,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -431,9 +434,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -457,9 +461,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -485,9 +490,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -517,9 +523,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -548,9 +555,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=4)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -580,9 +588,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -608,9 +617,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=6)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -634,9 +644,10 @@ class IPUModelModelTest(test.TestCase):
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
       m = ipu.keras.Model(inputs=input_layer, outputs=x)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = gradient_descent.GradientDescentOptimizer(0.001)
       m.compile(opt, loss='mse')
@@ -678,9 +689,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = gradient_descent.GradientDescentOptimizer(0.001)
 
@@ -722,9 +734,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -748,9 +761,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -779,9 +793,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -810,9 +825,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -837,9 +853,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -871,9 +888,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -898,9 +916,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -926,9 +945,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -954,9 +974,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -982,9 +1003,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -1043,9 +1065,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -1071,9 +1094,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -1102,9 +1126,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
@@ -1131,9 +1156,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
           0.001, 4, 0.1, staircase=True)
@@ -1161,9 +1187,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
           boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
@@ -1188,9 +1215,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
       m.compile(opt, loss='mse', metrics=['accuracy'])
@@ -1220,9 +1248,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       m.compile("sgd", loss='mse')
 
@@ -1253,9 +1282,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       m.compile(optimizer="rmsprop", loss='mse')
 
@@ -1275,9 +1305,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=x,
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # Generate predictions
       ipu_out = m.predict(test_inference_dataset(length=96))
@@ -1310,9 +1341,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=[block_c, block_d],
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       m.compile("sgd", loss=['mse', 'mse'])
 
@@ -1339,9 +1371,10 @@ class IPUModelModelTest(test.TestCase):
                           outputs=[block_c, block_d],
                           gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       m.compile("sgd", loss=['mse', 'mse'], metrics=['accuracy'])
 
@@ -1358,9 +1391,10 @@ class IPUModelModelTest(test.TestCase):
       x = simple_model(input_layer, [32, 32, 1], w=1)
       m = ipu.keras.Model(inputs=input_layer, outputs=x)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       ipu_out = m.predict(xs, batch_size=2)
 
@@ -1384,9 +1418,10 @@ class IPUModelModelTest(test.TestCase):
       x = simple_model(input_layer, [32, 32, 1], w=1)
       m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       ipu_out = m.predict(xs, batch_size=2)
 
@@ -1411,9 +1446,10 @@ class IPUModelModelTest(test.TestCase):
       x = keras.layers.Reshape((4, 4, 3))(x)
       m = ipu.keras.Model(inputs=input_layer, outputs=x)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       ipu_out = m.predict(xs, batch_size=2)
 
@@ -1439,9 +1475,10 @@ class IPUModelModelTest(test.TestCase):
       x = keras.layers.Reshape((4, 4, 3))(x)
       m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       ipu_out = m.predict(xs, batch_size=2)
 
@@ -1462,9 +1499,10 @@ class IPUModelModelTest(test.TestCase):
     # IPU Model.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
@@ -1530,9 +1568,10 @@ class IPUModelModelTest(test.TestCase):
     # IPU Test.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       model = ipu.keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
@@ -1616,9 +1655,10 @@ class IPUModelModelTest(test.TestCase):
     # IPU Test.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       model = ipu.keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'])
@@ -1673,9 +1713,10 @@ class IPUModelModelTest(test.TestCase):
     # IPU Test.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       model = ipu.keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'])
@@ -1736,9 +1777,10 @@ class IPUModelModelTest(test.TestCase):
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
     # IPU Test.
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -1789,9 +1831,10 @@ class IPUModelModelTest(test.TestCase):
                           gradient_accumulation_count=8,
                           layer_replacement=True)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       # Generate predictions
       ipu_out = m.predict(data, batch_size=4)
@@ -1832,9 +1875,10 @@ class IPUModelModelTest(test.TestCase):
 
       return ((input_1, input_2, input_3), (dense_3, dense_4))
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -1879,9 +1923,10 @@ class IPUModelModelTest(test.TestCase):
       o = keras.layers.Dense(1, kernel_initializer='ones')(ci)
       m = ipu.keras.Model(i, o)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       output = m.predict(dataset, steps_per_run=1)
       self.assertAllClose(output.flatten(), range(30))

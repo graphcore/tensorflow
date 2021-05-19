@@ -15,6 +15,7 @@
 """Test for IPU Keras single IPU model."""
 
 import os
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -78,9 +79,10 @@ class KerasSyntheticDataTest(test.TestCase):
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
-        cfg = ipu.utils.create_ipu_config(profiling=True)
-        cfg = ipu.utils.auto_select_ipus(cfg, 1)
-        ipu.utils.configure_ipu_system(cfg)
+        cfg = IPUConfig()
+        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg.auto_select_ipus = 1
+        cfg.configure_ipu_system()
 
         model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
@@ -96,9 +98,10 @@ class KerasSyntheticDataTest(test.TestCase):
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
-        cfg = ipu.utils.create_ipu_config(profiling=True)
-        cfg = ipu.utils.auto_select_ipus(cfg, 1)
-        ipu.utils.configure_ipu_system(cfg)
+        cfg = IPUConfig()
+        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg.auto_select_ipus = 1
+        cfg.configure_ipu_system()
 
         model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
@@ -114,9 +117,10 @@ class KerasSyntheticDataTest(test.TestCase):
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
-        cfg = ipu.utils.create_ipu_config(profiling=True)
-        cfg = ipu.utils.auto_select_ipus(cfg, 1)
-        ipu.utils.configure_ipu_system(cfg)
+        cfg = IPUConfig()
+        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg.auto_select_ipus = 1
+        cfg.configure_ipu_system()
 
         model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
@@ -132,10 +136,11 @@ class KerasSyntheticDataTest(test.TestCase):
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
-        cfg = ipu.utils.create_ipu_config(profiling=True)
-        cfg = ipu.utils.auto_select_ipus(cfg, 2)
-        cfg = tu.add_hw_ci_connection_options(cfg)
-        ipu.utils.configure_ipu_system(cfg)
+        cfg = IPUConfig()
+        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg.auto_select_ipus = 2
+        tu.add_hw_ci_connection_options(cfg)
+        cfg.configure_ipu_system()
 
         model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])

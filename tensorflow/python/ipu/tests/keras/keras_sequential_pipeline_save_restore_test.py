@@ -15,6 +15,7 @@
 """Test for IPU Keras Pipelined model save and restore."""
 
 import os
+from tensorflow.python.ipu.config import IPUConfig
 import shutil
 
 import numpy as np
@@ -65,9 +66,10 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     dataset = test_dataset(length=72)
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
@@ -123,9 +125,10 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     dataset = test_dataset(length=72)
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     checkpoint_path = "ckpt/model"
     checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -170,9 +173,10 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testInvalidRestorePath(self):
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():

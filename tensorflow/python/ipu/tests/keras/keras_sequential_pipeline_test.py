@@ -15,6 +15,7 @@
 """Test for IPU Keras Pipelined model."""
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
@@ -320,9 +321,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=12)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -341,9 +343,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = gradient_descent.GradientDescentOptimizer(0.001)
 
@@ -379,9 +382,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -403,9 +407,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -428,9 +433,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -453,9 +459,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -479,9 +486,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -537,9 +545,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -562,9 +571,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -590,9 +600,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
@@ -616,9 +627,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
           0.001, 4, 0.1, staircase=True)
@@ -643,9 +655,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
           boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
@@ -667,9 +680,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(pipeline_with_lstm(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -687,9 +701,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
       m.compile(opt, loss='mse', metrics=['accuracy'])
@@ -719,9 +734,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m_acc = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                            gradient_accumulation_count=24)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
       m.compile(opt, loss='mse', metrics=['accuracy'])
@@ -752,9 +768,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       m.compile("sgd", loss='mse')
 
@@ -780,9 +797,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       # Generate predictions using the fixed weight model
       ipu_output = m.predict(test_inference_dataset(length=96))
@@ -815,9 +833,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       for l in m.layers:
         self.assertAllEqual(l.built, True)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       # Just verify that it doesn't assert
       m.predict(test_inference_dataset(length=96))
@@ -839,9 +858,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       for l in m.layers:
         self.assertAllEqual(l.built, True)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       # Should fail because the model weights were constructed for a
       # different shaped input.
@@ -856,9 +876,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -884,9 +905,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -908,9 +930,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=8)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -939,9 +962,10 @@ class IPUSequentialPipelineTest(test.TestCase):
           gradient_accumulation_dtype=dtype_getter,
           dtype=np.float16)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       outer = self
 
@@ -998,9 +1022,10 @@ class IPUSequentialPipelineTest(test.TestCase):
     # Compute IPU model output, uses layer replacement.
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 2
+      cfg.configure_ipu_system()
 
       # Compute output with substituition.
       m = ipu.keras.PipelineSequential(f(),

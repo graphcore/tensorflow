@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python.framework import errors
 from tensorflow.python.platform import googletest
@@ -24,17 +25,17 @@ from tensorflow.python import ipu
 class IPUReconfigureTest(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
-    cls.first_cfg = ipu.utils.create_ipu_config(profiling=True)
-    cls.first_cfg = ipu.utils.auto_select_ipus(cls.first_cfg, num_ipus=[1, 1])
-    cls.first_cfg = ipu.utils.set_ipu_model_options(cls.first_cfg,
-                                                    compile_ipu_code=True)
+    cls.first_cfg = IPUConfig()
+    cls.first_cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cls.first_cfg.auto_select_ipus = [1, 1]
+    cls.first_cfg.ipu_model.compile_ipu_code = True
 
-    cls.second_cfg = ipu.utils.create_ipu_config(profiling=True)
-    cls.second_cfg = ipu.utils.auto_select_ipus(cls.second_cfg,
-                                                num_ipus=[1, 2, 1])
+    cls.second_cfg = IPUConfig()
+    cls.second_cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cls.second_cfg.auto_select_ipus = [1, 2, 1]
 
   def testChangingConfigWithoutResetRaises(self):
-    ipu.config.configure_ipu_system(self.first_cfg)
+    self.first_cfg.configure_ipu_system()
 
     self.assertRaises(errors.FailedPreconditionError,
                       ipu.config.configure_ipu_system,
@@ -42,17 +43,18 @@ class IPUReconfigureTest(test_util.TensorFlowTestCase):
                       reset_configuration=False)
 
   def testCanChangeConfigurationAfterReset(self):
-    ipu.config.configure_ipu_system(self.first_cfg)
+    self.first_cfg.configure_ipu_system()
     ipu.config.reset_ipu_configuration()
 
-    ipu.config.configure_ipu_system(self.second_cfg, reset_configuration=False)
+    self.second_cfg.configure_ipu_system()
+    pb = self.second_cfg._create_protobuf()  # pylint: disable=protected-access
 
     configs = ipu.config.get_ipu_config()
     for config in configs:
-      self.assertEqual(config, self.second_cfg)
+      self.assertEqual(config, pb)
 
   def testNoConfigAfterResetting(self):
-    ipu.config.configure_ipu_system(self.first_cfg)
+    self.first_cfg.configure_ipu_system()
     ipu.config.reset_ipu_configuration()
 
     # If no devices are configured then get_ipu_config throws.
@@ -66,18 +68,19 @@ class IPUReconfigureTest(test_util.TensorFlowTestCase):
           "Unexpected exception thrown when resetting empty configuration")
 
   def testResetsAutomaticallyWhenConfiguring(self):
-    ipu.config.configure_ipu_system(self.first_cfg, reset_configuration=False)
+    self.first_cfg.configure_ipu_system()
 
-    ipu.config.configure_ipu_system(self.second_cfg)
+    self.second_cfg.configure_ipu_system()
+    pb = self.second_cfg._create_protobuf()  # pylint: disable=protected-access
     for config in ipu.config.get_ipu_config():
-      self.assertEqual(config, self.second_cfg)
+      self.assertEqual(config, pb)
 
   def testCanResetWithinIPUDeviceContext(self):
     ''' It's not uncommon for ipu.config.configure_ipu_system to be called from
     within a ipu device scope. This test is to make sure that the reset works
     when that happens, since the kernels used for resetting are CPU only'''
 
-    ipu.config.configure_ipu_system(self.first_cfg)
+    self.first_cfg.configure_ipu_system()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       try:

@@ -28,6 +28,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python import ipu
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuXlaMultiRunTest(xla_test.XLATestCase):
@@ -70,10 +71,10 @@ class IpuXlaMultiRunTest(xla_test.XLATestCase):
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   def testCatchException(self):
     with self.session() as sess:
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       def my_net(x):
         with variable_scope.variable_scope('vs', use_resource=True):

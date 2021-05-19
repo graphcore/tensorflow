@@ -35,6 +35,7 @@ from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
@@ -59,8 +60,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       # Make sure the communication channels are reusable.
       for i in range(3):
@@ -81,8 +82,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       result = sess.run(device_out, feed_dict={inputs: 2.0})
       self.assertEqual(6.0, result)
@@ -101,8 +102,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       result = sess.run(device_out, feed_dict={inputs: 2.0})
       self.assertEqual(9.0, result)
@@ -120,8 +121,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with self.captureWritesToStream(sys.stdout) as printed:
         _ = sess.run(device_out, feed_dict={inputs: 2.0})
@@ -145,9 +146,9 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       input2 = array_ops.placeholder(dtype=dtypes.float32, shape=())
       out1, out2 = ipu_compiler.compile(device_fn, inputs=[input1, input2])
 
-      opts = utils.create_ipu_config()
-      opts = utils.set_optimization_options(opts, max_send_recv_cluster_size=8)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.optimizations.maximum_send_recv_cluster_size = 8
+      opts.configure_ipu_system()
 
       res1, res2 = sess.run([out1, out2], feed_dict={input1: 1.0, input2: 2.0})
       self.assertEqual(2.0, res1)
@@ -190,10 +191,10 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       compiled_without_outside_scope = ipu_compiler.compile(
           without_outside_scope, inputs=[input1, input2])
 
-      opts = utils.create_ipu_config(profiling=True)
-      opts = utils.set_optimization_options(opts,
-                                            max_send_recv_cluster_size=12)
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts.optimizations.maximum_send_recv_cluster_size = 12
+      opts.configure_ipu_system()
 
       report = ReportJSON(self, sess, configure_device=False)
 
@@ -246,8 +247,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       res = sess.run(out, feed_dict={inputs: 2.0})
       self.assertEqual(20.0, res)
@@ -270,8 +271,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=(2,))
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
       result = sess.run(device_out, feed_dict={inputs: [1.0, 2.0]})
       self.assertEqual((2,), result.shape)
       self.assertAllEqual([6.0, 8.0], result)
@@ -293,8 +294,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [device_out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
       result = sess.run(device_out, feed_dict={inputs: 2.0})
       self.assertEqual(64.0, result)
 
@@ -313,8 +314,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       with ipu_scope("/device:IPU:0"):
         [res] = ipu_compiler.compile(my_net, inputs=[0.0])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
 
       with self.assertRaisesRegex(
           errors_impl.UnimplementedError,
@@ -340,8 +341,8 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
       [out] = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      opts = utils.create_ipu_config()
-      utils.configure_ipu_system(opts)
+      opts = IPUConfig()
+      opts.configure_ipu_system()
       self.assertEqual(5.0, sess.run(out, feed_dict={inputs: 1.0}))
 
   def testNotInXlaContextShouldRaiseException(self):

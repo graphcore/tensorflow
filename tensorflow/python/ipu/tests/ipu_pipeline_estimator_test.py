@@ -14,6 +14,7 @@
 # =============================================================================
 
 import glob
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from absl.testing import parameterized
@@ -41,12 +42,10 @@ from tensorflow.python.training import training_util
 def _make_config(iterations_per_loop=1):
   num_ipus_in_pipeline = 2
 
-  ipu_options = ipu_utils.create_ipu_config()
-  ipu_options = ipu_utils.set_ipu_model_options(ipu_options,
-                                                compile_ipu_code=True,
-                                                tiles_per_ipu=128)
-  ipu_options = ipu_utils.auto_select_ipus(ipu_options,
-                                           num_ipus=num_ipus_in_pipeline)
+  ipu_options = IPUConfig()
+  ipu_options.ipu_model.compile_ipu_code = True
+  ipu_options.ipu_model.tiles_per_ipu = 128
+  ipu_options.auto_select_ipus = num_ipus_in_pipeline
   return ipu_run_config.RunConfig(ipu_run_config=ipu_run_config.IPURunConfig(
       num_shards=num_ipus_in_pipeline,
       iterations_per_loop=iterations_per_loop,
@@ -135,8 +134,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=2)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 2
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             num_shards=2, iterations_per_loop=1, ipu_options=ipu_options))
@@ -163,8 +162,8 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             num_shards=4, iterations_per_loop=1, ipu_options=ipu_options))

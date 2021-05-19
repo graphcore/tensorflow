@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -220,9 +221,11 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -289,9 +292,11 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -354,9 +359,11 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu_compiler.compile(my_net, inputs=[c])
 
-      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 4)
-      utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
@@ -454,9 +461,11 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
                                                      inputs=[x, y])
 
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
     utils.move_variable_initialization_to_cpu()
 
     #TODO(T10784) test how many IPU copies are here once we insert IPU copies.

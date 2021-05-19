@@ -42,6 +42,7 @@ from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.compiler.xla.python_api import types
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.platform import test
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class FeedId:
@@ -68,15 +69,14 @@ def PrimitiveTypeStringToNumpyDtype(primitive_type_str):
 
 class IpuSerializationTest(xla_test.XLATestCase):
   def _configureIPU(self, serialization_folder, verification_options=None):
-    opts = utils.create_ipu_config()
-    opts = utils.set_ipu_connection_type(opts,
-                                         utils.DeviceConnectionType.NEVER,
-                                         "ipu1")
-    opts = utils.set_serialization_options(opts, serialization_folder)
+    opts = IPUConfig()
+    opts.device_connection.version = 'ipu1'
+    opts.device_connection.type = utils.DeviceConnectionType.NEVER
+    opts.serialization_output_folder = serialization_folder
     if verification_options:
-      opts = utils.set_transfer_options(opts, True)
-      opts = utils.set_verification_options(opts, verification_options)
-    utils.configure_ipu_system(opts)
+      opts._verified_transfers.enabled = True  # pylint: disable=protected-access
+      opts._verified_transfers.key_id_pairs = verification_options  # pylint: disable=protected-access
+    opts.configure_ipu_system()
 
   def _create_tmp_symlink(self, tmp_folder):
     tmp = "tempfiles"

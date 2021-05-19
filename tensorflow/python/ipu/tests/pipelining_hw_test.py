@@ -29,6 +29,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import momentum
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 from tensorflow.python.ipu.tests import pipelining_test_util
 
 
@@ -38,22 +39,22 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
           'replication_factor': 1,
           'minimum_remote_tensor_size': 128,
           'replicated_optimizer_state_sharding': False,
-          'merge_remote_buffers': True,
+          'merge_remote_buffers': MergeRemoteBuffersBehaviour.MERGE,
       }, {
           'replication_factor': 2,
           'minimum_remote_tensor_size': 128,
           'replicated_optimizer_state_sharding': False,
-          'merge_remote_buffers': False,
+          'merge_remote_buffers': MergeRemoteBuffersBehaviour.NO_MERGING,
       }, {
           'replication_factor': 2,
           'minimum_remote_tensor_size': 0,
           'replicated_optimizer_state_sharding': True,
-          'merge_remote_buffers': True,
+          'merge_remote_buffers': MergeRemoteBuffersBehaviour.MERGE,
       }, {
           'replication_factor': 2,
           'minimum_remote_tensor_size': 0,
           'replicated_optimizer_state_sharding': [True, False],
-          'merge_remote_buffers': True,
+          'merge_remote_buffers': MergeRemoteBuffersBehaviour.MERGE,
       })
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self, replication_factor,

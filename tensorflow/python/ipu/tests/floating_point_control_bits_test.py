@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import os
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -32,13 +33,14 @@ class TestFloatingPointControlBits(test_util.TensorFlowTestCase):
                  overflow=False,
                  stochastic_rounding=False,
                  nan_overflow=False):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg)
-    cfg = ipu.utils.set_floating_point_behaviour_options(
-        cfg, invalid_operation, division_by_zero, overflow,
-        stochastic_rounding, nan_overflow)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.floating_point_behaviour.inv = invalid_operation
+    cfg.floating_point_behaviour.div0 = division_by_zero
+    cfg.floating_point_behaviour.oflo = overflow
+    cfg.floating_point_behaviour.esr = stochastic_rounding
+    cfg.floating_point_behaviour.nanoo = nan_overflow
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
   @staticmethod
   def _test_invalid_operation():

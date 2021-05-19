@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.compiler.xla import xla
@@ -57,12 +58,11 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = ipu.utils.create_ipu_config()
-      config = ipu.utils.set_optimization_options(
-          config, max_cross_replica_sum_buffer_size=1000)
-      config = ipu.utils.auto_select_ipus(config, [2])
-      config = tu.add_hw_ci_connection_options(config)
-      ipu.utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
+      config.auto_select_ipus = [2]
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -97,12 +97,11 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = ipu.utils.create_ipu_config()
-      config = ipu.utils.set_optimization_options(
-          config, max_cross_replica_sum_buffer_size=1000)
-      config = ipu.utils.auto_select_ipus(config, [2])
-      config = tu.add_hw_ci_connection_options(config)
-      ipu.utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
+      config.auto_select_ipus = [2]
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -138,12 +137,11 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = ipu.utils.create_ipu_config()
-      config = ipu.utils.set_optimization_options(
-          config, max_cross_replica_sum_buffer_size=1000)
-      config = ipu.utils.auto_select_ipus(config, [2])
-      config = tu.add_hw_ci_connection_options(config)
-      ipu.utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
+      config.auto_select_ipus = [2]
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -192,12 +190,11 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = ipu.utils.create_ipu_config()
-      config = ipu.utils.set_optimization_options(
-          config, max_cross_replica_sum_buffer_size=1000)
-      config = ipu.utils.auto_select_ipus(config, [2])
-      config = tu.add_hw_ci_connection_options(config)
-      ipu.utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
+      config.auto_select_ipus = [2]
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -267,12 +264,11 @@ class TestReplicatedStatefulGradientAccumulate(test_util.TensorFlowTestCase):
         y = array_ops.placeholder(dtype, [1])
         report = gen_ipu_ops.ipu_event_trace()
 
-      config = ipu.utils.create_ipu_config()
-      config = ipu.utils.set_optimization_options(
-          config, max_cross_replica_sum_buffer_size=1000)
-      config = ipu.utils.auto_select_ipus(config, [2])
-      config = tu.add_hw_ci_connection_options(config)
-      ipu.utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.optimizations.maximum_cross_replica_sum_buffer_size = 1000
+      config.auto_select_ipus = [2]
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])

@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
@@ -33,11 +34,15 @@ class TestReductions(test_util.TensorFlowTestCase):
       pa = array_ops.placeholder(np.float16, shape)
       output = math_ops.reduce_mean(pa, axis=[1])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, [1])
-    config = ipu.utils.set_floating_point_behaviour_options(config)
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = [1]
+    config.floating_point_behaviour.inv = True
+    config.floating_point_behaviour.div0 = True
+    config.floating_point_behaviour.oflo = True
+    config.floating_point_behaviour.esr = True
+    config.floating_point_behaviour.nanoo = True
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     with tu.ipu_session() as sess:
       val = np.finfo(np.float16).max / 2

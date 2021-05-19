@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
@@ -85,9 +86,9 @@ class PoprandSameSeedTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope('/device:IPU:0'):
         model = ipu.ipu_compiler.compile(my_net)
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       with session.Session() as sess:
         sess.run(variables.global_variables_initializer())

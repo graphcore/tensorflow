@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
@@ -43,10 +44,10 @@ class IPUPipelineSequentialReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs2Replicas2(self):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, 4)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     strategy = ipu_strategy.IPUStrategy()
 

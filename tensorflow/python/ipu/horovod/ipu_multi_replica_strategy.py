@@ -69,8 +69,8 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
     Returns:
       The IpuOptions configuration protobuf.
     """
-    return ipu_utils.set_experimental_multi_replica_distribution_options(
-        config, process_count=size(), process_index=rank())
+    config.experimental.multi_replica_distribution.process_count = size()
+    config.experimental.multi_replica_distribution.process_index = rank()
 
 
 class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
