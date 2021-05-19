@@ -208,7 +208,6 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
     ],
 )
 
@@ -232,7 +231,6 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/io_tiles_test.py"],
     shard_count = 6,  # as can't have differing config in same process
-    shard_count = 4,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -300,6 +298,7 @@ tf_py_test(
     name = "nn_ops_test",
     size = "medium",
     srcs = ["tests/nn_ops_test.py"],
+    shard_count = 8,
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -311,7 +310,6 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
     ],
-    shard_count = 8,
 )
 
 tf_py_test(
@@ -1068,13 +1066,13 @@ tf_py_test(
     name = "utils_test_v2",
     size = "medium",
     srcs = ["tests/utils_test_v2.py"],
-    additional_deps = [
+    deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -1856,18 +1854,18 @@ tf_py_test(
     name = "histogram_test",
     size = "medium",
     srcs = ["tests/histogram_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+    shard_count = 8,
+    deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
-    shard_count = 8,
 )
 
 test_suite(
