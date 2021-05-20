@@ -14,6 +14,7 @@
 # =============================================================================
 
 import collections
+from tensorflow.python.ipu.config import IPUConfig
 import glob
 import json
 import multiprocessing
@@ -74,10 +75,10 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
   """Tests using multiple threads in the same processes."""
   @classmethod
   def setUpClass(cls):
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     cls._num_workers = 2
     cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
@@ -809,10 +810,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       with ipu_scope("/device:IPU:0"):
         compiled_fn = ipu_compiler.compile(device_fn, inputs=[inputs])
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, 1)
-      config = tu.add_hw_ci_connection_options(config)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         [out] = sess.run(compiled_fn, feed_dict={inputs: task_id + 1})
@@ -846,10 +847,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       train_op = strategy.experimental_run_v2(compiled_fn, args=[])
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=1)
-      config = tu.add_hw_ci_connection_options(config)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       [w] = variables.global_variables()
 
@@ -929,10 +930,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return ipu_compiler.compile(model, inputs=[])
 
       train_op = strategy.experimental_run_v2(compiled_model, args=[])
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
-      config = tu.add_hw_ci_connection_options(config)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 2
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       expected_w0 = initial_w0
       expected_w1 = initial_w1
@@ -1056,10 +1057,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       # divided by the global batch size above, we do a sum here):
       global_loss = strategy.reduce(ReduceOp.SUM, per_worker_loss)
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
-      config = tu.add_hw_ci_connection_options(config)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 2
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
       ipu_utils.move_variable_initialization_to_cpu()
 
       with session_lib.Session(target=sess_target, config=sess_config) as sess:
@@ -1194,10 +1195,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       return dataset
 
     num_ipus_in_pipeline = 2
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options,
-                                             num_ipus=num_ipus_in_pipeline)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = num_ipus_in_pipeline
+    tu.add_hw_ci_connection_options(ipu_options)
 
     config = ipu_run_config.RunConfig(
         session_config=config_pb2.ConfigProto(allow_soft_placement=False),
@@ -1273,10 +1273,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       with ipu_scope("/device:IPU:0"):
         [res] = ipu_compiler.compile(my_net, inputs=[])
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=1)
-      config = tu.add_hw_ci_connection_options(config)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(config)
+      config.configure_ipu_system()
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
@@ -1333,9 +1333,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       return dataset
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=1)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(ipu_options)
 
     config = ipu_run_config.RunConfig(
         session_config=config_pb2.ConfigProto(allow_soft_placement=False),

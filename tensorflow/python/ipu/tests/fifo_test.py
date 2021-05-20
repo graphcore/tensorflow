@@ -14,6 +14,7 @@
 # =============================================================================
 
 import os
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -36,10 +37,10 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, 1)
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -57,10 +58,10 @@ class FifoTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[2])
       run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, 1)
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -98,10 +99,10 @@ class FifoTest(test_util.TensorFlowTestCase):
     dequeue_outfeed2 = outfeed_queue2.dequeue()
 
     # Configure the hardware
-    config = ipu.utils.create_ipu_config()
-    config = ipu.utils.auto_select_ipus(config, 1)
-    config = tu.add_hw_ci_connection_options(config)
-    ipu.utils.configure_ipu_system(config)
+    config = IPUConfig()
+    config.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(config)
+    config.configure_ipu_system()
 
     with tu.ipu_session() as sess:
       sess.run(infeed_queue.initializer)

@@ -30,16 +30,18 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
   def testMatMulFwdBackwd(self):
     with self.session() as sess:
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 1)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):

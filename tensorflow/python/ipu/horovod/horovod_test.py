@@ -14,6 +14,7 @@
 # =============================================================================
 
 import os
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 from tensorflow.python import keras
 from tensorflow.python import ops
@@ -86,9 +87,9 @@ class HorovodTest(test_util.TensorFlowTestCase):
                                 "The Adasum reduction is not implemented"):
       hvd.allreduce(rank, op=hvd.Adasum)
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       self.assertAllEqual(np.arange(hvd.size()), sess.run(allgathered))
@@ -104,9 +105,9 @@ class HorovodTest(test_util.TensorFlowTestCase):
     strategy = IPUHorovodStrategy()
     self.assertEqual(strategy.num_replicas_in_sync, hvd_size)
 
-    cfg = ipu_utils.create_ipu_config()
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     with strategy.scope():
 
@@ -197,9 +198,9 @@ class HorovodTest(test_util.TensorFlowTestCase):
       # divided by the global batch size above, we do a sum here):
       global_loss = strategy.reduce(ReduceOp.SUM, per_worker_loss)
 
-      config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, num_ipus=1)
-      ipu_utils.configure_ipu_system(config)
+      config = IPUConfig()
+      config.auto_select_ipus = 1
+      config.configure_ipu_system()
       ipu_utils.move_variable_initialization_to_cpu()
 
       with session.Session() as sess:

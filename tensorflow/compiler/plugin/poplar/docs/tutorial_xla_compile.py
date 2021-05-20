@@ -1,15 +1,15 @@
 import numpy as np
 
-from tensorflow.python import ipu
+from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
 # Configure argument for targeting the IPU
-cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
-cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-cfg = ipu.utils.auto_select_ipus(cfg, 1)
-ipu.utils.configure_ipu_system(cfg)
+cfg = IPUConfig()
+cfg.auto_select_ipus = 1
+cfg.configure_ipu_system()
 
 with tf.device("cpu"):
   pa = tf.placeholder(np.float32, [2], name="a")
@@ -26,7 +26,7 @@ def basic_graph(pa, pb, pc):
 
 
 with ipu_scope("/device:IPU:0"):
-  xla_result = ipu.ipu_compiler.compile(basic_graph, [pa, pb, pc])
+  xla_result = ipu_compiler.compile(basic_graph, [pa, pb, pc])
 
 with tf.Session() as sess:
   # Base run

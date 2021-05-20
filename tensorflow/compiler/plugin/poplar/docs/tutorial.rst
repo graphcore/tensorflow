@@ -63,43 +63,36 @@ We begin with a simple example of adding some floating-point numbers.
 .. literalinclude:: tutorial_basic.py
     :language: python
     :linenos:
-    :emphasize-lines: 3,4,8-12,14-17,20-25,28
+    :emphasize-lines: 3,4,8-11,13-16,19-24,27
 
 Let's review the key sections of the code. In
 lines 1-5 are the basic import statements, two of which pertain to the IPU
-specifically. Line 3 imports the IPU API, which will be the main interface
-to set configuration options for running the IPU session. ``ipu_scope`` is a helper
-function that ensures that the device and resource scopes are set (that is,
-that the hardware is properly initialised when called by the script).
+specifically. Line 3 imports the IPUConfig configuration API, which will be the
+main interface to set configuration options for running the IPU session.
+``ipu_scope`` is a helper function that ensures that the device and resource
+scopes are set (that is, that the hardware is properly initialised when called
+by the script).
 
 .. literalinclude:: tutorial_basic.py
     :language: python
     :linenos:
     :lineno-start: 8
     :start-at: # Configure arguments for targeting the IPU
-    :end-at: ipu.utils.configure_ipu_system
+    :end-at: cfg.configure_ipu_system()
 
 In this section of the code, basic configuration options are being defined.
-Boolean flags are passed to ``create_ipu_config``, which turn on
-profiling and a text-format report.
-
-* The ``profiling`` parameter enables event
-  logging on the IPU. This will monitor operations on the IPU, providing
-  detailed data about the session as it runs.
-
-* ``use_poplar_text_report`` configures the text format
-  of the generated report, making it more readable for debugging purposes.
-
-Because profiling adds code and extra variables to extract the profiling
-information, it can change the performance and memory usage of your program.
+The ``IPUConfig`` is a hierarchical structure of configuration options,
+organized into categories. To set a configuration option, assign to one of its
+attributes.
 
 Selecting hardware to run on
 ............................
 
-The ``auto_select_ipus`` function enables you to select from the available IPUs
+The ``auto_select_ipus`` option enables you to select from the available IPUs
 in a system. In this example, one IPU is selected. This can be changed
-to any number between 1 and 16 for a system, such as the Dell EMC
-DSS8440 IPU Server which has eight C2 cards installed, each with two IPUs.
+to any number between 1 and the number of IPUs available in your system.
+For example, the Dell EMC DSS8440 IPU Server has eight C2 cards installed, each
+with two IPUs, so it has 16 IPUs available in total.
 
 This option will be important when we
 explore sharding, in which a single graph is segregated into separate sections,
@@ -162,7 +155,7 @@ information will not be as precise as running on hardware.
 By default, the memory use will not include that required for IPU
 code.
 
-If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
+If you set the ``IPUConfig.ipu_model.compile_ipu_code`` option to
 ``True`` then Poplar will compile code for the IPU (in addition to the CPU code
 that is actually executed by the IPU Model). In this case, the reported
 IPU memory usage will include the memory used for code.
@@ -176,9 +169,9 @@ IPU Model instead, you need to set the environment variable
 
 .. code-block:: python
 
-    # Using IPU model instead of IPU hardware
-    if self.base_dictionary['ipu_model']:
-        os.environ['TF_POPLAR_FLAGS'] = '--use_ipu_model'
+    # Make sure we append to the environment variable, in case there are
+    # already other flags in there.
+    os.environ['TF_POPLAR_FLAGS'] = os.environ.get('TF_POPLAR_FLAGS', '') + ' --use_ipu_model'
 
 
 Compiling the graph for the IPU
@@ -206,7 +199,7 @@ Let's now build on our previous TensorFlow script by adding
 .. literalinclude:: tutorial_xla_compile.py
     :language: python
     :linenos:
-    :emphasize-lines: 29,33
+    :emphasize-lines: 29
 
 The script has now gone from calling ``basic_graph`` directly, to feeding it as
 the graph input to ``ipu.ipu_compiler.compile()``. This takes the graph, along with
@@ -252,7 +245,7 @@ Let's now return to our basic script and add the sharding component.
 .. literalinclude:: tutorial_sharding.py
     :language: python
     :linenos:
-    :emphasize-lines: 9,14,29-38,43
+    :emphasize-lines: 10,14,29-38,43
 
 Focusing on the sharding parts of this new script, line 14 uses
 ``auto_select_ipus`` to select four separate IPUs for the task. This will

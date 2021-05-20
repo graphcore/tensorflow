@@ -362,19 +362,6 @@ def running_on_ipu_model():
 
 
 class AttributeMetadata:
-  """
-  Encapsulates the metadata for an attribute in a nested _ConfigBase structure.
-
-  Args:
-    name: The full name of the attribute, relative to the structure's root.
-    doc: The docstring for the attribute.
-    depth: The depth of the attribute in the structure.
-    default: The default value for the attribute.
-    deprecated_msg: Deprecation message if the attribute is deprecated.
-    attr_type: A string describing the allowed types for the attribute.
-    check_type_fn: A function that takes in a single value and determines if
-                   it's the correct type for this attribute.
-  """
   def __init__(self,
                name,
                doc="",
@@ -383,19 +370,80 @@ class AttributeMetadata:
                deprecated_msg=None,
                attr_type=None,
                check_type_fn=lambda v: True):
-    self.name = name
+    """
+    Encapsulates the metadata for an attribute in a nested _ConfigBase
+    structure.
+
+    This docstring is here so it's not shown to users by Sphinx.
+
+    Args:
+      name: The full name of the attribute, relative to the structure's root.
+      doc: The docstring for the attribute.
+      depth: The depth of the attribute in the structure.
+      default: The default value for the attribute.
+      deprecated_msg: Deprecation message if the attribute is deprecated.
+      attr_type: A string describing the allowed types for the attribute.
+      check_type_fn: A function that takes in a single value and determines if
+                    it's the correct type for this attribute.
+    """
+    self._name = name
     self.__doc__ = inspect.cleandoc(doc)  # Normalize docstring indentation.
-    self.deprecated = deprecated_msg is not None
-    self.deprecated_msg = deprecated_msg
-    self.type = attr_type
-    self.default = default
+    self._deprecated = deprecated_msg is not None
+    self._deprecated_msg = deprecated_msg
+    self._type = attr_type
+    self._default = default
+
     self._check_type_fn = check_type_fn
     self._depth = depth
+
+  @property
+  def name(self):
+    """
+    The full name of the option/category, relative to the config structure's
+    root.
+    """
+    return self._name
+
+  @property
+  def deprecated(self):
+    """
+    Whether or not this option/category is deprecated.
+    """
+    return self._deprecated
+
+  @property
+  def deprecated_msg(self):
+    """
+    The deprecation message for this attribute. `None` if it is not deprecated.
+    """
+    return self._deprecated_msg
+
+  @property
+  def type(self):
+    """
+    The type of this option, as a string. The type can be a simple Python
+    type or a type hint. Categories themselves do not have types.
+    """
+    return self._type
+
+  @property
+  def default(self):
+    """
+    The default value for this option. Categories themselves do not have default
+    values.
+    """
+    return self._default
 
   def check_type(self, value):
     """
     Checks if `value` is one of the allowed types for this option. Throws a
     TypeError if not.
+
+    Args:
+      value: The value to check against this attribute's type.
+
+    Returns:
+      True if `value` satisfies this attribute's type.
     """
     if not self._check_type_fn(value):
       raise TypeError(
@@ -404,10 +452,14 @@ class AttributeMetadata:
 
   def warn_if_deprecated(self):
     """
-    Outputs a warning if this option/category is deprecated.
+    Outputs a log warning if this option/category is deprecated.
     """
     if self.deprecated:
       logging.warn(f"{self.name} has been deprecated: {self.deprecated_msg}")
+
+  def _set_deprecated(self, msg):
+    self._deprecated = True
+    self._deprecated_msg = msg
 
   def _generate_documentation(self, is_nested_config=False, workaround=False):
     """
@@ -776,8 +828,7 @@ class _ConfigBase(object):
       # already deprecated.
       if _parent_metadata and _parent_metadata.deprecated and \
           not metadata.deprecated:
-        metadata.deprecated = _parent_metadata.deprecated
-        metadata.deprecated_msg = _parent_metadata.deprecated_msg
+        metadata._set_deprecated(_parent_metadata.deprecated_msg)  # pylint: disable=protected-access
 
       # Generate docs
       root_class = _root_class or self.__class__
@@ -803,10 +854,11 @@ class _ConfigBase(object):
 
     Args:
       attr: required, a string which specifies which attribute to retrieve
-            metadata for. Must be its full name relative to the config
+            metadata for. Must be its full name relative to the category
             this method is being called on.
     Returns:
-      An `AttributeMetadata` object containing the metadata for the attribute.
+      An :py:class:`~tensorflow.python.ipu.config.AttributeMetadata` object
+      containing the metadata for the attribute.
     """
     try:
       parts = attr.split('.')
@@ -1554,6 +1606,14 @@ class _ProfilingConfig(_ConfigBase):
     A dictionary of Poplar option flags for the execution report generation.
     """
     self.execution_poplar_options = {}
+    """
+    When the autoReport.directory Poplar engine option is set through
+    IPUConfig.compilation_poplar_options and not through an environment
+    variable, this determines whether or not individual compiled clusters are
+    given their own sub-directories in the autoReport.directory by the
+    TensorFlow Poplar backend.
+    """
+    self.auto_assign_report_subdirectories = False
 
   def _to_protobuf(self, pb):
     if self.profiling and self.enable_ipu_events:
@@ -1584,6 +1644,8 @@ class _ProfilingConfig(_ConfigBase):
     pb.profiling.report_every_nth_execution = self.report_every_nth_execution
     pb.profiling.max_report_size = self.max_report_size
     pb.profiling.report_directory = self.report_directory
+    pb.auto_assign_report_subdirectories = \
+        self.auto_assign_report_subdirectories
     _poplar_options_to_protobuf(self.graph_poplar_options,
                                 pb.profiling.graph_options)
     _poplar_options_to_protobuf(self.execution_poplar_options,
@@ -1846,11 +1908,11 @@ class IPUConfig(_ConfigBase):
 
         # Create a single TensorFlow device with 1 IPU at PCI address
         # 0000:1a:00.0 by using IPU configuration index 0
-        config.select_ipus = [0]
+        config.select_ipus = 0
 
         # Create a single TensorFlow device with 1 IPU at PCI address
         # 0000:8b:00.0 by using IPU configuration index 8
-        config.select_ipus = [8]
+        config.select_ipus = 8
 
         # Create two TensorFlow devices, with one IPU each, being devices at
         # indices 0 and 1
@@ -1866,7 +1928,7 @@ class IPUConfig(_ConfigBase):
         # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
         config.select_ipus = [0, 1, 2, 3]
     """
-    self.select_ipus: typing.Union[typing.List[int], typing.
+    self.select_ipus: typing.Union[int, typing.List[int], typing.
                                    Tuple[int, ...]] = []
     """
     Sub-category containing configuration options that affect convolutions.
@@ -1947,6 +2009,8 @@ class IPUConfig(_ConfigBase):
           "Only one of `auto_select_ipus` and `select_ipus` can be set.")
     if isinstance(self.auto_select_ipus, int):
       self.auto_select_ipus = [self.auto_select_ipus]
+    if isinstance(self.select_ipus, int):
+      self.select_ipus = [self.select_ipus]
     if len(set(self.select_ipus)) != len(self.select_ipus):
       raise ValueError("All MultiIPU indices in `select_ipus` must be unique.")
     if self.select_ipus and running_on_ipu_model():

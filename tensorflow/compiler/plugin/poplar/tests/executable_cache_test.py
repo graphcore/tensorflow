@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import contextlib
+from tensorflow.python.ipu.config import IPUConfig
 import glob
 import multiprocessing
 import numpy as np
@@ -45,9 +46,10 @@ offline_compilation_needed = "--use_ipu_model" in os.environ.get(
 
 def _extra_ipu_config(opts):
   if offline_compilation_needed:
-    return ipu.utils.set_ipu_connection_type(
-        opts, ipu.utils.DeviceConnectionType.NEVER, "ipu1")
-  return tu.add_hw_ci_connection_options(opts)
+    opts.device_connection.version = 'ipu1'
+    opts.device_connection.type = ipu.utils.DeviceConnectionType.NEVER
+    return
+  tu.add_hw_ci_connection_options(opts)
 
 
 @contextlib.contextmanager
@@ -279,9 +281,10 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      ipu_options = ipu.utils.create_ipu_config(profiling=True)
-      ipu_options = _extra_ipu_config(ipu_options)
-      ipu_options = ipu.utils.auto_select_ipus(ipu_options, 1)
+      ipu_options = IPUConfig()
+      ipu_options._profiling.profiling = True  # pylint: disable=protected-access
+      _extra_ipu_config(ipu_options)
+      ipu_options.auto_select_ipus = 1
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    ipu_options=ipu_options,

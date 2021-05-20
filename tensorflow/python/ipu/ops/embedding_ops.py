@@ -466,8 +466,9 @@ def create_host_embedding(name,
         name: The name which uniquely identifies the embedding.
         shape: The shape for the tensor which will hold the embedding.
         dtype: The dtype for the tensor which will hold the embedding.
-        partition_strategy: When
-          `enable_experimental_remote_buffer_embedding` is `True` and using
+        partition_strategy: When the IPU system is configured with an IPUConfig
+          instance that has its `experimental.enable_remote_buffer_embedding`
+          option set to `True`, and when using
           replication, the embedding must be distributed across the replicas.
           This option decides on which axis the embedding will be split. Options
           are "TOKEN" or "ENCODING".

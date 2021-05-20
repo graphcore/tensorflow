@@ -36,6 +36,7 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.platform import test
 from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.python.saved_model import saved_model
+from tensorflow.python.ipu.config import IPUConfig
 
 
 def filesInFolder(folder):
@@ -128,14 +129,13 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
     return 0
 
   def configureIPU(self, serialization_folder=None, offline_compilation=True):
-    opts = utils.create_ipu_config()
+    opts = IPUConfig()
     if offline_compilation:
-      opts = utils.set_ipu_connection_type(opts,
-                                           utils.DeviceConnectionType.NEVER,
-                                           "ipu1")
+      opts.device_connection.version = 'ipu1'
+      opts.device_connection.type = utils.DeviceConnectionType.NEVER
     if serialization_folder:
-      opts = utils.set_serialization_options(opts, serialization_folder)
-    utils.configure_ipu_system(opts)
+      opts.serialization_output_folder = serialization_folder
+    opts.configure_ipu_system()
 
   def runCommand(self, cmd):
     logging.info("Running: %s", " ".join(cmd))

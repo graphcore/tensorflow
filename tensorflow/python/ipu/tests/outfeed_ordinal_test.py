@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -25,9 +26,9 @@ from tensorflow.python.platform import googletest
 
 class OutfeedOrdinalTest(test_util.TensorFlowTestCase):
   def testTwoOutfeedsOnDifferentOrdinals(self):
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = [1, 1]
+    cfg.configure_ipu_system()
 
     outfeed_1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed1',
                                                       device_ordinal=0)

@@ -4,15 +4,16 @@ Half-precision floating point and stochastic rounding
 The IPU supports IEEE half-precision floating-point numbers, and supports
 stochastic rounding in hardware.  The IPU extensions to TensorFlow expose this
 floating point functionality through the functions described below.
-See the :ref:`api-section` for more detail.
+See the :ref:`api-section` for more details.
 
 .. _controlling-half-unit:
 
 Controlling the half-precision floating-point unit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can configure the behaviour of the floating-point hardware using the function
-:py:func:`tensorflow.python.ipu.utils.set_floating_point_behaviour_options`.
+You can configure the floating-point behaviour of the hardware using the
+:ref:`floating_point_behaviour <floating_point_behaviour>` category of an
+:py:class:`~tensorflow.python.ipu.utils.IPUConfig` instance.
 
 The ``esr`` bit enables the stochastic rounding unit. Three of the remaining
 options control the generation of hardware exceptions on various conditions.
@@ -33,8 +34,9 @@ Due to the hardware threading in the device, if the seed reset function is used
 then the ``target.deterministicWorkers`` Poplar Engine option will need to be set
 to "portable".
 
-This can be done using
-:py:func:`tensorflow.python.ipu.utils.set_compilation_options`.
+This can be done using the
+:ref:`compilation_poplar_options <compilation_poplar_options>` option of an
+:py:class:`~tensorflow.python.ipu.utils.IPUConfig` instance.
 
 Debugging numerical issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1,6 +1,7 @@
 import numpy as np
 
 from tensorflow.python import ipu
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 import tensorflow.compat.v1 as tf
@@ -9,10 +10,9 @@ tf.disable_v2_behavior()
 NUM_IPUS = 4
 
 # Configure the IPU system
-cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
-cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-cfg = ipu.utils.auto_select_ipus(cfg, NUM_IPUS)
-ipu.utils.configure_ipu_system(cfg)
+cfg = IPUConfig()
+cfg.auto_select_ipus = NUM_IPUS
+cfg.configure_ipu_system()
 
 # Create the CPU section of the graph
 with tf.device("cpu"):

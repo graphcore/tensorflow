@@ -58,17 +58,16 @@ computation.
     An application serialised on a long ``StreamCopyMid``.
 
 You can set the number of I/O tiles to use during execution when configuring
-the IPU. This is set using
-:py:func:`tensorflow.python.ipu.utils.set_io_tile_options`.
+the IPU. This is set using the :ref:`io_tiles.num_io_tiles <io_tiles.num_io_tiles>`
+configuration option of the :py:class:`~tensorflow.python.ipu.utils.IPUConfig`:
 
 .. code-block:: python
 
-  from tensorflow.python.ipu import utils
+  from tensorflow.python import ipu
   ...
-  config = utils.set_io_tile_options(
-      config,
-      num_io_tiles=128,
-      place_ops_on_io_tiles=True)
+  config = ipu.config.IPUConfig()
+  config.io_tiles.num_io_tiles = 128
+  config.io_tiles.place_ops_on_io_tiles = True
 
 .. figure:: figures/overlap_mid.png
     :width: 95%

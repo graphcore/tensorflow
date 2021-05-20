@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -60,12 +61,13 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
-      cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+      tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
@@ -116,12 +118,13 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
-      cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+      tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
@@ -166,12 +169,13 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
-      cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+      tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
@@ -208,12 +212,13 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
-      cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+      tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 

@@ -52,7 +52,8 @@ StatusOr<poplar::RemoteBuffer> GetOrCreateRemoteBuffer(
         "Poplar remote buffers are not supported on this machine. They are "
         "required to support experimental remote buffer embeddings. Consider "
         "either configuring this machine to support remote buffers or "
-        "setting enable_experimental_remote_buffer_embedding to false.");
+        "setting experimental.enable_remote_buffer_embedding to False on an "
+        "IPUConfig instance.");
   }
 
   auto itr = res.remote_buffers.find(embedding_id);

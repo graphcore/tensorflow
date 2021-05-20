@@ -35,6 +35,7 @@ from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import config as ipu_config
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -198,9 +199,12 @@ class IPUEstimatorSpec(
 
 class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
   def __init__(self, config, host_device=_HOST_DEVICE):
-    if not isinstance(config.ipu_options, IpuOptions):
-      raise Exception("`config.ipu_options` must be an IpuOptions instance")
+    if not isinstance(config.ipu_options, (IpuOptions, ipu_config.IPUConfig)):
+      raise Exception("`config.ipu_options` must be an IPUConfig or IpuOptions"
+                      " instance")
     self._config = config.ipu_options
+    if isinstance(self._config, ipu_config.IPUConfig):
+      self._config = self._config._create_protobuf()  # pylint: disable=protected-access
     self._run_config = config
     self._host_device = host_device
 

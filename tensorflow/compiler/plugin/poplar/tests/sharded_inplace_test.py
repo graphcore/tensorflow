@@ -24,6 +24,7 @@ from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
+from tensorflow.python.ipu.config import IPUConfig
 
 
 class MappingTest(xla_test.XLATestCase):
@@ -45,9 +46,9 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c, d])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.configure_ipu_system()
 
       result = sess.run(r, {a: [0], b: [1], c: [2], d: [3]})
       self.assertAllClose(result[0], [0, 1, 3])

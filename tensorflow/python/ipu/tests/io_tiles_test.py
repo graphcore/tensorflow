@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -39,7 +40,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     tiles_per_ipu = 1216
     num_io_tiles = 32
     num_compute_tiles = tiles_per_ipu - num_io_tiles
-    proportion = 100 if buffer_fits_on_io_tiles else 0.1
+    proportion = 100.0 if buffer_fits_on_io_tiles else 0.1
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors((data, data))
@@ -60,19 +61,17 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
 
-    cfg = ipu_utils.set_io_tile_options(
-        cfg,
-        num_io_tiles=num_io_tiles,
-        place_ops_on_io_tiles=True,
-        io_tile_available_memory_proportion=proportion)
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.io_tiles.available_memory_proportion = proportion
 
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
@@ -139,17 +138,16 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
 
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
 
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
@@ -202,15 +200,14 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
@@ -259,15 +256,14 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
@@ -326,15 +322,14 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[a])
 
-    cfg = ipu_utils.create_ipu_config(profiling=True)
-    cfg = ipu_utils.set_ipu_model_options(cfg,
-                                          compile_ipu_code=False,
-                                          tiles_per_ipu=tiles_per_ipu)
-    cfg = ipu_utils.set_io_tile_options(cfg,
-                                        num_io_tiles=num_io_tiles,
-                                        place_ops_on_io_tiles=True)
-    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
-    ipu_utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
+    cfg.io_tiles.num_io_tiles = num_io_tiles
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.auto_select_ipus = 2
+    cfg.configure_ipu_system()
 
     with session.Session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)

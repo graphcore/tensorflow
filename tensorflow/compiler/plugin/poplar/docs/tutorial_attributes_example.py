@@ -8,9 +8,9 @@ import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
 # Configure argument for targeting the IPU
-cfg = ipu.utils.create_ipu_config()
-cfg = ipu.utils.auto_select_ipus(cfg, 1)
-ipu.utils.configure_ipu_system(cfg)
+cfg = ipu.config.IPUConfig()
+cfg.auto_select_ipus = 1
+cfg.configure_ipu_system()
 
 base_path = os.path.join(os.getcwd(), "tensorflow/compiler/plugin/poplar")
 lib_path = os.path.join(base_path, "libtutorial_attributes_example.so")

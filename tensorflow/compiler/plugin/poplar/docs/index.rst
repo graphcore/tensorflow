@@ -28,6 +28,7 @@ Targeting the IPU from TensorFlow 1
     logging
 
     api-changes
+    deprecated_profiling
     api
     supported_ops
     references

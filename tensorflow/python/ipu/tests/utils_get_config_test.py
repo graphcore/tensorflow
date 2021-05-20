@@ -14,6 +14,7 @@
 #  =============================================================================
 
 from absl.testing import parameterized
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
@@ -34,12 +35,13 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testGetConfig(self):
     # Generate a simple IPU config.
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, [2, 4])
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.auto_select_ipus = [2, 4]
 
     # Configure IPU.
-    ipu.utils.configure_ipu_system(cfg)
+    cfg.configure_ipu_system()
 
     # Get back serialised IpuOption instances. One instance per
     # stream executor is expected.
@@ -65,10 +67,11 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testGetNumberOfIpus(self):
     # Generate a simple IPU config.
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, [2, 4])
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.auto_select_ipus = [2, 4]
+    cfg.configure_ipu_system()
 
     self.assertEqual(ipu.utils.get_num_of_ipus_in_device("/device:IPU:0"), 2)
     self.assertEqual(ipu.utils.get_num_of_ipus_in_device("/device:IPU:1"), 4)

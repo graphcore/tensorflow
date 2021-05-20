@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
@@ -143,10 +144,10 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       _, s1 = sess.run(out, {inp: [2, 4]})
@@ -167,10 +168,10 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       _, s1 = sess.run(out, {inp: [2, 4]})
@@ -198,10 +199,10 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     with sl.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -233,10 +234,10 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.auto_select_ipus(cfg, 1)
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
 
     outfeed_op = outfeed_queue.dequeue()
 

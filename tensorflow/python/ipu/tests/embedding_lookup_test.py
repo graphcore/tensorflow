@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -77,9 +78,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
       w_h = np.arange(2400000).reshape([12000, 200])
@@ -109,9 +110,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -146,9 +147,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -183,9 +184,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
@@ -224,9 +225,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, grads, lr])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
       out, indices, gradient = sess.run(
           r, {
@@ -255,9 +256,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, 16).reshape([8, 2])
       w_h = np.arange(25600).reshape([32, 200, 4])
@@ -288,9 +289,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = tu.add_hw_ci_connection_options(cfg)
-    ipu.utils.configure_ipu_system(cfg)
+    cfg = IPUConfig()
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
 
@@ -312,9 +313,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         table = array_ops.placeholder(np.float16, [2000, 4, 4, 8])
         indices = array_ops.placeholder(np.int32, [4, 4, 8])
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = tu.add_hw_ci_connection_options(cfg)
-      ipu.utils.configure_ipu_system(cfg)
+      cfg = IPUConfig()
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(body, inputs=[table, indices])

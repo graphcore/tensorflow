@@ -14,6 +14,7 @@
 # =============================================================================
 
 import glob
+from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from absl.testing import parameterized
@@ -86,9 +87,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       dataset = dataset.batch(batch_size=1, drop_remainder=True)
       return dataset
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    num_replicas=4,
@@ -160,9 +161,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
       return dataset
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=iterations_per_loop,
@@ -226,9 +227,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
       return dataset
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                                    num_replicas=2,
@@ -289,9 +290,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
                                         loss=loss,
                                         eval_metric_ops=eval_metric_ops)
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -329,9 +330,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
                                             loss=loss,
                                             eval_metrics=eval_metrics)
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -377,9 +378,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
           predictions=predictions,
       )
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
@@ -406,9 +407,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase,
       train_op = array_ops.identity(loss)
       return model_fn_lib.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
-    ipu_options = tu.add_hw_ci_connection_options(ipu_options)
+    ipu_options = IPUConfig()
+    ipu_options.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(ipu_options)
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
