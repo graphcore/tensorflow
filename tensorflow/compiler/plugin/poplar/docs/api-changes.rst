@@ -158,9 +158,12 @@ information about the new API, see :ref:`configuring-section`.
   ``report_every_nth_execution`` etc.
   To profile a TensorFlow program, you should instead use the suite of profiling
   tools that have been added to the SDK. For general advice on how to enable
-  profiling, refer to :ref:`report_capture` in the PopVision User Guide. To
-  parse profiles, use the :std:doc:`pva-python` or :std:doc:`pva`. To enable
-  time-based profiling of events, see :std:doc:`system/system`.
+  profiling, refer to the :ref:`Capturing IPU Reports <report_capture>` chapter
+  in the PopVision User Guide. To parse profiles, use the
+  :std:doc:`PopVision Analysis Python API chapter <pva-python>` or :std:doc:`PopVision Analysis C++ API chapter <pva>`
+  in the Poplar and PopLibs API Reference. To enable time-based profiling of
+  events, see the :ref:`Capturing Execution Information <{HelpTopic.CapturingData}>`
+  chapter of the PopVision User Guide.
 
   Note that any Poplar engine options mentioned in the above guides can be
   passed to the :ref:`compilation_poplar_options <compilation_poplar_options>`
@@ -191,7 +194,6 @@ the old API corresponds to and how:
 
 .. table:: Configuration API conversion
   :width: 100%
-  :widths: auto
 
   +---------------------------------------------------------------------------------------------+------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
   | Old API function                                                                            | Function argument                                          | ``IPUConfig`` attribute equivalent                                                                                                 |
@@ -276,7 +278,7 @@ the old API corresponds to and how:
   +---------------------------------------------------------------------------------------------+------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
   | :py:func:`~tensorflow.python.ipu.utils.set_pooling_options`                                 | ``pooling_options`` [7]_                                   | :ref:`pooling.poplar_options <pooling.poplar_options>`                                                                             |
   +---------------------------------------------------------------------------------------------+------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
-  | :py:func:`~tensorflow.python.ipu.utils.set_report_options`                                  | ``graph_options``                                          | Not supported in IPUConfig. All graph report options have equivalents in the PopVision Graph Analyser or :std:doc:`pva`.           |
+  | :py:func:`~tensorflow.python.ipu.utils.set_report_options`                                  | ``graph_options``                                          | Not supported in IPUConfig. All graph report options have equivalents in the PopVision Graph Analyser or PopVision Analysis APIs   |
   |                                                                                             +------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
   |                                                                                             | ``execution_options``                                      | Not supported in IPUConfig. All execution report options have equivalents in the PopVision Graph Analyser                          |
   +---------------------------------------------------------------------------------------------+------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
