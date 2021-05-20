@@ -10,9 +10,10 @@ deployment on the IPU.
 
 To retrieve trace information about the Poplar IPU compilation and execution,
 there are environment variables provided by Poplar itself to dump the
-compilation and execution reports into a file. See the :ref:`report_capture`
+compilation and execution reports into a file. See the :ref:`Capturing IPU Reports <report_capture>`
 chapter in the PopVision User Guide for more information. To enable
-time-based profiling of events, see :std:doc:`system/system`.
+time-based profiling of events, see the :ref:`Capturing Execution Information <{HelpTopic.CapturingData}>`
+chapter in the PopVision User Guide for more information.
 
 Profiling through the TensorFlow IPU configuration options has been deprecated
 and will be removed in a future release. Information about using this old API
