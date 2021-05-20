@@ -282,7 +282,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMustCallCompileFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
@@ -294,7 +294,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMustCallCompileEvaluate(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
@@ -306,7 +306,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedTupleDatasetFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
@@ -319,7 +319,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedTupleDatasetEvaluate(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
@@ -332,7 +332,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedNonTupleDatasetPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
@@ -344,7 +344,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMismatchDatasetLengthToGradientAccumulationCount(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -362,7 +362,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -377,7 +377,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerEpochTooLargeForDatasetFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -402,7 +402,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerEpochTooLargeForDatasetPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -426,7 +426,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerEpochTooLargeForNumpyArrayPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -453,7 +453,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerRunTooLargeForNumpyArrayPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -482,7 +482,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerRunNumpyArrayFitDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -515,7 +515,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictWithNumpyDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -547,7 +547,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictWithNumpyStepsPerRunDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -580,7 +580,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNumpyArrayTooSmallForGradientAccumulationCount(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -609,7 +609,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNumpyArrayTooSmallForGradientAccumulationCountStepsPerRun(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -638,7 +638,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizerNoAccumulation_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -681,7 +681,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -726,7 +726,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithTensorDataNoBatchSize(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -753,7 +753,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithTensorData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -785,7 +785,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithNumpyData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -817,7 +817,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testEvalWithNumpyData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -845,7 +845,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs1(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -880,7 +880,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizer(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -908,7 +908,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryTwoEpochs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -937,7 +937,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerRun(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -966,7 +966,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochOneEpoch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -994,7 +994,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitTwice(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       ds = test_dataset()
       input_layer = keras.layers.Input(shape=(32))
@@ -1057,7 +1057,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -1086,7 +1086,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -1115,7 +1115,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -1145,7 +1145,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -1176,7 +1176,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -1207,7 +1207,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
@@ -1240,7 +1240,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testEval_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -1274,7 +1274,7 @@ class IPUModelModelTest(test.TestCase):
   @test_util.run_v2_only
   def testCallOrder(self):
     # Test which verifies that we can call evaluate/predict before run.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [2], w=0.4)
@@ -1297,7 +1297,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredict_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
@@ -1324,7 +1324,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testTrainMultipleInput(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_a = keras.layers.Input(shape=(32))
       input_b = keras.layers.Input(shape=(16))
@@ -1354,7 +1354,7 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testTrainMultipleInputMap(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_a = keras.layers.Input(shape=(32))
       input_b = keras.layers.Input(shape=(16))
@@ -1385,7 +1385,7 @@ class IPUModelModelTest(test.TestCase):
   def testPredictNumpyData(self):
     xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
@@ -1412,7 +1412,7 @@ class IPUModelModelTest(test.TestCase):
   def testPredictNumpyDataTwoOutput(self):
     xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
@@ -1439,7 +1439,7 @@ class IPUModelModelTest(test.TestCase):
   def testPredictNumpyData3D(self):
     xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 48], w=1)
@@ -1468,7 +1468,7 @@ class IPUModelModelTest(test.TestCase):
   def testPredictNumpyDataTwoOutput3D(self):
     xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 48], w=1)
@@ -1497,7 +1497,7 @@ class IPUModelModelTest(test.TestCase):
   @test_util.run_v2_only
   def testFitVanillaKerasMatch(self):
     # IPU Model.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1566,7 +1566,7 @@ class IPUModelModelTest(test.TestCase):
       return ((input_1, input_2, input_3), (dense_3, dense_4))
 
     # IPU Test.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1653,7 +1653,7 @@ class IPUModelModelTest(test.TestCase):
       return ((input_1, input_2, input_3), ((output[0][0], output[1])))
 
     # IPU Test.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1711,7 +1711,7 @@ class IPUModelModelTest(test.TestCase):
       return ((input_1, input_2, input_3), ((dense_3, dense_4)))
 
     # IPU Test.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1782,7 +1782,7 @@ class IPUModelModelTest(test.TestCase):
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       model = ipu.keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse', 'mse'])
@@ -1825,7 +1825,7 @@ class IPUModelModelTest(test.TestCase):
     data = np.ones((96, 10), dtype=np.int32)
 
     # Compute IPU model output, uses layer replacement.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.Model(*f(),
                           gradient_accumulation_count=8,
@@ -1880,7 +1880,7 @@ class IPUModelModelTest(test.TestCase):
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.Model(*f(),
                           gradient_accumulation_count=8,
@@ -1916,7 +1916,7 @@ class IPUModelModelTest(test.TestCase):
     dataset = dataset.map(lambda x: math_ops.cast(x, dtype=np.uint8)).batch(
         1, drop_remainder=True).batch(1, drop_remainder=True)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       i = keras.layers.Input(shape=[1])
       ci = keras.layers.Lambda(lambda x: math_ops.cast(x, dtype=np.float16))(i)

@@ -29,10 +29,10 @@ def _to_horovod_op(reduce_op):
   raise ValueError("Unsupported reduce op: {}".format(reduce_op))
 
 
-class IPUHorovodStrategy(distribute_lib.StrategyV1):
+class IPUHorovodStrategyV1(distribute_lib.StrategyV1):
   """This is a distribution strategy using Horovod.
 
-  Usage is very similar to the `IPUMultiWorkerStrategy`, with the
+  Usage is very similar to the `IPUMultiWorkerStrategyV1`, with the
   following differences:
 
   * There is no `cluster_resolver` argument, as Horovod's built-in
@@ -46,7 +46,7 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
 
   .. code-block:: python
 
-    strategy = IPUHorovodStrategy()
+    strategy = IPUHorovodStrategyV1()
 
     with strategy.scope():
 
@@ -91,7 +91,7 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
-      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      train_op = strategy.run(compiled_model, args=[lr])
 
       _, per_worker_losses = outfeed_queue.dequeue()
 
@@ -115,6 +115,8 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
           sess.run(train_op, {lr: 0.01})
           global_loss_val = sess.run(global_loss)
   """
+  _collective_key_base = 0
+
   def __init__(self, ipu_device="/device:IPU:0", variables_on_host=False):
     # We create an empty cluster here since we will not be using gRPC for communication.
     # All the communication is delegated to Horovod (MPI) below.
@@ -122,25 +124,32 @@ class IPUHorovodStrategy(distribute_lib.StrategyV1):
         server_lib.ClusterSpec({}))
 
     super().__init__(
-        IPUHorovodExtended(self, cluster_resolver, ipu_device,
-                           variables_on_host))
+        IPUHorovodExtendedV1(self, cluster_resolver, ipu_device,
+                             variables_on_host))
 
 
-class IPUHorovodExtended(ipu_multi_worker_strategy.IPUMultiWorkerExtended):
+class IPUHorovodExtendedV1(ipu_multi_worker_strategy.IPUMultiWorkerExtendedV1):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
                variables_on_host):
     super().__init__(container_strategy, cluster_resolver, ipu_device,
                      variables_on_host)
     self._num_workers = size()
 
-  def _reduce_implementation(self, reduce_op, value, destinations):
+  def _reduce_implementation(self, reduce_op, value, destinations, options):
     del destinations
+    del options
     return allreduce(value, op=_to_horovod_op(reduce_op))
 
-  def _batch_reduce_implementation(self, reduce_op, value_destination_pairs):
+  def _batch_reduce_implementation(self, reduce_op, value_destination_pairs,
+                                   options):
+    del options
     op = _to_horovod_op(reduce_op)
     return [allreduce(v, op=op) for (v, _) in value_destination_pairs]
 
   def _broadcast_implementation(self, initial_value, device):
     del device
     return broadcast(initial_value, root_rank=0)
+
+
+# Export the alias for backwards compability.
+IPUHorovodStrategy = IPUHorovodStrategyV1

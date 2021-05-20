@@ -30,7 +30,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 
 
-class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
+class IPUMultiReplicaStrategyV1Test(test_util.TensorFlowTestCase):  # pylint: disable=abstract-method
   @classmethod
   def setUpClass(cls):
     hvd.init()
@@ -40,7 +40,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
     hvd.shutdown()
 
   def test_update_ipu_config(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
     config = IPUConfig()
     strategy.update_ipu_config(config)
     self.assertEqual(
@@ -52,7 +52,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   @test_util.deprecated_graph_mode_only
   def test_strategy(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
 
     with strategy.scope():
 
@@ -76,8 +76,8 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
         return y_allreduced
 
-      per_replica_value = strategy.experimental_run_v2(
-          per_replica_fn, args=[constant_op.constant(2.0)])
+      per_replica_value = strategy.run(per_replica_fn,
+                                       args=[constant_op.constant(2.0)])
 
       # This reduction is performed on CPU, and hence uses Horovod.
       value_allreduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
@@ -97,7 +97,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   @test_util.deprecated_graph_mode_only
   def test_strategy_without_ipu_reduction(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy(
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1(
         add_ipu_cross_replica_reductions=False)
 
     with strategy.scope():
@@ -116,27 +116,25 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
         return y_out
 
       # It is sufficient to test the TF graph construction.
-      strategy.experimental_run_v2(per_replica_fn,
-                                   args=[constant_op.constant(2.0)])
+      strategy.run(per_replica_fn, args=[constant_op.constant(2.0)])
 
   @test_util.deprecated_graph_mode_only
   def test_strategy_with_sync_on_read_variable(self):
-    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
+    strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategyV1()
 
     with strategy.scope():
 
       def per_replica_fn(x):
         w0 = variable_scope.get_variable(
             name="w0",
-            initializer=hvd.rank() + 1,
+            initializer=float(hvd.rank() + 1),
             synchronization=variable_scope.VariableSynchronization.ON_READ,
             aggregation=variable_scope.VariableAggregation.MEAN)
         self.assertIsInstance(w0, IPUSyncOnReadVariable)
         return w0.assign_add(x)
 
-      inputs = array_ops.placeholder(dtype=np.int32, shape=())
-      assign_add_op = strategy.experimental_run_v2(per_replica_fn,
-                                                   args=[inputs])
+      inputs = array_ops.placeholder(dtype=np.float32, shape=())
+      assign_add_op = strategy.run(per_replica_fn, args=[inputs])
 
       with session.Session() as sess:
         sess.run(variables.global_variables_initializer())

@@ -52,7 +52,7 @@ These will be described in the appropriate sections of this document.
 .. note:: Many of the sections are shared with the TensorFlow 1 version of this
           document. The function `ipu_compiler.compile()` is used within an IPU
           device scope when using `tf.compat.v1.Session`. It is not required
-          when using the `IPUStrategy`.
+          when using the `IPUStrategyV1`.
 
 Document overview
 ~~~~~~~~~~~~~~~~~
@@ -61,7 +61,7 @@ Document overview
   <device_selection>` hardware and configuring the code to run on it.
 * The next section describes executable caches and pre-compilation of
   executables.
-* The `IPUStrategy` and IPU-specific versions of the Keras Model and Sequential
+* The `IPUStrategyV1` and IPU-specific versions of the Keras Model and Sequential
   classes are described in the section on :any:`support for TensorFlow 2
   <targetting_tf2>` with examples in the subsequent section.
 * The following sections provide information on various methods related to

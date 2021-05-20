@@ -74,7 +74,7 @@ class IPUPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer, output_layer = fixed_weight_pipeline()
       m = ipu.keras.PipelineModel(input_layer,
@@ -144,7 +144,7 @@ class IPUPipelineTest(test.TestCase):
     if os.path.isdir(checkpoint_dir):
       shutil.rmtree(checkpoint_dir)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer, output_layer = fixed_weight_pipeline()
       m = ipu.keras.PipelineModel(input_layer,
@@ -189,7 +189,7 @@ class IPUPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer, output_layer = fixed_weight_pipeline()
       m = ipu.keras.PipelineModel(input_layer,

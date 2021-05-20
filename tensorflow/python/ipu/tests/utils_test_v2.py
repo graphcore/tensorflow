@@ -33,7 +33,7 @@ from tensorflow.python.platform import googletest
 
 class ContribIpuOpsTestWithV2Behaviour(test_util.TensorFlowTestCase):
   def testRepeatLoopWithConditional(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       opt = keras.optimizer_v2.gradient_descent.SGD(0.01)
 
@@ -61,7 +61,7 @@ class ContribIpuOpsTestWithV2Behaviour(test_util.TensorFlowTestCase):
       last_loss = float('inf')
       for _ in range(5):
         c = np.array([0], dtype=np.int32)
-        res = strategy.experimental_run_v2(fn_with_loop, args=[a_data, c])
+        res = strategy.run(fn_with_loop, args=[a_data, c])
         loss_sum = np.sum(res)
         self.assertLess(loss_sum, last_loss)
         last_loss = loss_sum

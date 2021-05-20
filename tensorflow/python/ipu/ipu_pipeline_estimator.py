@@ -339,7 +339,7 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   in order to average the gradients across the replicas.
 
   This can further be combined with distributed multi-worker training using the
-  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategyV1`,
   giving a total effective batch size of
   `num_workers * num_replicas * gradient_accumulation_count * batch_size`.
 

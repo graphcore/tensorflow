@@ -107,7 +107,7 @@ class IPUKerasMNISTTest(test.TestCase):
     train_ds, _ = create_datasets()
 
     # Get IPU loss.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       model = create_sequential_model()
 
@@ -139,7 +139,7 @@ class IPUKerasMNISTTest(test.TestCase):
     train_ds, test_ds = create_datasets()
 
     # Train IPU model and get predictions
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       model = create_sequential_model(constant_init=False)
 
@@ -178,7 +178,7 @@ class IPUKerasMNISTTest(test.TestCase):
     train_ds, _ = create_datasets()
 
     # Get IPU loss.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input((28, 28))
       model = create_model(input_layer)
@@ -212,7 +212,7 @@ class IPUKerasMNISTTest(test.TestCase):
     train_ds, test_ds = create_datasets()
 
     # Train IPU model and get predictions
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input((28, 28))
       model = create_model(input_layer, constant_init=False)

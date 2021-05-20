@@ -73,7 +73,7 @@ def model_fn(features, labels, mode):
 hvd.init()
 
 # Create a Horovod strategy that places variables on the host.
-strategy = ipu_horovod_strategy.IPUHorovodStrategy(variables_on_host=True)
+strategy = ipu_horovod_strategy.IPUHorovodStrategyV1(variables_on_host=True)
 
 ipu_options = IPUConfig()
 ipu_options.auto_select_ipus = 1

@@ -27,21 +27,21 @@ does not apply to constructing a Keras model or using the Keras ``Model.fit()``
 API. See below for details on Keras.
 
 When calling a function that is marked with a ``@tf.function`` from within a
-distribution strategy like ``IPUStrategy``, you should not call it directly,
-but instead use the ``experimental_run_v2`` method.
+distribution strategy like ``IPUStrategyV1``, you should not call it directly,
+but instead use the ``run`` method.
 
 See the following online resources for more information:
 
 - https://www.tensorflow.org/tutorials/customization/performance
 - https://www.tensorflow.org/guide/function
 
-IPUStrategy
-~~~~~~~~~~~
+IPUStrategyV1
+~~~~~~~~~~~~~
 
 The ``tf.distribute.Strategy`` is an API to distribute training across multiple
-devices. :py:class:`~tensorflow.python.ipu.ipu_strategy.IPUStrategy` is a
+devices. :py:class:`~tensorflow.python.ipu.ipu_strategy.IPUStrategyV1` is a
 subclass which targets a system with one or more IPUs attached. Another subclass,
-:py:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+:py:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategyV1`,
 targets a multiple system configuration.
 
 Use the ``strategy.scope()`` context to ensure that everything within that
@@ -53,13 +53,13 @@ of using the ``tf.device`` context.
     from tensorflow.python import ipu
 
     # Create an IPU distribution strategy
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
         ...
 
 It is important to construct a Keras model within the scope of the
-``IPUStrategy``, because Keras may create some parts of the model at
+``IPUStrategyV1``, because Keras may create some parts of the model at
 construction time, and some other parts at execution time.
 
 See the TensorFlow documentation for more details:
@@ -86,7 +86,7 @@ available for the IPU. These have the following features:
 These are described in more detail below.
 
 .. note::
-  The model must be both instantiated and called from within an ``IPUStrategy``
+  The model must be both instantiated and called from within an ``IPUStrategyV1``
   context.
 
 See https://www.tensorflow.org/guide/keras/train_and_evaluate for
@@ -179,9 +179,9 @@ If a more sophisticated training loop is required, then it can be described
 inside a function which is marked as a ``@tf.function``. See :ref:`tensorflow2examples`
 for an example.
 
-The outer training function should be called using the ``experimental_run_v2``
-method on the ``IPUStrategy`` object, to ensure that it is executed using the
-strategy's configuration.
+The outer training function should be called using the ``run`` method on the
+``IPUStrategyV1`` object, to ensure that it is executed using the strategy's
+configuration.
 
 .. note::
   It is not possible to use either ``PipelineModel`` or

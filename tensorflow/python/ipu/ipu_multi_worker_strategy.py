@@ -19,8 +19,10 @@ Distributed training
 
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.distribute import collective_all_reduce_strategy
+from tensorflow.python.distribute import collective_util
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import distribute_lib
+from tensorflow.python.distribute import distribute_utils
 from tensorflow.python.distribute import numpy_dataset
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import device as device_lib
@@ -33,7 +35,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import tf_contextlib
 
 
-class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
+class IPUMultiWorkerStrategyV1(distribute_lib.StrategyV1):
   """This is a distribution strategy for synchronous training using
   IPUs on multiple workers with between-graph replication.
 
@@ -94,7 +96,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
 
   **Compatibility**
 
-  `IPUEstimator`: Pass the `IPUMultiWorkerStrategy` instance to the
+  `IPUEstimator`: Pass the `IPUMultiWorkerStrategyV1` instance to the
   :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the
   `train_distribute` argument. When variables are placed on the host,
   the `optimizer.apply_gradients()` call should also be placed on the
@@ -102,7 +104,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   :class:`~tensorflow.python.ipu.ipu_estimator.IPUEstimatorSpec`
   `host_call` argument. See full example: :any:`distributed_training`.
 
-  `IPUPipelineEstimator`: Pass the `IPUMultiWorkerStrategy` instance to
+  `IPUPipelineEstimator`: Pass the `IPUMultiWorkerStrategyV1` instance to
   the :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the
   `train_distribute` argument. Placing variables on the host is not
   currently supported here.
@@ -110,7 +112,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   Keras `Model.fit`: Not currently supported.
 
   Custom training loop: Pass the training step function to
-  `IPUMultiWorkerStrategy.experimental_run_v2()`. With variables on
+  `IPUMultiWorkerStrategyV1.run()`. With variables on
   the IPU, the `optimizer.apply_gradients()` call can be done from
   an XLA compiled IPU function, and the inter-host allreduce will
   be automatically extracted from the compiled XLA cluster and placed
@@ -122,7 +124,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   .. code-block:: python
 
     cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
-    strategy = IPUMultiWorkerStrategy(cluster_resolver)
+    strategy = IPUMultiWorkerStrategyV1(cluster_resolver)
 
     sess_config = tf.ConfigProto()
     sess_config = strategy.update_config_proto(sess_config)
@@ -175,7 +177,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
-      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      train_op = strategy.run(compiled_model, args=[lr])
 
       _, per_worker_losses = outfeed_queue.dequeue()
 
@@ -199,13 +201,16 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
           sess.run(train_op, {lr: 0.01})
           global_loss_val = sess.run(global_loss)
   """
+
+  _collective_key_base = 0
+
   def __init__(self,
                cluster_resolver,
                ipu_device="/device:IPU:0",
                variables_on_host=False):
     super().__init__(
-        IPUMultiWorkerExtended(self, cluster_resolver, ipu_device,
-                               variables_on_host))
+        IPUMultiWorkerExtendedV1(self, cluster_resolver, ipu_device,
+                                 variables_on_host))
 
 
 def _is_inside_compilation():
@@ -246,6 +251,10 @@ def _make_identity_op(v):
   return array_ops.identity(v, name=name)
 
 
+class IPUDistributedVariable(values.DistributedVariable):  # pylint: disable=abstract-method
+  pass
+
+
 class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
   pass
 
@@ -254,16 +263,44 @@ class IPUMirroredVariable(values.MirroredVariable):  # pylint: disable=abstract-
   pass
 
 
-class IPUMultiWorkerExtended(
+IPU_VARIABLE_CLASS_MAPPING = {
+    "VariableClass": IPUDistributedVariable,
+    variable_scope.VariableSynchronization.AUTO: IPUMirroredVariable,
+    variable_scope.VariableSynchronization.ON_WRITE: IPUMirroredVariable,
+    variable_scope.VariableSynchronization.ON_READ: IPUSyncOnReadVariable,
+}
+
+
+class IPUAutoPolicy(values.AutoPolicy):  # pylint: disable=abstract-method
+  pass
+
+
+class IPUOnWritePolicy(values.OnWritePolicy):  # pylint: disable=abstract-method
+  pass
+
+
+class IPUOnReadPolicy(values.OnReadPolicy):  # pylint: disable=abstract-method
+  pass
+
+
+IPU_VARIABLE_POLICY_MAPPING = {
+    variable_scope.VariableSynchronization.AUTO: IPUAutoPolicy,
+    variable_scope.VariableSynchronization.ON_WRITE: IPUOnWritePolicy,
+    variable_scope.VariableSynchronization.ON_READ: IPUOnReadPolicy,
+}
+
+
+class IPUMultiWorkerExtendedV1(
     collective_all_reduce_strategy.CollectiveAllReduceExtended):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
                variables_on_host):
-    super().__init__(
-        container_strategy,
-        communication=cross_device_ops_lib.CollectiveCommunication.RING,
-        cluster_resolver=cluster_resolver)
+    communication_options = collective_util.Options(
+        implementation=cross_device_ops_lib.CollectiveCommunication.RING)
+    super().__init__(container_strategy,
+                     cluster_resolver=cluster_resolver,
+                     communication_options=communication_options)
 
-    host_devices = self._device_map.all_devices
+    host_devices = self._devices
     if len(host_devices) != 1:
       raise ValueError("Expected one host device per worker")
 
@@ -306,19 +343,17 @@ class IPUMultiWorkerExtended(
 
     return initial_value_fn
 
-  def _create_variable(self, next_creator, *args, **kwargs):
+  def _create_variable(self, next_creator, **kwargs):
     colocate_with = kwargs.pop("colocate_with", None)
     if colocate_with is None:
-      device_map = values.ReplicaDeviceMap([self._variable_device])
-      logical_device = 0
+      devices = [self._variable_device]
     elif isinstance(colocate_with, numpy_dataset.SingleDevice):
       with ops.device(colocate_with.device):
-        return next_creator(*args, **kwargs)
+        return next_creator(**kwargs)
     else:
-      device_map = colocate_with.device_map
-      logical_device = colocate_with.logical_device
+      devices = colocate_with._devices  # pylint: disable=protected-access
 
-    def _real_creator(devices, *args, **kwargs):
+    def _real_creator(**kwargs):
       assert len(devices) == 1
       assert devices[0] == self._variable_device
 
@@ -336,7 +371,7 @@ class IPUMultiWorkerExtended(
       if (not self._variables_on_host or
           synchronization == variable_scope.VariableSynchronization.ON_READ):
         with ops.device(self._ipu_device):
-          return [next_creator(*args, **kwargs)]
+          return [next_creator(**kwargs)]
 
       # Cache a snapshot of the variable on the IPU device,
       # otherwise the XLA cluster containing the ops consuming the
@@ -353,45 +388,47 @@ class IPUMultiWorkerExtended(
       graph = ops.get_default_graph()
       with ops.device(self._host_device), \
           graph._attr_scope(disable_xla):  # pylint: disable=protected-access
-        return [next_creator(*args, **kwargs)]
+        return [next_creator(**kwargs)]
 
-    # For tf1: use distribute_lib.create_mirrored_variable
-    return values.create_mirrored_variable(self._container_strategy(),
-                                           device_map, logical_device,
-                                           _real_creator, IPUMirroredVariable,
-                                           IPUSyncOnReadVariable, *args,
-                                           **kwargs)
+    return distribute_utils.create_mirrored_variable(
+        self._container_strategy(), _real_creator, IPU_VARIABLE_CLASS_MAPPING,
+        IPU_VARIABLE_POLICY_MAPPING, **kwargs)
 
   def read_var(self, var):
     return var.read_value()
 
-  def _reduce_to(self, reduce_op, value, destinations):
+  def _reduce_to(self, reduce_op, value, destinations, options):
     if isinstance(value, values.DistributedValues):
       assert len(value.values) == 1
       value = value.values[0]
 
+    # Make sure the reduction is done on the host device by wrapping the inputs
+    # in an identity op before and after placing it on that device. This also
+    # disables the scoped_allocator_optimizer because it allows it to see that
+    # we cross a device boundary here.
+    value = _make_identity_op(value)
     with _outside_compilation_scope_if_needed("host_reduce"):
-      # Make sure the reduction is done on the host device
-      # by wrapping the inputs in an identity op on that device.
-      # This also disables the scoped_allocator_optimizer because
-      # it allows it to see that we cross a device boundary here.
       with ops.device(self._host_device):
         value = _make_identity_op(value)
 
-      return self._reduce_implementation(reduce_op, value, destinations)
+      return self._reduce_implementation(reduce_op, value, destinations,
+                                         options)
 
-  def _batch_reduce_to(self, reduce_op, value_destination_pairs):
+  def _batch_reduce_to(self, reduce_op, value_destination_pairs, options):
+    # Make sure the reduction is done on the host device by wrapping the inputs
+    # in an identity op before and after placing it on that device. This also
+    # disables the scoped_allocator_optimizer because it allows it to see that
+    # we cross a device boundary here.
+    value_destination_pairs = [(_make_identity_op(v), d)
+                               for (v, d) in value_destination_pairs]
     with _outside_compilation_scope_if_needed("host_batch_reduce"):
-      # Make sure the reduction is done on the host device
-      # by wrapping the inputs in an identity op on that device.
-      # This also disables the scoped_allocator_optimizer because
-      # it allows it to see that we cross a device boundary here.
       with ops.device(self._host_device):
         value_destination_pairs = [(_make_identity_op(v), d)
                                    for (v, d) in value_destination_pairs]
 
       return self._batch_reduce_implementation(reduce_op,
-                                               value_destination_pairs)
+                                               value_destination_pairs,
+                                               options)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
@@ -404,13 +441,15 @@ class IPUMultiWorkerExtended(
       raise ValueError("Unexpected colocated variable device: {}".format(
           colocate_with_variable.device))
 
-  def _reduce_implementation(self, reduce_op, value, destinations):
+  def _reduce_implementation(self, reduce_op, value, destinations, options):
     # This is an extension point for overriding, try to keep a stable API.
-    return super()._reduce_to(reduce_op, value, destinations)
+    return super()._reduce_to(reduce_op, value, destinations, options)
 
-  def _batch_reduce_implementation(self, reduce_op, value_destination_pairs):
+  def _batch_reduce_implementation(self, reduce_op, value_destination_pairs,
+                                   options):
     # This is an extension point for overriding, try to keep a stable API.
-    return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+    return super()._batch_reduce_to(reduce_op, value_destination_pairs,
+                                    options)
 
   def _broadcast_implementation(self, initial_value, device):
     # This is an extension point for overriding, try to keep a stable API.
@@ -418,11 +457,12 @@ class IPUMultiWorkerExtended(
     if self._num_workers <= 1:
       return initial_value
 
+    assert device is not None
     # Only the first device participates in the broadcast of initial values.
     group_key = self._collective_keys.get_group_key([device])
     group_size = self._num_workers
-    collective_instance_key = (
-        self._collective_keys.get_variable_instance_key())
+    collective_instance_key = (self._collective_keys.get_instance_key(
+        group_key, device))
 
     if self._is_chief:
       bcast_send = collective_ops.broadcast_send(initial_value,
@@ -436,3 +476,7 @@ class IPUMultiWorkerExtended(
       return collective_ops.broadcast_recv(initial_value.shape,
                                            initial_value.dtype, group_size,
                                            group_key, collective_instance_key)
+
+
+# Export the alias for backwards compability.
+IPUMultiWorkerStrategy = IPUMultiWorkerStrategyV1

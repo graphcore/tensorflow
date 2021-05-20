@@ -28,7 +28,7 @@ release.
 
     Use ``graph_options`` and ``execution_options`` parameters instead.
 
-    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.4.
 
   - Removed ``allow_stateful_recompute`` parameter from
     ``set_recomputation_options``.
@@ -36,13 +36,26 @@ release.
     Pipelining recomputation will recompute all the non-stateful operations when
     recomputation is enabled.
 
-    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.4.
 
   - Removed ``num_io_tiles`` from ``set_gcl_options``.
 
     Use the ``set_io_tile_options`` instead.
 
-    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.1.
+    Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.4.
+
+TensorFlow 2.1 to TensorFlow 2.4 Migration
+''''''''''''''''''''''''''''''''''''''''''
+
+The Graphcore TensorFlow backend has been migrated from TensorFlow 2.1 to
+TensorFlow 2.4 which might require changes to your application.
+
+See the following list for IPU specific breaking changes:
+
+  - ``experimental_run_v2`` function in ``IPUStrategy`` has been removed to
+    align with TensorFlow 2.4 strategies.
+
+    Use ``run`` instead.
 
 IPUPipelineEstimator change
 '''''''''''''''''''''''''''

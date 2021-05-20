@@ -77,7 +77,7 @@ class KerasSyntheticDataTest(test.TestCase):
     poplar_flags += " --use_synthetic_data"
 
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      strategy = ipu.ipu_strategy.IPUStrategy()
+      strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
         cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -96,7 +96,7 @@ class KerasSyntheticDataTest(test.TestCase):
     poplar_flags += " --use_synthetic_data"
 
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      strategy = ipu.ipu_strategy.IPUStrategy()
+      strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
         cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -115,7 +115,7 @@ class KerasSyntheticDataTest(test.TestCase):
     poplar_flags += " --use_synthetic_data"
 
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      strategy = ipu.ipu_strategy.IPUStrategy()
+      strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
         cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -134,7 +134,7 @@ class KerasSyntheticDataTest(test.TestCase):
     poplar_flags += " --use_synthetic_data"
 
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      strategy = ipu.ipu_strategy.IPUStrategy()
+      strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
         cfg._profiling.profiling = True  # pylint: disable=protected-access

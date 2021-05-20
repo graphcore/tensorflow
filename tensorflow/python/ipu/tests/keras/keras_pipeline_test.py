@@ -182,7 +182,7 @@ def _count_host_to_device_events(evts):
 class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -225,7 +225,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizer(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -253,7 +253,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryTwoEpochs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -282,7 +282,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerRun(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -311,7 +311,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochOneEpoch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -339,7 +339,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitTwice(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       ds = test_dataset()
 
@@ -403,7 +403,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -432,7 +432,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -461,7 +461,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitMultipleOutputs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       init = keras.initializers.Constant(0.1)
@@ -506,7 +506,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -536,7 +536,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -567,7 +567,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
@@ -598,7 +598,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testTrainPipelineWithLstm(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),
                                        dtype=dtypes.int32,
@@ -631,7 +631,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -665,7 +665,7 @@ class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitAndEvaluateAccumulateOutfeed(self):
     # Accumulating the outfeeds shouldn't make a difference to the outputs.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       input_layer_acc = keras.layers.Input(shape=(32))
@@ -707,7 +707,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitAccumulateOutfeedSetDtype(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -774,7 +774,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testEval_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -807,7 +807,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredict_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -837,7 +837,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithNumpyData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -869,7 +869,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testEvalWithNumpyData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -897,7 +897,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictWithNumpyData(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1], w=0.2)
@@ -927,7 +927,7 @@ class IPUPipelineTest(test.TestCase):
   def testModelToDot(self):
     # This test is conditional on both `pydot` and `graphviz` being installed
     if vis_utils.check_pydot():
-      strategy = ipu.ipu_strategy.IPUStrategy()
+      strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         # Initialize pipeline model
         input_layer = keras.layers.Input(shape=(32))
@@ -997,7 +997,7 @@ class IPUPipelineTest(test.TestCase):
     data = np.ones((96, 10), dtype=np.int32)
 
     # Compute IPU model output, uses layer replacement.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1022,7 +1022,7 @@ class IPUPipelineTest(test.TestCase):
     dataset = dataset.map(lambda x: math_ops.cast(x, dtype=np.uint8)).batch(
         1, drop_remainder=True).batch(1, drop_remainder=True)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       inputs = keras.layers.Input(shape=[1])
 
@@ -1049,7 +1049,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithReusedLayer(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       layer1 = keras.layers.Dense(32,
@@ -1084,7 +1084,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithStagesDefinedForLayerAndNodes(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1117,7 +1117,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitFailsWithSameLayerOnDifferentDevices(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1148,7 +1148,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithStagesDefinedOnlyForLayers(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access

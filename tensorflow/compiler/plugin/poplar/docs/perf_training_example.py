@@ -37,11 +37,11 @@ config.auto_select_ipus = 1
 config.configure_ipu_system()
 
 # Initialize the IPU default strategy.
-strategy = ipu_strategy.IPUStrategy()
+strategy = ipu_strategy.IPUStrategyV1()
 
 with strategy.scope():
   infeed_queue.initializer
-  count_out = strategy.experimental_run_v2(my_net)
+  count_out = strategy.run(my_net)
   print("counter", count_out)
 
   # The outfeed dequeue has to happen after the outfeed enqueue op has been executed.

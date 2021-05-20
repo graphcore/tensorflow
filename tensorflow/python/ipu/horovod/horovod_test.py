@@ -28,7 +28,7 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils as ipu_utils
-from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategy
+from tensorflow.python.ipu.horovod.ipu_horovod_strategy import IPUHorovodStrategyV1
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
@@ -102,7 +102,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
     hvd_size = hvd.size()
     hvd_rank = hvd.rank()
 
-    strategy = IPUHorovodStrategy()
+    strategy = IPUHorovodStrategyV1()
     self.assertEqual(strategy.num_replicas_in_sync, hvd_size)
 
     cfg = IPUConfig()
@@ -116,7 +116,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
         self.assertEqual("/replica:0/task:0/device:IPU:0", w.device)
         return w * w
 
-      per_replica_val = strategy.experimental_run_v2(per_replica_fn)
+      per_replica_val = strategy.run(per_replica_fn)
       strategy_sum = strategy.reduce(ReduceOp.SUM, per_replica_val)
       strategy_mean = strategy.reduce(ReduceOp.MEAN, per_replica_val)
 
@@ -140,7 +140,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
     loss_vals = []
 
-    strategy = IPUHorovodStrategy()
+    strategy = IPUHorovodStrategyV1()
 
     with strategy.scope():
 
@@ -187,7 +187,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
-      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      train_op = strategy.run(compiled_model, args=[lr])
 
       _, per_worker_losses = outfeed_queue.dequeue()
 

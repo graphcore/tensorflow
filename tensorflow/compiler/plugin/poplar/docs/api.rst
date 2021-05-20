@@ -24,7 +24,7 @@ For example, this will not work:
   :imported-members:
 
 .. automodule:: tensorflow.python.ipu.ipu_strategy
-  :members: IPUStrategy
+  :members: IPUStrategyV1
 
 .. Note: the headings of the following modules will be included
          as subsection headings. They need to be added before
@@ -79,16 +79,16 @@ For example, this will not work:
 .. Distributed training
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
-  :members: IPUMultiWorkerStrategy
+  :members: IPUMultiWorkerStrategyV1
 
 .. automodule:: tensorflow.python.ipu.horovod
   :members:
 
 .. automodule:: tensorflow.python.ipu.horovod.ipu_horovod_strategy
-  :members: IPUHorovodStrategy
+  :members: IPUHorovodStrategyV1
 
 .. automodule:: tensorflow.python.ipu.horovod.ipu_multi_replica_strategy
-  :members: IPUMultiReplicaStrategy
+  :members: IPUMultiReplicaStrategyV1
 
 .. _datasets-api:
 

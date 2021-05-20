@@ -51,7 +51,7 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       m = ipu_keras.Sequential(stage1() + stage2(),
@@ -125,7 +125,7 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       model = ipu_keras.Sequential(model_fn())
       model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),

@@ -2,7 +2,7 @@ Distributed training
 --------------------
 
 This example shows how to use the ``IPUEstimator`` with the
-``IPUMultiWorkerStrategy`` to perform distributed training of
+``IPUMultiWorkerStrategyV1`` to perform distributed training of
 a model on the MNIST dataset.
 
 The example is based on the following official tutorial
@@ -97,18 +97,18 @@ Distributed training can also be performed using
 TensorFlow wheel provided by Graphcore.
 
 The class
-:class:`~tensorflow.python.ipu.horovod.ipu_horovod_strategy.IPUHorovodStrategy`
+:class:`~tensorflow.python.ipu.horovod.ipu_horovod_strategy.IPUHorovodStrategyV1`
 can be used in the same manner as the
-:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`.
+:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategyV1`.
 
-While the ``IPUMultiWorkerStrategy`` uses collective operations over gRPC, the
-``IPUHorovodStrategy`` uses the collective operations provided by Horovod, based on
+While the ``IPUMultiWorkerStrategyV1`` uses collective operations over gRPC, the
+``IPUHorovodStrategyV1`` uses the collective operations provided by Horovod, based on
 MPI. Horovod also has built-in cluster discovery, so there is no cluster resolver
-argument that must be provided like there is for the ``IPUMultiWorkerStrategy``,
+argument that must be provided like there is for the ``IPUMultiWorkerStrategyV1``,
 and there is no need for starting a ``tf.distribute.Server``.
 
 Apart from these differences, the API and semantics should be the same for the
-``IPUHorovodStrategy`` and ``IPUMultiWorkerStrategy``. In other words, they
+``IPUHorovodStrategyV1`` and ``IPUMultiWorkerStrategyV1``. In other words, they
 both provide data parallel distributed training that keeps the variables in sync
 on the different workers. During variable initialisation the values are broadcast
 from the root rank to the other ranks, and during training the gradients are

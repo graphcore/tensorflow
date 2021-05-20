@@ -26,7 +26,8 @@ from tensorflow.python import feature_column
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.distribute_config import DistributeConfig
-from tensorflow.python.distribute.multi_worker_test_base import pick_unused_port
+from tensorflow.python.distribute import multi_worker_test_base
+from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import combinations
@@ -35,7 +36,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
-from tensorflow.python.ipu import ipu_multi_worker_strategy
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ops import array_ops
@@ -51,6 +52,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import server_lib
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training_util
+from tensorflow.compat.v1 import disable_v2_behavior
 
 
 def _dummy_model_fn(features, labels, params):
@@ -271,31 +273,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with self.assertRaisesRegex(
         ValueError, "host_call is not allowed for iterations_per_loop > 1"):
       estimator.train(input_fn=my_input_fn, steps=2)
-
-  def testDistributedMultipleIterationsPerLoopNotImplemented(self):
-    port = pick_unused_port()
-    cluster_spec = server_lib.ClusterSpec(
-        {"worker": ["localhost:{}".format(port)]})
-    strategy = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
-        SimpleClusterResolver(cluster_spec, task_type="worker", task_id=0))
-
-    # Setting config.train_distribute
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
-        train_distribute=strategy)
-    with self.assertRaisesRegex(
-        NotImplementedError,
-        r"iterations_per_loop > 1 \(got 2\) not supported with distribution"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
-
-    # Setting config.experimental_distribute.train_distribute
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
-        experimental_distribute=DistributeConfig(train_distribute=strategy))
-    with self.assertRaisesRegex(
-        NotImplementedError,
-        r"iterations_per_loop > 1 \(got 2\) not supported with distribution"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
 
   def testHostCallTwoArguments(self):
     def my_input_fn():
@@ -1519,65 +1496,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with self.assertRaisesRegex(ParamsReceived, "'batch_size': 42"):
       next(estimator.predict(mock_input_fn))
 
-  def testBatchSizeCalculationWithReplicationAndDistribution(self):
-    class ParamsReceived(RuntimeError):
-      pass
-
-    def mock_input_fn(params):
-      raise ParamsReceived(str(params))
-
-    port = pick_unused_port()
-
-    train_cluster = server_lib.ClusterSpec(
-        {"worker": ["worker0:{}".format(port), "worker1:2222"]})
-    train_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
-        SimpleClusterResolver(train_cluster, task_type="worker", task_id=0))
-
-    eval_cluster = server_lib.ClusterSpec({
-        "worker": ["worker0:{}".format(port), "worker1:2222", "worker2:2222"]
-    })
-    eval_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
-        SimpleClusterResolver(eval_cluster, task_type="worker", task_id=0))
-
-    # Testing with replication here is fine with the IPU model since we never
-    # attempt to compile anything.
-    ipu_options = IPUConfig()
-    ipu_options.auto_select_ipus = 2
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(num_replicas=2,
-                                                   ipu_options=ipu_options),
-        train_distribute=train_distribute,
-        eval_distribute=eval_distribute)
-
-    with self.assertRaisesRegex(
-        ValueError, r"train_batch_size \(got 1\) must be divisible by "
-        r"num_workers \* num_replicas \(2 \* 2\)"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
-                                 config=config,
-                                 train_batch_size=1)
-
-    with self.assertRaisesRegex(
-        ValueError, r"eval_batch_size \(got 1\) must be divisible by "
-        r"num_workers \* num_replicas \(3 \* 2\)"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
-                                 config=config,
-                                 eval_batch_size=1)
-
-    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
-                                           config=config,
-                                           train_batch_size=4,
-                                           eval_batch_size=12,
-                                           predict_batch_size=6)
-
-    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 1"):
-      estimator.train(mock_input_fn, steps=1)
-
-    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 2"):
-      estimator.evaluate(mock_input_fn, steps=1)
-
-    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 3"):
-      next(estimator.predict(mock_input_fn))
-
   def testInvalidPrefetchDepth(self):
     def my_model_fn(features, labels, mode):
       del features, labels, mode
@@ -1593,6 +1511,129 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with self.assertRaisesRegex(ValueError,
                                 "prefetch_depth must be greater than zero"):
       estimator.train(my_input_fn, steps=1)
+
+
+class IPUEstimatorWithStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
+  """Tests using multiple threads in the same processes."""
+  @classmethod
+  def setUpClass(cls):  # pylint: disable=arguments-differ
+    cls._num_workers = 2
+    cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
+        num_workers=cls._num_workers, num_ps=0, has_chief=False)
+
+  def setUp(self):
+    disable_v2_behavior()
+    # We use a different key_base for each test so that collective keys won't be
+    # reused.
+    IPUMultiWorkerStrategyV1._collective_key_base += 100000
+    super().setUp()
+
+  def testDistributedMultipleIterationsPerLoopNotImplemented(self):
+
+    cluster_spec = multi_worker_test_base.create_in_process_cluster(
+        num_workers=2, num_ps=0, has_chief=False)
+
+    def function(task_type, task_id, _num_gpus):
+      del _num_gpus
+      train_cluster = multi_worker_util.normalize_cluster_spec(cluster_spec)
+      strategy = IPUMultiWorkerStrategyV1(
+          SimpleClusterResolver(train_cluster,
+                                task_type=task_type,
+                                task_id=task_id))
+
+      # Setting config.train_distribute
+      config = ipu_run_config.RunConfig(
+          ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
+          train_distribute=strategy)
+      with self.assertRaisesRegex(
+          NotImplementedError,
+          r"iterations_per_loop > 1 \(got 2\) not supported with distribution"
+      ):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
+
+      # Setting config.experimental_distribute.train_distribute
+      config = ipu_run_config.RunConfig(
+          ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
+          experimental_distribute=DistributeConfig(train_distribute=strategy))
+      with self.assertRaisesRegex(
+          NotImplementedError,
+          r"iterations_per_loop > 1 \(got 2\) not supported with distribution"
+      ):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
+
+    self._run_between_graph_clients(function, cluster_spec, num_gpus=0)
+
+  def testBatchSizeCalculationWithReplicationAndDistribution(self):
+
+    cluster_spec = multi_worker_test_base.create_in_process_cluster(
+        num_workers=3, num_ps=0, has_chief=False)
+
+    class ParamsReceived(RuntimeError):
+      pass
+
+    def mock_input_fn(params):
+      raise ParamsReceived(str(params))
+
+    def function(task_type, task_id, _num_gpus):
+      del _num_gpus
+      train_spec = {"worker": cluster_spec["worker"][:2]}
+      train_cluster = multi_worker_util.normalize_cluster_spec(train_spec)
+      eval_cluster = multi_worker_util.normalize_cluster_spec(cluster_spec)
+
+      train_distribute = None
+      if task_id < 2:
+        train_distribute = IPUMultiWorkerStrategyV1(
+            SimpleClusterResolver(train_cluster,
+                                  task_type=task_type,
+                                  task_id=task_id))
+
+      eval_distribute = IPUMultiWorkerStrategyV1(
+          SimpleClusterResolver(eval_cluster,
+                                task_type=task_type,
+                                task_id=task_id))
+
+      # Testing with replication here is fine with the IPU model since we never
+      # attempt to compile anything.
+      ipu_options = IPUConfig()
+      ipu_options.auto_select_ipus = 2
+      config = ipu_run_config.RunConfig(
+          ipu_run_config=ipu_run_config.IPURunConfig(num_replicas=2,
+                                                     ipu_options=ipu_options),
+          train_distribute=train_distribute,
+          eval_distribute=eval_distribute)
+
+      if task_id < 2:
+        with self.assertRaisesRegex(
+            ValueError, r"train_batch_size \(got 1\) must be divisible by "
+            r"num_workers \* num_replicas \(2 \* 2\)"):
+          ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                     config=config,
+                                     train_batch_size=1)
+
+      with self.assertRaisesRegex(
+          ValueError, r"eval_batch_size \(got 1\) must be divisible by "
+          r"num_workers \* num_replicas \(3 \* 2\)"):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                   config=config,
+                                   eval_batch_size=1)
+
+      estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                             config=config,
+                                             train_batch_size=4,
+                                             eval_batch_size=12,
+                                             predict_batch_size=6)
+
+      if task_id < 2:
+        with self.assertRaisesRegex(ParamsReceived, "'batch_size': 1"):
+          estimator.train(mock_input_fn, steps=1)
+
+      with self.assertRaisesRegex(ParamsReceived, "'batch_size': 2"):
+        estimator.evaluate(mock_input_fn, steps=1)
+
+      with self.assertRaisesRegex(ParamsReceived, "'batch_size': 3"):
+        next(estimator.predict(mock_input_fn))
+
+    self._run_between_graph_clients(function, cluster_spec, num_gpus=0)
 
 
 if __name__ == "__main__":

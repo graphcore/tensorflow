@@ -71,7 +71,7 @@ class IPUSequentialPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
@@ -137,7 +137,7 @@ class IPUSequentialPipelineTest(test.TestCase):
     if os.path.isdir(checkpoint_dir):
       shutil.rmtree(checkpoint_dir)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)
@@ -178,7 +178,7 @@ class IPUSequentialPipelineTest(test.TestCase):
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
                                        gradient_accumulation_count=24)

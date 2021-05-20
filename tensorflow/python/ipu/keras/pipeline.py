@@ -90,7 +90,7 @@ class PipelineSequential(ipu_model._IpuModelBase):  # pylint: disable=protected-
 
     dataset = ...
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.PipelineSequential([
         [
@@ -930,9 +930,9 @@ class PipelineStage(object):
       raise ValueError("%d is not a valid pipeline stage.")
 
     strategy = distribution_strategy_context.get_strategy()
-    if not isinstance(strategy, ipu_strategy.IPUStrategy):
+    if not isinstance(strategy, ipu_strategy.IPUStrategyV1):
       raise RuntimeError("PipelineStage may only be used from "
-                         "within an IPUStrategy context.")
+                         "within an IPUStrategyV1 context.")
 
     if hasattr(strategy, "_pipeline_stage"):
       raise RuntimeError("Pipeline stages must not be nested.")
@@ -963,7 +963,7 @@ class PipelineModel(ipu_model.Model):
 
   .. code-block:: python
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     input_layer = Input(2)
     with strategy.scope():
       with PipelineStage(0):
@@ -976,7 +976,7 @@ class PipelineModel(ipu_model.Model):
 
   .. code-block:: python
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     input_layer = Input(2)
     l = Dense(4)
     with strategy.scope():
@@ -1025,7 +1025,7 @@ class PipelineModel(ipu_model.Model):
 
     dataset = ...
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(4)
 

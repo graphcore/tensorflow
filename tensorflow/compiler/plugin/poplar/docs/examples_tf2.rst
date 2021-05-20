@@ -7,7 +7,7 @@ Training on the IPU
 ~~~~~~~~~~~~~~~~~~~
 
 This example shows how to use the IPU-specific Keras ``Model`` class and the
-``IPUStrategy`` to train a model using the Keras ``Model.fit()`` method.
+``IPUStrategyV1`` to train a model using the Keras ``Model.fit()`` method.
 
 The IPU specific changes are highlighted:
 
@@ -34,7 +34,7 @@ Custom training function
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 This example shows how to use a custom training function with the
-``IPUStrategy`` and the standard Keras ``Sequential`` class.
+``IPUStrategyV1`` and the standard Keras ``Sequential`` class.
 
 .. literalinclude:: example_tf2_custom_training.py
   :language: python

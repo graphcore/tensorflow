@@ -310,7 +310,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
                                                 ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -339,7 +339,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
                                                 ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -368,7 +368,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -401,7 +401,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -447,7 +447,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     cpu_predictions = model_cpu.predict(x=[inputs, input_lengths],
                                         batch_size=ctc_params["batch_size"])
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)

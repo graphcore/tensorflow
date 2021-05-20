@@ -92,7 +92,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     steps = 10
     batch_size = 2
     with strategy.scope():
@@ -118,7 +118,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = create_model(True, quad_optimizer)
       m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
@@ -136,7 +136,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = create_model(True, quad_optimizer)
       m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
@@ -156,7 +156,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     cfg.auto_select_ipus = nipus
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = create_model(True, add_optimizer)
       m.fit(x=x, y=y, steps_per_epoch=2, epochs=1, batch_size=1)
@@ -181,7 +181,7 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = create_model(
           True,

@@ -30,7 +30,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     # Create an IPU distribution strategy
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Create dummy graph
       @function()
@@ -42,7 +42,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       b = constant([2.0], dtype=float32)
 
       # Run graph
-      result = strategy.experimental_run_v2(test_fn, args=(a, b))
+      result = strategy.run(test_fn, args=(a, b))
 
       # Extract summary
       reports = summary_ops.get_ipu_reports()

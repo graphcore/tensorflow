@@ -56,17 +56,17 @@ def _get_compiled_modules(trace_events):
   return compiled_modules
 
 
-class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
   @test_util.run_v2_only
   def test_create_variable(self):
     # IPU 0 should be the default.
-    ipu0_strategy = ipu_strategy.IPUStrategy()
+    ipu0_strategy = ipu_strategy.IPUStrategyV1()
     with ipu0_strategy.scope():
       v0 = variables.Variable(1.0)
       self.assertEqual("/job:localhost/replica:0/task:0/device:IPU:0",
                        v0.device)
 
-    ipu1_strategy = ipu_strategy.IPUStrategy("/device:IPU:1")
+    ipu1_strategy = ipu_strategy.IPUStrategyV1("/device:IPU:1")
     with ipu1_strategy.scope():
       v1 = variables.Variable(1.0)
       self.assertEqual("/job:localhost/replica:0/task:0/device:IPU:1",
@@ -74,7 +74,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_inference_step_fn_keras_model(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -92,7 +92,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       report.reset()
 
       inputs = np.ones((1, 2), dtype=np.float32)
-      out = strategy.experimental_run_v2(step_fn, args=[inputs])
+      out = strategy.run(step_fn, args=[inputs])
       self.assertEqual("/job:localhost/replica:0/task:0/device:IPU:0",
                        out.device)
       self.assertAllClose(1.0, np.sum(out.numpy()))
@@ -103,7 +103,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_building_model_by_passing_input_shape_to_first_layer(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -128,7 +128,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_building_model_explicitly(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -156,7 +156,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_model_with_autograph_loop(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -174,7 +174,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       report.reset()
 
       inputs = -1.0 * np.ones((1, 1), dtype=np.float32)
-      out = strategy.experimental_run_v2(step_fn, args=[inputs])
+      out = strategy.run(step_fn, args=[inputs])
       self.assertGreaterEqual(out, 0.0)
 
       # There should be a single engine, executed once. If auto-clustering
@@ -185,7 +185,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_train_step_fn_keras_model(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -214,10 +214,8 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       x_train = np.ones((batch_size, 10), dtype=np.float32)
       y_train = np.ones((batch_size, 1), dtype=np.float32)
 
-      first_loss = strategy.experimental_run_v2(step_fn,
-                                                args=[x_train, y_train])
-      second_loss = strategy.experimental_run_v2(step_fn,
-                                                 args=[x_train, y_train])
+      first_loss = strategy.run(step_fn, args=[x_train, y_train])
+      second_loss = strategy.run(step_fn, args=[x_train, y_train])
 
       # Check that loss is decreasing.
       self.assertLess(second_loss, first_loss)
@@ -229,7 +227,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_train_step_fn_keras_model_known_input_size(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -258,10 +256,8 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       x_train = np.ones((batch_size, 10), dtype=np.float32)
       y_train = np.ones((batch_size, 1), dtype=np.float32)
 
-      first_loss = strategy.experimental_run_v2(step_fn,
-                                                args=[x_train, y_train])
-      second_loss = strategy.experimental_run_v2(step_fn,
-                                                 args=[x_train, y_train])
+      first_loss = strategy.run(step_fn, args=[x_train, y_train])
+      second_loss = strategy.run(step_fn, args=[x_train, y_train])
 
       # Check that loss is decreasing.
       self.assertLess(second_loss, first_loss)
@@ -298,7 +294,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report = tu.ReportJSON(self, eager_mode=True)
     report.reset()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -353,7 +349,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report = tu.ReportJSON(self, eager_mode=True)
     report.reset()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -415,7 +411,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     report = tu.ReportJSON(self, eager_mode=True)
     report.reset()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
@@ -459,19 +455,17 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     def cast_float64(x):
       return math_ops.cast(x, np.float64)
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
 
       with self.assertRaisesRegex(TypeError,
                                   "Unsupported data type for input: float64"):
-        strategy.experimental_run_v2(identity,
-                                     args=[np.array(1.0, dtype=np.float64)])
+        strategy.run(identity, args=[np.array(1.0, dtype=np.float64)])
 
       with self.assertRaisesRegex(TypeError,
                                   "Unsupported data type for output: float64"):
-        strategy.experimental_run_v2(cast_float64,
-                                     args=[np.array(1.0, dtype=np.float32)])
+        strategy.run(cast_float64, args=[np.array(1.0, dtype=np.float32)])
 
   @test_util.run_v2_only
   def test_allowed_function_types_in_eager_mode(self):
@@ -481,7 +475,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     inputs = constant_op.constant(1.0, dtype=np.float32)
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       self.assertTrue(context.executing_eagerly())
@@ -489,24 +483,24 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       # Passing plain function in eager mode is not allowed.
       with self.assertRaisesRegex(ValueError,
                                   "does not support eager execution"):
-        strategy.experimental_run_v2(identity, args=[inputs])
+        strategy.run(identity, args=[inputs])
 
       # But calling it from inside a `tf.function` is fine.
       @def_function.function
       def wrapper():
-        return strategy.experimental_run_v2(identity, args=[inputs])
+        return strategy.run(identity, args=[inputs])
 
       self.assertEqual(wrapper(), inputs)
 
       # Converted to `tf.function` also fine.
       tf_function = def_function.function(identity)
-      result = strategy.experimental_run_v2(tf_function, args=[inputs])
+      result = strategy.run(tf_function, args=[inputs])
       self.assertEqual(result, inputs)
 
       # `ConcreteFunction` is fine as well.
       concrete_function = tf_function.get_concrete_function(
           tensor_spec.TensorSpec(inputs.shape, inputs.dtype))
-      result = strategy.experimental_run_v2(concrete_function, args=[inputs])
+      result = strategy.run(concrete_function, args=[inputs])
       self.assertEqual(result, inputs)
 
   @parameterized.named_parameters(*OUTFEED_ASYNC_TEST_CASES)
@@ -523,7 +517,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       x = x + 1
       return x
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       # Async dequeue function that will run during main thread training loop
@@ -542,7 +536,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       # Start the training loop
       for i, x in zip(range(num_iterations), dataset):
-        strategy.experimental_run_v2(training_step, args=[x[0]])
+        strategy.run(training_step, args=[x[0]])
         # Once the model is compiled, start the dequeuing thread
         if i == 0:
           dequeue_thread = Thread(target=dequeue)

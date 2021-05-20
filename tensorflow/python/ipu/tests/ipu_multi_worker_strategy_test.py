@@ -48,7 +48,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
-from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.scopes import ipu_scope
@@ -71,7 +71,7 @@ from tensorflow.python.training.monitored_session import MonitoredTrainingSessio
 disable_v2_behavior()
 
 
-class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
+class IPUMultiWorkerStrategyV1Test(multi_worker_test_base.MultiWorkerTestBase):
   """Tests using multiple threads in the same processes."""
   @classmethod
   def setUpClass(cls):
@@ -84,13 +84,11 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
         num_workers=cls._num_workers, num_ps=0, has_chief=False)
 
-  collective_key_base = 0
-
   def setUp(self):
     # We use a different key_base for each test so that collective keys won't be
     # reused.
-    IPUMultiWorkerStrategyTest.collective_key_base += 100000
-    super(IPUMultiWorkerStrategyTest, self).setUp()
+    IPUMultiWorkerStrategyV1._collective_key_base += 100000
+    super().setUp()
 
   def _create_test_objects(self, task_type, task_id, variables_on_host=True):
     sess_config = config_pb2.ConfigProto()
@@ -104,18 +102,9 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     target = cluster_resolver.master(task_id=task_id,
                                      task_type=task_type,
                                      rpc_layer="grpc")
-    strategy = IPUMultiWorkerStrategy(cluster_resolver,
-                                      variables_on_host=variables_on_host)
+    strategy = IPUMultiWorkerStrategyV1(cluster_resolver,
+                                        variables_on_host=variables_on_host)
     sess_config = strategy.update_config_proto(sess_config)
-
-    collective_keys = cross_device_utils.CollectiveKeys(
-        group_key_start=10 + IPUMultiWorkerStrategyTest.collective_key_base,
-        op_instance_key_start=100 +
-        IPUMultiWorkerStrategyTest.collective_key_base,
-        variable_instance_key_start=10000 +
-        IPUMultiWorkerStrategyTest.collective_key_base)
-    strategy.extended._collective_keys = collective_keys
-    strategy.extended._cross_device_ops._collective_keys = collective_keys
 
     return strategy, target, sess_config
 
@@ -164,7 +153,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual(ipu_device, op.device)
         return op
 
-      per_replica_op = strategy.experimental_run_v2(per_replica_fn)
+      per_replica_op = strategy.run(per_replica_fn)
       self.assertEqual(ipu_device, per_replica_op.device)
 
   @tu.test_may_use_ipus_or_model(num_ipus=2)
@@ -191,7 +180,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual(ipu_device, op.device)
         return op
 
-      per_replica_op = strategy.experimental_run_v2(per_replica_fn)
+      per_replica_op = strategy.run(per_replica_fn)
       self.assertEqual(ipu_device, per_replica_op.device)
 
   @tu.test_may_use_ipus_or_model(num_ipus=2)
@@ -215,8 +204,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return y
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      per_replica_y = strategy.experimental_run_v2(per_replica_fn,
-                                                   args=[inputs])
+      per_replica_y = strategy.run(per_replica_fn, args=[inputs])
       self.assertEqual(compute_device, per_replica_y.device)
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
       self.assertEqual(variable_device, sum_y.device)
@@ -250,7 +238,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           self.assertEqual(compute_device, ret.device)
           return ret
 
-      per_replica_ret = strategy.experimental_run_v2(per_replica_fn, args=[])
+      per_replica_ret = strategy.run(per_replica_fn, args=[])
       self.assertEqual(compute_device, per_replica_ret.device)
       sum_ret = strategy.reduce(ReduceOp.SUM, per_replica_ret, axis=None)
       self.assertEqual(variable_device, sum_ret.device)
@@ -279,7 +267,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         with ops.device("/device:IPU:0"):
           w0 = variable_scope.get_variable(
               name="w0",
-              initializer=task_id + 1,
+              initializer=float(task_id + 1),
               synchronization=variable_scope.VariableSynchronization.ON_READ,
               aggregation=variable_scope.VariableAggregation.MEAN)
           self.assertIsInstance(w0, IPUSyncOnReadVariable)
@@ -288,9 +276,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           self.assertEqual(variable_device, initializer_tensor.device)
           return w0.assign_add(x)
 
-      inputs = array_ops.placeholder(dtype=np.int32, shape=())
-      assign_add_op = strategy.experimental_run_v2(per_replica_fn,
-                                                   args=[inputs])
+      inputs = array_ops.placeholder(dtype=np.float32, shape=())
+      assign_add_op = strategy.run(per_replica_fn, args=[inputs])
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(variables.global_variables_initializer())
@@ -350,8 +337,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
-                                                                args=[inputs])
+      train_op, per_replica_loss = strategy.run(step_fn, args=[inputs])
       self.assertEqual(compute_device, per_replica_loss.device)
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
       self.assertEqual(variable_device, total_loss.device)
@@ -404,8 +390,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
-                                                                args=[inputs])
+      train_op, per_replica_loss = strategy.run(step_fn, args=[inputs])
       self.assertEqual(compute_device, per_replica_loss.device)
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
       self.assertEqual(variable_device, total_loss.device)
@@ -449,8 +434,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
-                                                                args=[inputs])
+      train_op, per_replica_loss = strategy.run(step_fn, args=[inputs])
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
 
       # Verify device placement of momentum accumulator variable.
@@ -485,8 +469,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
-                                                                args=[inputs])
+      train_op, per_replica_loss = strategy.run(step_fn, args=[inputs])
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
 
       # Verify device placement of momentum accumulator variable.
@@ -512,7 +495,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
       def step_fn(x):
         with ipu_scope("/device:IPU:0"):
-          y = x * x
+          y = x.values[0] * x.values[0]
           return y
 
       dataset = dataset_ops.Dataset.range(10)
@@ -520,8 +503,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       dataset = dataset.batch(2, drop_remainder=True)  # global batch size
       dist_dataset = strategy.experimental_distribute_dataset(dataset)
       inputs = dist_dataset.make_initializable_iterator()
-      per_replica_y = strategy.experimental_run_v2(step_fn,
-                                                   args=[next(inputs)])
+      per_replica_y = strategy.run(step_fn, args=[next(inputs)])
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
 
       with session_lib.Session(target=target, config=sess_config) as sess:
@@ -549,7 +531,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return y
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      per_replica_y = strategy.experimental_run_v2(step_fn, args=[inputs])
+      per_replica_y = strategy.run(step_fn, args=[inputs])
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
 
       with MonitoredTrainingSession(master=target, config=sess_config) as sess:
@@ -673,16 +655,14 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return out
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=(2, 1))
-      per_replica_y = strategy.experimental_run_v2(compiled_per_replica_fn,
-                                                   args=[inputs])
+      per_replica_y = strategy.run(compiled_per_replica_fn, args=[inputs])
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
-      self.assertEqual(variable_device, batch_norm.moving_mean.get().device)
+      self.assertEqual(variable_device, batch_norm.moving_mean._get().device)  # pylint: disable=protected-access
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(variables.global_variables_initializer())
         sess.run(sum_y, feed_dict={inputs: [[2.0 * (task_id + 1)], [0.0]]})
-
-        task_local_mean = batch_norm.moving_mean.get(variable_device)
+        task_local_mean = batch_norm.moving_mean._get_on_device_or_primary()  # pylint: disable=protected-access
         self.assertAllEqual([task_id + 1], sess.run(task_local_mean))
 
         # mean(mean(2, 0), mean(4, 0)) = mean(1, 3) = 1.5
@@ -722,7 +702,7 @@ def _get_summary_values(model_dir, tag):
   return outputs
 
 
-class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
+class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
   """Tests using multiple processes."""
   def _run_task_in_process(self, task_fn, cluster_spec, task_type, task_id):
     def wrapper_fn():
@@ -756,8 +736,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
   def _create_test_objects(self, start_server=True, variables_on_host=True):
     cluster_resolver = TFConfigClusterResolver()
-    strategy = IPUMultiWorkerStrategy(cluster_resolver,
-                                      variables_on_host=variables_on_host)
+    strategy = IPUMultiWorkerStrategyV1(cluster_resolver,
+                                        variables_on_host=variables_on_host)
 
     sess_config = config_pb2.ConfigProto()
     sess_config.allow_soft_placement = False
@@ -830,7 +810,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       def compiled_fn():
         return ipu_compiler.compile(device_fn, inputs=[x])
 
-      train_op = strategy.experimental_run_v2(compiled_fn, args=[])
+      train_op = strategy.run(compiled_fn, args=[])
 
       config = IPUConfig()
       config.auto_select_ipus = 1
@@ -914,7 +894,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       def compiled_model():
         return ipu_compiler.compile(model, inputs=[])
 
-      train_op = strategy.experimental_run_v2(compiled_model, args=[])
+      train_op = strategy.run(compiled_model, args=[])
       config = IPUConfig()
       config.auto_select_ipus = 2
       tu.add_hw_ci_connection_options(config)
@@ -1031,7 +1011,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
-      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      train_op = strategy.run(compiled_model, args=[lr])
 
       _, per_worker_losses = outfeed_queue.dequeue()
 

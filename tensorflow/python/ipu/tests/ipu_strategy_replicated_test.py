@@ -30,11 +30,11 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 
 
-class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
+class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_all_reduce(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     def make_all_reduce_function(reduce_op):
       @def_function.function(experimental_compile=True)
@@ -49,18 +49,16 @@ class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
     report.reset()
 
     with strategy.scope():
-      summed = strategy.experimental_run_v2(
-          make_all_reduce_function(reduce_util.ReduceOp.SUM))
+      summed = strategy.run(make_all_reduce_function(reduce_util.ReduceOp.SUM))
       self.assertEqual(1.0, summed.numpy())
 
-      mean = strategy.experimental_run_v2(
-          make_all_reduce_function(reduce_util.ReduceOp.MEAN))
+      mean = strategy.run(make_all_reduce_function(reduce_util.ReduceOp.MEAN))
       self.assertEqual(0.5, mean.numpy())
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_optimizer(self):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     report = tu.ReportJSON(self, eager_mode=True, replicated=True, use_hw=True)
     report.reset()
@@ -90,7 +88,7 @@ class IPUStrategyReplicatedTest(test_util.TensorFlowTestCase):
       infeed.initializer  # pylint: disable=pointless-statement
 
       for _ in range(num_iterations):
-        strategy.experimental_run_v2(apply_gradient)
+        strategy.run(apply_gradient)
         expected_variable -= learning_rate * expected_gradient
         self.assertEqual(expected_variable, variable.numpy())
 

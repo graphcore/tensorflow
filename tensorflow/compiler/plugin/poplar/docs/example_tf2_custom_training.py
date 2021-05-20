@@ -61,7 +61,7 @@ def training_step(features, labels, model, opt):
 
 
 # Create an IPU distribution strategy
-strategy = ipu.ipu_strategy.IPUStrategy()
+strategy = ipu.ipu_strategy.IPUStrategyV1()
 
 with strategy.scope():
   # An optimizer for updating the trainable variables
@@ -75,7 +75,7 @@ with strategy.scope():
 
   # Train the model
   for (x, y), c in zip(ds, range(step_count)):
-    loss = strategy.experimental_run_v2(training_step, args=[x, y, model, opt])
+    loss = strategy.run(training_step, args=[x, y, model, opt])
 
     if not c % 50:
       print("Step " + str(c) + " loss = " + str(loss.numpy()))

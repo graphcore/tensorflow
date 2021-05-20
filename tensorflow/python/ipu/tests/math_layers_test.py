@@ -75,7 +75,7 @@ class SerialDenseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     def kernel_init(_shape, **_):
       return kernel_val
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       dense = Dense(num_units, kernel_initializer=kernel_init)(input_val)
       serial_dense = SerialDense(num_units,
@@ -102,7 +102,7 @@ class SerialDenseTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       grads = t.gradient(loss, layer.weights)
       return grads
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       dense = Dense(num_units, kernel_initializer=kernel_init)
       serial_dense = SerialDense(num_units,

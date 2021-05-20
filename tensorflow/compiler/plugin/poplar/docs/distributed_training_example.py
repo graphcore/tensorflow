@@ -85,7 +85,7 @@ def model_fn(features, labels, mode):
 # Get the cluster configuration from the TF_CONFIG environment variable.
 cluster = tf.distribute.cluster_resolver.TFConfigClusterResolver()
 # Create strategy that places variables (including momentums) on the host.
-strategy = ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
+strategy = ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategyV1(
     cluster, variables_on_host=True)
 
 ipu_options = IPUConfig()

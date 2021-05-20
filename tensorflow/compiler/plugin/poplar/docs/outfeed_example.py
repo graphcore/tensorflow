@@ -30,7 +30,7 @@ cfg = IPUConfig()
 cfg.configure_ipu_system()
 
 # Execute the graph
-strategy = ipu_strategy.IPUStrategy()
+strategy = ipu_strategy.IPUStrategyV1()
 with strategy.scope():
   # Create the dataset for feeding the graphs
   dataset = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[2, 20]))
@@ -62,7 +62,7 @@ with strategy.scope():
 
   # Run the custom training loop over the data.
   for i, (x, y) in zip(range(NUM_ITERATIONS), dataset):
-    strategy.experimental_run_v2(training_step, args=[x, y, model, opt])
+    strategy.run(training_step, args=[x, y, model, opt])
     # Start the dequeue_thread once the graph has been compiled
     if i == 0:
       dequeue_thread.start()

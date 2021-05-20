@@ -44,7 +44,7 @@ def create_model():
 
 
 # Create an IPU distribution strategy
-strategy = ipu.ipu_strategy.IPUStrategy()
+strategy = ipu.ipu_strategy.IPUStrategyV1()
 
 with strategy.scope():
   # Create an instance of the model

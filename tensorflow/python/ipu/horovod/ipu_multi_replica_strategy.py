@@ -21,7 +21,7 @@ from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cl
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.horovod import Sum, Average, size, rank, allreduce as hvd_allreduce, broadcast as hvd_broadcast
-from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerExtended
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerExtendedV1
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import server_lib
 
@@ -40,13 +40,15 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
-class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
+class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1):
   """This is a distribution strategy for multi-replica distribution
   that uses compiled communications with GCL for reductions over IPU
   links and gateway links, while using Horovod for broadcasting of
   the initial values of variables to all processes, or when a
   reduction is requested with a CPU as the current device.
   """
+  _collective_key_base = 0
+
   def __init__(self,
                ipu_device="/device:IPU:0",
                add_ipu_cross_replica_reductions=True):
@@ -56,8 +58,8 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
         server_lib.ClusterSpec({}))
 
     super().__init__(
-        IPUMultiReplicaExtended(self, cluster_resolver, ipu_device,
-                                add_ipu_cross_replica_reductions))
+        IPUMultiReplicaExtendedV1(self, cluster_resolver, ipu_device,
+                                  add_ipu_cross_replica_reductions))
 
   def update_ipu_config(self, config):
     """Update the given IPU configuration with the multi-replica
@@ -73,7 +75,7 @@ class IPUMultiReplicaStrategy(distribute_lib.StrategyV1):
     config.experimental.multi_replica_distribution.process_index = rank()
 
 
-class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
+class IPUMultiReplicaExtendedV1(IPUMultiWorkerExtendedV1):
   def __init__(self, container_strategy, cluster_resolver, ipu_device,
                add_ipu_cross_replica_reductions):
     super().__init__(container_strategy,
@@ -83,8 +85,9 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
     self._num_workers = size()
     self._add_ipu_cross_replica_reductions = add_ipu_cross_replica_reductions
 
-  def _reduce_to(self, reduce_op, value, destinations):
+  def _reduce_to(self, reduce_op, value, destinations, options):
     del destinations
+    del options
 
     if isinstance(value, values.DistributedValues):
       assert len(value.values) == 1
@@ -108,9 +111,9 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
 
     return result
 
-  def _batch_reduce_to(self, reduce_op, value_destination_pairs):
+  def _batch_reduce_to(self, reduce_op, value_destination_pairs, options):
     return [
-        self.reduce_to(reduce_op, t, destinations=v)
+        self.reduce_to(reduce_op, t, destinations=v, options=options)
         for t, v in value_destination_pairs
     ]
 
@@ -120,3 +123,7 @@ class IPUMultiReplicaExtended(IPUMultiWorkerExtended):
           "Can only broadcast on CPU, but got device {}".format(device))
 
     return hvd_broadcast(initial_value, root_rank=0)
+
+
+# Export the alias for backwards compability.
+IPUMultiReplicaStrategy = IPUMultiReplicaStrategyV1

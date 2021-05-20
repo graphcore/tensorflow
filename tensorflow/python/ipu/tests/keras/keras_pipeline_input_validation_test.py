@@ -75,7 +75,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMissingStage(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 4], [0, 1])
@@ -90,7 +90,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNotEnoughIPUs(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 4, 2], [0, 1, 2])
@@ -104,7 +104,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testBadStageOrder(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 4, 2], [0, 1, 0])
@@ -118,7 +118,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testCannotCallEagerly(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 4], [0, 1])
@@ -135,7 +135,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testCannotUseKerasV1Optimizers(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 4], [0, 1])
@@ -151,7 +151,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMustCallCompileFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 2], [0, 1])
@@ -166,7 +166,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMustCallCompileEvaluate(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 2], [0, 1])
@@ -181,7 +181,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedTupleDatasetFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 2], [0, 1])
@@ -198,7 +198,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedTupleDatasetEvaluate(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 2], [0, 1])
@@ -215,7 +215,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testNeedNonTupleDatasetPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [2, 2], [0, 1])
@@ -230,7 +230,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testMismatchDatasetLengthToGradientAccumulationCount(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1])
@@ -247,7 +247,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1])
@@ -263,7 +263,7 @@ class IPUPipelineInputValidationTest(test.TestCase):
 
   @test_util.run_v2_only
   def testStepsPerEpochTooLargeForDataset(self):
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_pipeline(input_layer, [32, 2], [0, 1])

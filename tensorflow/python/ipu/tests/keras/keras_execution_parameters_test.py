@@ -53,7 +53,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model(), gradient_accumulation_count=64)
       m.compile('sgd', loss='mse')
@@ -71,7 +71,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model(), gradient_accumulation_count=1)
       m.compile('sgd', loss='mse')
@@ -89,7 +89,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model(), gradient_accumulation_count=1)
       m.compile('sgd', loss='mse')
@@ -111,7 +111,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     # gradient_accumulation_count,
     # replication_factor,
     # and steps_per_run: (8 x 8 x 8) > 64
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model(), gradient_accumulation_count=8)
       m.compile('sgd', loss='mse')
@@ -129,7 +129,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model())
       m.compile('sgd', loss='mse')
@@ -147,7 +147,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model())
       m.compile('sgd', loss='mse')
@@ -167,7 +167,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
 
     # Only missmatched when considering both steps_per_run, and
     # replication_factor: 24 % (4 * 4) != 0
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu_keras.Sequential(simple_model())
       m.compile('sgd', loss='mse')
@@ -185,7 +185,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),
@@ -217,7 +217,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),
@@ -251,7 +251,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),
@@ -286,7 +286,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),
@@ -325,7 +325,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),

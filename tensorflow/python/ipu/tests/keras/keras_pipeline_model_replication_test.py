@@ -33,7 +33,7 @@ class PipelineModelReplicatedTest(test_util.TensorFlowTestCase):
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
 
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32),

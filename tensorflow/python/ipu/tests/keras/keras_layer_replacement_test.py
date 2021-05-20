@@ -299,7 +299,7 @@ class KerasLayerReplacementTest(test.TestCase, parameterized.TestCase):
   @parameterized.named_parameters(*_train_pred_test_cases)
   @test_util.run_v2_only
   def testTrainingConsistency(self, model_fn, features, targets):
-    strategy = ipu_strategy.IPUStrategy()
+    strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Configure an IPU.
       cfg = IPUConfig()

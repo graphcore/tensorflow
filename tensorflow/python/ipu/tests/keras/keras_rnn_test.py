@@ -476,7 +476,7 @@ class IpuGruTest(test.TestCase):
     results_cpu = model_cpu.predict((x_predict, init), batch_size=batch_size)
     weights_cpu = layer_cpu.get_weights()
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Setup IPU GRU layer
       layer_ipu = _getGRULayer(ipu.layers.PopnnGRU,

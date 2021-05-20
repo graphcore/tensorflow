@@ -62,7 +62,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
               4, kernel_initializer=keras.initializers.Constant(0.5))
       ]
 
-    strategy_seq = ipu_strategy.IPUStrategy()
+    strategy_seq = ipu_strategy.IPUStrategyV1()
     with strategy_seq.scope():
       m = ipu_keras.Sequential(stage1() + stage2(),
                                gradient_accumulation_count=8)
@@ -74,7 +74,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
       # Generate predictions
       predict_seq = m.predict(predict_input_fn(32), steps=4)
 
-    strategy_pipeline = ipu_strategy.IPUStrategy()
+    strategy_pipeline = ipu_strategy.IPUStrategyV1()
     with strategy_pipeline.scope():
       m = ipu_keras.PipelineSequential([stage1(), stage2()],
                                        gradient_accumulation_count=16,
@@ -125,7 +125,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
 
       return input_layer, x
 
-    strategy_model = ipu_strategy.IPUStrategy()
+    strategy_model = ipu_strategy.IPUStrategyV1()
     with strategy_model.scope():
       m = ipu_keras.Model(*get_model(), gradient_accumulation_count=12)
       m.compile(optimizer="adam", loss='mae')
@@ -136,7 +136,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
       # Generate predictions
       predict_model = m.predict(predict_input_fn(48))
 
-    strategy_pipeline = ipu_strategy.IPUStrategy()
+    strategy_pipeline = ipu_strategy.IPUStrategyV1()
     with strategy_pipeline.scope():
       m = ipu_keras.PipelineModel(*get_model(pipeline_stages=[0, 1, 2]),
                                   gradient_accumulation_count=24,
@@ -202,7 +202,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
                              output,
                              gradient_accumulation_count=8)
 
-    strategy_seq = ipu_strategy.IPUStrategy()
+    strategy_seq = ipu_strategy.IPUStrategyV1()
     with strategy_seq.scope():
       m = ipu_keras.Sequential(get_sequential_model(),
                                gradient_accumulation_count=8)
@@ -214,7 +214,7 @@ class KerasModelsTests(test_util.TensorFlowTestCase):
       # Generate predictions
       predict_seq = m.predict(predict_input_fn(dataset_length))
 
-    strategy_model = ipu_strategy.IPUStrategy()
+    strategy_model = ipu_strategy.IPUStrategyV1()
     with strategy_model.scope():
       m = get_model()
       m.compile("adam", loss='mse')

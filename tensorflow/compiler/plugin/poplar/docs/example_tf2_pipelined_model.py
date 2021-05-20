@@ -77,7 +77,7 @@ cfg.auto_select_ipus = 2
 cfg.configure_ipu_system()
 
 # Set up IPU strategy
-strategy = ipu.ipu_strategy.IPUStrategy()
+strategy = ipu.ipu_strategy.IPUStrategyV1()
 with strategy.scope():
 
   model = get_model()

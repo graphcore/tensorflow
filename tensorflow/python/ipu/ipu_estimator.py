@@ -43,7 +43,7 @@ from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import ops as ipu_ops
 from tensorflow.python.ipu import utils as ipu_utils
-from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategyV1
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -128,7 +128,7 @@ class IPUEstimatorSpec(
 
   This functionality can be used for e.g. doing all-reduce of the gradients and
   weight updates on the host during distributed training with the
-  `IPUMultiWorkerStrategy`. Example:
+  `IPUMultiWorkerStrategyV1`. Example:
 
   .. code-block:: python
 
@@ -773,7 +773,7 @@ def _call_host_fn(host_call_fn, host_call_args):
 
 def _get_input_context():
   strategy = distribution_strategy_context.get_strategy()
-  if isinstance(strategy, IPUMultiWorkerStrategy):
+  if isinstance(strategy, IPUMultiWorkerStrategyV1):
     return strategy.extended._make_input_context()  # pylint: disable=protected-access
   return None
 
@@ -1203,7 +1203,7 @@ class IPUEstimator(_IPUEstimatorBase):
   in order to average the gradients across the replicas.
 
   This can also be combined with distributed multi-worker training using the
-  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategyV1`,
   giving a total effective batch size of
   `num_workers * num_replicas * batch_size`.
 

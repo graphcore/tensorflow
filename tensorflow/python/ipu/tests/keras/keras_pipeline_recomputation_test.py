@@ -71,7 +71,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
       return m
 
     # Make sure the checkpoints reduce peak liveness.
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = make_model(checkpoints=False)
       m.fit(ds)

@@ -52,7 +52,7 @@ from tensorflow.python.keras.engine import data_adapter
 # from tensorflow.python.keras.engine import network
 from tensorflow.python.keras.engine import node as node_module
 from tensorflow.python.keras.engine import training as keras_training
-from tensorflow.python.keras.engine import training_utils
+from tensorflow.python.keras.engine import training_utils_v1
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.ipu.keras.optimizers import _KerasOptimizerWrapper
 from tensorflow.python.ipu.keras.optimizers import _TensorflowOptimizerWrapper
@@ -239,7 +239,7 @@ class _IpuModelBase(KerasModel):
     target_tensors = self._process_target_tensor_for_compile(target_tensors)
 
     # Prepare list of loss functions, same size of model outputs.
-    self.loss_functions = training_utils.prepare_loss_functions(
+    self.loss_functions = training_utils_v1.prepare_loss_functions(
         self.loss, self.output_names)
 
     self._training_endpoints = []
@@ -250,8 +250,8 @@ class _IpuModelBase(KerasModel):
       self._training_endpoints.append(endpoint)
 
     # Prepare list loss weights, same size of model outputs.
-    training_utils.prepare_loss_weights(self._training_endpoints,
-                                        self.loss_weights)
+    training_utils_v1.prepare_loss_weights(self._training_endpoints,
+                                           self.loss_weights)
 
     masks = self._prepare_output_masks()
 
@@ -270,7 +270,8 @@ class _IpuModelBase(KerasModel):
         masks=masks)
 
     # Prepare sample weight modes. List with the same length as model outputs.
-    training_utils.prepare_sample_weight_modes(self._training_endpoints, None)
+    training_utils_v1.prepare_sample_weight_modes(self._training_endpoints,
+                                                  None)
 
     # Creates the model loss
     self.total_loss = self._prepare_total_loss(masks)
@@ -298,7 +299,7 @@ class _IpuModelBase(KerasModel):
         "_IpuModelBase should not be used directly.  Use PipelinedModel or "
         "Model instead.")
 
-  def _get_optimizer(self):
+  def _get_wrapped_optimizer(self):
     opt = self.optimizer
 
     # Unwrap native TF optimizers from a Keras wrapper
@@ -479,7 +480,7 @@ class _IpuModelBase(KerasModel):
     # If mini_batches_per_epoch is None then this will infer the value to use,
     # else it will check that the value is valid.
     steps_name_string = 'steps_per_epoch' if mode == ModeKeys.TRAIN else "steps"
-    mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
+    mini_batches_per_epoch = training_utils_v1.infer_steps_for_dataset(
         self, ds, mini_batches_per_epoch, epochs, steps_name=steps_name_string)
 
     # These errors can only occur when steps_per_epoch is not passed in and the
@@ -537,12 +538,9 @@ class _IpuModelBase(KerasModel):
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
-          ds,
-          "infeed",
-          prefetch_depth=prefetch_depth)
+          ds, "infeed", prefetch_depth=prefetch_depth)
       self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-          "outfeed",
-          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
+          "outfeed", outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -554,11 +552,11 @@ class _IpuModelBase(KerasModel):
 
     # Aggregator for combining the various outputs/metrics together
     if mode != ModeKeys.PREDICT:
-      aggregator = training_utils.MetricsAggregator(
+      aggregator = training_utils_v1.MetricsAggregator(
           use_steps=True, steps=mini_batches_per_epoch)
     else:
-      aggregator = training_utils.OutputsAggregator(use_steps=True,
-                                                    steps=total_batches)
+      aggregator = training_utils_v1.OutputsAggregator(use_steps=True,
+                                                       steps=total_batches)
 
     # Outer loop
     try:
@@ -587,8 +585,8 @@ class _IpuModelBase(KerasModel):
           # Pass the run_loop_kwargs through to allow children to pass kwargs
           # from their fit/evaluate/predict calls to their _internal_run_loop.
           func = self._get_internal_run_loop(mode, run_loop_kwargs)
-          strategy.experimental_run_v2(
-              func, args=[self.infeed, self.outfeed, steps_per_run, mode])
+          strategy.run(func,
+                       args=[self.infeed, self.outfeed, steps_per_run, mode])
 
           # Send an end of batches
           callbacks.on_batch_end(batch_num, batch_logs)
@@ -823,7 +821,7 @@ class IPUSequential(_IpuModelBase):
 
     dataset = ...
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = ipu.keras.Sequential([
         keras.layers.Dense(4),
@@ -991,7 +989,7 @@ class IPUSequential(_IpuModelBase):
             "Sequential must have at least one trainable parameter.")
 
       if training:
-        opt = self._get_optimizer()
+        opt = self._get_wrapped_optimizer()
         if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
               opt,
@@ -1392,7 +1390,7 @@ class IPUModel(_IpuModelBase):
 
     dataset = ...
 
-    strategy = ipu.ipu_strategy.IPUStrategy()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       inputs = keras.Input(shape=(784,))
 
@@ -1786,7 +1784,7 @@ class IPUModel(_IpuModelBase):
         raise ValueError("Model must have at least one trainable parameter.")
 
       if training:
-        opt = self._get_optimizer()
+        opt = self._get_wrapped_optimizer()
         if self.gradient_accumulation_count > 1:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
               opt,
