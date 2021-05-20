@@ -6,7 +6,8 @@ Deprecated profiling functionality
   be possible in a future release, since they rely on the old configuration API.
   See the :ref:`configuration API changes <new-configuration-api>` for details.
   Therefore, it is strongly recommended to use the Poplar environment variables
-  described in the :ref:`report_capture` and :std:doc:`system/system` chapters
+  described in the :ref:`Capturing IPU Reports <report_capture>` and
+  :ref:`Capturing Execution Information <{HelpTopic.CapturingData}>` chapters
   of the PopVision User Guide to profile your applications instead.
 
 Within TensorFlow, the basic steps for this are:
