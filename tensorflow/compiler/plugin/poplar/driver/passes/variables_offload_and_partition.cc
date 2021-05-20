@@ -628,6 +628,8 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
     offload_infos.push_back(offload_info);
   }
 
+  VLOG(1) << "Minimum remote tensor size: " << minimum_remote_tensor_size_
+          << ", replication factor: " << partition_replication_factor_;
   // For each parameter in offload_info, insert any required load and store
   // operations.
   for (auto& offload_info : offload_infos) {
@@ -664,8 +666,13 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       continue;
     }
 
-    if (minimum_remote_tensor_size_ >
-        ShapeUtil::ByteSizeOf(offload_info.input_to_call->shape())) {
+    const std::size_t partition_replication_factor =
+        offload_info.replica_partition ? partition_replication_factor_ : 1;
+
+    const std::size_t byte_size =
+        ShapeUtil::ByteSizeOf(offload_info.input_to_call->shape());
+    if (minimum_remote_tensor_size_ * partition_replication_factor >
+        byte_size) {
       VLOG(1) << "Variable " << offload_info.entry_param_number << ": "
               << offload_info.input_to_call->ToString()
               << " is smaller than the minimum remote tensor size ("
@@ -674,11 +681,9 @@ StatusOr<bool> VariablesOffloadAndPartition::Optimize(HloInstruction* call_op) {
       continue;
     }
 
-    const std::size_t partition_replication_factor =
-        offload_info.replica_partition ? partition_replication_factor_ : 1;
-
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
-            << offload_info.input_to_call->ToString();
+            << offload_info.input_to_call->ToString()
+            << ", byte size: " << byte_size;
 
     if (offload_info.type == OffloadedResourceInfo::Type::Modified) {
       auto& modifying_user = offload_info.modifying_user;
