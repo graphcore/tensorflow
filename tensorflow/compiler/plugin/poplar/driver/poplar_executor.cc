@@ -213,9 +213,7 @@ std::vector<int64> GetGclHashes() {
   // Add a hash for each environment variable known to impact the GCL
   // compilation result.
   // TODO(T20018) - get this from GCL.
-  for (const char* name :
-       {"GCL_NUM_IO_TILES", "GCL_REAL_COLLECTIVES", "GCL_LIBRARY_PATH",
-        "GCL_MAX_BYTES_PER_TILE", "GCL_GP_PATH"}) {
+  for (const char* name : {"GCL_LIBRARY_PATH", "GCL_GP_PATH"}) {
     const char* value = std::getenv(name);
     if (value != nullptr) {
       hashes.push_back(std::hash<string>()(value));
