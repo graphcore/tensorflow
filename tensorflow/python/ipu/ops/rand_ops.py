@@ -22,7 +22,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
 
-def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None, ref=True):
+def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None, **kwargs):
   """This targets the PopLibs Poprand operation, optimized for execution
   on the IPU.
 
@@ -39,10 +39,6 @@ def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None, ref=True):
       be used to seed the random number generator that generates the dropout
       mask.
     name: Optional op name.
-    ref: A boolean which specifies whether a reference tensor should be
-      produced internally. This reference tensor is used to gaurantee
-      reproducable masks are used for recomputation and backpropogation.
-      Consequently, this is required to be true to train with IPU dropout.
 
   Returns:
     A tensor which has some nodes set to zero, as randomly selected based on
@@ -70,6 +66,7 @@ def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None, ref=True):
   # probability of keeping rather than dropping.
   keep_prob = 1 - rate
   scale = 1 / keep_prob
+  ref = kwargs.pop("ref", True)
 
   if seed is None and ref:
     return gen_poprand_ops.ipu_dropout(x,
