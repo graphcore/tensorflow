@@ -473,8 +473,8 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
   auto found_buffer = res.remote_buffers.find(remote_buffer_name);
   if (found_buffer != res.remote_buffers.end()) {
     // Return the existing remote buffer.
-    return TensorOrRemoteBuffer(found_buffer->second, is_replica_partitioned,
-                                num_merged);
+    return TensorOrRemoteBuffer(found_buffer->second.get(),
+                                is_replica_partitioned, num_merged);
   }
 
   // Create a new remote buffer.
@@ -485,12 +485,14 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteBuffer(
 
   const int64 total_num_repeats = num_merged * num_repeats;
 
-  poplar::RemoteBuffer remote_buffer = graph.addRemoteBuffer(
-      remote_buffer_name, element_type, element_count, total_num_repeats,
-      /*rearrangeOnHost=*/true);
-
   // Save the buffer such that the others that we have merged with can find it.
-  CHECK(res.remote_buffers.emplace(remote_buffer_name, remote_buffer).second);
+  auto remote_buffer = res.remote_buffers
+                           .emplace(remote_buffer_name,
+                                    absl::make_unique<RemoteBufferHolder>(
+                                        graph, remote_buffer_name, element_type,
+                                        element_count, total_num_repeats,
+                                        /*rearrange_on_host=*/true))
+                           .first->second.get();
 
   return TensorOrRemoteBuffer(remote_buffer, is_replica_partitioned,
                               num_merged);

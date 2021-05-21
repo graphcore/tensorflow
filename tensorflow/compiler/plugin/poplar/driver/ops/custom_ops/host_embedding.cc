@@ -42,7 +42,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<poplar::RemoteBuffer> GetOrCreateRemoteBuffer(
+StatusOr<RemoteBufferHolder*> GetOrCreateRemoteBuffer(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const std::string& embedding_id, const xla::Shape& embedding_shape,
     HostEmbeddingSplittingStrategy splitting_strategy,
@@ -76,11 +76,14 @@ StatusOr<poplar::RemoteBuffer> GetOrCreateRemoteBuffer(
       }
     }
 
-    // Create a remote buffer, and add an extra "junk" token for invalid
+    // Create a remote buffer proxy, and add an extra "junk" token for invalid
     // writes.
-    poplar::RemoteBuffer result = graph.addRemoteBuffer(
-        embedding_id, poplar_type, dim[1], dim[0] + 1, true, true);
-    res.remote_buffers.insert({embedding_id, result});
+    auto result =
+        res.remote_buffers
+            .emplace(embedding_id, absl::make_unique<RemoteBufferHolder>(
+                                       graph, embedding_id, poplar_type, dim[1],
+                                       dim[0] + 1, true, true))
+            .first->second.get();
 
     // Keep track of the embedding information.
     res.annotations.host_embedding_lookup_infos.push_back(
@@ -90,7 +93,7 @@ StatusOr<poplar::RemoteBuffer> GetOrCreateRemoteBuffer(
     return result;
   }
 
-  return itr->second;
+  return itr->second.get();
 }
 
 class HostEmbeddingLookupOp : public PoplarOpDef {
@@ -365,12 +368,13 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       VLOG(1) << "Using experimental remote buffer embedding lookup";
 
       TF_ASSIGN_OR_RETURN(
-          poplar::RemoteBuffer rbuffer,
+          auto rbuffer_holder,
           GetOrCreateRemoteBuffer(
               graph, res, inst, host_embedding_inst->EmbeddingId(),
               host_embedding_inst->EmbeddingShape(),
               host_embedding_inst->SplittingStrategy(), output_shape));
 
+      auto rbuffer = rbuffer_holder->Get();
       if (res.replication_factor > 1) {
         if (host_embedding_inst->SplittingStrategy() ==
             HostEmbeddingSplittingStrategy::Token) {
@@ -642,12 +646,13 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       VLOG(1) << "Using experimental remote buffer embedding update";
 
       TF_ASSIGN_OR_RETURN(
-          poplar::RemoteBuffer rbuffer,
+          auto rbuffer_holder,
           GetOrCreateRemoteBuffer(
               graph, res, inst, host_embedding_inst->EmbeddingId(),
               host_embedding_inst->EmbeddingShape(),
               host_embedding_inst->SplittingStrategy(), output_shape));
 
+      poplar::RemoteBuffer rbuffer = rbuffer_holder->Get();
       if (res.replication_factor > 1) {
         if (host_embedding_inst->SplittingStrategy() ==
             HostEmbeddingSplittingStrategy::Token) {

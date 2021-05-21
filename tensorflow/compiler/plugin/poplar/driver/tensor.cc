@@ -1388,10 +1388,10 @@ bool PoplarShapeMatchesXLAShape(TensorOrRemoteBuffer torb,
     return PoplarShapeMatchesXLAShape(torb.AsTensor(), shape);
   }
 
-  poplar::RemoteBuffer remote_buffer = torb.AsRemoteBuffer();
+  auto& remote_buffer = torb.AsRemoteBufferHolder();
 
   const std::size_t merged_element_count =
-      remote_buffer.numElements() * remote_buffer.getRepeats();
+      remote_buffer.GetNumElements() * remote_buffer.GetRepeats();
   CHECK_GT(torb.NumMerged(), 0);
   CHECK_EQ(merged_element_count % torb.NumMerged(), 0);
   std::size_t element_count = merged_element_count / torb.NumMerged();
@@ -1751,11 +1751,6 @@ Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor) {
   return map.AddOutputTensor(inst, n, tensor);
-}
-
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer) {
-  return map.AddOutputRemoteBuffer(inst, n, rbuffer);
 }
 
 Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
