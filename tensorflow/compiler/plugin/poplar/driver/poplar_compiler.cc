@@ -537,7 +537,8 @@ bool InitializeCycleCounter(poplar::Graph& graph,
   } else {
     std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
     poplar::Tensor cycleCounter =
-        poplar::cycleCount(graph, seq, tile, {debug_info, cycleCounterId});
+        poplar::cycleCount(graph, seq, tile, poplar::SyncType::INTERNAL,
+                           {debug_info, cycleCounterId});
     poplar::DataStream fifo = graph.addDeviceToHostFIFO(
         cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
     seq.add(poplar::program::Copy(cycleCounter, fifo, false, {debug_info}));
