@@ -111,7 +111,7 @@ in release 2.2. Automatic recomputation of casts will remain.
 IPUInfeedQueue/IPUOutfeedQueue replication_factor deprecated
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-The ``replication_factor`` argument of ``IPUInfeedQueue``and ``IPUOutfeedQueue`` has been deprecated
+The ``replication_factor`` argument of ``IPUInfeedQueue`` and ``IPUOutfeedQueue`` has been deprecated
 and will be removed in release 2.2. The replication factor is now automatically set based on the model
 being executed.
 
@@ -119,7 +119,7 @@ being executed.
 IPUInfeedQueue data_to_prefetch deprecated
 ''''''''''''''''''''''''''''''''''''''''''
 
-The ``data_to_prefetch`` argument of ``IPUInfeedQueue``has been deprecated and
+The ``data_to_prefetch`` argument of ``IPUInfeedQueue`` has been deprecated and
 will be removed in release 2.2. It is recommended to use the ``prefetch_depth``
 argument instead.
 
@@ -127,7 +127,7 @@ argument instead.
 IPUOutfeedQueue data_to_prefetch deprecated
 '''''''''''''''''''''''''''''''''''''''''''
 
-The ``io_batch_size`` argument of ``IPUOutfeedQueue``has been deprecated and
+The ``io_batch_size`` argument of ``IPUOutfeedQueue`` has been deprecated and
 will be removed in release 2.2. It is recommended to either manually accumulate
 results or use ``accumulate_outfeed`` when using pipelining.
 
