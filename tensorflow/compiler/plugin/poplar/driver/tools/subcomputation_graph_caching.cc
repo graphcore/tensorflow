@@ -40,7 +40,8 @@ RemoteBufferHandleVectors GetInputRemoteBufferHandles(
       // For remote buffer inputs store their handle.
       auto& operand_input = operand_inputs[tuple_idx];
       if (operand_input && operand_input->IsRemoteBuffer()) {
-        operand_handles[tuple_idx] = operand_input->AsRemoteBuffer().handle();
+        operand_handles[tuple_idx] =
+            operand_input->AsRemoteBufferHolder().GetHandle();
       }
     }
   }

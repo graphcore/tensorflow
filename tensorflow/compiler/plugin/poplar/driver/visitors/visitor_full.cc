@@ -393,8 +393,9 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
 
     if (out.IsRemoteBuffer()) {
       TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
-      const auto merged_element_count = out.AsRemoteBuffer().numElements() *
-                                        out.AsRemoteBuffer().getRepeats();
+      const auto merged_element_count =
+          out.AsRemoteBufferHolder().GetNumElements() *
+          out.AsRemoteBufferHolder().GetRepeats();
       CHECK_GT(out.NumMerged(), 0);
       CHECK_EQ(merged_element_count % out.NumMerged(), 0);
       const auto element_count = merged_element_count / out.NumMerged();
@@ -421,10 +422,12 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
       }
 
       // Check type
-      if (expected_type != out.AsRemoteBuffer().elementType()) {
+      auto remote_buffer_element_type =
+          out.AsRemoteBufferHolder().GetElementType();
+      if (expected_type != remote_buffer_element_type) {
         return xla::InternalErrorStrCat(
             "Instruction ", inst->name(), " has mismatched Poplar (",
-            out.AsRemoteBuffer().elementType().toString().cloneAsString(),
+            remote_buffer_element_type.toString().cloneAsString(),
             ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
       }
     }

@@ -32,6 +32,17 @@ using ::absl::StrCat;
 namespace xla {
 namespace poplarplugin {
 
+poplar::RemoteBuffer RemoteBufferHolder::Get() {
+  if (!remote_buffer_) {
+    VLOG(1) << "Creating remote buffer (" << handle_ << ", " << num_elements_
+            << ", " << repeats_ << ")";
+    remote_buffer_ =
+        graph_->addRemoteBuffer(handle_, element_type_, num_elements_, repeats_,
+                                rearrange_on_host_, optimise_memory_);
+  }
+  return *remote_buffer_;
+}
+
 const TensorMap& TensorMaps::GetTensorMapForComputation(
     const std::string& computation_name) const {
   return _map.at(computation_name);
@@ -56,21 +67,6 @@ Status TensorMap::AddOutputTensor(const HloInstruction* inst,
   _map[location].tensor = tensor;
   _map[location].name = inst->metadata().op_name();
   return Status::OK();
-}
-
-Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
-                                        int64 output_index,
-                                        poplar::RemoteBuffer rbuffer) {
-  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer, false,
-                                   /*num_merged=*/1);
-}
-
-Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
-                                        int64 output_index,
-                                        poplar::RemoteBuffer rbuffer,
-                                        bool is_replica_partitioned) {
-  return AddOutputRemoteBufferImpl(inst, output_index, rbuffer,
-                                   is_replica_partitioned, /*num_merged=*/1);
 }
 
 Status TensorMap::AddOutputOpaque(const HloInstruction* inst,
@@ -112,29 +108,6 @@ Status TensorMap::AddOutput(const HloInstruction* inst, int64 output_index,
 
   _map[location].tensor = torb;
   _map[location].name = inst->metadata().op_name();
-  return Status::OK();
-}
-
-Status TensorMap::AddOutputRemoteBufferImpl(const HloInstruction* inst,
-                                            int64 output_index,
-                                            poplar::RemoteBuffer rbuffer,
-                                            bool is_replica_partitioned,
-                                            int64 num_merged) {
-  VLOG(2) << "Adding output remote buffer for instruction " << inst->name()
-          << " at output index " << output_index;
-
-  TensorLocation location(inst, output_index);
-  auto it = _map.find(location);
-  if (it != _map.end()) {
-    return tensorflow::errors::Unknown(StrCat(
-        "[Poplar] Output RemoteBuffer ", location.flattened_output_tuple_index,
-        " for ", GetDebugName(inst), " already exists"));
-  }
-
-  _map[location].tensor =
-      TensorOrRemoteBuffer(rbuffer, is_replica_partitioned, num_merged);
-  _map[location].name = inst->metadata().op_name();
-
   return Status::OK();
 }
 

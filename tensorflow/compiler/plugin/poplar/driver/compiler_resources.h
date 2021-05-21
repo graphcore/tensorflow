@@ -152,7 +152,8 @@ struct CompilerResources {
 
   std::unique_ptr<CallGraph> module_call_graph;
 
-  absl::flat_hash_map<std::string, poplar::RemoteBuffer> remote_buffers;
+  absl::flat_hash_map<std::string, std::unique_ptr<RemoteBufferHolder>>
+      remote_buffers;
 
   VerifiedStreamsIndices streams_indices;
 
