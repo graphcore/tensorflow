@@ -16,10 +16,12 @@
 import functools
 import numpy as np
 from absl.testing import parameterized
+from scipy import special
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
+from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
@@ -261,6 +263,45 @@ class SerializedMatmulTest(test_util.TensorFlowTestCase,
       self.assertAllClose(a, serial_a, atol=1.e-05, rtol=1.e-05)
       self.assertAllClose(b, serial_b, atol=1.e-05, rtol=1.e-05)
       self.assertAllClose([l], [serial_l], atol=1.e-05, rtol=1.e-05)
+
+
+class ErfTest(test_util.TensorFlowTestCase):
+  configured = False
+
+  def __configureIPU(self):
+    if not self.configured:
+      cfg = ipu.config.IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
+      self.configured = True
+
+  def run_erf_test(self, i_h):
+    with self.session() as sess:
+      self.__configureIPU()
+
+      ref_h = special.erf(i_h)
+
+      with ops.device("/device:IPU:0"):
+        i = array_ops.placeholder(np.float32, shape=[len(i_h)])
+        o = math_ops.erf(i)
+
+        test_h = sess.run(o, {i: i_h})
+
+        self.assertAllClose(ref_h, test_h)
+
+  @test_util.deprecated_graph_mode_only
+  def test(self):
+    self.run_erf_test(np.linspace(-10, 10, 100, dtype='float32'))
+
+  @test_util.deprecated_graph_mode_only
+  def testLargeNegative(self):
+    self.run_erf_test(np.linspace(-10000, -3, 100, dtype='float32'))
+
+  @test_util.deprecated_graph_mode_only
+  def testLargePositive(self):
+    self.run_erf_test(np.linspace(3, 10000, 100, dtype='float32'))
 
 
 if __name__ == "__main__":

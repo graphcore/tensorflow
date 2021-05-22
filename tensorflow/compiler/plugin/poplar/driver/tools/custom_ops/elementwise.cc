@@ -43,5 +43,28 @@ std::unique_ptr<HloInstruction> HloInverseInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateInverse(HloInstruction* const operand) {
   return absl::make_unique<HloInverseInstruction>(operand);
 }
+
+// Erf
+std::unique_ptr<HloInstruction> HloErfInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloErfInstruction>(new_operands[0]);
+}
+
+std::unique_ptr<HloInstruction> CreateErf(HloInstruction* const operand) {
+  return absl::make_unique<HloErfInstruction>(operand);
+}
+
+namespace {
+StatusOr<std::unique_ptr<HloInstruction>> HloErfInstructionFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateErf(call->mutable_operand(0));
+}
+
+static HloPoplarInstructionFactory erf_factory(PoplarOp::Erf,
+                                               HloErfInstructionFactoryFunc);
+
+}  // namespace
+
 }  // namespace poplarplugin
 }  // namespace xla

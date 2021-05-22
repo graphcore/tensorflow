@@ -576,6 +576,7 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
         "//tensorflow/python/keras",
     ],
 )

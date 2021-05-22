@@ -85,6 +85,18 @@ class HloInverseInstruction
 };
 std::unique_ptr<HloInstruction> CreateInverse(HloInstruction* const operand);
 
+// Erf
+class HloErfInstruction : public HloElementwiseUnaryBase<PoplarOp::Erf> {
+ public:
+  using HloElementwiseUnaryBase::HloElementwiseUnaryBase;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+std::unique_ptr<HloInstruction> CreateErf(HloInstruction* const operand);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

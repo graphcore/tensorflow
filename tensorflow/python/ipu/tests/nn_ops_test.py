@@ -888,5 +888,54 @@ class PopnnCTCLossTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertAllClose(decoded2, ex_decoded)
 
 
+def gelu_cpu(features, approximate):
+  if approximate:
+    coeff = 0.044715
+    retval = 0.5 * features * (
+        1.0 + np.tanh(0.7978845608028654 *
+                      (features + coeff * np.power(features, 3))))
+  else:
+    retval = 0.5 * features * (1.0 + math_ops.erf(
+        features / math_ops.cast(1.4142135623730951, features.dtype)))
+
+  return retval
+
+
+class GeluTest(test_util.TensorFlowTestCase):
+  configured = False
+
+  def __configureIPU(self):
+    if not self.configured:
+      cfg = ipu.config.IPUConfig()
+      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      cfg.configure_ipu_system()
+      self.configured = True
+
+  def run_gelu_test(self, n, approximate):
+    with self.session() as sess:
+      self.__configureIPU()
+
+      i_h = np.linspace(-10, 10, n, dtype='float32')
+      ref_h = gelu_cpu(i_h, approximate)
+
+      with ops.device("/device:IPU:0"):
+        i = array_ops.placeholder(np.float32, shape=[n])
+        o = nn_ops.gelu(i, approximate)
+
+        test_h = sess.run(o, {i: i_h})
+
+        self.assertAllClose(ref_h, test_h)
+
+  @test_util.deprecated_graph_mode_only
+  def testApproximateFalse(self):
+    self.run_gelu_test(100, False)
+
+  @test_util.deprecated_graph_mode_only
+  def testApproximateTrue(self):
+    self.run_gelu_test(100, True)
+
+
 if __name__ == "__main__":
   googletest.main()

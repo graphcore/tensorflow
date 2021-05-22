@@ -109,6 +109,7 @@ enum PoplarOp {
   ScaledInplaceaXbY = 105;
   Histogram = 106;
   HistogramUpdate = 107;
+  Erf = 108;
   
   // Supported Fusions.
   Conv_biasadd = 200;

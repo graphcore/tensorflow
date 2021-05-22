@@ -952,6 +952,7 @@ cc_library(
         "kernels/popnn/topk.cc",
         "kernels/popops/all_reduce.cc",
         "kernels/popops/all_to_all.cc",
+        "kernels/popops/erf.cc",
         "kernels/popops/histogram.cc",
         "kernels/popops/multi_slice.cc",
         "kernels/popops/normalise_image.cc",
