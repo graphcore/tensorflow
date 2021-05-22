@@ -42,19 +42,25 @@ from tensorflow.python.ipu.ops import embedding_ops as ipu_embedding_ops
 from tensorflow.python.util import deprecation
 
 
-def gelu(x, name=None):
+def gelu(x, approximate=True, name=None):
   """This targets the PopLibs Popnn gelu operation, optimised for execution
   on the IPU.
 
   Args:
     x: The input tensor.
+    approximate: Use tanh()-based approximation if true, otherwise use erf()
     name: Optional op name.
 
   Returns:
     A `Tensor`. Has the same type the input tensor.
   """
 
-  return gen_popnn_ops.ipu_gelu(x, name=name)
+  if approximate:
+    return gen_popnn_ops.ipu_gelu(x, name=name)
+
+  inv_sqrt_2 = 0.7071067811865475
+  return 0.5 * x * (1.0 + math_ops.erf(
+      x * math_ops.cast(inv_sqrt_2, x.dtype, name=name), name=name))
 
 
 def hard_sigmoid(x, name=None):
