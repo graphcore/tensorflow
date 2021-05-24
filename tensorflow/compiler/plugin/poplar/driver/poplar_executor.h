@@ -115,14 +115,32 @@ class ModuleFilenames {
 
 class PoplarExecutor : public se::internal::StreamExecutorInterface {
  private:
+  // Represents a handle to an input/output argument where the identity is
+  // defined by the parameter index and tuple index. The name doesn't partipate
+  // in any comparison operations.
+  struct ArgHandle {
+    int64 parameter_index;
+    int64 flat_tensor_index;
+    std::string name;
+
+    ArgHandle(int64 parameter_index, int64 flat_tensor_index);
+
+    ArgHandle(int64 parameter_index, int64 flat_tensor_index,
+              const std::string& name);
+
+    bool operator==(const ArgHandle& rhs) const;
+    bool operator!=(const ArgHandle& rhs) const;
+    bool operator<(const ArgHandle& rhs) const;
+  };
+
   struct TensorControl {
     size_t size = 0;
     PrimitiveType element_type = PRIMITIVE_TYPE_INVALID;
     std::atomic<uint32> ref_count;
     bool on_device = false;
     absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
-    std::string input_handle;
-    std::string output_handle;
+    absl::optional<ArgHandle> input_handle;
+    absl::optional<ArgHandle> output_handle;
     ConversionFn output_convertor;
     std::vector<char> converted_data;
     char* data;
@@ -161,9 +179,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
  public:
   using InputPairList = std::vector<InputDef>;
-  using ArgsHandleMap = std::map<std::string, InputDef>;
+  using ArgsHandleMap = std::map<ArgHandle, InputDef>;
   using OutputPairList = std::vector<OutputDef>;
-  using OutputsHandleMap = std::map<std::string, OutputDef>;
+  using OutputsHandleMap = std::map<ArgHandle, OutputDef>;
 
   explicit PoplarExecutor();
   ~PoplarExecutor() override;

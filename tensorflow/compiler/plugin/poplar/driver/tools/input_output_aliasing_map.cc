@@ -186,14 +186,22 @@ const uint64 InputOutputAliasingMap::InputInfo::GetOutputIndex() const {
   return output_index_;
 }
 
+const int64 InputOutputAliasingMap::InputInfo::GetParameterIndex() const {
+  return parameter_index_;
+}
+
 InputOutputAliasingMap::InputInfo::InputInfo(const Type type,
                                              const std::string& name,
                                              const xla::Shape& shape,
                                              int64 parameter_idx)
-    : type_(type), output_index_(0), name_(name), shape_(shape) {
+    : type_(type),
+      output_index_(0),
+      name_(name),
+      shape_(shape),
+      parameter_index_(parameter_idx) {
   int64 index = 0;
   for (auto shape : FlattenedXlaShape(shape)) {
-    handles_.push_back(GetInputCopyHandle(parameter_idx, index));
+    handles_.push_back(name + ":" + GetInputCopyHandle(parameter_idx, index));
     index++;
   }
 }
@@ -206,7 +214,7 @@ InputOutputAliasingMap::OutputInfo::OutputInfo(const Type& type,
     : type_(type), input_index_(input_index), name_(name), shape_(shape) {
   int64 index = 0;
   for (auto shape : FlattenedXlaShape(shape)) {
-    handles_.push_back(GetOutputCopyHandle(parameter_idx, index));
+    handles_.push_back(name + ":" + GetOutputCopyHandle(parameter_idx, index));
     index++;
   }
 }
