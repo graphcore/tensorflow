@@ -511,10 +511,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
 
-      w_dl = "1.0"
-      w_ul = "out_1.0"
-      b_dl = "2.0"
-      b_ul = "out_2.0"
+      w_dl = "XLA_Args/vs/w:1.0"
+      w_ul = "XLA_Retvals:out_1.0"
+      b_dl = "XLA_Args/vs/b:2.0"
+      b_ul = "XLA_Retvals:out_2.0"
 
       report.parse_log()
 
@@ -604,14 +604,14 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
 
-      w1_dl = "1.0"
-      b1_dl = "2.0"
-      w2_dl = "3.0"
-      b2_dl = "4.0"
+      w1_dl = "XLA_Args/vs/w1:1.0"
+      b1_dl = "XLA_Args/vs/b1:2.0"
+      w2_dl = "XLA_Args/vs/w2:3.0"
+      b2_dl = "XLA_Args/vs/b2:4.0"
 
       # biases are not outputs of the graph
-      w1_ul = "out_1.0"
-      w2_ul = "out_2.0"
+      w1_ul = "XLA_Retvals:out_1.0"
+      w2_ul = "XLA_Retvals:out_2.0"
 
       report.parse_log()
 
@@ -713,8 +713,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(out, x + w_val)
 
       report.parse_log()
-
-      w_dl = "1.0"
+      w_dl = "XLA_Args/vs/w:1.0"
       report.assert_host_to_device_event_names(
           [w_dl], "w should be copied to device once and "
           "that should be the only io event")
