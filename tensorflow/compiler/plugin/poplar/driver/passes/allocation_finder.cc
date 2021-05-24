@@ -116,6 +116,7 @@ int64 AllocationFinder::GetAllocationPriority(
     case HloOpcode::kDot: {
       return 1;
     }
+    case HloOpcode::kCustomCall:
     case HloOpcode::kFusion: {
       return IsPopOpsConvolution(target.tgt) ? 1 : 0;
     }

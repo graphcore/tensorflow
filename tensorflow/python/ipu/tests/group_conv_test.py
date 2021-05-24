@@ -146,7 +146,7 @@ class GroupedConvTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     cs = [
         'ipu/cnv/convolution*/Conv_*/Convolve',
-        'ipu/gradients/ipu/cnv_grad/Conv2DBackpropInput/fusion*',
+        'ipu/gradients/ipu/cnv_grad/Conv2DBackpropInput/conv-with-reverse/*',
         'ipu/gradients/ipu/cnv_grad/Conv2DBackpropFilter/fusion*'
     ]
     _compare_ipu_to_cpu(self,

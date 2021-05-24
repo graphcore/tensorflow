@@ -284,12 +284,11 @@ bool IsF16ToF32Convert(const HloInstruction* inst) {
 }
 
 bool IsPopOpsConvolution(const HloInstruction* inst) {
-  if (IsPopOpsFusion(inst, "conv_with_reverse")) return true;
-  return false;
+  return IsPoplarInstruction(PoplarOp::ConvWithReverse, inst);
 }
 
 bool IsPopOpsConvolutionWithReverse(const HloInstruction* inst) {
-  return (IsPopOpsFusion(inst, "conv_with_reverse"));
+  return IsPoplarInstruction(PoplarOp::ConvWithReverse, inst);
 }
 
 bool IsOpWithWindowNoBaseDilation(const HloInstruction* inst) {
