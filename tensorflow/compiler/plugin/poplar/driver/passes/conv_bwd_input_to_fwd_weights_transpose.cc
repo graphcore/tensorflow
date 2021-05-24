@@ -91,9 +91,9 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
 
   TF_ASSIGN_OR_RETURN(int64 batch_group_count,
                       GetBatchGroupCount(inst_conv_with_reverse));
-  HloInstruction* root_inst =
-      inst_conv_with_reverse->fused_instructions_computation()
-          ->root_instruction();
+
+  TF_ASSIGN_OR_RETURN(auto precision_config,
+                      GetPrecisionConfig(inst_conv_with_reverse));
 
   TF_RETURN_IF_ERROR(
       conv_input->AddControlDependencyTo(weights_transpose_flip));
@@ -103,7 +103,7 @@ StatusOr<bool> ReplaceConvolutionWithReverse(
           inst_conv_with_reverse->shape(), conv_input, weights_transpose_flip,
           feature_group_count, batch_group_count, window,
           FlipConvolutionDimensionNumbersFeatureAxis(conv_dimension_numbers),
-          root_inst->precision_config()));
+          precision_config));
 
   inst_conv_with_reverse->SetupDerivedInstruction(conv_fwd);
   if (inst_conv_with_reverse->has_sharding()) {

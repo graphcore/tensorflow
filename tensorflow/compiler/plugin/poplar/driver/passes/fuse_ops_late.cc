@@ -56,7 +56,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
       {HloOpcode::kBroadcast, NodeOperands({3})},
-      {HloOpcode::kFusion, NodeOperands({}), IsPopOpsConvolution},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsPopOpsConvolution},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), Is1DVector}
     })),
 

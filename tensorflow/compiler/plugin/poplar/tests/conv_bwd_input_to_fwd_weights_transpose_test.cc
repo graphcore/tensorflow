@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/conv_bwd_input_to_fwd_weights_transpose.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
@@ -66,13 +67,6 @@ std::string GetHloString(const std::string& dims) {
   const std::string hlo = R"(
  HloModule top
 
- _pop_op_conv_with_reverse (arg_0: f32[1,4,4,2], arg_1: f32[1,1,2,2]) -> f32[1,4,4,2] {
-   arg_0 = f32[1,4,4,2] parameter(0)
-   arg_1 = f32[1,1,2,2] parameter(1)
-   reverse.64.clone = f32[1,1,2,2] reverse(f32[1,1,2,2] arg_1), dimensions={0,1}
-   ROOT convolution.65.clone = f32[1,4,4,2] convolution(f32[1,4,4,2] arg_0, f32[1,1,2,2] reverse.64.clone), window={size=1x1}, dim_labels=b01f_01oi->b01f
- }
-
  _pop_op_relu (arg_0.2: f32[1,4,4,2]) -> f32[1,4,4,2] {
    arg_0.2 = f32[1,4,4,2] parameter(0)
    constant.20.clone.1 = f32[] constant(0)
@@ -104,8 +98,8 @@ std::string GetHloString(const std::string& dims) {
    convolution.23 = f32[1,4,4,2] convolution(f32[1,4,4,2] fusion.2, f32[1,1,2,2] arg3.4), window={size=1x1}, dim_labels=$DIMS
    arg2.3 = f32[2] parameter(2), control-predecessors={convolution.23}, metadata={op_name="XLA_Args"}
    arg1.2 = f32[2] parameter(1), control-predecessors={convolution.23}, metadata={op_name="XLA_Args"}
-   fusion = f32[1,4,4,2] fusion(f32[1,4,4,2] convolution.23, f32[1,1,2,2] arg3.4), kind=kCustom, calls=_pop_op_conv_with_reverse, backend_config="{\"fusionConfig\":{\"window\":{\"dimensions\":[{\"size\":\"1\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"},{\"size\":\"1\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"}]},\"dimensionNumbers\":{\"kernelInputFeatureDimension\":\"3\",\"kernelOutputFeatureDimension\":\"2\",\"kernelSpatialDimensions\":[\"0\",\"1\"],\"inputFeatureDimension\":\"3\",\"outputFeatureDimension\":\"3\",\"inputSpatialDimensions\":[\"1\",\"2\"],\"outputSpatialDimensions\":[\"1\",\"2\"]},\"featureGroupCount\":\"1\",\"batchGroupCount\":\"1\"}}"
-   fusion.6 = f32[1,1,2,2] fusion(f32[1,1,2,2] arg3.4, f32[1,4,4,2] fusion.2, f32[1,4,4,2] convolution.23), kind=kCustom, calls=_pop_op_conv_scaled_inplace, control-predecessors={fusion}, backend_config="{\"fusionConfig\":{\"window\":{\"dimensions\":[{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"},{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"}]},\"dimensionNumbers\":{\"kernelOutputFeatureDimension\":\"3\",\"kernelSpatialDimensions\":[\"1\",\"2\"],\"inputBatchDimension\":\"3\",\"outputBatchDimension\":\"2\",\"outputFeatureDimension\":\"3\",\"inputSpatialDimensions\":[\"1\",\"2\"],\"outputSpatialDimensions\":[\"0\",\"1\"]},\"featureGroupCount\":\"1\",\"batchGroupCount\":\"1\"}}"
+   conv-with-reverse = f32[1,4,4,2] custom-call(f32[1,4,4,2] convolution.23, f32[1,1,2,2] arg3.4), custom_call_target="ConvWithReverse", batch_group_count=1, feature_group_count=1, dim_labels=b01f_01oi->b01f, window={size=1x1}, backend_config="{}"
+   fusion.6 = f32[1,1,2,2] fusion(f32[1,1,2,2] arg3.4, f32[1,4,4,2] fusion.2, f32[1,4,4,2] convolution.23), kind=kCustom, calls=_pop_op_conv_scaled_inplace, backend_config="{\"fusionConfig\":{\"window\":{\"dimensions\":[{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"},{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"}]},\"dimensionNumbers\":{\"kernelOutputFeatureDimension\":\"3\",\"kernelSpatialDimensions\":[\"1\",\"2\"],\"inputBatchDimension\":\"3\",\"outputBatchDimension\":\"2\",\"outputFeatureDimension\":\"3\",\"inputSpatialDimensions\":[\"1\",\"2\"],\"outputSpatialDimensions\":[\"0\",\"1\"]},\"featureGroupCount\":\"1\",\"batchGroupCount\":\"1\"}}"
    ROOT tuple.107 = (f32[1,1,2,2], f32[1,4,4,2]) tuple(f32[1,1,2,2] fusion.6, f32[1,4,4,2] convolution.11), metadata={op_name="XLA_Retvals"}
  }
   )";
@@ -148,6 +142,8 @@ TEST_P(ConvBwdInputToFwdWeightsTransposeTest, DoTest) {
   auto module0 = ParseAndReturnVerifiedModule(GetHloString(param.dims), config)
                      .ValueOrDie();
   auto* module = module0.get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
   EXPECT_EQ(GetNumConvolutionWithReverse(module->entry_computation()), 1);
   EXPECT_EQ(GetNumWeightsTransposeChansFlipXY(module->entry_computation()), 0);

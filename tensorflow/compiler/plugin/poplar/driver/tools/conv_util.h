@@ -15,6 +15,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONV_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONV_UTIL_H_
 
+#include <functional>
+#include <string>
+
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
@@ -29,6 +32,8 @@ StatusOr<int64> GetFeatureGroupCount(const HloInstruction* inst);
 
 StatusOr<int64> GetBatchGroupCount(const HloInstruction* inst);
 
+StatusOr<PrecisionConfig> GetPrecisionConfig(const HloInstruction* inst);
+
 // Checks that forward and backward convolution dimension number match: input
 // and output feature dimensions are swapped and the rest of the parameters are
 // equivalent.
@@ -41,7 +46,27 @@ bool ForwardBackwardConvolutionDimensionNumbersMatch(
 ConvolutionDimensionNumbers FlipConvolutionDimensionNumbersFeatureAxis(
     const ConvolutionDimensionNumbers& dims);
 
+// Serialise a PrecisionConfig object.
+std::string PrecisionConfigToString(const PrecisionConfig& precision_config);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
+namespace std {
+template <>
+struct hash<xla::Window> {
+  std::size_t operator()(const xla::Window& window) const;
+};
+
+template <>
+struct hash<xla::PrecisionConfig> {
+  std::size_t operator()(const xla::PrecisionConfig& precision_config) const;
+};
+
+template <>
+struct hash<xla::ConvolutionDimensionNumbers> {
+  std::size_t operator()(
+      const xla::ConvolutionDimensionNumbers& dimension_numbers) const;
+};
+}  // namespace std
 #endif

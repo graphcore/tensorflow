@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 
@@ -81,17 +83,10 @@ _pop_op_wide_const.3 {
   ROOT broadcast.19.87.clone = f16[7,7,4,64] broadcast(constant.19.10.clone.3), dimensions={}
 }
 
-_pop_op_conv_with_reverse {
-  arg_0.2 = f16[1,16,16,4] parameter(0)
-  arg_1.2 = f16[5,5,64,4] parameter(1)
-  reverse.19.67.clone = f16[5,5,64,4] reverse(arg_1.2), dimensions={0,1}
-  ROOT convolution.19.68.clone = f16[1,16,16,64] convolution(arg_0.2, reverse.19.67.clone), window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
-}
-
 pop_backprop_conv {
   arg_0.3 = f16[1,16,16,4] parameter(0)
   arg_1.3 = f16[5,5,64,4] parameter(1)
-  ROOT call.2.clone = f16[1,16,16,64] fusion(arg_0.3, arg_1.3), kind=kCustom, calls=_pop_op_conv_with_reverse
+  ROOT call.2.clone = f16[1,16,16,64] custom-call(arg_0.3, arg_1.3), custom_call_target="ConvWithReverse", window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
 }
 
 pop_convolution {
@@ -188,9 +183,11 @@ _cluster_1  {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
+  CustomOpReplacer replacer;
   ModuleFlatten flatten(annotations);
   ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(replacer.Run(module).ValueOrDie());
   EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
@@ -203,7 +200,7 @@ _cluster_1  {
   EXPECT_EQ(all_classifications.size(), 5);
 
   for (auto it : all_classifications) {
-    if (it.first->name() == "call.2.clone") {
+    if (it.first->name() == "conv-with-reverse") {
       EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_FWD);
@@ -214,8 +211,7 @@ _cluster_1  {
     } else if (it.first->name() == "convolution.19.86.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing convolutions
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing convolutions";
     }
   }
 }
@@ -270,17 +266,10 @@ _pop_op_wide_const.3 {
   ROOT broadcast.19.87.clone = f16[7,7,4,64] broadcast(constant.19.10.clone.3), dimensions={}
 }
 
-_pop_op_conv_with_reverse {
-  arg_0.2 = f16[1,16,16,4] parameter(0)
-  arg_1.2 = f16[5,5,64,4] parameter(1)
-  reverse.19.67.clone = f16[5,5,64,4] reverse(arg_1.2), dimensions={0,1}
-  ROOT convolution.19.68.clone = f16[1,16,16,64] convolution(arg_0.2, reverse.19.67.clone), window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
-}
-
 pop_backprop_conv {
   arg_0.3 = f16[1,16,16,4] parameter(0)
   arg_1.3 = f16[5,5,64,4] parameter(1)
-  ROOT call.2.clone = f16[1,16,16,64] fusion(arg_0.3, arg_1.3), kind=kCustom, calls=_pop_op_conv_with_reverse
+  ROOT call.2.clone = f16[1,16,16,64] custom-call(arg_0.3, arg_1.3), custom_call_target="ConvWithReverse", window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
 }
 
 pop_convolution {
@@ -397,8 +386,11 @@ ENTRY in {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
+  CustomOpReplacer replacer;
   ModuleFlatten flatten(annotations);
   ConvolutionClassifier classifier(annotations);
+
+  EXPECT_TRUE(replacer.Run(module).ValueOrDie());
   EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
@@ -411,7 +403,7 @@ ENTRY in {
   EXPECT_EQ(all_classifications.size(), 5);
 
   for (auto it : all_classifications) {
-    if (it.first->name() == "call.2.clone") {
+    if (it.first->name() == "conv-with-reverse") {
       EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_FWD);
@@ -422,8 +414,7 @@ ENTRY in {
     } else if (it.first->name() == "convolution.19.86.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing convolutions
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing convolutions";
     }
   }
 }
@@ -478,17 +469,10 @@ _pop_op_wide_const.3 {
   ROOT broadcast.19.87.clone = f16[7,7,4,64] broadcast(constant.19.10.clone.3), dimensions={}
 }
 
-_pop_op_conv_with_reverse {
-  arg_0.2 = f16[1,16,16,4] parameter(0)
-  arg_1.2 = f16[5,5,64,4] parameter(1)
-  reverse.19.67.clone = f16[5,5,64,4] reverse(arg_1.2), dimensions={0,1}
-  ROOT convolution.19.68.clone = f16[1,16,16,64] convolution(arg_0.2, reverse.19.67.clone), window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
-}
-
 pop_backprop_conv {
   arg_0.3 = f16[1,16,16,4] parameter(0)
   arg_1.3 = f16[5,5,64,4] parameter(1)
-  ROOT call.2.clone = f16[1,16,16,64] fusion(arg_0.3, arg_1.3), kind=kCustom, calls=_pop_op_conv_with_reverse
+  ROOT call.2.clone = f16[1,16,16,64] custom-call(arg_0.3, arg_1.3), custom_call_target="ConvWithReverse", window={size=5x5 pad=2_2x2_2}, dim_labels=b01f_01oi->b01f
 }
 
 pop_convolution {
@@ -606,9 +590,11 @@ ENTRY in {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
+  CustomOpReplacer replacer;
   ModuleFlatten flatten(annotations);
   ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(replacer.Run(module).ValueOrDie());
   EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
@@ -621,7 +607,7 @@ ENTRY in {
   EXPECT_EQ(all_classifications.size(), 5);
 
   for (auto it : all_classifications) {
-    if (it.first->name() == "call.2.clone") {
+    if (it.first->name() == "conv-with-reverse") {
       EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_FWD);
@@ -632,8 +618,7 @@ ENTRY in {
     } else if (it.first->name() == "convolution.19.86.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing convolutions
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing convolutions";
     }
   }
 }
@@ -746,8 +731,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
     } else if (it.first->name() == "convolution.7.13.clone") {
       EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else {
-      // Should not have missing convolutions
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing convolutions";
     }
   }
 }
@@ -865,8 +849,7 @@ ENTRY cluster_1 {
     } else if (it.first->name() == "dot.9.47") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1001,8 +984,7 @@ ENTRY in {
     } else if (it.first->name() == "dot.9.47") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1138,8 +1120,7 @@ ENTRY in {
     } else if (it.first->name() == "dot.9.47") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1212,8 +1193,7 @@ ENTRY cluster_9 {
     } else if (it.first->name() == "dot.17.6") {
       EXPECT_EQ(it.second, MLType::INFERENCE_FWD);
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1461,8 +1441,7 @@ ENTRY cluster {
                it.first->name() == "dot.169") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1640,8 +1619,7 @@ ENTRY cluster {
                it.first->name() == "dot.7") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1799,8 +1777,7 @@ ENTRY cluster {
                it.first->name() == "dot.7") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }
@@ -1971,8 +1948,7 @@ ENTRY cluster {
                it.first->name() == "dot.5") {
       EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
     } else {
-      // Should not have missing matmuls
-      EXPECT_EQ(1, 0);
+      FAIL() << "We should not have any missing matmuls";
     }
   }
 }

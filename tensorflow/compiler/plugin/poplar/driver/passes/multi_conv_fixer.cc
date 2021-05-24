@@ -62,7 +62,7 @@ Status ReplaceConvsWithMultiConv(
     HloMultiConvInstruction::ConvolutionSpec convolution_spec;
     if (new_conv->opcode() == HloOpcode::kConvolution) {
       convolution_spec.type = ConvType::Conv;
-    } else if (IsPopOpsFusion(new_conv, "conv_with_reverse")) {
+    } else if (IsPopOpsConvolutionWithReverse(new_conv)) {
       convolution_spec.type = ConvType::ConvWithReverse;
     } else {
       return InternalErrorStrCat("Could not classify the ",

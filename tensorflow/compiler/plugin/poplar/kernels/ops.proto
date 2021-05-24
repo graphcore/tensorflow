@@ -110,6 +110,7 @@ enum PoplarOp {
   Histogram = 106;
   HistogramUpdate = 107;
   Erf = 108;
+  ConvWithReverse = 109;
   
   // Supported Fusions.
   Conv_biasadd = 200;
@@ -119,7 +120,7 @@ enum PoplarOp {
   Uniform_scale_add = 204;
   Wide_const = 205;
   Depthwise_conv = 206;
-  Conv_with_reverse = 207;
+  // retired = 207
   Bias_apply = 208;
   Zero_pad = 209;
   Depthwise_filter = 210;

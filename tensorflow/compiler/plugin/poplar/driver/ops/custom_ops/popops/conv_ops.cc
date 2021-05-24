@@ -244,7 +244,7 @@ class Conv2DReverseOp : public PoplarOpDef {
   }
 };
 
-REGISTER_POPLAR_OP(Conv_with_reverse, Conv2DReverseOp);
+REGISTER_POPLAR_OP(ConvWithReverse, Conv2DReverseOp);
 
 class ConvScaledInplaceOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(

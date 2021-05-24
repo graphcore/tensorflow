@@ -1317,7 +1317,7 @@ StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
 
   // Move the AfterAll instructions to the fusion output
   for (auto* u : after_all) {
-    TF_RETURN_IF_ERROR(u->ReplaceOperandWith(0, fusion));
+    TF_RETURN_IF_ERROR(u->ReplaceOperandWithDifferentShape(0, fusion));
   }
 
   TF_RETURN_IF_ERROR(RemoveUnusedInstructions(matched));
@@ -1405,7 +1405,8 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
   }
 
   for (HloInstruction* inst : after_all) {
-    TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(0, new_meta_target));
+    TF_RETURN_IF_ERROR(
+        inst->ReplaceOperandWithDifferentShape(0, new_meta_target));
   }
 
   TF_RETURN_IF_ERROR(RemoveUnusedInstructions(matched));
