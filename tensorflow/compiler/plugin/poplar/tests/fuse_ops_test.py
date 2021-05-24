@@ -462,8 +462,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*', 'copy*/OnTileCopy-', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
-          'vs/conv2d_1/BiasAdd/fusion.2/Op/Add',
-          'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.3/ReduceFinalStage/IntermediateToOutput/Reduce',
+          'vs/conv2d_1/BiasAdd/fusion.1/Op/Add',
+          'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.2/ReduceFinalStage/IntermediateToOutput/Reduce',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
           'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply*/Op/Multiply',
           'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/Subtract',

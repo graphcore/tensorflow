@@ -222,6 +222,9 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
           if (IsPoplarInstruction(PoplarOp::MultiConv)(inst)) {
             classifications[inst] = MLType::INFERENCE_FWD;
             operands[inst] = std::make_pair(0, inst->operand_count() / 2);
+          } else if (IsPopOpsConvolutionWithReverse(inst)) {
+            classifications[inst] = MLType::INFERENCE_FWD;
+            operands[inst] = std::make_pair(0, 1);
           }
           break;
         }
