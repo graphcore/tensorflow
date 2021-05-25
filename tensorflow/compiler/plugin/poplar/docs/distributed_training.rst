@@ -1,6 +1,84 @@
 Distributed training
 --------------------
 
+We support distributed training for two different types of systems:
+
+1. IPU-POD systems: An IPU-M2000-based system where IPUs in a rack are
+   interconnected by IPU-Links, and IPUs in different racks are interconnected
+   by GW-Links. Distributed training on IPU-PODs uses these links to perform
+   collective operations without host involvement. When using multiple
+   instances (host processes), there may however still be a need for
+   communication over the host network, for example for broadcasting the
+   initial values of variables from the first instance to the others.
+
+2. IPU-Server systems: A Mk1 PCIe card-based system with IPUs
+   interconnected by IPU-Links. IPUs in distinct IPU-Servers are not directly
+   interconnected. Distributed training on IPU-Servers therefore uses the host
+   network for communication. A collective operation is typically performed in
+   a hierarchical fashion where the IPU-Links are used first for intra-server
+   communication, and then the host network is used for inter-server
+   communication.
+
+We provide distribution strategies that are designed for these two types of
+systems, and with different implementations of the host communication:
+
+* :class:`~tensorflow.python.ipu.horovod.IPUMultiReplicaStrategy`
+* :class:`~tensorflow.python.ipu.horovod.IPUHorovodStrategy`
+* :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`
+
+Their main differences can be summarized like this:
+
++-----------------------------+------------+--------------------+
+| Distribution strategy       | System     | Host communication |
++=============================+============+====================+
+| ``IPUMultiReplicaStrategy`` | IPU-POD    | Horovod (OpenMPI)  |
++-----------------------------+------------+--------------------+
+| ``IPUHorovodStrategy``      | IPU-Server | Horovod (OpenMPI)  |
++-----------------------------+------------+--------------------+
+| ``IPUMultiWorkerStrategy``  | IPU-Server | gRPC               |
++-----------------------------+------------+--------------------+
+
+There are some things they have in common:
+
+* They all perform data-parallel synchronous training using multiple host processes.
+  In this sense they are all similar to the
+  `MultiWorkerMirroredStrategy <https://www.tensorflow.org/api_docs/python/tf/distribute/MultiWorkerMirroredStrategy>`_
+  provided in standard TensorFlow.
+* They all broadcast the initial values of variables over the host
+  network (using either Horovod or gRPC as described above).
+
+And these are the main differences:
+
+* With the ``IPUMultiReplicaStrategy`` designed for IPU-POD systems, a
+  collective operation (performed either explicitly by calling a member function
+  like ``reduce()`` or implicitly by using an optimizer under the strategy scope)
+  will be performed directly on the IPU by using compiled communications with the
+  GCL library over the IPU-Links and GW-Links. The ``IPUMultiReplicaStrategy`` is
+  designed for use with PopDist and PopRun. Please refer to the
+  `PopDist and PopRun User Guide <https://docs.graphcore.ai/projects/poprun-user-guide/>`_
+  for more details.
+
+* With the two distribution strategies designed for IPU-Server systems, an
+  equivalent collective operation will involve a transfer of the tensor from
+  the IPU to the host for performing the collective communication over the host
+  network (using either Horovod with OpenMPI or gRPC). A local (cross-replica)
+  collective operation can be performed by using the
+  :mod:`~tensorflow.python.ipu.cross_replica_ops`.
+
+A distinction should be made between these distribution strategies and
+the ``IPUStrategy`` provided in TensorFlow 2. The ``IPUStrategy`` targets
+a single system with one or more IPUs attached, while the distribution
+strategies we discuss here target distributed systems like those described
+above (IPU-PODs or multiple IPU-Servers). Also, unlike the ``IPUStrategy``,
+these distribution strategies do not currently support the Keras
+``Model.fit()`` family of APIs, and the use of ``ipu_compiler.compile()``
+is still required to ensure a single XLA graph is compiled, except when
+using ``IPUEstimator`` or ``IPUPipelineEstimator`` which already use it
+internally.
+
+Example using IPUMultiWorkerStrategy
+####################################
+
 This example shows how to use the ``IPUEstimator`` with the
 ``IPUMultiWorkerStrategyV1`` to perform distributed training of
 a model on the MNIST dataset.
@@ -13,7 +91,7 @@ We highlight the changes needed to convert code using ``IPUEstimator``
 to support distributed training below.
 
 The input function
-##################
+******************
 
 In multi-worker training, it is necessary to shard the dataset such
 that each worker processes distinct portions of the dataset.
@@ -29,7 +107,7 @@ per-worker batch size. The global batch size will be this
 multiplied by the number of workers.
 
 The model function
-##################
+******************
 
 The optimiser will automatically divide the loss by the number of workers,
 so in the model function we should only divide the loss by the local
@@ -61,7 +139,7 @@ is no additional IPU memory consumption when using stateful
 optimisers with this approach.
 
 Cluster definition
-##################
+******************
 
 We use the ``TFConfigClusterResolver`` which reads the ``TF_CONFIG``
 environment variable to determine the cluster definition.
@@ -83,7 +161,7 @@ You could run this example with two workers on the same machine
     $ TF_CONFIG='{"cluster":{"worker":["localhost:3737","localhost:3738"]},"task":{"type":"worker","index":1}}' python distributed_training_example.py
 
 Complete example
-################
+****************
 
 .. literalinclude:: distributed_training_example.py
   :language: python
@@ -113,14 +191,6 @@ both provide data parallel distributed training that keeps the variables in sync
 on the different workers. During variable initialisation the values are broadcast
 from the root rank to the other ranks, and during training the gradients are
 all-reduced as a part of the ``Optimizer.apply_gradients`` call.
-
-Horovod Open MPI dependency
-###########################
-
-Horovod depends on Open MPI being installed on the system. The Open MPI library is
-dynamically loaded when the module ``tensorflow.python.ipu.horovod`` is
-imported, and this will fail if Open MPI is not installed. It is recommended to
-install the Open MPI version that is provided by your operating system package manager.
 
 Launching Horovod training
 ##########################

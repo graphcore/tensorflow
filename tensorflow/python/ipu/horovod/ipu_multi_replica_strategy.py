@@ -46,6 +46,10 @@ class IPUMultiReplicaStrategyV1(distribute_lib.StrategyV1):
   links and gateway links, while using Horovod for broadcasting of
   the initial values of variables to all processes, or when a
   reduction is requested with a CPU as the current device.
+
+  This is the recommended distribution strategy when using PopDist and PopRun.
+  The GCL reductions will then be performed across all the global replicas in
+  the application.
   """
   _collective_key_base = 0
 
