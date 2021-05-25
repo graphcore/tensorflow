@@ -179,9 +179,6 @@ Status AddOutput(TensorMap& map, const HloInstruction* inst, int64 n,
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor);
 
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer);
-
 Status AddOutputOpaque(TensorMap& map, const HloInstruction* inst, int64 n,
                        absl::any token);
 

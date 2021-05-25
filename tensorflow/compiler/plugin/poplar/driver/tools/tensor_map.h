@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <map>
 #include <poplar/DataStream.hpp>
+#include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <string>
 #include <utility>
@@ -38,6 +39,66 @@ namespace xla {
 class HloInstruction;
 
 namespace poplarplugin {
+
+/**
+ * A drop-in replacement for poplar RemoteBuffer structure.
+ *
+ * RemoteBufferHolder holds all information required for RemoteBuffer creation,
+ * and creates it on-demand. This allows deferring of remote buffer creation and
+ * optionally changing parameters before it's created.
+ */
+
+class RemoteBufferHolder {
+ public:
+  explicit RemoteBufferHolder(const poplar::RemoteBuffer& buffer)
+      : graph_(nullptr),
+        handle_(buffer.handle()),
+        element_type_(buffer.elementType()),
+        num_elements_(buffer.numElements()),
+        repeats_(buffer.getRepeats()),
+        rearrange_on_host_(buffer.isRearrangeOnHost()),
+        optimise_memory_(buffer.isOptimisedForMemory()),
+        remote_buffer_(buffer) {}
+
+  RemoteBufferHolder(poplar::Graph& graph, const std::string& handle,
+                     const poplar::Type& element_type, std::size_t num_elements,
+                     std::size_t repeats = 1, bool rearrange_on_host = false,
+                     bool optimise_memory = false)
+      : graph_(&graph),
+        handle_(handle),
+        element_type_(element_type),
+        num_elements_(num_elements),
+        repeats_(repeats),
+        rearrange_on_host_(rearrange_on_host),
+        optimise_memory_(optimise_memory) {}
+
+  /**
+   * Creates poplar RemoteBuffer or returns it if it's already created.
+   */
+  poplar::RemoteBuffer Get();
+
+  const std::string& GetHandle() const { return handle_; }
+  poplar::Type GetElementType() const { return element_type_; }
+  std::size_t GetNumElements() const { return num_elements_; }
+  std::size_t GetRepeats() const { return repeats_; }
+
+  bool operator==(const RemoteBufferHolder& other) const {
+    return handle_ == other.handle_;
+  }
+
+ private:
+  poplar::Graph* graph_;
+  std::string handle_;
+  poplar::Type element_type_;
+  std::size_t num_elements_;
+  std::size_t repeats_;
+  bool rearrange_on_host_;
+  bool optimise_memory_;
+
+  absl::optional<poplar::RemoteBuffer> remote_buffer_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(RemoteBufferHolder);
+};
 
 /**
  * A struct that can hold either a poplar tensor, a poplar remote buffer, or an
@@ -65,9 +126,9 @@ struct TensorOrRemoteBuffer {
   /**
    * Construct with a poplar remote buffer.
    */
-  explicit TensorOrRemoteBuffer(poplar::RemoteBuffer rbuffer,
+  explicit TensorOrRemoteBuffer(RemoteBufferHolder* rbuffer,
                                 bool is_replica_partitioned, int64 num_merged)
-      : remote_buffer(rbuffer),
+      : remote_buffer_holder(rbuffer),
         is_replica_partitioned(is_replica_partitioned),
         num_merged(num_merged),
         content_type(ContentType::RemoteBuffer) {}
@@ -81,27 +142,7 @@ struct TensorOrRemoteBuffer {
   /**
    * Construct with a remote buffer, tensor, or opaque.
    */
-  TensorOrRemoteBuffer(const TensorOrRemoteBuffer& rhs) {
-    switch (rhs.content_type) {
-      case ContentType::Empty:
-        content_type = ContentType::Empty;
-        break;
-      case ContentType::Tensor:
-        content_type = ContentType::Tensor;
-        tensor = rhs.tensor;
-        break;
-      case ContentType::RemoteBuffer:
-        content_type = ContentType::RemoteBuffer;
-        remote_buffer = rhs.remote_buffer;
-        is_replica_partitioned = rhs.is_replica_partitioned;
-        num_merged = rhs.num_merged;
-        break;
-      case ContentType::Opaque:
-        content_type = ContentType::Opaque;
-        opaque_ = rhs.opaque_;
-        break;
-    }
-  }
+  TensorOrRemoteBuffer(const TensorOrRemoteBuffer& rhs) { *this = rhs; }
 
   /**
    * Helper function to test whether a tensor is stored in the element.
@@ -140,9 +181,14 @@ struct TensorOrRemoteBuffer {
    * Helper function to force the cast to a poplar remote buffer when it is
    * unambiguous.
    */
-  poplar::RemoteBuffer AsRemoteBuffer() const {
+  RemoteBufferHolder& AsRemoteBufferHolder() const {
     CHECK(content_type == ContentType::RemoteBuffer);
-    return remote_buffer;
+    CHECK_NOTNULL(remote_buffer_holder);
+    return *remote_buffer_holder;
+  }
+
+  poplar::RemoteBuffer AsRemoteBuffer() const {
+    return AsRemoteBufferHolder().Get();
   }
 
   /**
@@ -171,7 +217,7 @@ struct TensorOrRemoteBuffer {
         break;
       case ContentType::RemoteBuffer:
         content_type = ContentType::RemoteBuffer;
-        remote_buffer = rhs.remote_buffer;
+        remote_buffer_holder = rhs.remote_buffer_holder;
         is_replica_partitioned = rhs.is_replica_partitioned;
         num_merged = rhs.num_merged;
         break;
@@ -194,17 +240,6 @@ struct TensorOrRemoteBuffer {
   }
 
   /**
-   * Support assignment, like this is a poplar remote buffer.
-   */
-  TensorOrRemoteBuffer& operator=(poplar::RemoteBuffer rbuffer) {
-    content_type = ContentType::RemoteBuffer;
-    remote_buffer = rbuffer;
-    is_replica_partitioned = false;
-    num_merged = 1;
-    return *this;
-  }
-
-  /**
    * Support assignment, like this is an opaque absl::any.
    */
   TensorOrRemoteBuffer& operator=(absl::any opaque) {
@@ -219,7 +254,7 @@ struct TensorOrRemoteBuffer {
    */
   inline bool operator==(const TensorOrRemoteBuffer& rhs) const {
     if (IsRemoteBuffer() && rhs.IsRemoteBuffer()) {
-      return AsRemoteBuffer() == rhs.AsRemoteBuffer();
+      return AsRemoteBufferHolder() == rhs.AsRemoteBufferHolder();
     }
 
     if (IsTensor() && rhs.IsTensor()) {
@@ -243,7 +278,7 @@ struct TensorOrRemoteBuffer {
    * The inner storage is a variable of a tensor, a remote buffer, or neither.
    */
   poplar::Tensor tensor;
-  poplar::RemoteBuffer remote_buffer;
+  RemoteBufferHolder* remote_buffer_holder = nullptr;
   absl::any opaque_;
 
   /**
@@ -302,11 +337,6 @@ class TensorMap {
   // poplar::Tensor tensor);
   Status AddOutputTensor(const HloInstruction* inst, int64 output_index,
                          poplar::Tensor tensor);
-  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
-                               poplar::RemoteBuffer rbuffer);
-  Status AddOutputRemoteBuffer(const HloInstruction* inst, int64 output_index,
-                               poplar::RemoteBuffer rbuffer,
-                               bool is_replica_partitioned);
   Status AddOutputOpaque(const HloInstruction* inst, int64 output_index,
                          absl::any opaque);
   Status AddOutput(const HloInstruction* inst, int64 output_index,
@@ -336,12 +366,6 @@ class TensorMap {
 
  private:
   std::map<TensorLocation, NamedTensor> _map;
-
-  Status AddOutputRemoteBufferImpl(const HloInstruction* inst,
-                                   int64 output_index,
-                                   poplar::RemoteBuffer rbuffer,
-                                   bool is_replica_partitioned,
-                                   int64 num_merged);
 };
 
 struct ComputationTensorMap {

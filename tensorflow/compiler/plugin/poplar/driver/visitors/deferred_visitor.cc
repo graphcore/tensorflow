@@ -906,27 +906,22 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
 
     auto info = create->RemoteBufferInfo();
-    if (info.has_value()) {
-      TF_ASSIGN_OR_RETURN(auto output, GetOrCreateRemoteBuffer(
-                                           graph, resources_, info->name,
-                                           element_type, element_count,
-                                           /*num_repeats=*/1, info->num_merged,
-                                           /*is_replica_partitioned=*/false));
+    const bool has_info = info.has_value();
+    TF_ASSIGN_OR_RETURN(
+        auto output,
+        GetOrCreateRemoteBuffer(
+            graph, resources_, has_info ? info->name : inst->name(),
+            element_type, element_count,
+            /*num_repeats=*/1, has_info ? info->num_merged : 1,
+            /*is_replica_partitioned=*/false));
 
-      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
+    TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
 
-      // Zero the remote buffer for the offset that we own.
-      auto remote_buffer = output.AsRemoteBuffer();
-      ZeroRemoteBuffer(resources_, graph, remote_buffer, info->merge_offset,
-                       zeroing_seq, debug_name_and_id);
-    } else {
-      // Create a new buffer.
-      poplar::RemoteBuffer output = graph.addRemoteBuffer(
-          inst->name(), element_type, element_count, 1, true);
-      TF_RETURN_IF_ERROR(AddOutputRemoteBuffer(tensor_map, inst, 0, output));
-      ZeroRemoteBuffer(resources_, graph, output, /*offset=*/0, zeroing_seq,
-                       debug_name_and_id);
-    }
+    // Zero the remote buffer for the offset that we own.
+    auto remote_buffer = output.AsRemoteBuffer();
+    ZeroRemoteBuffer(resources_, graph, remote_buffer,
+                     has_info ? info->merge_offset : 0, zeroing_seq,
+                     debug_name_and_id);
 
     // Add the remote buffer to the zeroing stack.
     TF_RETURN_IF_ERROR(AddGradientAccumulationZeroing(resources_, zeroing_seq));
@@ -1014,19 +1009,15 @@ Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
         ShapeUtil::ElementsIn(ShapeUtil::DeleteDimension(0, shape));
 
     auto info = create_buffer->RemoteBufferInfo();
-    if (info.has_value()) {
-      TF_ASSIGN_OR_RETURN(
-          auto output, GetOrCreateRemoteBuffer(graph, resources_, info->name,
-                                               element_type, element_count,
-                                               num_repeats, info->num_merged));
+    const bool has_info = info.has_value();
+    TF_ASSIGN_OR_RETURN(
+        auto output,
+        GetOrCreateRemoteBuffer(graph, resources_,
+                                has_info ? info->name : inst->name(),
+                                element_type, element_count, num_repeats,
+                                has_info ? info->num_merged : 1));
 
-      TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
-    } else {
-      poplar::RemoteBuffer result = graph.addRemoteBuffer(
-          inst->name(), element_type, element_count, num_repeats, true);
-
-      TF_CHECK_OK(AddOutputRemoteBuffer(tensor_map, inst, 0, result));
-    }
+    TF_RETURN_IF_ERROR(AddOutput(tensor_map, inst, 0, output));
   } else {
     // Allocate now if there is an allocation target.
     const bool allocate_now =
