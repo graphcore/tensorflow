@@ -291,36 +291,57 @@ some help for each option. The available options are described below:
     - Dumps the Poplar interval report to the given directory.
   * - :samp:`--save_vertex_graph={path}`
     - Dumps the Poplar vertex graph (as a DOT file) to the given directory.
-  * - ``--synthetic_data_initializer``
-    - Used in combination with the
-      ``--use_synthetic_data`` or ``--synthetic_data_categories`` option to
-      control how the inputs to the graph will be initialised on the IPU.
-      The values will be either random: ``--synthetic_data_initializer=random``
-
-      Or a constant value *X*: :samp:`--synthetic_data_initializer={X}`
   * - :samp:`--tensor_map_file_path={path}`
     - Cause a JSON file containing the tile mapping of all tensors to be written
       to this directory.
   * - ``--use_ipu_model``
     - Use the Poplar IPUModel for graph compilation and execution.
-  * - ``--synthetic_data_categories``
-    - Prevents the system from transferring data of the given types to/from the IPU
-      when executing code. This is used for testing performance without the overhead
-      of data transfer.
-
-      The values can be any of: infeed, outfeed, seed, hostembedding or parameters.
-
-      For example, ``--synthetic_data_categories='infeed,outfeed'`` will use synthetic data just
-      for in and outfeeds.
   * - ``--use_synthetic_data``
     - Prevent the system from downloading or uploading data to the IPU when
-      executing code. This is used for testing performance without the overhead
-      of data transfer. When enabled implies that all ``--synthetic_data_categories``
-      are set.
+      executing code. This can be useful for testing performance without the
+      overhead of data transfer.
 
-      Executing the ``dequeue`` op for an ``IPUOutfeedQueue``
-      with ``outfeed_mode`` set to ``IPUOutfeedMode.LAST`` will throw an
-      exception when this flag is set.
+      Using this option, all data transfer is prevented. You can instead use
+      ``--synthetic_data_categories`` to prevent the transfer of
+      specific categories of tensor data.
+
+      When using this option, the graph's transferred input tensors will never
+      be initialized and can therefore have undefined content. You can avoid
+      this with the ``--synthetic-data-initializer`` option.
+
+      The outputs from any outfeeds will also be uninitialized tensors on the
+      host which may also contain undefined content.
+
+      This option cannot be used when dequeuing an ``IPUOutfeedQueue`` which is
+      in ``IPUOutfeedMode.LAST`` mode.
+  * - ``--synthetic_data_categories``
+    - Prevent the system from downloading or uploading data of the given types
+      to the IPU when executing code. This can be useful for testing performance
+      without the overhead of data transfer.
+
+      The values can be any of: infeed, outfeed, seed, hostembedding or
+      parameters.
+
+      For example, ``--synthetic_data_categories='infeed,outfeed'`` will use
+      synthetic data just for infeeds and outfeeds.
+
+      When using this option, the graph's transferred input tensors will never
+      be initialized and can therefore have undefined content. You can avoid
+      this with the ``--synthetic-data-initializer`` option.
+
+      This option is a more selective alternative to ``--use_synthetic_data``;
+      you shouldn't specify both.
+  * - ``--synthetic_data_initializer``
+    - When using synthetic data, the graph's transferred input tensors
+      will never be initialized and can therefore have undefined content. You
+      can use this option to prevent this by initializing these tensors on the
+      device.
+      The tensors can be initialized with a constant value *X*:
+      :samp:`--synthetic_data_initializer={X}`
+      or random values: ``--synthetic_data_initializer=random``.
+
+      For this option to have an effect, you must also specify
+      ``--use_synthetic_data`` **or** ``--synthetic_data_categories``.
   * - :samp:`--while_loop_brute_force_max_trip_count={int}`
     - Sets the upper bound for how many iterations a while loop will be
       simulated for in order to brute force the number of times it will be
