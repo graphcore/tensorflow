@@ -1676,9 +1676,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           {"InitializeIndexTensors"}));
 
       // The following line starts the lowering in poplar.
-      VLOG(1) << "Begin Poplar graph contruction.";
+      VLOG(1) << "Begin Poplar graph construction.";
       TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
-      VLOG(1) << "End Poplar graph contruction.";
+      VLOG(1) << "End Poplar graph construction.";
       resources.progress_bar->MoveToNextStage();
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Build graph] ", e);

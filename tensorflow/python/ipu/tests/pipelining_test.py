@@ -21,6 +21,7 @@ from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -2073,6 +2074,96 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.deleter)
       sess.run(outfeed_queue.deleter)
       sess.run(grad_outfeed_queue.deleter)
+
+  @test_util.deprecated_graph_mode_only
+  @tu.test_uses_ipus(num_ipus=4)
+  def testGradientAccumulationDtypeTiedEmbedding(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+
+    with ops.device('cpu'):
+      indices = array_ops.placeholder(np.int32, [8])
+
+    def stage1(indices):
+      # Do an embedding lookup on a float16 embedding table.
+      with variable_scope.variable_scope("vs", use_resource=True):
+        table = variable_scope.get_variable(
+            name="table",
+            shape=[300, 300],
+            dtype=dtypes.float16,
+            initializer=init_ops.ones_initializer())
+        return embedding_ops.embedding_lookup(table, indices)
+
+    def identity(*args):
+      return args
+
+    def stage2(partials):
+      # Do a projection on the same float16 embeddding table.
+      # Since the table has two (non-consecutive) pipeline stage users, and one
+      # of those users is a valid AllocationFinder target, the gradient buffer
+      # for the table will be allocated immediately in the DeferredVisitor.
+      # When we accumulate in a different data type to the table, the buffer
+      # should be allocated as the accumulating data type, not the table's data
+      # type.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        table = variable_scope.get_variable(
+            name="table",
+            shape=[300, 300],
+            dtype=dtypes.float16,
+            initializer=init_ops.ones_initializer())
+        return math_ops.matmul(partials, table)
+
+    def optimizer_function(loss):
+      class CastingGradientDescent(optimizer_lib.Optimizer):  # pylint: disable=abstract-method
+        """Compute update using the dtype of the gradient, and then cast to
+        the dtype of the variable."""
+        def __init__(self):
+          super().__init__(use_locking=False, name="CastingGradientDescent")
+
+        def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+          update_ops = []
+
+          for (grad, var) in grads_and_vars:
+            # Cast the gradient to be the var's dtype when applying in the WU.
+            delta = math_ops.cast(-0.01 * grad, var.dtype)
+            update_ops.append(var.assign_add(delta))
+
+          return control_flow_ops.group(*update_ops)
+
+      opt = CastingGradientDescent()
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def model():
+      return pipelining_ops.pipeline(
+          # There must be 4 stages here, otherwise:
+          #  - there won't be >1 users of the gradient buffer because
+          #  - both accs on the buffer will be on the same bwd stage since
+          #  - the PipelineGradientAccumulationOptimizer didn't trigger because
+          #  - it avoids putting size 0 FIFOs between consecutive stages.
+          # a.k.a. the two stage users of the GA buffer can't be consecutive.
+          computational_stages=[stage1, identity, identity, stage2],
+          device_mapping=[0, 1, 1, 0],
+          gradient_accumulation_count=8,
+          # Accumulate the float16 embedding table's gradient in float32
+          gradient_accumulation_dtype=dtypes.float32,
+          inputs=[indices],
+          outfeed_queue=outfeed_queue,
+          optimizer_function=optimizer_function,
+          name="Pipeline")
+
+    with ops.device("/device:IPU:0"):
+      train_op = ipu_compiler.compile(model)
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.set_ipu_model_options(cfg,
+                                      compile_ipu_code=True,
+                                      tiles_per_ipu=128)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(train_op, feed_dict={indices: np.ones([8], dtype=np.int32)})
 
   @test_util.deprecated_graph_mode_only
   def testPipeliningArgsAndKwargs(self):
