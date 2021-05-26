@@ -732,7 +732,8 @@ ENTRY pipeline {
   auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Build and run the graph
-  poplar::Engine engine(*resources->main_graph, program);
+  poplar::Engine engine(*resources->main_graph, program,
+                        /*options=*/{{"debug.retainDebugInformation", "true"}});
   engine.enableExecutionProfiling();
 
   device.attach();
@@ -912,7 +913,8 @@ ENTRY pipeline {
   auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Build and run the graph
-  poplar::Engine engine(*resources->main_graph, program);
+  poplar::Engine engine(*resources->main_graph, program,
+                        /*options=*/{{"debug.retainDebugInformation", "true"}});
   engine.enableExecutionProfiling();
 
   device.attach();
@@ -1097,7 +1099,8 @@ ENTRY pipeline {
   auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Build and run the graph
-  poplar::Engine engine(*resources->main_graph, program);
+  poplar::Engine engine(*resources->main_graph, program,
+                        /*options=*/{{"debug.retainDebugInformation", "true"}});
   engine.enableExecutionProfiling();
   std::stringstream ss;
   engine.setPrintTensorStream(ss);
