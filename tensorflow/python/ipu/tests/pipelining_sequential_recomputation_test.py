@@ -440,7 +440,6 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
-      outfeed_op = outfeed_queue.dequeue()
       report = tu.ReportJSON(self, session, configure_device=False)
 
       session.run(variables.global_variables_initializer())

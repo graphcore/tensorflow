@@ -895,14 +895,14 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   const HloGradientAccumulatorCreate* create =
       Cast<HloGradientAccumulatorCreate>(inst);
 
+  TF_ASSIGN_OR_RETURN(poplar::Type output_type, PoplarDataType(inst->shape()));
+
   if (create->IsRemote()) {
     CHECK(inst->shape().IsArray());
 
     poplar::program::Sequence zeroing_seq({}, {debug_name_and_id, "zeroing"});
 
     poplar::Graph& graph = GetGraphWithOutputIndex(resources_, inst, 0);
-    TF_ASSIGN_OR_RETURN(poplar::Type element_type,
-                        PoplarDataType(inst->shape()));
     const int64 element_count = ShapeUtil::ElementsIn(inst->shape());
 
     auto info = create->RemoteBufferInfo();
@@ -911,7 +911,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
         auto output,
         GetOrCreateRemoteBuffer(
             graph, resources_, has_info ? info->name : inst->name(),
-            element_type, element_count,
+            output_type, element_count,
             /*num_repeats=*/1, has_info ? info->num_merged : 1,
             /*is_replica_partitioned=*/false));
 
@@ -934,7 +934,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
       HasTensorAllocationTarget(output_location, resources_);
   if (inst->operand_count() > 0) {
     allocate_fn =
-        [this, inst, debug_name_and_id](
+        [this, inst, debug_name_and_id, output_type](
             TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
       poplar::Graph& graph = GetGraph(resources_, inst);
 
@@ -952,16 +952,22 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
 
       poplar::Tensor tensor;
       if (tensor_like && inst->user_count() > 1) {
-        // Use the variable tensor layout as the layout for the accumulator.
+        // Use the tensor-like layout as the layout for the accumulator.
         tensor = TensorCloneAndRebalanceAliasing(
             graph, resources_, variable_tensor, debug_name_and_id);
       } else {
         // Allocate the accumulator, and if there isn't a layout to use, use
-        // the variable layout.
+        // the tensor-like.
         TF_ASSIGN_OR_RETURN(tensor,
                             AllocateInput(allocation_location, inst->shape(),
                                           tensor_like, debug_name_and_id));
       }
+
+      // Handle input type different to output type by cloning.
+      if (output_type != tensor.elementType()) {
+        tensor = graph.clone(output_type, tensor, {debug_name_and_id});
+      }
+
       return tensor;
     };
   } else {
