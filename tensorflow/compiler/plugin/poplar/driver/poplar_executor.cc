@@ -1880,14 +1880,17 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       break;
     case IpuExecutionProfileType::DEVICE_PROFILE:
       option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.retainDebugInformation", "true");
       option_flags_.set("debug.computeInstrumentationLevel", "device");
       break;
     case IpuExecutionProfileType::IPU_PROFILE:
       option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.retainDebugInformation", "true");
       option_flags_.set("debug.computeInstrumentationLevel", "ipu");
       break;
     case IpuExecutionProfileType::TILE_PROFILE:
       option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.retainDebugInformation", "true");
       option_flags_.set("debug.computeInstrumentationLevel", "tile");
       break;
   }
@@ -1945,7 +1948,13 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   }
 
   if (CompilerReportingEnabled()) {
+    option_flags_.set("debug.retainDebugInformation", "true");
     option_flags_.set("debug.allowOutOfMemory", "true");
+  }
+
+  if (!PoplarXlaFlags::Get().save_vertex_graph.empty() ||
+      !PoplarXlaFlags::Get().save_interval_report.empty()) {
+    option_flags_.set("debug.retainDebugInformation", "true");
   }
 
   for (auto opt : option_flags_) {
