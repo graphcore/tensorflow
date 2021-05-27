@@ -183,9 +183,6 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
         !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host,
         graph, resources_, stream_copy_seq, in_info, inst, debug_name_and_id));
 
-    FeedInfo input_info(handle, {}, shape);
-    TF_RETURN_IF_ERROR(
-        AddStreamedInputInfo(resources_.annotations, input_info));
   } else if (use_synthetic_data && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -328,10 +325,6 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
             !out_info.IsStreaming() ||
                 resources_.always_rearrange_copies_on_host,
             graph, resources_, seq, out_info, root, debug_name_and_id));
-
-        FeedInfo output_info(handle, {}, layout_sub_shapes[tuple_index]);
-        TF_RETURN_IF_ERROR(
-            AddStreamedOutputInfo(resources_.annotations, output_info));
       }
     }
 
