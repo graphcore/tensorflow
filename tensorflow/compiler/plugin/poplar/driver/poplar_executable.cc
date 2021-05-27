@@ -51,7 +51,9 @@ PoplarExecutable::PoplarExecutable(
     RemoteParameterInfos&& remote_parameter_infos,
     const bool logging_cycle_count,
     const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
-    const std::vector<string>& checkpoint_feeds_order)
+    const std::vector<string>& checkpoint_feeds_order,
+    const StreamedInputInfos& streamed_input_infos,
+    const StreamedOutputInfos& streamed_output_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -69,6 +71,8 @@ PoplarExecutable::PoplarExecutable(
       stream_meta_infos_(std::move(stream_meta_info)),
       send_infos_(std::move(send_infos)),
       recv_infos_(std::move(recv_infos)),
+      streamed_input_infos_(streamed_input_infos),
+      streamed_output_infos_(streamed_output_infos),
       host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
       host_embedding_update_infos_(std::move(host_embedding_update_infos)),
       host_embedding_notify_infos_(std::move(host_embedding_notify_infos)),
@@ -456,6 +460,20 @@ PoplarExecutable::Deserialize(
     checkpoint_feeds_order.push_back(feed);
   }
 
+  StreamedInputInfos streamed_input_infos;
+  for (const auto& streamed_input_info : proto.streamed_input_infos()) {
+    streamed_input_infos.emplace(streamed_input_info.stream_prefix(),
+                                 streamed_input_info.config(),
+                                 Shape(streamed_input_info.shape()));
+  }
+
+  StreamedOutputInfos streamed_output_infos;
+  for (const auto& streamed_output_info : proto.streamed_output_infos()) {
+    streamed_output_infos.emplace(streamed_output_info.stream_prefix(),
+                                  streamed_output_info.config(),
+                                  Shape(streamed_output_info.shape()));
+  }
+
   // Load the Poplar executable.
   std::unique_ptr<poplar::Engine> engine = absl::make_unique<poplar::Engine>(
       std::move(poplar_executable), engine_options);
@@ -472,7 +490,8 @@ PoplarExecutable::Deserialize(
           std::move(sends), std::move(recvs), std::move(lookups),
           std::move(updates), std::move(notifications),
           std::move(remote_parameter_infos), logging_cycle_count,
-          key_id_mappings, checkpoint_feeds_order);
+          key_id_mappings, checkpoint_feeds_order, streamed_input_infos,
+          streamed_output_infos);
 
   executable->loaded_from_cache_ = true;
 
@@ -572,6 +591,20 @@ PoplarExecutable::Deserialize(
   for (const auto& feed : checkpoint_feeds_order) {
     std::string* proto_feed = proto.add_checkpoint_feeds_order();
     *proto_feed = feed;
+  }
+
+  for (const auto& feed : annotations.streamed_input_infos) {
+    auto* streamed_input = proto.add_streamed_input_infos();
+    streamed_input->set_stream_prefix(feed.stream_prefix);
+    *(streamed_input->mutable_config()) = feed.config;
+    *(streamed_input->mutable_shape()) = feed.shape.ToProto();
+  }
+
+  for (const auto& feed : annotations.streamed_output_infos) {
+    auto* streamed_output = proto.add_streamed_output_infos();
+    streamed_output->set_stream_prefix(feed.stream_prefix);
+    *(streamed_output->mutable_config()) = feed.config;
+    *(streamed_output->mutable_shape()) = feed.shape.ToProto();
   }
 
   proto.set_logging_cycle_count(logging_cycle_count);

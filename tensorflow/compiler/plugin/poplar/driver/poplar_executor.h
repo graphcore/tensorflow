@@ -899,8 +899,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ResetOnDeviceBuffers();
 
   // Functions which connect the streams to/from device
-  void ConnectStreamedVariablesHostToDevice();
-  void ConnectStreamedVariablesDeviceToHost();
+  Status ConnectStreamedVariablesHostToDevice(
+      const StreamedInputInfos& streamed_input_infos);
+  Status ConnectStreamedVariablesDeviceToHost(
+      const StreamedOutputInfos& streamed_output_infos);
 
   // Sometimes post process streamed data into the right host format
   void PostProcessStreamedVariablesDeviceToHost();

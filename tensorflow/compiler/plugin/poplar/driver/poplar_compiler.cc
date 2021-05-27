@@ -1873,7 +1873,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.host_embedding_notify_infos),
       std::move(resources.annotations.remote_parameter_infos),
       logging_cycle_count, resources.streams_indices.GetAssignedIds(),
-      resources.streams_indices.CheckpointFeedsOrder());
+      resources.streams_indices.CheckpointFeedsOrder(),
+      resources.annotations.streamed_input_infos,
+      resources.annotations.streamed_output_infos);
 
   return executable;
 }

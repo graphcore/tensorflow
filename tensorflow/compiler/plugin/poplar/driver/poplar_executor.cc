@@ -3155,34 +3155,50 @@ Status PoplarExecutor::MoveHostToDevice() {
   return buffer;
 }
 
-void PoplarExecutor::ConnectStreamedVariablesHostToDevice() {
+Status PoplarExecutor::ConnectStreamedVariablesHostToDevice(
+    const StreamedInputInfos& streamed_input_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
-    return;
+    return Status::OK();
   }
 
   for (auto arg : args_map_) {
     if (arg.second.streamed) {
+      if (streamed_input_infos.count({arg.first.name, {}, {}}) == 0) {
+        return tensorflow::errors::FailedPrecondition(
+            "Unknown streamed input with name '" + arg.first.name + "'");
+      }
+
       void* buf = PreProcessBuffer(arg.second);
       current_engine_->connectStream(arg.first.name, buf);
     }
   }
+
+  return Status::OK();
 }
 
-void PoplarExecutor::ConnectStreamedVariablesDeviceToHost() {
+Status PoplarExecutor::ConnectStreamedVariablesDeviceToHost(
+    const StreamedOutputInfos& streamed_output_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticDataFor(SyntheticDataCategory::Parameters)) {
-    return;
+    return Status::OK();
   }
 
   for (auto output : outputs_map_) {
     if (output.second.streamed) {
+      if (streamed_output_infos.count({output.first.name, {}, {}}) == 0) {
+        return tensorflow::errors::FailedPrecondition(
+            "Unknown streamed output with name '" + output.first.name + "'");
+      }
+
       TensorControl* tc = output.second.tc;
       ConnectReplicatedDeviceToHost(output.first.name, tc);
     }
   }
+
+  return Status::OK();
 }
 
 void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
@@ -3741,8 +3757,10 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
     try {
       // Connect the streams to and from the device
-      ConnectStreamedVariablesHostToDevice();
-      ConnectStreamedVariablesDeviceToHost();
+      TF_RETURN_IF_ERROR(ConnectStreamedVariablesHostToDevice(
+          executable.GetStreamedInputInfos()));
+      TF_RETURN_IF_ERROR(ConnectStreamedVariablesDeviceToHost(
+          executable.GetStreamedOutputInfos()));
 
       // The send/recv callbacks only need to be re-connected when the engine
       // has changed as they do not depend on any external state and are
