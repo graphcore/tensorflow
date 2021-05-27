@@ -64,9 +64,7 @@ class PoplarExecutable : public Executable {
                    RemoteParameterInfos&& remote_parameter_infos,
                    const bool logging_cycle_count,
                    const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
-                   const std::vector<string>& checkpoint_feeds_order,
-                   const StreamedInputInfos& streamed_input_infos,
-                   const StreamedOutputInfos& streamed_output_infos);
+                   const std::vector<string>& checkpoint_feeds_order);
 
   ~PoplarExecutable() override;
 
@@ -116,14 +114,6 @@ class PoplarExecutable : public Executable {
   }
 
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
-
-  const StreamedInputInfos& GetStreamedInputInfos() const {
-    return streamed_input_infos_;
-  }
-
-  const StreamedOutputInfos& GetStreamedOutputInfos() const {
-    return streamed_output_infos_;
-  }
 
   const StreamMetaInfos& GetStreamMetaInfos() const {
     return stream_meta_infos_;
@@ -221,8 +211,6 @@ class PoplarExecutable : public Executable {
   StreamMetaInfos stream_meta_infos_;
   SendRecvInfos send_infos_;
   SendRecvInfos recv_infos_;
-  StreamedInputInfos streamed_input_infos_;
-  StreamedOutputInfos streamed_output_infos_;
   HostEmbeddingInfos host_embedding_lookup_infos_;
   HostEmbeddingInfos host_embedding_update_infos_;
   HostEmbeddingInfos host_embedding_notify_infos_;

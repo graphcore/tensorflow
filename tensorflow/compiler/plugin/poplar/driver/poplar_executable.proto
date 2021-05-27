@@ -68,7 +68,4 @@ message PoplarExecutableProto {
   repeated string checkpoint_feeds_order = 12;
 
   bool logging_cycle_count = 13;
-
-  repeated FeedConfig streamed_input_infos = 14;
-  repeated FeedConfig streamed_output_infos = 15;
 };

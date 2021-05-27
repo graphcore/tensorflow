@@ -114,8 +114,6 @@ struct RemoteParameterInfo {
 
 using OutfeedInfos = std::set<FeedInfo>;
 using InfeedInfos = std::set<FeedInfo>;
-using StreamedInputInfos = std::set<FeedInfo>;
-using StreamedOutputInfos = std::set<FeedInfo>;
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
@@ -221,9 +219,6 @@ struct CompilerAnnotations {
 
   FlattenedInstMap flattened_inst_map_fwd;
   FlattenedInstMap flattened_inst_map_bwd;
-
-  StreamedInputInfos streamed_input_infos;
-  StreamedOutputInfos streamed_output_infos;
 };
 
 inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,
@@ -255,42 +250,6 @@ inline Status AddOutfeedInfo(CompilerAnnotations& compiler_annotations,
 
   if (other_info_itr == compiler_annotations.outfeed_infos.end()) {
     compiler_annotations.outfeed_infos.insert(feed_info);
-  }
-
-  return Status::OK();
-}
-
-inline Status AddStreamedInputInfo(CompilerAnnotations& compiler_annotations,
-                                   const FeedInfo& feed_info) {
-  auto other_info_itr =
-      compiler_annotations.streamed_input_infos.find(feed_info);
-  if (other_info_itr != compiler_annotations.streamed_input_infos.end() &&
-      feed_info.shape != other_info_itr->shape) {
-    return xla::FailedPrecondition(
-        "Streamed input with matching name '%s' have different shapes.",
-        feed_info.stream_prefix);
-  }
-
-  if (other_info_itr == compiler_annotations.streamed_input_infos.end()) {
-    compiler_annotations.streamed_input_infos.insert(feed_info);
-  }
-
-  return Status::OK();
-}
-
-inline Status AddStreamedOutputInfo(CompilerAnnotations& compiler_annotations,
-                                    const FeedInfo& feed_info) {
-  auto other_info_itr =
-      compiler_annotations.streamed_output_infos.find(feed_info);
-  if (other_info_itr != compiler_annotations.streamed_output_infos.end() &&
-      feed_info.shape != other_info_itr->shape) {
-    return xla::FailedPrecondition(
-        "Streamed output with matching name '%s' have different shapes.",
-        feed_info.stream_prefix);
-  }
-
-  if (other_info_itr == compiler_annotations.streamed_output_infos.end()) {
-    compiler_annotations.streamed_output_infos.insert(feed_info);
   }
 
   return Status::OK();
