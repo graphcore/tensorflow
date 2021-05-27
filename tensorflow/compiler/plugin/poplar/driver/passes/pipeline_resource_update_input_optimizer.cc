@@ -73,11 +73,11 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
       HloInstruction* stage = stages.forward[stage_idx];
       HloComputation* stage_comp = stage->to_apply();
       HloInstruction* parameter = stage_comp->parameter_instruction(input_idx);
+      HloInstruction* state_root = stage_comp->root_instruction();
 
       // Check whether it is used in the root of the stage.
-      std::vector<int64> indices =
-          stage_comp->root_instruction()->OperandIndices(parameter);
-      if (indices.size() != 1) {
+      int64 output_idx = -1;
+      if (state_root->OperandIndices(parameter).size() != 1) {
         if (elementwise_modifier) {
           // Only single elementwise modifier is allowed.
           break;
@@ -100,9 +100,9 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
               }
             }
 
-            indices = stage_comp->root_instruction()->OperandIndices(user);
             // Found the elementwise modifier.
-            if (indices.size() == 1) {
+            if (state_root->OperandIndices(user).size() == 1) {
+              output_idx = state_root->operand_index(user);
               elementwise_modifier =
                   ElementwiseModifierInfo{user, modifier_operand_idx};
               break;
@@ -114,20 +114,21 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
         if (!elementwise_modifier) {
           break;
         }
+      } else {
+        output_idx = state_root->operand_index(parameter);
       }
 
       // Try and get the GTE user.
-      auto status_or = GetUniqueGTEUser(stage, indices[0]);
+      auto status_or = GetUniqueGTEUser(stage, output_idx);
       if (!status_or.ok()) {
         break;
       }
       HloInstruction* gte = status_or.ValueOrDie();
 
       // Check whether this is used by the resource update.
-      indices = resource_update->OperandIndices(gte);
-      if (indices.size() == 1) {
+      if (resource_update->OperandIndices(gte).size() == 1) {
         // Found a match.
-        input_idx = indices[0];
+        input_idx = resource_update->operand_index(gte);
         valid_path = true;
         break;
       }
@@ -135,11 +136,10 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
       if (stage_idx + 1 < stages.forward.size()) {
         // Check whether the value is passed to the next stage.
         HloInstruction* next_stage = stages.forward[stage_idx + 1];
-        indices = next_stage->OperandIndices(gte);
-        if (indices.size() != 1) {
+        if (next_stage->OperandIndices(gte).size() != 1) {
           break;
         }
-        input_idx = indices[0];
+        input_idx = next_stage->operand_index(gte);
       }
     }
 
