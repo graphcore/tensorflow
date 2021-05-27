@@ -580,7 +580,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const std::vector<string>& checkpoint_feeds_order) {
   try {
     ipu::MetadataBuilder builder;
-    std::map<int64, InputOutputAliasingMap::InputInfo> params_handle_map;
+    std::map<std::string, std::string> params_handle_map;
     const bool use_verified_transfers = !indices.empty();
     for (auto input : io_map.GetEntryInputInfos()) {
       VLOG(1) << "Processing input " << input.Name();
@@ -600,7 +600,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         builder.AddInput(t, info);
       } else if (input.IsResource()) {
         builder.AddInputParameter(t, info);
-        params_handle_map.insert({input.GetParameterIndex(), input});
+        params_handle_map[t.Handle()] = t.Name();
       }
     }
 
@@ -622,11 +622,12 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         builder.AddOutput(t, info);
       } else if (output.IsResource()) {
         if (output.IsResourceModified()) {
-          auto input = params_handle_map.at(output.GetInputIndex());
-
-          // Override the name to make sure it matches the one from the input.
-          t.SetName(UnmangleInputName(input.Name()));
-          builder.AddOutputModifiedParameter(input.Handles().at(0), t, info);
+          const std::string input_handle =
+              GetInputCopyHandle(output.GetInputIndex(), 0);
+          // Override the name to make sure it matches the one from the
+          // input.
+          t.SetName(params_handle_map.at(input_handle));
+          builder.AddOutputModifiedParameter(input_handle, t, info);
         } else {
           builder.AddOutputParameter(t, info);
         }
