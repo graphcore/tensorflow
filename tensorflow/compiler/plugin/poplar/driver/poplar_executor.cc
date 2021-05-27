@@ -382,52 +382,12 @@ std::unique_ptr<SeedGenerator> CreateDefaultSeedGenerator() {
 
 }  // namespace
 
-PoplarExecutor::ArgHandle::ArgHandle(int64 parameter_index,
-                                     int64 flat_tensor_index)
-    : parameter_index(parameter_index), flat_tensor_index(flat_tensor_index) {}
-
-PoplarExecutor::ArgHandle::ArgHandle(int64 parameter_index,
-                                     int64 flat_tensor_index,
-                                     const std::string& name)
-    : parameter_index(parameter_index),
-      flat_tensor_index(flat_tensor_index),
-      name(name) {}
-
-bool PoplarExecutor::ArgHandle::operator==(const ArgHandle& rhs) const {
-  return (parameter_index == rhs.parameter_index) &&
-         (flat_tensor_index == rhs.flat_tensor_index);
-}
-
-bool PoplarExecutor::ArgHandle::operator!=(const ArgHandle& rhs) const {
-  return !(*this == rhs);
-}
-
-bool PoplarExecutor::ArgHandle::operator<(const ArgHandle& rhs) const {
-  if (parameter_index < rhs.parameter_index) {
-    return true;
-  }
-
-  if (parameter_index > rhs.parameter_index) {
-    return false;
-  }
-
-  if (flat_tensor_index < rhs.flat_tensor_index) {
-    return true;
-  }
-
-  if (flat_tensor_index > rhs.flat_tensor_index) {
-    return false;
-  }
-
-  return false;
-}
-
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   size = size_;
   ref_count = 1;
   on_device = false;
-  input_handle.reset();
-  output_handle.reset();
+  input_handle.clear();
+  output_handle.clear();
   output_convertor = nullptr;
   converted_data.clear();
   data = static_cast<char*>(tensorflow::port::AlignedMalloc(size_, 64));
@@ -1342,7 +1302,7 @@ Status PoplarExecutor::SynchronousMemcpy(se::DeviceMemoryBase* pop_dst,
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     tc->on_device = false;
-    tc->input_handle.reset();
+    tc->input_handle.clear();
   }
   return Status::OK();
 }
@@ -1354,7 +1314,7 @@ Status PoplarExecutor::SynchronousMemcpy(void* host_dst,
       reinterpret_cast<const TensorControl*>(pop_src.opaque());
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    if (tc->on_device == true && tc->output_handle) {
+    if (tc->on_device == true && !tc->output_handle.empty()) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
@@ -1369,7 +1329,7 @@ Status PoplarExecutor::SynchronousMemcpyDeviceToDevice(
       reinterpret_cast<const TensorControl*>(src.opaque());
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
-    if (src_tc->on_device == true && src_tc->output_handle) {
+    if (src_tc->on_device == true && !src_tc->output_handle.empty()) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
@@ -1377,7 +1337,7 @@ Status PoplarExecutor::SynchronousMemcpyDeviceToDevice(
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     dst_tc->on_device = false;
-    dst_tc->input_handle.reset();
+    dst_tc->input_handle.clear();
   }
   return Status::OK();
 }
@@ -2404,7 +2364,7 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
       }
 
       input.tc->element_type = shapes[a].element_type();
-      args_map.emplace(ArgHandle{a, i, input_handle}, input);
+      args_map.emplace(input_handle, input);
     }
   }
 
@@ -2460,7 +2420,7 @@ void PoplarExecutor::UpdateOutputsHandleMap(const PoplarExecutable& executable,
     OutputPairList bufs;
     FlattenedOutputDeviceMemoryList(bufs, shapes[a], outputs[a], output_info);
     for (unsigned i = 0; i < bufs.size(); i++) {
-      outputs_map_[*bufs[i].tc->output_handle] = bufs[i];
+      outputs_map_[bufs[i].tc->output_handle] = bufs[i];
     }
   }
 }
@@ -2515,7 +2475,7 @@ Status PoplarExecutor::ConstantOutputAllocation::PopulateBuffer(
   tc->size = size;
   tc->element_type = shape.element_type();
   tc->on_device = false;
-  tc->output_handle = absl::nullopt;
+  tc->output_handle = std::string();
   tc->output_convertor = nullptr;
 
   void* buf = static_cast<void*>(tc->data);
@@ -2540,7 +2500,7 @@ Status PoplarExecutor::PrecompileOutputAllocation::PopulateBuffer(
   tc->size = size;
   tc->element_type = shape.element_type();
   tc->on_device = false;
-  tc->output_handle = absl::nullopt;
+  tc->output_handle = std::string();
   tc->output_convertor = nullptr;
 
   void* buf = static_cast<void*>(tc->data);
@@ -2571,7 +2531,7 @@ PoplarExecutor::RemapOutputAllocation::GetRemapedTensorControl(
     int64 output_index, int64 flat_tensor_index) const {
   const int64 remap_idx = remap_map_.at(output_index);
 
-  auto it = args_map_.find(ArgHandle{remap_idx, flat_tensor_index});
+  auto it = args_map_.find(GetInputCopyHandle(remap_idx, flat_tensor_index));
   if (it == args_map_.end()) {
     return FailedPrecondition("Could not remap an output to input tensor.");
   }
@@ -2620,7 +2580,7 @@ PoplarExecutor::BufferOutputAllocation::AllocateBuffer(
   if (output_info.IsResourceModified()) {
     // The output is an in-place update of one of the inputs.
     auto it = args_map_.find(
-        ArgHandle{output_info.GetInputIndex(), flat_tensor_index});
+        GetInputCopyHandle(output_info.GetInputIndex(), flat_tensor_index));
     if (it == args_map_.end()) {
       return FailedPrecondition(
           "Could not find matching input resource tensor.");
@@ -2646,8 +2606,7 @@ Status PoplarExecutor::BufferOutputAllocation::PopulateBuffer(
   tc->size = ShapeUtil::ByteSizeOf(shape);
   tc->element_type = shape.element_type();
   tc->on_device = output_info.IsStreaming() ? false : true;
-  tc->output_handle = ArgHandle{output_index, flat_tensor_index,
-                                output_info.Handles().at(flat_tensor_index)};
+  tc->output_handle = output_info.Handles().at(flat_tensor_index);
   tc->output_convertor = GetOutputConversionFunction(shape);
   return Status::OK();
 }
@@ -2800,9 +2759,9 @@ StatusOr<bool> PoplarExecutor::CheckMoveDeviceToHostRequired(
   // c)   output buffer isn't an input to the current engine _or_
   // d)   output buffer isn't currently in the right place for the new input
   for (const auto& tc : allocations_) {
-    if (tc->on_device == true && tc->output_handle) {
-      if (engine_changed || args_map_.count(*tc->input_handle) == 0 ||
-          tc != args_map_.at(*tc->input_handle).tc) {
+    if (tc->on_device == true && !tc->output_handle.empty()) {
+      if (engine_changed || args_map_.count(tc->input_handle) == 0 ||
+          tc != args_map_.at(tc->input_handle).tc) {
         return true;
       }
     }
@@ -2816,7 +2775,7 @@ StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
     const TensorControl* tc =
         reinterpret_cast<const TensorControl*>(device_buffer.opaque());
 
-    if (tc->on_device && tc->output_handle) {
+    if (tc->on_device && !tc->output_handle.empty()) {
       return true;
     }
   }
@@ -2880,7 +2839,7 @@ StatusOr<bool> PoplarExecutor::CheckMoveHostToDeviceRequired(
             "Argument isn't allocated on device: ", (void*)arg.second.tc);
       }
       if (engine_changed || arg.second.tc->on_device == false ||
-          *arg.second.tc->input_handle != arg.first) {
+          arg.second.tc->input_handle != arg.first) {
         do_host_to_device = true;
       }
     }
@@ -2924,12 +2883,12 @@ Status PoplarExecutor::MoveDeviceToHost() {
   try {
     for (const auto& tc : allocations_) {
       // Set up streams
-      if (tc->on_device == true && tc->output_handle) {
+      if (tc->on_device == true && !tc->output_handle.empty()) {
         if (tc->in_memory_remote_parameter_info) {
           // We currently only get one copy of the buffer.
           // Note that only resource variables are on device, hence they must
           // have the input handle set too.
-          CHECK(tc->input_handle);
+          CHECK(tc->input_handle.size());
 
           const std::string buffer_name =
               tc->in_memory_remote_parameter_info->buffer_name;
@@ -2969,15 +2928,11 @@ Status PoplarExecutor::MoveDeviceToHost() {
                                                   buffer_offset, replica_id);
           }
         } else {
-          ConnectReplicatedDeviceToHost(tc->output_handle->name, tc);
+          ConnectReplicatedDeviceToHost(tc->output_handle, tc);
         }
 
         Json::Value tensor;
-        tensor["name"] = Json::Value(tc->output_handle->name);
-        tensor["parameter_index"] =
-            Json::Value::Int64(tc->output_handle->parameter_index);
-        tensor["flat_tensor_index"] =
-            Json::Value::Int64(tc->output_handle->flat_tensor_index);
+        tensor["name"] = Json::Value(tc->output_handle);
         tensor["size"] = Json::Value::UInt64(tc->size);
         root["tensors"].append(tensor);
         total_size += tc->size;
@@ -3001,7 +2956,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
 
     // Post process upload
     for (auto* tc : allocations_) {
-      if (tc->on_device == true && tc->output_handle) {
+      if (tc->on_device == true && !tc->output_handle.empty()) {
         PostProcessBuffer(tc);
       }
 
@@ -3016,8 +2971,8 @@ Status PoplarExecutor::MoveDeviceToHost() {
 Status PoplarExecutor::ResetTensorControlState(TensorControl* tc) {
   tc->in_memory_remote_parameter_info = absl::nullopt;
   tc->on_device = false;
-  tc->output_handle.reset();
-  tc->input_handle.reset();
+  tc->output_handle.clear();
+  tc->input_handle.clear();
   return Status::OK();
 }
 
@@ -3099,24 +3054,19 @@ Status PoplarExecutor::MoveHostToDevice() {
           }
         } else {
           tc->in_memory_remote_parameter_info = absl::nullopt;
-          current_engine_->connectStream(arg.first.name, buf);
+          current_engine_->connectStream(arg.first, buf);
         }
 
         tc->on_device = true;
         tc->input_handle = arg.first;
 
         Json::Value tensor;
-        tensor["name"] = Json::Value(arg.first.name);
-        tensor["parameter_index"] =
-            Json::Value::Int64(arg.first.parameter_index);
-        tensor["flat_tensor_index"] =
-            Json::Value::Int64(arg.first.flat_tensor_index);
-        tensor["name"] = Json::Value(arg.first.name);
+        tensor["name"] = Json::Value(arg.first);
         tensor["size"] = Json::Value::UInt64(tc->size);
         root["tensors"].append(tensor);
         total_size += tc->size;
 
-        stream_list.push_back(std::make_pair(arg.first.name, 0));
+        stream_list.push_back(std::make_pair(arg.first, 0));
       }
     }
     root["total_size"] = Json::Value::UInt64(total_size);
@@ -3171,7 +3121,7 @@ Status PoplarExecutor::ConnectStreamedVariablesHostToDevice(
       }
 
       void* buf = PreProcessBuffer(arg.second);
-      current_engine_->connectStream(arg.first.name, buf);
+      current_engine_->connectStream(arg.first, buf);
     }
   }
 
@@ -3194,7 +3144,7 @@ Status PoplarExecutor::ConnectStreamedVariablesDeviceToHost(
       }
 
       TensorControl* tc = output.second.tc;
-      ConnectReplicatedDeviceToHost(output.first.name, tc);
+      ConnectReplicatedDeviceToHost(output.first, tc);
     }
   }
 
