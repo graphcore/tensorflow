@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -550,14 +550,13 @@ def ctc_loss(labels,
              blank_index,
              out_dtype=None,
              name=None):
-  """This function has been deprecated in favour of `ctc_loss_v2` and
-  `ctc_loss_with_log_probs`.
-
+  """
   Calculates and returns CTC (Connectionist Temporal Classification) loss.
+
   This op is designed and optimized for the IPU and cannot be used with other
   systems.
 
-  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
@@ -604,14 +603,13 @@ def ctc_loss_with_logits(labels,
                          blank_index,
                          out_dtype=None,
                          name=None):
-  """This function has been deprecated in favour of `ctc_loss_v2` and
-  `ctc_loss_with_log_probs`.
-
+  """
   Calculates and returns CTC (Connectionist Temporal Classification) loss.
+
   This op is designed and optimized for the IPU and cannot be used with other
   systems.
 
-  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
@@ -658,7 +656,7 @@ def ctc_loss_v2(labels,
   This op is designed and optimized for the IPU and cannot be used with other
   systems.
 
-  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
@@ -703,9 +701,10 @@ def ctc_loss_with_log_probs(labels,
                             name=None):
   """Calculates and returns CTC (Connectionist Temporal Classification) loss.
   This op is designed and optimized for the IPU and cannot be used with other
-  systems.
+  systems. It is identical to the :py:func:`ctc_loss_v2` operation except that
+  it takes negative log probabilities instead of logits for the data input.
 
-  Note: the tensorflow op tf.nn.ctc_loss is not compatible with the IPU.
+  Note: The TensorFlow op tf.nn.ctc_loss is not compatible with the IPU.
 
   Args:
     labels: The labels input [batch_size, max_label_length] tensor.
@@ -748,11 +747,13 @@ def ctc_beam_search_decoder(logits,
                             top_paths=1,
                             blank_index=-1,
                             name=None):
-  """Calculates and returns CTC (Connectionist Temporal Classification) predictions.
+  """Calculates and returns CTC (Connectionist Temporal Classification)
+  predictions.
   This op is designed and optimized for the IPU and cannot be used with other
   systems.
 
   .. code-block:: python
+
     # assuming batch_size = 1
     # hyper-parameters
     top_paths = 1
@@ -766,34 +767,39 @@ def ctc_beam_search_decoder(logits,
                                                             top_paths)
 
       batch_index = 0 # as batch_size 1, otherwise must iterate batch
-      path_index = 0 # as top paths = 1 otherwise argmin(probs[batch_index])
+      path_index = 0 # as top_paths = 1 otherwise argmin(probs[batch_index])
 
       vocab_predictions = [tokens[predictions[batch_index][path_index][l]] for l
                                  in range(lengths[batch_index)]
       predicted_prob_of_correct_prediction = probs[batch_index][path_index]
       return vocab_predictions, predicted_prob_of_correct_prediction
 
-  Note: The tensorflow op tf.nn.ctc_beam_search_decoder is not
-        compatible with the IPU. This version also returns the predicted
-        label lengths in addition to the probabilites and decoded labels.
-        Instead of returning a lengths tensor the upstream version returns
-        a list of dynamically sized tensors.
+  Note: The TensorFlow op tf.nn.ctc_beam_search_decoder is not
+  compatible with the IPU. This version also returns the predicted
+  label lengths in addition to the probabilities and decoded labels.
+  Instead of returning a lengths tensor the upstream version returns
+  a list of dynamically sized tensors.
 
   Args:
     logits: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of logits.
-    logit_length: A tensor of shape [batch_size] containing the number of
-        timesteps in each `logits` batch entry.
+    logit_lengths: A tensor of shape [batch_size] containing the number of
+        valid timesteps in each `logits` batch entry.
     beam_width: The beam width to be passed to the beam search algorithm.
-    top_paths: The ammount of paths to keep track of in the beam
-        search algorithm.
+    top_paths: The number of paths to keep track of in the beam
+        search algorithm. This must be less than or equal to `beam_width`.
     blank_index: The class index to use for the blank label.
     name: A name for this op. Defaults to "ctc_beam_search".
 
   Returns:
-    A labels probrabilities tensor of shape [batch_size, top_paths].
-    A label lengths tensor of shape [batch_size, top_paths].
-    A decoded labels tensor of shape [batch_size, top_paths, max_time].
+
+    * A tensor of shape [batch_size, top_paths] containing the negative log
+      probabilities of the `top_paths` most likely labels.
+    * A tensor of shape [batch_size, top_paths] containing the length of the
+      `top_paths` most likely labels.
+    * A tensor of shape [batch_size, top_paths, max_time] containing the
+      decoded `top_paths` most likely labels.
+
   """
 
   label_probabilities, label_lengths, decoded_labels =\
@@ -816,29 +822,34 @@ def ctc_beam_search_decoder_with_log_probs(log_probs,
   """Calculates and returns CTC (Connectionist
   Temporal Classification) predictions.
   This op is designed and optimized for the IPU and cannot be used with other
-  systems. Identical to ctc_beam_search_decoder
-  operation except take negative log
-  probabilites instead of probabilities for the data input.
+  systems. It is identical to the :py:func:`ctc_beam_search_decoder`
+  operation except that it takes negative log
+  probabilities instead of logits for the data input.
 
-  Note: The tensorflow op tf.nn.beam_search_decoder is not
-        compatible with the IPU. This version also returns the predicted
-        label lengths in addition to the probabilites and decoded labels.
+  Note: The TensorFlow op tf.nn.beam_search_decoder is not
+  compatible with the IPU. This version also returns the predicted
+  label lengths in addition to the probabilities and decoded labels.
 
   Args:
     log_probs: The data input [max_time, batch_size, num_classes] tensor.
         The data is expected in the form of log probabilities.
     input_lengths: A tensor of shape [batch_size] containing the number of
-        timesteps in each `log_probs` batch entry.
+        valid timesteps in each `log_probs` batch entry.
     beam_width: The beam width to be passed to the beam search algorithm.
-    top_paths: The ammount of paths to keep track of in the beam
-        search algorithm.
+    top_paths: The number of paths to keep track of in the beam
+        search algorithm. This must be less than or equal to `beam_width`.
     blank_index: The class index to use for the blank label.
     name: A name for this op. Defaults to "ctc_beam_search".
 
   Returns:
-    A labels probrabilities tensor of shape [batch_size, top_paths].
-    A label lengths tensor of shape [batch_size, top_paths].
-    A decoded labels tensor of shape [batch_size, top_paths, max_time].
+
+    * A tensor of shape [batch_size, top_paths] containing the negative log
+      probabilities of the `top_paths` most likely labels.
+    * A tensor of shape [batch_size, top_paths] containing the length of the
+      `top_paths` most likely labels.
+    * A tensor of shape [batch_size, top_paths, max_time] containing the
+      decoded `top_paths` most likely labels.
+
   """
   label_probabilities, label_lengths, decoded_labels =\
     gen_popnn_ops.popnn_ctc_beam_search_with_log_probs(

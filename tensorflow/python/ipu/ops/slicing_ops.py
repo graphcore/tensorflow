@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""
+Slicing operators
+~~~~~~~~~~~~~~~~~
+"""
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.framework import ops
@@ -31,8 +35,8 @@ def sequence_slice(dst, src, num_elems, src_offsets, dst_offsets, zero_unused):
   from which the elements should be placed `dst_offsets`.
 
   For each slice, an element count, source offset and destination offset must
-  be provided. The i'th entry of `num_elems` corresponds to the i'th entry of
-  `src_offsets` and the i'th entry of `dst_offsets`.
+  be provided. The i-th entry of `num_elems` corresponds to the i-th entry of
+  `src_offsets` and the i-th entry of `dst_offsets`.
 
   For example:
 
@@ -108,7 +112,7 @@ def sequence_slice(dst, src, num_elems, src_offsets, dst_offsets, zero_unused):
 
 def sequence_slice_unpack(src, num_elems, src_offsets, total_elements):
   """This op specialises the PopLibs SequenceSlice operation for
-     sequence unpacking.
+  sequence unpacking.
 
   The SequenceSliceUnpack operation unpacks specified elements from the
   source tensor and inserts them contiguously into the resulting tensor.
@@ -117,8 +121,8 @@ def sequence_slice_unpack(src, num_elems, src_offsets, total_elements):
   to take for each slice `num_elems` and the offset in the source tensor from
   which to take them `src_offsets`.
 
-  For each slice, an element count and source offset must be provided. The i'th
-  entry of `num_elems` corresponds to the i'th entry of `src_offsets`.
+  For each slice, an element count and source offset must be provided. The i-th
+  entry of `num_elems` corresponds to the i-th entry of `src_offsets`.
 
   For example:
 
@@ -185,10 +189,10 @@ def sequence_slice_unpack(src, num_elems, src_offsets, total_elements):
 
 def sequence_slice_pack(dst, src, num_elems, dst_offsets, zero_unused):
   """This op specialises the PopLibs SequenceSlice operation for
-     sequence packing.
+  sequence packing.
 
   The SequenceSlicePack operation takes a contiguous tensor of sequences (
-  such as the output of `sequence_slice_unpack`) and packs it's elements
+  such as the output of `sequence_slice_unpack`) and packs its elements
   into specified locations in the destination tensor.
 
   The parameters of the slice operation are defined by the number of elements
@@ -196,7 +200,7 @@ def sequence_slice_pack(dst, src, num_elems, dst_offsets, zero_unused):
   into which the elements should be placed, `dst_offsets`.
 
   For each slice, an element count and destination offset must
-  be provided. The i'th entry of `num_elems` corresponds to the i'th entry of
+  be provided. The i-th entry of `num_elems` corresponds to the i-th entry of
   `dst_offsets`.
 
   For example:
