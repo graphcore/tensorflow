@@ -191,8 +191,6 @@ It is also possible to access the operators via the
 
 .. Popnn
 
-.. tensorflow.python.ipu.nn_ops just contains Gelu
-
 .. automodule:: tensorflow.python.ipu.nn_ops
   :members:
   :imported-members:
@@ -226,16 +224,6 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
-.. automodule:: tensorflow.python.ipu.slicing_ops
-  :members:
-  :special-members: __init__
-  :imported-members:
-
-.. automodule:: tensorflow.python.ipu.statisics_ops
-  :members:
-  :special-members: __init__
-  :imported-members:
-
 .. Poprand
 
 .. automodule:: tensorflow.python.ipu.rand_ops
@@ -246,6 +234,16 @@ It is also possible to access the operators via the
 
 .. automodule:: tensorflow.python.ipu.replication_ops
   :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.slicing_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.statistics_ops
+  :members:
+  :special-members: __init__
   :imported-members:
 
 .. automodule:: tensorflow.python.ipu.summary_ops

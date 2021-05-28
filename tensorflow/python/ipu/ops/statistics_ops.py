@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""
+Statistics operators
+~~~~~~~~~~~~~~~~~~~~
+"""
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.framework import dtypes
@@ -42,7 +46,8 @@ def histogram(inputs, levels, absolute_of_input=False):
   Args:
     inputs: A rank-1 tensor of values over which to compute binning levels.
     n_bins: The number of bins required.
-    absolute_of_input: Whether to bin on input magnitude (absolute value).
+    absolute_of_input: If True, bin on input magnitude (absolute value).
+      Default is False.
 
   Returns:
     A rank-1 histogram tensor.
@@ -72,7 +77,8 @@ def histogram_update(hist, inputs, levels, absolute_of_input=False):
   Args:
     inputs: A rank-1 tensor of values over which to compute binning levels.
     n_bins: The number of bins required.
-    absolute_of_input: Whether to bin on input magnitude (absolute value).
+    absolute_of_input: If True, bin on input magnitude (absolute value).
+      Default is False.
 
   Returns:
     The updated rank-1 histogram tensor, `hist`.
