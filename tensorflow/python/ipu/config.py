@@ -1257,11 +1257,13 @@ class _IPUDeviceConnectionConfig(_ConfigBase):
     """
     self.version = ""
     """
-    When :ref:`connection type <device_connection.type>` is
+    Default to `False`. When :ref:`connection type <device_connection.type>` is
     `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
     `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate whether
     remote buffers are enabled and supported in the system which will eventually
-    be used to execute the compiled programs.
+    be used to execute the compiled programs. Set it to `True` if your model
+    requires remote buffers and :ref:`connection type <device_connection.type>`
+    is not `DeviceConnectionType.ALWAYS`.
     """
     self.enable_remote_buffers = False
 

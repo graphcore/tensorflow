@@ -1203,11 +1203,13 @@ def set_ipu_connection_type(opts,
                  "ipu1", "ipu2" or "". Only required if the `connection_type`
                  provided is `DeviceConnectionType.PRE_COMPILE` or
                  `DeviceConnectionType.NEVER`.
-    enable_remote_buffers: When `connection_type` is
+    enable_remote_buffers: Default to `False`. When `connection_type` is
       `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
       `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate
       whether remote buffers are enabled and supported in the system which will
-      eventually be used to execute the compiled programs.
+      eventually be used to execute the compiled programs. Set it to `True` if
+      your model requires remote buffers and `connection_type` is not
+      `DeviceConnectionType.ALWAYS`.
   Returns:
     The IpuOptions configuration protobuf.
   """
