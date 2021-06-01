@@ -1805,16 +1805,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {
-      if (poplar_executor->CompilerReportingEnabled()) {
-        // Catch all exceptions but only do the profile printing if it is of
-        // graph_memory_allocation_error type.
-        const poplar::graph_memory_allocation_error* p_e_ptr =
-            dynamic_cast<const poplar::graph_memory_allocation_error*>(&e);
-        if (p_e_ptr) {
-          poplar_executor->DumpPoplarOutOfMemoryAllocationException(
-              module->name(), *p_e_ptr);
-        }
-      }
       return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
     }
 

@@ -566,10 +566,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                                 const std::string& tensorflow_info,
                                 int64 duration);
 
-  void DumpPoplarOutOfMemoryAllocationException(
-      const std::string& module_name,
-      const poplar::graph_memory_allocation_error& p_e);
-
   void AddHostToDeviceEventRecord(const std::string& transfer_json);
 
   void AddDeviceToHostEventRecord(const std::string& transfer_json);
