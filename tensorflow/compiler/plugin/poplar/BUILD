@@ -168,6 +168,7 @@ cc_library(
 cc_library(
     name = "optimizers",
     srcs = [
+        "driver/invariant_passes/no_control_deps_checker.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
@@ -362,6 +363,7 @@ cc_library(
     hdrs = [
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
+        "driver/invariant_passes/no_control_deps_checker.h",
         "driver/passes/add_block_recompute.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
@@ -3503,6 +3505,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "no_control_deps_checker_test",
+    srcs = ["tests/no_control_deps_checker_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     testonly = 1,
@@ -5372,6 +5387,7 @@ test_suite(
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
         "multi_use_feeds_finder_test",
+        "no_control_deps_checker_test",
         "nonlinearity_hlo_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",

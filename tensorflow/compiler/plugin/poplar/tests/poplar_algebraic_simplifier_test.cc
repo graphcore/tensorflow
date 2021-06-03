@@ -5223,7 +5223,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceBatchDim) {
 
     sum (x: f32[], y: f32[]) -> f32[] {
       y = f32[] parameter(1), backend_config="{}"
-      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      x = f32[] parameter(0), backend_config="{}"
       ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
     }
 
@@ -5262,7 +5262,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceMultipleBatchDims) {
 
     sum (x: f32[], y: f32[]) -> f32[] {
       y = f32[] parameter(1), backend_config="{}"
-      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      x = f32[] parameter(0), backend_config="{}"
       ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
     }
 
@@ -5313,7 +5313,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceDontOptimiseNonBatchDims) {
 
     sum (x: f32[], y: f32[]) -> f32[] {
       y = f32[] parameter(1), backend_config="{}"
-      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      x = f32[] parameter(0), backend_config="{}"
       ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
     }
 
