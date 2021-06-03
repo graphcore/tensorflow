@@ -371,15 +371,16 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
       reduction_dims.push_back(d);
     }
 
-    // Check if there is an allocation for the reduction output.
-    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
+    if (ShapeUtil::ElementsIn(output_shape) == 1) {
+      // If output is scalar, map it linearly with res.linear_mapping_state
+      TF_ASSIGN_OR_RETURN(
+          out, AddPlainTensor(graph, {debug_name_and_id, "out"}, output_shape,
+                              res, /*offset=*/true));
+    } else if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
+      // Check if there is an allocation for the reduction output.
       TF_ASSIGN_OR_RETURN(
           out, AddTensor(graph, TensorLocation{inst, 0}, output_shape, res,
                          tensor_map, {debug_name_and_id, "out"}));
-      // If output is scalar, map it linearly with res.linear_mapping_state
-      if (ShapeUtil::IsScalar(output_shape)) {
-        MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, out);
-      }
     } else {
       TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(inst->shape()));
       const auto shape = PoplarShapeFromXlaShape(inst->shape());
