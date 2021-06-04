@@ -556,6 +556,51 @@ Status ConvertComputationToUniqueSharding(HloInstruction* caller,
   }
   return Status::OK();
 }
+
+Status FixResourceUpdateOutputSharding(HloInstruction* resource_update) {
+  HloComputation* comp = resource_update->parent();
+  HloComputation* resource_update_comp = resource_update->to_apply();
+
+  HloInstruction* comp_root = comp->root_instruction();
+  HloInstruction* resource_update_root =
+      resource_update_comp->root_instruction();
+  CHECK_EQ(comp_root->opcode(), HloOpcode::kTuple);
+  CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
+
+  TF_ASSIGN_OR_RETURN(
+      const auto comp_root_sharding,
+      comp_root->sharding().GetTupleSharding(comp_root->shape()));
+
+  TF_ASSIGN_OR_RETURN(auto resource_update_tree,
+                      resource_update_root->sharding().AsShapeTree(
+                          resource_update_root->shape()));
+
+  for (HloInstruction* gte : resource_update->users()) {
+    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+    CHECK_EQ(gte->user_count(), 1);
+    CHECK_EQ(gte->users()[0], comp_root);
+    const auto indices = comp_root->OperandIndices(gte);
+    CHECK_EQ(indices.size(), 1);
+
+    // Get the expected sharding.
+    HloSharding output_sharding =
+        comp_root_sharding.GetSubSharding(comp_root->shape(),
+                                          /*index=*/ShapeIndex{indices[0]});
+
+    gte->set_sharding(output_sharding);
+
+    resource_update_tree.CopySubtreeFrom(
+        output_sharding.GetAsShapeTree(gte->shape()),
+        /*source_base_index=*/ShapeIndex{},
+        /*target_base_index=*/ShapeIndex{gte->tuple_index()});
+  }
+
+  HloSharding new_resource_update_sharding =
+      HloSharding::Tuple(resource_update_tree);
+  resource_update_root->set_sharding(new_resource_update_sharding);
+  resource_update->set_sharding(new_resource_update_sharding);
+  return Status::OK();
+}
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
@@ -804,6 +849,22 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
       }
     } else {
       attempt = 0;
+    }
+  }
+
+  // Make sure that sharding for all resource updates outputs matches the loop
+  // outputs sharding to prevent inter IPU copies between the resource update
+  // and the root.
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    auto& call_graph_node = call_graph->GetNode(comp);
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (IsResourceUpdate(inst)) {
+        auto callsites = call_graph_node.caller_callsites();
+        CHECK_EQ(callsites.size(), 1);
+        HloInstruction* caller = callsites[0].instruction();
+        CHECK(IsRepeatLoop(caller) || IsPipelineOp(caller));
+        TF_RETURN_IF_ERROR(FixResourceUpdateOutputSharding(inst));
+      }
     }
   }
   VLOG(2) << "After ShardingPass:";
