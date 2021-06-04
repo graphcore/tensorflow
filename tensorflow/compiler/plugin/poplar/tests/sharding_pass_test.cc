@@ -1775,6 +1775,55 @@ main {
   }
 }
 
+TEST_F(ShardingPassTest, FixResourceUpdateSharding) {
+  const std::string hlo_string = R"(
+HloModule top
+
+resource_update {
+  ru_arg0 = f32[] parameter(0)
+  ru_arg1 = f32[] parameter(1)
+  add0 = f32[] add(ru_arg0, ru_arg1), sharding={maximal device=0}
+  add1 = f32[] add(ru_arg0, ru_arg1), sharding={maximal device=1}
+  ROOT root = (f32[],f32[]) tuple(add1, add0)
+}
+
+loop {
+  param0 = f32[] parameter(0)
+  param1 = f32[] parameter(1)
+  add2 = f32[] add(param0, param0), sharding={maximal device=1}
+  add3 = f32[] add(param1, param1), sharding={maximal device=1}
+  call_ru = (f32[],f32[]) call(add2, add3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  gte0 = f32[] get-tuple-element(call_ru), index=0
+  gte1 = f32[] get-tuple-element(call_ru), index=1
+  ROOT root = (f32[], f32[]) tuple(gte1, gte0), sharding={{maximal device=0}, {maximal device=0}}
+}
+
+ENTRY e {
+  e0 = f32[] parameter(0)
+  e1 = f32[] parameter(1)
+  ROOT e.call = (f32[], f32[]) call(e0, e1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, ShardingPass().Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  HloComputation* resource_update =
+      FindComputation(module.get(), "resource_update");
+  HloInstruction* ru_root = resource_update->root_instruction();
+  EXPECT_EQ(ru_root->sharding().GetUniqueDevice(), 1);
+
+  HloComputation* comp = FindComputation(module.get(), "loop");
+  HloInstruction* gte0 = FindInstruction(module.get(), "gte0");
+  EXPECT_EQ(gte0->sharding().GetUniqueDevice(), 1);
+  HloInstruction* gte1 = FindInstruction(module.get(), "gte1");
+  EXPECT_EQ(gte1->sharding().GetUniqueDevice(), 1);
+  HloInstruction* comp_root = comp->root_instruction();
+  EXPECT_EQ(comp_root->sharding().GetUniqueDevice(), 1);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
