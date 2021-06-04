@@ -550,8 +550,7 @@ def ctc_loss(labels,
              blank_index,
              out_dtype=None,
              name=None):
-  """
-  Calculates and returns CTC (Connectionist Temporal Classification) loss.
+  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
 
   This op is designed and optimized for the IPU and cannot be used with other
   systems.
@@ -603,8 +602,7 @@ def ctc_loss_with_logits(labels,
                          blank_index,
                          out_dtype=None,
                          name=None):
-  """
-  Calculates and returns CTC (Connectionist Temporal Classification) loss.
+  """Calculates and returns CTC (Connectionist Temporal Classification) loss.
 
   This op is designed and optimized for the IPU and cannot be used with other
   systems.

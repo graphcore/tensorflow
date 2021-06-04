@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -27,6 +26,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu.scopes import ipu_shard
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test

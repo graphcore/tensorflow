@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 import popdist
 
@@ -53,7 +52,7 @@ class PoprunBasicTest(test_util.TensorFlowTestCase):  # pylint: disable=abstract
     dequeue_op = outfeed.dequeue()
 
     with session.Session() as sess:
-      config = IPUConfig()
+      config = ipu.config.IPUConfig()
       config.select_ipus = [popdist.getDeviceId()]
 
       config.experimental.multi_replica_distribution.process_count = \

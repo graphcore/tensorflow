@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import ops
@@ -46,7 +45,7 @@ class AssertTest(xla_test.XLATestCase):
 
           compiled_graph = ipu.ipu_compiler.compile(lambda: graph)
 
-          cfg = IPUConfig()
+          cfg = ipu.config.IPUConfig()
           cfg.configure_ipu_system()
 
           return sess.run(compiled_graph, {pa: value})

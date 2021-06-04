@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
@@ -144,7 +143,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
@@ -168,7 +167,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
@@ -199,7 +198,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
@@ -234,7 +233,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       out = ipu.ipu_compiler.compile(model, [inp])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()

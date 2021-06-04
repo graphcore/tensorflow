@@ -14,7 +14,6 @@
 # =============================================================================
 
 import math
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -32,6 +31,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data

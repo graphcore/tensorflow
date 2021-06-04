@@ -14,7 +14,6 @@
 # =============================================================================
 import copy
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -80,7 +79,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
@@ -149,7 +148,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
@@ -227,7 +226,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
@@ -258,7 +257,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000

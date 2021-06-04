@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session
@@ -58,7 +57,7 @@ class GclTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
@@ -100,7 +99,7 @@ class GclTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       compiled_model = ipu.ipu_compiler.compile(my_model, [inputs])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = num_replicas * num_shards
     cfg.gcl_poplar_options = {'useSynclessCollectives': 'true'}

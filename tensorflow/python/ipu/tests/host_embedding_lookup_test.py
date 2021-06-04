@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -61,7 +60,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
@@ -118,7 +117,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
@@ -169,7 +168,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
@@ -212,7 +211,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False

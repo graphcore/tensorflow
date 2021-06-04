@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -54,7 +53,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
       out1 = math_ops.cast(inp, dtype=np.float16)
 
     # Configure the hardware
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [2, 2]
     tu.add_hw_ci_connection_options(config)
     config.floating_point_behaviour.inv = True
@@ -129,7 +128,7 @@ class TestSeedControl(test_util.TensorFlowTestCase):
 
     dequeue_op = outfeed.dequeue()
 
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     config.auto_select_ipus = [2]
     tu.add_hw_ci_connection_options(config)
     config.floating_point_behaviour.inv = True

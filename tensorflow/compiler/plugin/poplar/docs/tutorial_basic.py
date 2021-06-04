@@ -1,8 +1,8 @@
 import numpy as np
 
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 import tensorflow.compat.v1 as tf
+from tensorflow.python.ipu.config import IPUConfig
 tf.disable_v2_behavior()
 
 # Configure arguments for targeting the IPU

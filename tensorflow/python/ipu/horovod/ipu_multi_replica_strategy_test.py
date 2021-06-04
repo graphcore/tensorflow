@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.python.client import session
@@ -41,7 +40,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
 
   def test_update_ipu_config(self):
     strategy = ipu_multi_replica_strategy.IPUMultiReplicaStrategy()
-    config = IPUConfig()
+    config = ipu.config.IPUConfig()
     strategy.update_ipu_config(config)
     self.assertEqual(
         config.experimental.multi_replica_distribution.process_count,
@@ -83,7 +82,7 @@ class IPUMultiReplicaStrategyTest(test_util.TensorFlowTestCase):  # pylint: disa
       value_allreduced = strategy.reduce(ReduceOp.SUM, per_replica_value)
 
       with session.Session() as sess:
-        config = IPUConfig()
+        config = ipu.config.IPUConfig()
         config.auto_select_ipus = 1
         config.configure_ipu_system()
 

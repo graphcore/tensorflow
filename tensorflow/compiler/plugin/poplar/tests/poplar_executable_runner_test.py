@@ -32,11 +32,11 @@ from tensorflow.compat.v1.train import Saver
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.platform import test
 from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.python.saved_model import saved_model
-from tensorflow.python.ipu.config import IPUConfig
 
 
 def filesInFolder(folder):

@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import itertools
-from tensorflow.python.ipu.config import IPUConfig
 
 import numpy as np
 from absl.testing import parameterized
@@ -95,7 +94,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(f, inputs=[input_data])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.configure_ipu_system()
 

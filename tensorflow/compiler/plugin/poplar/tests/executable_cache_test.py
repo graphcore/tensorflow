@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import contextlib
-from tensorflow.python.ipu.config import IPUConfig
 import glob
 import multiprocessing
 import numpy as np
@@ -281,7 +280,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      ipu_options = IPUConfig()
+      ipu_options = ipu.config.IPUConfig()
       ipu_options._profiling.profiling = True  # pylint: disable=protected-access
       _extra_ipu_config(ipu_options)
       ipu_options.auto_select_ipus = 1
