@@ -199,9 +199,11 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
           HloInstruction::CreateParameter(param_idx, remote_load->shape(),
                                           "parameter-" + remote_load->name()));
 
-      HloInstruction* reshape = builder->AddInstruction(
-          HloInstruction::CreateReshape(in_comp_shape, parameter));
-      context->MapInstruction(cluster_input, reshape);
+      if (!ShapeUtil::Compatible(in_comp_shape, parameter->shape())) {
+        parameter = builder->AddInstruction(
+            HloInstruction::CreateReshape(in_comp_shape, parameter));
+      }
+      context->MapInstruction(cluster_input, parameter);
       return remote_load;
     }
   }
@@ -304,32 +306,32 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
 
   const Shape all_shards_shape = ShapeUtil::MakeShape(
       cluster_input_type,
-      {partition_replication_factor_, cluster.GetShardSize()});
+      {partition_replication_factor_ * cluster.GetShardSize()});
 
   // Reshaped the parameter so that it can be sliced.
-  HloInstruction* reshaped = builder->AddInstruction(
-      HloInstruction::CreateReshape(all_shards_shape, parameter));
-
-  HloInstruction* replica_id =
-      builder->AddInstruction(CreateReplicationIndex());
-
-  HloInstruction* zero_i =
-      builder->AddInstruction(HloInstruction::CreateConstant(
-          LiteralUtil::Zero(replica_id->shape().element_type())));
+  if (!ShapeUtil::Compatible(parameter->shape(), all_shards_shape)) {
+    parameter = builder->AddInstruction(
+        HloInstruction::CreateReshape(all_shards_shape, parameter));
+  }
 
   // Slice off this replica's storage elements.
   const Shape slice_shape =
-      ShapeUtil::MakeShape(cluster_input_type, {1, cluster.GetShardSize()});
-  HloInstruction* slice =
-      builder->AddInstruction(HloInstruction::CreateDynamicSlice(
-          slice_shape, reshaped, {replica_id, zero_i},
-          {1, cluster.GetShardSize()}));
+      ShapeUtil::MakeShape(cluster_input_type, {cluster.GetShardSize()});
 
-  HloInstruction* input_slice = builder->AddInstruction(
-      HloInstruction::CreateReshape(in_comp_shape, slice));
+  // reduce-scatter(op=LOCAL) slices replica-specific shard of the collective
+  // input tensor and does nothing with the values. This is more memory/cycles
+  // efficient than doing dynamic-slice(replication-index() * shard_size).
+  HloInstruction* slice = builder->AddInstruction(CreateReduceScatter(
+      slice_shape, {parameter}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
+      PoplarReplicaGroups::Consecutive(partition_replication_factor_)));
 
-  VLOG(2) << "Input slice: " << input_slice->ToString();
-  context->MapInstruction(cluster_input, input_slice);
+  if (!ShapeUtil::Compatible(in_comp_shape, slice->shape())) {
+    slice = builder->AddInstruction(
+        HloInstruction::CreateReshape(in_comp_shape, slice));
+  }
+
+  VLOG(2) << "Input slice: " << slice->ToString();
+  context->MapInstruction(cluster_input, slice);
   return cluster_input;
 }
 
@@ -354,13 +356,19 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterOutput(
     if (store_input->shape().dimensions() == cluster.GetShardDimensions()) {
       VLOG(2) << "Skipping the extra remote store fusion for "
               << store->ToString();
-      // Reshape it so that it can be stored.
-      HloInstruction* reshape =
-          builder->AddInstruction(HloInstruction::CreateReshape(
-              store_input->shape(), in_cluster_output));
       // Override the inst_users to be the parameter store instruction.
       inst_users = {UserPositions{store, {1}}};
-      return reshape;
+
+      if (!ShapeUtil::Compatible(store_input->shape(),
+                                 in_cluster_output->shape())) {
+        // Reshape it so that it can be stored.
+        HloInstruction* reshape =
+            builder->AddInstruction(HloInstruction::CreateReshape(
+                store_input->shape(), in_cluster_output));
+        return reshape;
+      } else {
+        return in_cluster_output;
+      }
     }
   }
 
@@ -386,8 +394,11 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterOutput(
     VLOG(2) << "Slicing padding, slice: " << output->ToString();
   }
 
-  output = builder->AddInstruction(HloInstruction::CreateReshape(
-      cluster.GetClusterShape(inst_element_type), output));
+  const Shape cluster_shape = cluster.GetClusterShape(inst_element_type);
+  if (!ShapeUtil::Compatible(cluster_shape, output->shape())) {
+    output = builder->AddInstruction(
+        HloInstruction::CreateReshape(cluster_shape, output));
+  }
 
   return output;
 }

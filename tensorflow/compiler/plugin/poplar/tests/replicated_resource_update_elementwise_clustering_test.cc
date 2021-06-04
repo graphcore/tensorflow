@@ -73,9 +73,7 @@ StatusOr<HloInstruction*> GetRewrittenInput(HloInstruction* inst, bool padded) {
     TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
   }
   TF_ASSIGN_OR_RETURN(inst, LookThroughReshape(inst));
-  EXPECT_THAT(inst->opcode(), HloOpcode::kDynamicSlice);
-  TF_ASSIGN_OR_RETURN(inst, GetNextUser(inst));
-  EXPECT_THAT(inst->opcode(), HloOpcode::kReshape);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter)(inst));
   return inst;
 }
 
@@ -438,10 +436,6 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(arg3->shape(), ShapeUtil::MakeShape(F16, {}));
 
   arg2_load = cluster_comp->parameter_instruction(3);
-  if (replica_partition) {
-    EXPECT_THAT(arg2_load->user_count(), 1);
-    arg2_load = arg2_load->users()[0];
-  }
   EXPECT_THAT(arg2_load->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
   EXPECT_THAT(arg2_load->user_count(), 1);
@@ -642,10 +636,6 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(bcast->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
   arg2_load = cluster_comp->parameter_instruction(3);
-  if (replica_partition) {
-    EXPECT_THAT(arg2_load->user_count(), 1);
-    arg2_load = arg2_load->users()[0];
-  }
   EXPECT_THAT(arg2_load->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
   EXPECT_THAT(arg2_load->user_count(), 1);
@@ -671,9 +661,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(arg1_new->shape(), ShapeUtil::MakeShape(F16, {128}));
 
   if (replica_partition) {
-    EXPECT_TRUE(Match(
-        cluster_comp->root_instruction(),
-        m::Tuple(m::Reshape(m::Op().Is(arg2_new)), m::Op().Is(arg1_new))));
+    EXPECT_TRUE(Match(cluster_comp->root_instruction(),
+                      m::Tuple(m::Op().Is(arg2_new), m::Op().Is(arg1_new))));
     EXPECT_TRUE(
         Match(arg2_store,
               m::CustomCall(m::Op().Is(arg2),
@@ -836,10 +825,6 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(fusion->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
   arg2_load = cluster_comp->parameter_instruction(3);
-  if (replica_partition) {
-    EXPECT_THAT(arg2_load->user_count(), 1);
-    arg2_load = arg2_load->users()[0];
-  }
   EXPECT_THAT(arg2_load->shape(), ShapeUtil::MakeShape(F16, {shard_size}));
 
   EXPECT_THAT(arg2_load->user_count(), 1);
@@ -864,9 +849,8 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   EXPECT_THAT(arg1_new->shape(), ShapeUtil::MakeShape(F16, {128}));
 
   if (replica_partition) {
-    EXPECT_TRUE(Match(
-        cluster_comp->root_instruction(),
-        m::Tuple(m::Reshape(m::Op().Is(arg2_new)), m::Op().Is(arg1_new))));
+    EXPECT_TRUE(Match(cluster_comp->root_instruction(),
+                      m::Tuple(m::Op().Is(arg2_new), m::Op().Is(arg1_new))));
     EXPECT_TRUE(
         Match(arg2_store,
               m::CustomCall(m::Op().Is(arg2),
@@ -1143,7 +1127,6 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
 
   EXPECT_THAT(arg2_new_c->user_count(), 1);
   if (param.partition_offloaded_variables) {
-    arg2_new_c = arg2_new_c->users()[0];
     EXPECT_THAT(arg2_new_c->shape(),
                 ShapeUtil::MakeShape(param.remote_buffer_element_type,
                                      {param.shard_size}));
