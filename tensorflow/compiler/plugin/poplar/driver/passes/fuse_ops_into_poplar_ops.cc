@@ -306,7 +306,8 @@ static const std::vector<HloMatcherPattern> patterns = {
 
 FuseOpsIntoPoplarOps::FuseOpsIntoPoplarOps(
     struct CompilerAnnotations& annotations)
-    : SingleHloMatcher(annotations, patterns, "_pop_op_") {}
+    : SingleHloMatcher(annotations, patterns, "_pop_op_",
+                       /*restart_search_after_match=*/false) {}
 
 }  // namespace poplarplugin
 }  // namespace xla
