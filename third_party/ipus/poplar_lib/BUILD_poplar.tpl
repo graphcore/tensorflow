@@ -19,6 +19,7 @@ cc_library(
         "poplibs/include",
         "libpvti/include",
         "openmpi/include",
+        "libpva/include",
     ],
 )
 
@@ -29,6 +30,7 @@ cc_library(
             "lib*/poplar/libpoplar*",
         ] + if_custom_poplibs([
             "lib*/poplar/libgcl_ct*",
+            "lib*/poplar/libpva.so",
             "lib*/poplar/libpvti.so",
             "lib*/poplar/libtbb.*",
             "lib*/poplar/libtbb_preview.*",
@@ -43,6 +45,7 @@ cc_library(
             "lib*/poplibs/libpoputil*",
         ], [
             "lib*/**/libgcl_ct*",
+            "lib*/**/libpva.so",
             "lib*/**/libpvti.so",
             "lib*/**/libtbb.*",
             "lib*/**/libtbb_preview.*",
