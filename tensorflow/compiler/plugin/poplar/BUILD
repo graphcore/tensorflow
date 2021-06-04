@@ -189,6 +189,7 @@ cc_library(
 cc_library(
     name = "optimizers",
     srcs = [
+        "driver/invariant_passes/no_control_deps_checker.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
@@ -304,6 +305,7 @@ cc_library(
         "driver/tools/custom_ops/assert.cc",
         "driver/tools/custom_ops/batch_norm_stats.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
+        "driver/tools/custom_ops/conv_with_reverse.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
@@ -382,6 +384,7 @@ cc_library(
     hdrs = [
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
+        "driver/invariant_passes/no_control_deps_checker.h",
         "driver/passes/add_block_recompute.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
@@ -499,6 +502,7 @@ cc_library(
         "driver/tools/custom_ops/candidate_sampler.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
+        "driver/tools/custom_ops/conv_with_reverse.h",
         "driver/tools/custom_ops/copy_into.h",
         "driver/tools/custom_ops/ctc_loss.h",
         "driver/tools/custom_ops/dropout_hlo.h",
@@ -3418,6 +3422,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "no_control_deps_checker_test",
+    srcs = ["tests/no_control_deps_checker_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3935,6 +3952,19 @@ xla_test(
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "fuse_ops_early_test",
+    srcs = ["tests/fuse_ops_early_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -5179,6 +5209,7 @@ test_suite(
         "forward_allocation_test",
         "function_combiner_test",
         "function_optimizer_test",
+        "fuse_ops_early_test",
         "fuse_ops_into_poplar_ops_test",
         "fuse_ops_test",
         "fuse_wide_const_test",
@@ -5227,6 +5258,7 @@ test_suite(
         "multi_update_combiner_test",
         "multi_update_scale_apply_test",
         "multi_use_feeds_finder_test",
+        "no_control_deps_checker_test",
         "nonlinearity_hlo_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",
