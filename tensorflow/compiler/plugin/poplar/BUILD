@@ -169,6 +169,7 @@ cc_library(
     name = "optimizers",
     srcs = [
         "driver/invariant_passes/no_control_deps_checker.cc",
+        "driver/invariant_passes/resource_update_checker.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
@@ -364,6 +365,7 @@ cc_library(
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
         "driver/invariant_passes/no_control_deps_checker.h",
+        "driver/invariant_passes/resource_update_checker.h",
         "driver/passes/add_block_recompute.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
@@ -3518,6 +3520,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "resource_update_checker_test",
+    srcs = ["tests/resource_update_checker_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     testonly = 1,
@@ -5437,6 +5452,7 @@ test_suite(
         "repeat_loop_copy_inserter_test",
         "replicated_resource_update_elementwise_clustering_hw_test",
         "replicated_resource_update_elementwise_clustering_test",
+        "resource_update_checker_test",
         "resource_update_copy_inserter_test",
         "resource_update_elementwise_clustering_test",
         "resource_update_fixer_test",

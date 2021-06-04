@@ -15,81 +15,170 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 
-#include <algorithm>
+#include <map>
+#include <memory>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_dce.h"
-#include "tensorflow/compiler/xla/service/hlo_module.h"
-#include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/lib/strings/str_util.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
-// Make sure the root of the pipeline computation is a tuple.
-StatusOr<bool> FixRoot(PipelineStages& stages) {
-  HloInstruction* resource_update = *stages.resource_update;
-  HloComputation* pipeline_comp = resource_update->parent();
-  HloInstruction* pipeline_comp_root = pipeline_comp->root_instruction();
 
-  // We do not need to fix the root if it's not the resource update.
-  if (pipeline_comp_root != resource_update) {
-    if (pipeline_comp_root->opcode() != HloOpcode::kTuple) {
-      return InternalErrorStrCat(
-          "Expected the root of the Pipeline computation to be a tuple "
-          "instruction.");
-    }
-    return false;
-  }
-  // Add a GTE for each output from the resource update.
-  const int64 num_elements =
+// De-duplicate outputs from the resource update to make sure that each
+// GTE tuple index occurs only once and that each GTE is only used once.
+StatusOr<bool> FixResourceUpdate(HloInstruction* resource_update,
+                                 HloInstruction* caller) {
+  HloComputation* comp = resource_update->parent();
+  HloComputation* resource_update_comp = resource_update->to_apply();
+
+  // Make sure the resource update and its outer computations have tuples as
+  // root instructions.
+  TF_ASSIGN_OR_RETURN(bool changed_comp, FixRootInstruction(comp));
+  TF_ASSIGN_OR_RETURN(bool changed_resource_update_comp,
+                      FixRootInstruction(resource_update_comp));
+  bool changed = changed_comp || changed_resource_update_comp;
+
+  HloInstruction* comp_root = comp->root_instruction();
+  HloInstruction* resource_update_root =
+      resource_update_comp->root_instruction();
+
+  CHECK_EQ(comp_root->opcode(), HloOpcode::kTuple);
+  CHECK_EQ(resource_update_root->opcode(), HloOpcode::kTuple);
+  const int64 num_resource_update_outputs =
       ShapeUtil::TupleElementCount(resource_update->shape());
-  std::vector<HloInstruction*> gtes(num_elements);
-  for (int64 idx = 0; idx != num_elements; ++idx) {
-    TF_ASSIGN_OR_RETURN(gtes[idx],
-                        MakeGetTupleElementHlo(resource_update, idx));
+
+  // Find all the gtes for the resource update.
+  std::map<int64, std::vector<HloInstruction*>> all_gtes;
+  for (HloInstruction* user : resource_update->users()) {
+    if (user->opcode() != HloOpcode::kGetTupleElement ||
+        absl::c_any_of(user->users(),
+                       [&comp_root](const HloInstruction* user_of) {
+                         return user_of != comp_root;
+                       })) {
+      return InternalErrorStrCat(
+          "Expected the ResourceUpdate outputs to be used by the "
+          "root instruction only.");
+    }
+    all_gtes[user->tuple_index()].push_back(user);
   }
-  HloInstruction* tuple_root =
-      pipeline_comp->AddInstruction(HloInstruction::CreateTuple(gtes));
-  pipeline_comp->set_root_instruction(tuple_root);
+
+  struct DuplicateOutput {
+    int64 tuple_index;
+    int64 root_operand_index;
+  };
+
+  std::vector<DuplicateOutput> duplicate_outputs;
+  for (auto pair : all_gtes) {
+    const int64 tuple_index = pair.first;
+    const std::vector<HloInstruction*>& gtes = pair.second;
+    // Zeroth GTE is allowed a single user, all other uses are duplicates.
+    for (int64 i = 0; i != gtes.size(); ++i) {
+      const int64 offset = i == 0;
+      const auto& root_indices = comp_root->OperandIndices(gtes[i]);
+      for (int64 j = offset; j != root_indices.size(); ++j) {
+        duplicate_outputs.push_back({tuple_index, root_indices[j]});
+      }
+    }
+  }
+
+  if (duplicate_outputs.empty()) {
+    return changed;
+  }
+
+  // Create a new root tuple for the resource update computation.
+  std::vector<HloInstruction*> new_outputs = {
+      resource_update_root->operands().begin(),
+      resource_update_root->operands().end()};
+
+  CHECK_EQ(num_resource_update_outputs, new_outputs.size());
+
+  // Copy duplicate outputs.
+  for (const auto& duplicate_output : duplicate_outputs) {
+    HloInstruction* output = new_outputs[duplicate_output.tuple_index];
+    HloInstruction* copied_output = resource_update_comp->AddInstruction(
+        HloInstruction::CreateUnary(output->shape(), HloOpcode::kCopy, output));
+    output->SetupDerivedInstruction(copied_output);
+    new_outputs.push_back(copied_output);
+  }
+
+  // Create the new root tuple.
+  HloInstruction* new_resource_update_root =
+      resource_update_comp->AddInstruction(
+          HloInstruction::CreateTuple(new_outputs));
+
+  resource_update_root->SetupDerivedInstruction(new_resource_update_root);
+  resource_update_comp->set_root_instruction(new_resource_update_root, true);
+  *resource_update->mutable_shape() = new_resource_update_root->shape();
+
+  if (resource_update_root->user_count()) {
+    // Wire outputs of the new root as inputs to the old tuple so that the users
+    // don't have to be modified.
+    for (int64 i = 0; i != num_resource_update_outputs; ++i) {
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(new_resource_update_root, i));
+      TF_RETURN_IF_ERROR(resource_update_root->ReplaceOperandWith(i, gte));
+    }
+  } else {
+    TF_RETURN_IF_ERROR(
+        resource_update_comp->RemoveInstruction(resource_update_root));
+  }
+
+  // Add new GTEs from the updated resource update and use them in the root
+  // instruction.
+  for (int64 i = 0; i != duplicate_outputs.size(); ++i) {
+    const int64 root_operand_index = duplicate_outputs[i].root_operand_index;
+    TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                        MakeGetTupleElementHlo(
+                            resource_update, num_resource_update_outputs + i));
+    HloInstruction* current_operand =
+        comp_root->mutable_operand(root_operand_index);
+    TF_RETURN_IF_ERROR(comp_root->ReplaceOperandWith(root_operand_index, gte));
+    if (current_operand->user_count() == 0) {
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(current_operand));
+    }
+  }
+
   return true;
 }
 }  // namespace
 
-StatusOr<bool> ResourceUpdateFixer::FixPipeline(HloInstruction* pipeline_op) {
-  HloComputation* pipeline_comp = pipeline_op->to_apply();
-
-  TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Make sure that the root of each stage is a tuple.
-  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
-  if (!stages.resource_update) {
-    return false;
-  }
-  // Make sure the root is in the expected format.
-  TF_ASSIGN_OR_RETURN(bool root_changed, FixRoot(stages));
-
-  return root_changed;
-}
-
 StatusOr<bool> ResourceUpdateFixer::Run(HloModule* module) {
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
-  if (pipeline_ops.empty()) {
-    // No pipeline ops found - nothing to fix.
+  std::vector<HloInstruction*> resource_updates;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (IsResourceUpdate(inst)) {
+        resource_updates.push_back(inst);
+      }
+    }
+  }
+
+  if (resource_updates.empty()) {
     return false;
   }
-  CHECK_EQ(pipeline_ops.size(), 1);
+
   VLOG(2) << "Before ResourceUpdateFixer:";
   XLA_VLOG_LINES(2, module->ToString());
+  bool changed = false;
 
-  TF_ASSIGN_OR_RETURN(bool changed, FixPipeline(pipeline_ops[0]));
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  for (HloInstruction* resource_update : resource_updates) {
+    auto& call_graph_node = call_graph->GetNode(resource_update->parent());
+    auto callsites = call_graph_node.caller_callsites();
+    CHECK_EQ(callsites.size(), 1);
+    HloInstruction* caller = callsites[0].instruction();
+    CHECK(IsRepeatLoop(caller) || IsPipelineOp(caller));
+    TF_ASSIGN_OR_RETURN(bool changed_resource_update,
+                        FixResourceUpdate(resource_update, caller));
+    changed |= changed_resource_update;
+  }
 
   if (changed) {
     VLOG(2) << "After ResourceUpdateFixer:";

@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -24,13 +24,12 @@ class HloModule;
 
 namespace poplarplugin {
 
-/**
- * This pass fixes the resource update stage so that it is ready to be lowered
- * into Poplar.
- */
-class ResourceUpdateFixer : public HloModulePass {
+// Pass which checks that resource update is in a correct format:
+// * make sure that all users of the resource update are unique GTE
+//   instructions with each GTE only having a single user.
+class ResourceUpdateChecker : public HloModulePass {
  public:
-  absl::string_view name() const override { return "resource-update-fixer"; }
+  absl::string_view name() const override { return "resource-update-checker"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 };
@@ -38,4 +37,4 @@ class ResourceUpdateFixer : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_

@@ -15,10 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fix_root_instruction.h"
 
-#include <algorithm>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/xla/service/hlo_dce.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -34,11 +34,13 @@ StatusOr<bool> FixRootInstructionsPass::Run(HloModule* module) {
   VLOG(2) << "Before fixing the Pipeline root instructions.";
   XLA_VLOG_LINES(2, module->ToString());
 
-  TF_ASSIGN_OR_RETURN(auto stages_,
-                      GetPipelineStages(pipeline_ops.back()->to_apply()));
+  HloInstruction* pipeline = pipeline_ops[0];
+
+  TF_ASSIGN_OR_RETURN(auto stages_, GetPipelineStages(pipeline->to_apply()));
   TF_RETURN_IF_ERROR(FixRootInstructions(stages_));
-  TF_ASSIGN_OR_RETURN(bool changed,
-                      FixRootInstruction(pipeline_ops.back()->to_apply()));
+  TF_ASSIGN_OR_RETURN(bool changed, FixRootInstruction(pipeline->to_apply()));
+  TF_RETURN_IF_ERROR(
+      HloDCE().RunOnComputation(pipeline->to_apply(), false).status());
 
   VLOG(2) << "After fixing the Pipeline root instructions.";
   XLA_VLOG_LINES(2, module->ToString());

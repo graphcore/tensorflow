@@ -48,6 +48,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/no_control_deps_checker.h"
+#include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/resource_update_checker.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
@@ -1456,12 +1457,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<HloCSE>(true);
       pipeline.AddPass<OutlineRemoteBuffers>();
       pipeline.AddPass<ResourceUpdateCopyInserter>();
+      pipeline.AddPass<ResourceUpdateFixer>();
     }
 
     // Passes below this point need to respect control dependencies.
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
           "with control dependencies");
+      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
       pipeline.AddPass<HostEmbeddingNotification>();
       pipeline.AddPass<RecomputationInputRemover>();
       pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
@@ -1510,6 +1514,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
           "with inplace information");
+      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
       pipeline.AddPass<InplaceFinder>();
       pipeline.AddPass<ExpressionOutliner>();
       pipeline.AddPass<PipelineCopyInserter>();
