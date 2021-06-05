@@ -32,7 +32,6 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
-from tensorflow.python.ipu.config import IPUConfig
 
 REPORT_DIR_PREFIX = "tf_report_"
 
@@ -79,7 +78,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
   def testAutoReportDirNotCreated(self):
     with test.mock.patch.dict("os.environ", add_to_poplar_engine_options({})):
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -95,7 +94,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -122,7 +121,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
             "autoReport.directory": "./tommyFlowers"
         })):
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -146,7 +145,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
     with test.mock.patch.dict(
         "os.environ", add_to_poplar_engine_options({"autoReport.all":
                                                     "true"})):
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -166,7 +165,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
 
   def testAutoAssignReportSubdirectoriesAllowsMultipleReports(self):
     report_helper = tu.ReportHelper(self)
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     report_helper.set_autoreport_options(cfg)
     cfg.configure_ipu_system()
@@ -184,7 +183,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
 
   def testAutoAssignReportSubdirectoriesSubdirectoryReused(self):
     report_helper = tu.ReportHelper(self)
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     report_helper.set_autoreport_options(cfg)
     cfg.configure_ipu_system()

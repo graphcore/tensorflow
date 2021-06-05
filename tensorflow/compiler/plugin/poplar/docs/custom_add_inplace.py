@@ -2,13 +2,12 @@ import os
 import numpy as np
 
 from tensorflow.python import ipu
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
 # Configure argument for targeting the IPU
-cfg = IPUConfig()
+cfg = ipu.config.IPUConfig()
 cfg.auto_select_ipus = 1
 cfg.configure_ipu_system()
 

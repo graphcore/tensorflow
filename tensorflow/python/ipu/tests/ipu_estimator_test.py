@@ -14,7 +14,6 @@
 # =============================================================================
 
 import glob
-from tensorflow.python.ipu.config import IPUConfig
 import six
 import numpy as np
 
@@ -38,6 +37,7 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -1051,7 +1051,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with self.assertRaisesRegex(
         ValueError, r"`IPURunConfig` configured with 4 devices "
-        r"\(4 num_replicas times 1 num_shards\), "
+        r"\(4 replicas times 1 shards\), "
         r"but `IpuOptions` configured with 3 devices"):
       ipu_options = IPUConfig()
       ipu_options._profiling.profiling = True  # pylint: disable=protected-access
@@ -1063,7 +1063,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     with self.assertRaisesRegex(
         ValueError, r"`IPURunConfig` configured with 4 devices "
-        r"\(4 num_replicas times 1 num_shards\), "
+        r"\(4 replicas times 1 shards\), "
         r"but `IpuOptions` configured with 1 devices"):
       ipu_options = IPUConfig()
       ipu_options._profiling.profiling = True  # pylint: disable=protected-access

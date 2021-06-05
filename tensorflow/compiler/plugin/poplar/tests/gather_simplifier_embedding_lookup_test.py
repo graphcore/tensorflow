@@ -27,11 +27,11 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variables
 from tensorflow.python.compiler.xla import xla
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):

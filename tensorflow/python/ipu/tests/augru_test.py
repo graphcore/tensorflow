@@ -15,7 +15,6 @@
 """Tests covering augru used by the DIEN model."""
 
 from functools import partial
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.python.framework import test_util
@@ -29,6 +28,7 @@ from tensorflow.python.ipu import utils
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ops.rnn_ops import PopnnAUGRU
 from tensorflow.python.ops.rnn_cell import RNNCell
 from tensorflow.python.ops.rnn import dynamic_rnn

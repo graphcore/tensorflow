@@ -14,7 +14,6 @@
 # =============================================================================
 
 from functools import partial
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
 from tensorflow.keras import layers
@@ -46,6 +45,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior

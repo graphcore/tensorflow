@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -73,7 +72,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -135,7 +134,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -181,7 +180,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
@@ -221,7 +220,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
@@ -281,7 +280,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i, w])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False

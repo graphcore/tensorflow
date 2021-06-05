@@ -47,10 +47,7 @@ from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
-from tensorflow.python.ipu.config import (
-    IPUConfig, SelectionOrder, ExecutionProfileType, DeviceConnectionType,
-    MergeRemoteBuffersBehaviour, SchedulingAlgorithm, KeyId,
-    VerificationOptions, get_ipu_config, configure_ipu_system)
+from tensorflow.python.ipu.config import IPUConfig, SelectionOrder, ExecutionProfileType, DeviceConnectionType, MergeRemoteBuffersBehaviour, SchedulingAlgorithm, KeyId, VerificationOptions, get_ipu_config, configure_ipu_system
 # pylint: enable=unused-import
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
@@ -415,7 +412,8 @@ def set_optimization_options(
 def set_norm_options(opts,
                      use_stable_statistics=False,
                      experimental_distributed_batch_norm_replica_group_size=1):
-  """Set the IPU options related to normalisation operations. Note that these
+  """Set the IPU options related to normalisation operations.
+  Note that these
   options will be applied to all normalisation operations encountered
   (Fused Batch Norm, IPU Specific Group Norm, IPU Specific Layer Norm and IPU
   Specific Instance Norm).
@@ -483,7 +481,8 @@ def set_transfer_options(opts, use_verified_transfers=False):
     " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
     " TensorFlow documentation.")
 def set_verification_options(opts, verification_options):
-  """Set the pairs or key / id to use for each type of data used in the graph
+  """Configure verified transfers.
+     Set the pairs or key / id to use for each type of data used in the graph
      when verified transfers are enabled.
 
   .. code-block:: python
@@ -710,8 +709,7 @@ def set_pooling_options(opts, pooling_options=None):
     " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
     " TensorFlow documentation.")
 def set_report_options(opts, graph_options=None, execution_options=None):
-  """Set the options used to influence Poplar graph and execution reports
-     generation.
+  """Set the options used to influence Poplar graph and execution report generation.
 
 
   .. code-block:: python
@@ -824,7 +822,7 @@ def set_floating_point_behaviour_options(opts,
                                          oflo=True,
                                          esr=True,
                                          nanoo=True):
-  """Set the IPU floating point control behaviour bits
+  """Set the IPU floating point control behaviour bits.
 
   See the Poplar API documentation for poplar::FloatingPointBehaviour.
 
@@ -1191,11 +1189,12 @@ def set_ipu_connection_type(opts,
                             connection_type=DeviceConnectionType.ALWAYS,
                             ipu_version="",
                             enable_remote_buffers=False):
-  """ Configure when to attach to the device. For example, you can use
-      this to compile and cache a program without attaching to an IPU,
-      and then later run on a real IPU device without recompiling.
-      Setting the connection type doesn't impact the ability to profile
-      a model.
+  """
+  Configure when to attach to the device.
+  You can use this to, for example,
+  compile and cache a program without attaching to an IPU, and then later run
+  on a real IPU device without recompiling. Setting the connection type doesn't
+  impact the ability to profile a model.
 
   .. code-block:: python
 
@@ -1250,7 +1249,8 @@ def set_ipu_connection_type(opts,
     " TensorFlow documentation.")
 def set_experimental_multi_replica_distribution_options(
     opts, process_count, process_index):
-  """This will use the Poplar runtime replica subset feature to let multiple
+  """Configure run-time parallel processes to execute the same Poplar program.
+  This will use the Poplar runtime replica subset feature to let multiple
   processes collaborate on executing the same Poplar program by executing a
   subset of the global replicas each.
 

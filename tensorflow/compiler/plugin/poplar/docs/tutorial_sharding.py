@@ -1,7 +1,6 @@
 import numpy as np
 
 from tensorflow.python import ipu
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 import tensorflow.compat.v1 as tf
@@ -10,7 +9,7 @@ tf.disable_v2_behavior()
 NUM_IPUS = 4
 
 # Configure the IPU system
-cfg = IPUConfig()
+cfg = ipu.config.IPUConfig()
 cfg.auto_select_ipus = NUM_IPUS
 cfg.configure_ipu_system()
 

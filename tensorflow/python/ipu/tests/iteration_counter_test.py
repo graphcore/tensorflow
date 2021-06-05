@@ -14,7 +14,6 @@
 # =============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.platform import googletest
@@ -27,6 +26,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 

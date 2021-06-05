@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.python import ipu
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -78,7 +77,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
     with sl.Session() as sess:
@@ -110,7 +109,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
@@ -147,7 +146,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
@@ -184,7 +183,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
@@ -225,7 +224,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(network, inputs=[x1, grads, lr])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
       sess.run(variables.global_variables_initializer())
@@ -256,7 +255,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
     with sl.Session() as sess:
@@ -289,7 +288,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = IPUConfig()
+    cfg = ipu.config.IPUConfig()
     tu.add_hw_ci_connection_options(cfg)
     cfg.configure_ipu_system()
     with sl.Session() as sess:
@@ -313,7 +312,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         table = array_ops.placeholder(np.float16, [2000, 4, 4, 8])
         indices = array_ops.placeholder(np.int32, [4, 4, 8])
 
-      cfg = IPUConfig()
+      cfg = ipu.config.IPUConfig()
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
 

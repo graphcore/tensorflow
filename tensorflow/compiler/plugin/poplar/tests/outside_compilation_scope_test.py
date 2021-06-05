@@ -29,13 +29,13 @@ from tensorflow.python.framework import errors_impl
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.scopes import ipu_scope, outside_compilation_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
-from tensorflow.python.ipu.config import IPUConfig
 
 
 class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
