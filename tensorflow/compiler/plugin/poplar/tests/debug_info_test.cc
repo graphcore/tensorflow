@@ -13,121 +13,117 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ===============================================================*/
 
-#include <stdio.h>
-#include <iostream>
+#include <fstream>
 
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
-
+#include "include/json/json.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
+#include "tensorflow/core/platform/env.h"
 
-class TemporaryFileManager {
+struct TemporaryFileManager {
  public:
-  explicit TemporaryFileManager(const char* ext) {
-    // create temporary file name
-    name = std::string(std::tmpnam(nullptr)) + "." + ext;
+  explicit TemporaryFileManager(const std::string& file_name)
+      : file_name_(file_name) {
+    if (!tensorflow::Env::Default()->LocalTempFilename(&file_name_)) {
+      LOG(FATAL) << "Could not create a file.";
+    }
   }
-
-  std::string name;
 
   ~TemporaryFileManager() {
-    // delete the file
-    remove(name.c_str());
+    auto status = tensorflow::Env::Default()->DeleteFile(file_name_);
+    if (!status.ok()) {
+      LOG(FATAL) << status.ToString();
+    }
   }
-};
+  const std::string& GetFileName() { return file_name_; }
 
-// Short alias for this namespace
-namespace pt = boost::property_tree;
+ private:
+  std::string file_name_;
+};
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
+StatusOr<Json::Value> ReadJsonFile(const std::string& file_name) {
+  std::ifstream file(file_name);
+  Json::Value output;
+  Json::Reader reader;
+  if (!reader.parse(file, output)) {
+    return InternalError("Could not parse json file.");
+  }
+  return output;
+}
+
 using DebugInfoTest = HloTestBase;
 
 TEST_F(DebugInfoTest, TestXlaOpDebugInfo) {
-  TemporaryFileManager tfm("json");
-  poplar::DebugInfo::initializeStreamer(tfm.name,
+  TemporaryFileManager tfm("file.json");
+  poplar::DebugInfo::initializeStreamer(tfm.GetFileName(),
                                         poplar::DebugSerializationFormat::JSON);
 
-  std::cout << tfm.name << std::endl;
   {
-    poplar::DebugContext debugContext(
+    poplar::DebugContext debug_context(
         "test", poplar::SourceLocation("function_name", "file_name", 42));
     xla::OpMetadata metadata;
     metadata.set_op_type("fred");
     metadata.set_op_name("test");
-    XlaOpDebugInfo debugInfo(debugContext, metadata);
+    XlaOpDebugInfo debug_info(debug_context, metadata);
   }
 
   poplar::DebugInfo::closeStreamer();
 
-  // Create a root
-  pt::ptree root;
+  TF_ASSERT_OK_AND_ASSIGN(auto root, ReadJsonFile(tfm.GetFileName()));
 
-  // Load the json file in this ptree
-  pt::read_json(tfm.name, root);
-
-  EXPECT_EQ(1, root.get_child("contexts").size());
-
-  auto c = root.get_child("contexts").front().second;
-  EXPECT_EQ("xla_op", c.get_child("layer").get_value<std::string>());
-  EXPECT_EQ("op", c.get_child("category").get_value<std::string>());
-
-  EXPECT_EQ("test", c.get_child("op_name").get_value<std::string>());
-  EXPECT_EQ("fred", c.get_child("op_type").get_value<std::string>());
-
-  EXPECT_FALSE(c.get_child_optional("sourcefile"));
-  EXPECT_FALSE(c.get_child_optional("sourceline"));
+  EXPECT_EQ(1, root["contexts"].size());
+  auto c = root["contexts"][0];
+  EXPECT_EQ("xla_op", c["layer"].asString());
+  EXPECT_EQ("op", c["category"].asString());
+  EXPECT_EQ("test", c["op_name"].asString());
+  EXPECT_EQ("fred", c["op_type"].asString());
+  EXPECT_FALSE(c.isMember("sourcefile"));
+  EXPECT_FALSE(c.isMember("sourceline"));
 }
 
 TEST_F(DebugInfoTest, TestHloInstructionDebugInfo_Constant) {
-  TemporaryFileManager tfm("json");
-  poplar::DebugInfo::initializeStreamer(tfm.name,
+  TemporaryFileManager tfm("file.json");
+  poplar::DebugInfo::initializeStreamer(tfm.GetFileName(),
                                         poplar::DebugSerializationFormat::JSON);
 
   {
-    poplar::DebugContext debugContext(
+    poplar::DebugContext debug_context(
         poplar::SourceLocation("function_name", "file_name", 42));
     auto instruction = HloInstruction::CreateConstant(xla::Literal());
-    HloInstructionDebugInfo debugInfo(debugContext, instruction.get());
+    HloInstructionDebugInfo debug_info(debug_context, instruction.get());
   }
 
   poplar::DebugInfo::closeStreamer();
 
-  // Create a root
-  pt::ptree root;
+  TF_ASSERT_OK_AND_ASSIGN(auto root, ReadJsonFile(tfm.GetFileName()));
 
-  // Load the json file in this ptree
-  pt::read_json(tfm.name, root);
-
-  EXPECT_EQ(1, root.get_child("contexts").size());
-  auto c = root.get_child("contexts").front().second;
-  EXPECT_EQ("hloinstruction", c.get_child("layer").get_value<std::string>());
-  EXPECT_EQ("constant", c.get_child("hlo_name").get_value<std::string>());
-  EXPECT_EQ(-1, c.get_child("hlo_id").get_value<int64>());
-  EXPECT_EQ("constant", c.get_child("opcode").get_value<std::string>());
-  EXPECT_EQ("() -> ()", c.get_child("signature").get_value<std::string>());
-  EXPECT_EQ("%constant = () constant({...})",
-            c.get_child("debug_string").get_value<std::string>());
-
-  EXPECT_EQ(0, c.get_child("operand_count").get_value<int>());
-
-  EXPECT_EQ(0, c.get_child("operands").size());
-  EXPECT_EQ(0, c.get_child("users").size());
+  EXPECT_EQ(1, root["contexts"].size());
+  auto c = root["contexts"][0];
+  EXPECT_EQ("hloinstruction", c["layer"].asString());
+  EXPECT_EQ("constant", c["hlo_name"].asString());
+  EXPECT_EQ(-1, c["hlo_id"].asInt64());
+  EXPECT_EQ("constant", c["opcode"].asString());
+  EXPECT_EQ("() -> ()", c["signature"].asString());
+  EXPECT_EQ("%constant = () constant({...})", c["debug_string"].asString());
+  EXPECT_EQ(0, c["operand_count"].asInt());
+  EXPECT_EQ(0, c["operands"].size());
+  EXPECT_EQ(0, c["users"].size());
 }
 
 TEST_F(DebugInfoTest, TestHloInstructionDebugInfo_Dot) {
-  TemporaryFileManager tfm("json");
-  poplar::DebugInfo::initializeStreamer(tfm.name,
+  TemporaryFileManager tfm("file.json");
+  poplar::DebugInfo::initializeStreamer(tfm.GetFileName(),
                                         poplar::DebugSerializationFormat::JSON);
 
   {
-    poplar::DebugContext debugContext(
+    poplar::DebugContext debug_context(
         poplar::SourceLocation("function_name", "file_name", 42));
 
     Shape r1f32 = ShapeUtil::MakeShape(F32, {1});
@@ -151,64 +147,51 @@ TEST_F(DebugInfoTest, TestHloInstructionDebugInfo_Dot) {
 
     auto computation = builder.Build(root.get());
     auto a = computation->AddInstruction(std::move(instruction));
-    HloInstructionDebugInfo debugInfo(debugContext, a);
+    HloInstructionDebugInfo debug_info(debug_context, a);
   }
 
   poplar::DebugInfo::closeStreamer();
 
-  // Create a root
-  pt::ptree root;
+  TF_ASSERT_OK_AND_ASSIGN(auto root, ReadJsonFile(tfm.GetFileName()));
 
-  // Load the json file in this ptree
-  pt::read_json(tfm.name, root);
-
-  EXPECT_EQ(1, root.get_child("contexts").size());
-  auto c = root.get_child("contexts").front().second;
-  EXPECT_EQ("hloinstruction", c.get_child("layer").get_value<std::string>());
-  EXPECT_EQ("dot", c.get_child("hlo_name").get_value<std::string>());
-  EXPECT_EQ(-1, c.get_child("hlo_id").get_value<int64>());
-  EXPECT_EQ("dot", c.get_child("opcode").get_value<std::string>());
-  EXPECT_EQ("(f32[1], f32[1]) -> f32[1]",
-            c.get_child("signature").get_value<std::string>());
+  EXPECT_EQ(1, root["contexts"].size());
+  auto c = root["contexts"][0];
+  EXPECT_EQ("hloinstruction", c["layer"].asString());
+  EXPECT_EQ("dot", c["hlo_name"].asString());
+  EXPECT_EQ(-1, c["hlo_id"].asInt64());
+  EXPECT_EQ("dot", c["opcode"].asString());
+  EXPECT_EQ("(f32[1], f32[1]) -> f32[1]", c["signature"].asString());
   EXPECT_EQ(
       "%dot = f32[1]{0} dot(f32[1]{0} %x, f32[1]{0} %y), lhs_batch_dims={0}, "
       "lhs_contracting_dims={}, rhs_batch_dims={0}, rhs_contracting_dims={}",
-      c.get_child("debug_string").get_value<std::string>());
+      c["debug_string"].asString());
+  EXPECT_EQ(2, c["operand_count"].asInt());
+  EXPECT_EQ(2, c["operands"].size());
+  EXPECT_EQ(0, c["users"].size());
 
-  EXPECT_EQ(2, c.get_child("operand_count").get_value<int>());
-
-  EXPECT_EQ("ComputationA",
-            c.get_child("computation").get_value<std::string>());
-  EXPECT_EQ(-1, c.get_child("computation_id").get_value<int64>());
-
-  EXPECT_EQ(2, c.get_child("operands").size());
-  EXPECT_EQ(0, c.get_child("users").size());
+  EXPECT_EQ("ComputationA", c["computation"].asString());
+  EXPECT_EQ(-1, c["computation_id"].asInt64());
 }
 
 TEST_F(DebugInfoTest, TestPoplarOpDefDebugInfo) {
-  TemporaryFileManager tfm("json");
-  poplar::DebugInfo::initializeStreamer(tfm.name,
+  TemporaryFileManager tfm("file.json");
+  poplar::DebugInfo::initializeStreamer(tfm.GetFileName(),
                                         poplar::DebugSerializationFormat::JSON);
 
   {
-    poplar::DebugContext debugContext(
+    poplar::DebugContext debug_context(
         poplar::SourceLocation("function_name", "file_name", 42));
-    PoplarOpDefDebugInfo debugInfo(debugContext, "SomeClass");
+    PoplarOpDefDebugInfo debug_info(debug_context, "SomeClass");
   }
 
   poplar::DebugInfo::closeStreamer();
 
-  // Create a root
-  pt::ptree root;
+  TF_ASSERT_OK_AND_ASSIGN(auto root, ReadJsonFile(tfm.GetFileName()));
 
-  // Load the json file in this ptree
-  pt::read_json(tfm.name, root);
-
-  EXPECT_EQ(1, root.get_child("contexts").size());
-
-  auto c = root.get_child("contexts").front().second;
-  EXPECT_EQ("poplar_driver", c.get_child("layer").get_value<std::string>());
-  EXPECT_EQ("SomeClass", c.get_child("class").get_value<std::string>());
+  EXPECT_EQ(1, root["contexts"].size());
+  auto c = root["contexts"][0];
+  EXPECT_EQ("poplar_driver", c["layer"].asString());
+  EXPECT_EQ("SomeClass", c["class"].asString());
 }
 
 }  // namespace
