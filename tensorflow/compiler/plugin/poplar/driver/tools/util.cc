@@ -338,15 +338,6 @@ bool IsFusion(const HloInstruction* inst, const std::string& name) {
                                        name);
 }
 
-bool IsArithmeticExpressionFusion(const HloComputation* comp) {
-  return IsFusionComputationWithPrefix(comp, "_arithmetic_expression");
-}
-
-bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kFusion &&
-         IsArithmeticExpressionFusion(inst->fused_instructions_computation());
-}
-
 namespace {
 PoplarBackendConfig ParsePoplarBackendConfig(const HloInstruction* inst) {
   auto status_or = inst->backend_config<PoplarBackendConfig>();

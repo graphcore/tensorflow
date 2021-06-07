@@ -22,17 +22,22 @@ limitations under the License.
 namespace xla {
 
 class HloModule;
+class HloComputation;
 
 namespace poplarplugin {
 
-// Extract elementwise ops into a called sub-graph
-// (must come after InplaceFinder)
-
+// Extract elementwise ops into a called sub-graph.
 class ExpressionOutliner : public HloModulePass {
  public:
+  explicit ExpressionOutliner(int64 maximum_num_elements = -1);
   absl::string_view name() const override { return "expression-outliner"; }
 
   StatusOr<bool> Run(HloModule* module);
+
+ private:
+  StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp);
+
+  const int64 maximum_num_elements_;
 };
 
 }  // namespace poplarplugin

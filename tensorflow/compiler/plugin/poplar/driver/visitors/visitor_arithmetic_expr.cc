@@ -42,12 +42,15 @@ namespace poplarplugin {
 
 ArithmeticExprVisitor::ArithmeticExprVisitor(
     CompilerResources& res, const TensorVectors& inputs,
+    const HloInstruction* caller,
     const poplar::DebugNameAndId& debug_name_and_id)
-    : BaseVisitor(res, debug_name_and_id), inputs_(std::move(inputs)) {}
+    : BaseVisitor(res, debug_name_and_id),
+      inputs_(std::move(inputs)),
+      caller_(caller) {}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
 ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
-  // When finding an expression, need to diffrentiate between parameters and
+  // When finding an expression, need to differentiate between parameters and
   // actual expressions
   if (inst->opcode() == HloOpcode::kParameter) {
     // Find the input tensor - tuples are not supported
@@ -170,7 +173,7 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
 
 Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
-  poplar::Graph& graph = GetGraph(resources_, inst);
+  poplar::Graph& graph = GetGraph(resources_, caller_);
   poplar::program::Sequence seq({}, debug_name_and_id);
 
   // get the expression
