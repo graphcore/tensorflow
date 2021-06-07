@@ -38,7 +38,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
@@ -230,24 +229,6 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   return AddSequenceForInstruction(inst, seq);
 }
 
-namespace {
-StatusOr<TensorVectors> GetFusionInputs(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    poplar::program::Sequence& seq,
-    const poplar::DebugNameAndId& debug_name_and_id,
-    const bool expand_aliasing = true) {
-  TensorVectors args;
-  for (int64 i = 0; i < inst->operand_count(); i++) {
-    TF_ASSIGN_OR_RETURN(
-        TensorVector t,
-        FindInstructionInputTensors(tensor_map, res, inst, i, seq,
-                                    debug_name_and_id, expand_aliasing));
-    args.push_back(t);
-  }
-  return args;
-}
-}  // namespace
-
 Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
   poplar::DebugNameAndId debug_name_and_id = GetDebugNameAndId(inst);
@@ -255,20 +236,7 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   poplar::program::Program prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
-  if (IsArithmeticExpressionFusion(inst)) {
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors args,
-        GetFusionInputs(resources_, inst, tensor_map, seq, debug_name_and_id));
-    ArithmeticExprVisitor arithmetic_visitor(resources_, args,
-                                             debug_name_and_id);
-    TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
-    prog = arithmetic_visitor.GetSequence();
-
-    for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  arithmetic_visitor.outputs()[i]));
-    }
-  } else if (IsPopOpsFusion(inst)) {
+  if (IsPopOpsFusion(inst)) {
     // Fusions are handle as Poplar custom ops.
     poplar::Graph& graph = GetGraph(resources_, inst);
     const bool is_poplar_custom_op = GetPoplarCustomOp(inst).has_value();

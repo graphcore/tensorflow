@@ -27,7 +27,7 @@ using InplaceSet = std::set<const HloInstruction*>;
 
 namespace {
 
-bool IsPopopsElementwise(const HloInstruction* inst) {
+bool IsSupportedElementwise(const HloInstruction* inst) {
   switch (inst->opcode()) {
     // Unary
     case HloOpcode::kAbs:
@@ -69,10 +69,8 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kShiftLeft:
     case HloOpcode::kShiftRightArithmetic:
     case HloOpcode::kShiftRightLogical:
-
     // Ternary
     case HloOpcode::kSelect:
-      return !inst->shape().IsTuple();
     case HloOpcode::kClamp:
       return true;
     // Ops not supported in Expressions
@@ -84,72 +82,38 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kReducePrecision:
     // Binary
     case HloOpcode::kComplex:
-      return false;
     default:
       return false;
   }
 }
+}  // namespace
 
-StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
+ExpressionOutliner::ExpressionOutliner(int64 maximum_num_elements)
+    : maximum_num_elements_(maximum_num_elements) {}
+
+StatusOr<bool> ExpressionOutliner::ModuleExpressionOutliner(
+    HloComputation* comp) {
   std::list<HloInstruction*> all_ops;
   for (auto* inst : comp->MakeInstructionPostOrder()) {
-    if (IsPopopsElementwise(inst) && inst->user_count() == 1 &&
-        !IsLoweredInplace(inst) && inst->control_predecessors().size() == 0 &&
-        inst->control_successors().size() == 0) {
-      bool add_op = true;
-      if (inst->IsElementwiseBinary()) {
-        // for BinaryOps check the shapes of inputs match
-        const HloInstruction* in0 = inst->operand(0);
-        const HloInstruction* in1 = inst->operand(1);
-        const bool input_shapes_match =
-            ShapeUtil::Equal(in0->shape(), in1->shape());
-        if (!input_shapes_match) {
-          // if shapes don't match check that they can be broadcasted to the
-          // same shape
-          auto shape0_optional =
-              convert_array<tensorflow::BCast::Vec>(in0->shape().dimensions());
-          auto shape1_optional =
-              convert_array<tensorflow::BCast::Vec>(in1->shape().dimensions());
-          if (!shape0_optional || !shape1_optional) {
-            return xla::FailedPrecondition(
-                "ExpressionOutliner - cannot cast input shape.");
-          }
-          tensorflow::BCast::Vec shape0 = *shape0_optional;
-          tensorflow::BCast::Vec shape1 = *shape1_optional;
-
-          const bool valid_bcast = tensorflow::BCast(shape0, shape1).IsValid();
-          if (!valid_bcast) {
-            add_op = false;
-          }
-        }
-      } else if (inst->opcode() == HloOpcode::kClamp) {
-        // don't add ClampOps for which inputs don't have the same shape as
-        // output
-        const bool shapes_match =
-            ShapeUtil::Equal(inst->shape(), inst->operand(0)->shape()) &&
-            ShapeUtil::Equal(inst->shape(), inst->operand(1)->shape()) &&
-            ShapeUtil::Equal(inst->shape(), inst->operand(2)->shape());
-        if (!shapes_match) {
-          add_op = false;
-        }
-      } else if (inst->opcode() == HloOpcode::kSelect) {
-        const HloInstruction* pred = inst->operand(0);
-        const HloInstruction* in0 = inst->operand(1);
-        const HloInstruction* in1 = inst->operand(2);
-        // for Elementwise Select, predicate has to be scalar
-        const bool pred_scalar = ShapeUtil::ElementsIn(pred->shape()) == 1;
-        // or match the shape with the inputs
-        const bool shapes_match =
-            ShapeUtil::Equal(pred->shape(), in0->shape()) &&
-            ShapeUtil::Equal(pred->shape(), in1->shape());
-        if (!(pred_scalar || shapes_match)) {
-          add_op = false;
-        }
-      }
-      if (add_op) {
-        all_ops.push_front(inst);
-      }
+    if (!IsSupportedElementwise(inst)) {
+      continue;
     }
+
+    // Skip if:
+    // * Instruction has more than one user - Poplibs maps only really support
+    // trees.
+    // * Instruction is lowered inplace.
+    // * Instruction has control deps.
+    // * Instruction has more elements than the maximum (-1 means no maximum).
+    if (inst->user_count() != 1 || IsLoweredInplace(inst) ||
+        inst->control_predecessors().size() ||
+        inst->control_successors().size() ||
+        (maximum_num_elements_ >= 0 &&
+         ShapeUtil::ElementsIn(inst->shape()) > maximum_num_elements_)) {
+      continue;
+    }
+
+    all_ops.push_front(inst);
   }
 
   bool was_outlined = false;
@@ -222,7 +186,7 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
                    instructions_to_outline.end());
 
       auto* fusion = OutlineExpressionFromComputationWithFusion(
-          instructions_to_outline, "_arithmetic_expression", comp);
+          instructions_to_outline, "_pop_op_arithmetic_expression", comp);
 
       was_outlined = true;
 
@@ -234,8 +198,6 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
 
   return was_outlined;
 }
-
-}  // namespace
 
 StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
   bool was_outlined = false;

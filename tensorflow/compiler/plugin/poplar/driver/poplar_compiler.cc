@@ -1414,6 +1414,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
       pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
+      pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
       pipeline.AddPass<ElementwiseSimplifier>();
       pipeline.AddPass<ElementwiseBroadcastConverter>();
       pipeline.AddPass<FuseWideConst>(resources.annotations);

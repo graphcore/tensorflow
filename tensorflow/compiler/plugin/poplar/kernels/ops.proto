@@ -115,7 +115,7 @@ enum PoplarOp {
   // Supported Fusions.
   Conv_biasadd = 200;
   Matmul_biasadd = 201;
-  // retired = 202;
+  Arithmetic_expression = 202;
   Norm_scale_add = 203;
   Uniform_scale_add = 204;
   Wide_const = 205;

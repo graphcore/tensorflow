@@ -82,11 +82,11 @@ class SubcomputationGraphCachingTest(xla_test.XLATestCase):
         return cond_1 + cond_2
 
       with ops.device('cpu'):
-        x1 = array_ops.placeholder(dtypes.int32, [2, 2])
+        x1 = array_ops.placeholder(dtypes.int32, [8, 2])
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r1 = ipu.ipu_compiler.compile(f_cond, inputs=[x1])
-        i_x1 = np.full((2, 2), 10)
+        i_x1 = np.full((8, 2), 10)
 
         report = ReportJSON(self, sess)
         sess.run(r1, {x1: i_x1})

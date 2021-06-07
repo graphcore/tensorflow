@@ -181,13 +181,15 @@ class MultiIpuTest(xla_test.XLATestCase):
 
       report.parse_log()
       tm = report.get_tensor_map()
-      mods = tm.computation_names()
-      self.assertEqual(len(mods), 1)
+      comps = tm.computation_names()
+      self.assertEqual(len(comps), 3)
 
-      tiles = tm.tile_ids(mods[0])
-
-      self.assertEqual(len(tiles), 2)
-      self.assertEqual(tiles, set((0, 1472)))
+      for c in comps:
+        tiles = tm.tile_ids(c)
+        if len(tiles) == 3:
+          self.assertEqual(tiles, set((0, 1, 1472)))
+        else:
+          self.assertEqual(len(tiles), 0)
 
   def testMultiIpuTraining(self):
     with self.session() as sess:

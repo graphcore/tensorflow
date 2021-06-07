@@ -88,13 +88,13 @@ TEST_F(ExpressionOutlinerTest, OutlineTreeWithSharedInputs) {
 HloModule top
 
 %cluster_1  {
-  a0 = f16[] parameter(0)
-  a1 = f16[] parameter(1)
-  a2 = f16[] parameter(2)
-  add1 = f16[] add(a0, a1)
-  sub1 = f16[] subtract(a0, a2)
-  mul1 = f16[] multiply(add1, sub1), sharding={maximal device=1}
-  ROOT %tuple = (f16[]) tuple(mul1)
+  a0 = f16[128] parameter(0)
+  a1 = f16[128] parameter(1)
+  a2 = f16[128] parameter(2)
+  add1 = f16[128] add(a0, a1)
+  sub1 = f16[128] subtract(a0, a2)
+  mul1 = f16[128] multiply(add1, sub1), sharding={maximal device=1}
+  ROOT %tuple = (f16[128]) tuple(mul1)
 }
   )";
 
@@ -106,8 +106,13 @@ HloModule top
 
   auto* module = module_or_status.ValueOrDie().get();
 
-  ExpressionOutliner eo;
-  EXPECT_TRUE(eo.Run(module).ValueOrDie());
+  // Noting to outline - the number of elements exceeds the limit.
+  EXPECT_FALSE(ExpressionOutliner(/*maximum_num_elements=*/127)
+                   .Run(module)
+                   .ValueOrDie());
+
+  // Outline now.
+  EXPECT_TRUE(ExpressionOutliner().Run(module).ValueOrDie());
 
   auto* comp = module->entry_computation();
   auto* inst = comp->root_instruction();

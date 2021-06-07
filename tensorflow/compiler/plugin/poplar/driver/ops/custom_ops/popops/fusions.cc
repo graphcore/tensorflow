@@ -33,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -452,6 +453,40 @@ class ReductionSquareAddOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(Reduction_square_add, ReductionSquareAddOp)
+
+class ArithemticExpressionOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "ArithemticExpressionOp");
+    poplar::program::Sequence seq({}, debug_info);
+
+    // Get all the inputs.
+    TensorVectors args;
+    for (int64 i = 0; i < inst->operand_count(); i++) {
+      TF_ASSIGN_OR_RETURN(
+          TensorVector t,
+          FindInstructionInputTensors(tensor_map, res, inst, i, seq, debug_info,
+                                      /*expand_aliasing=*/false));
+      args.push_back(t);
+    }
+
+    // Evaluate the expression.
+    const HloComputation* comp = inst->fused_instructions_computation();
+    ArithmeticExprVisitor arithmetic_visitor(res, args, inst, debug_info);
+    TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
+    seq.add(arithmetic_visitor.GetSequence());
+
+    for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
+                                  arithmetic_visitor.outputs()[i]));
+    }
+    return seq;
+  }
+};
+
+REGISTER_POPLAR_OP(Arithmetic_expression, ArithemticExpressionOp)
 
 }  // namespace poplarplugin
 }  // namespace xla
