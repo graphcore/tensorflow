@@ -46,7 +46,10 @@ Status DeleteXlaCompilationCache(XlaDevice* device) {
   Status lookup_status = resource_manager->Lookup(
       resource_manager->default_container(), "xla_cache", &cache);
   const bool has_cache = lookup_status.ok() && cache;
+
   if (has_cache) {
+    // Remove the extra reference acquired during the lookup.
+    cache->Unref();
     // Fragile but the arguments to Delete correspond to the values used when
     // constructing the cache in CompileToLocalExecutable (kernels/xla_ops.cc).
     // It'll be lazily recreated if the device is used for compilation again.
