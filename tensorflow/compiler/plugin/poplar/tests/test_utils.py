@@ -644,7 +644,9 @@ class ReportJSON(object):
           self.tensor_map.computation_names(), ["*_stage_%d_" % i])
       self.test.assertTrue(stage, "No stage %d found" % i)
       ipus = self.tensor_map.ipu_ids(stage)
-      if ipus:
+
+      # A stage using device -1 can be on any of the devices.
+      if ipus and expected_ipu != -1:
         self.test.assertEqual(
             len(ipus), 1,
             "Stage %d was mapped to more than one ipu: %s" % (i + 1, ipus))

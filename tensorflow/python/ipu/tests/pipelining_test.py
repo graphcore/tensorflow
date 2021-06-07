@@ -2204,6 +2204,113 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(ValueError, 'No variables to optimize.'):
         ipu_compiler.compile(my_net, inputs=[x])
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareMultiIPUStage(self):
+    # Resnet like network.
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(100, shape=[4])
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value
+        label = math_ops.reduce_mean(img, axis=[1, 2, 3])
+        return img, math_ops.cast(label, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 18
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def fixed_padding(inputs, kernel_size):
+      pad_total = kernel_size - 1
+      pad_beg = pad_total // 2
+      pad_end = pad_total - pad_beg
+      padded_inputs = array_ops.pad(
+          inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+      return padded_inputs
+
+    def block(name, first_stride, out_filters, count, x):
+
+      for i in range(count):
+        shape_in = x.shape
+        stride = first_stride if (i == 0) else 1
+        if stride > 1:
+          x = fixed_padding(x, 3)
+        sc = x
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/1"):
+          x = conv(x, 3, stride, out_filters)
+          x = nn.relu(x)
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/2"):
+          x = conv(x, 3, 1, out_filters)
+
+          # shortcut
+          if stride != 1:
+            sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                         sc.shape,
+                                         strides=[1, stride, stride, 1])
+          pad = int(x.shape[3] - shape_in[3])
+          if pad != 0:
+            sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
+
+          x = nn.relu(x + sc)
+
+      return x
+
+    def fc(x, num_units_out):
+      return layers.Dense(
+          num_units_out,
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def max_pool(x, ksize=3, stride=2):
+      return layers.MaxPooling2D(ksize, stride, padding='SAME')(x)
+
+    def conv(x, ksize, stride, filters_out):
+      return layers.Conv2D(
+          filters_out,
+          ksize,
+          stride,
+          'SAME',
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def stage1(img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        x = conv(img, 7, 2, 16)
+        x = nn.relu(x)
+        x = max_pool(x, ksize=3, stride=2)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        x = block("b", 2, 64, 1, x)
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        x = math_ops.reduce_mean(x, axis=[1, 2])
+        x = fc(x, 100)
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
+        return loss
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        53362,
+        device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1])  # pylint: disable=W0212
+
 
 if __name__ == "__main__":
   googletest.main()

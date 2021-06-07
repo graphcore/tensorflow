@@ -804,14 +804,14 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     for (unsigned hw_id : resources.shard_to_ipu_id) {
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
-  } else {  // !ShardingEnabled(module)
-    if (tilesets.has_value()) {
-      resources.compute_graph.emplace(
-          main_graph.createVirtualGraph(tilesets->compute_tiles));
+  }
 
-      resources.io_graph.emplace(
-          main_graph.createVirtualGraph(tilesets->io_tiles));
-    }
+  if (tilesets.has_value()) {
+    resources.compute_graph.emplace(
+        main_graph.createVirtualGraph(tilesets->compute_tiles));
+
+    resources.io_graph.emplace(
+        main_graph.createVirtualGraph(tilesets->io_tiles));
   }
 
   std::stringstream codelets_cpp_src{

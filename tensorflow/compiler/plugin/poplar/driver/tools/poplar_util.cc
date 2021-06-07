@@ -138,13 +138,24 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
         GetShardForOutputIndex(inst, flattened_output_tuple_index);
 
     if (tileset == TILESET_IO_TILES) {
-      CHECK_LT(device_id, res.shard_io_graphs.size()) << inst->ToString();
-      return res.shard_io_graphs[device_id];
+      if (device_id == Devices::All) {
+        CHECK(res.io_graph.has_value())
+            << "IO tiles not allocated, but requested by " << inst->ToString();
+        return *res.io_graph;
+      } else {
+        CHECK_LT(device_id, res.shard_io_graphs.size()) << inst->ToString();
+        return res.shard_io_graphs[device_id];
+      }
     }
 
     CHECK_EQ(tileset, TILESET_COMPUTE_TILES);
-    CHECK_LT(device_id, res.shard_compute_graphs.size()) << inst->ToString();
-    return res.shard_compute_graphs[device_id];
+    if (device_id == Devices::All) {
+      return res.compute_graph.has_value() ? *res.compute_graph
+                                           : *res.main_graph;
+    } else {
+      CHECK_LT(device_id, res.shard_compute_graphs.size()) << inst->ToString();
+      return res.shard_compute_graphs[device_id];
+    }
   }
 
   if (tileset == TILESET_IO_TILES) {
