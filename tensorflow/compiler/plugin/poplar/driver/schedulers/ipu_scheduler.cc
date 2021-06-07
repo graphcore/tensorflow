@@ -55,16 +55,15 @@ StatusOr<HloSchedule> IpuScheduleModule(
                           algorithm(computation, *points_to_analysis,
                                     size_function, memory_by_computation));
       TF_ASSIGN_OR_RETURN(
-          auto bytes,
-          HeapSimulator::MinimumMemoryForComputation(
-              *computation, computation_sequence, *alias_analysis,
-              size_function, &memory_by_computation));
+          auto bytes, HeapSimulator::MinimumMemoryForComputation(
+                          *computation, computation_sequence, *alias_analysis,
+                          size_function, &memory_by_computation));
 
       memory_by_computation[computation] = bytes;
       schedule.set_sequence(computation, std::move(computation_sequence));
     }
   }
-  VLOG(1) << "Module schedule:\n" << schedule;
+  VLOG(2) << "Module schedule:\n" << schedule;
 
   TF_RETURN_IF_ERROR(schedule.Verify());
 
@@ -78,7 +77,7 @@ IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
                      const TuplePointsToAnalysis& points_to_analysis,
                      const LogicalBuffer::SizeFunction& size_function,
                      const absl::flat_hash_map<const HloComputation*, int64>&
-                        memory_by_computation) {
+                         memory_by_computation) {
     std::unique_ptr<HloAliasAnalysis> alias_analysis =
         HloAliasAnalysis::NewEmptyAnalysis(computation->parent());
     return algorithm(computation, points_to_analysis, *alias_analysis,
@@ -93,30 +92,22 @@ MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
                      const HloAliasAnalysis& alias_analysis,
                      const LogicalBuffer::SizeFunction& size_function,
                      const absl::flat_hash_map<const HloComputation*, int64>&
-                     memory_by_computation, int64* peak_mem) {
+                         memory_by_computation,
+                     int64* peak_mem) {
     return algorithm(computation, points_to_analysis, size_function,
                      memory_by_computation);
   };
 }
 
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    IpuSchedulerAlgorithm algorithm_a, IpuSchedulerAlgorithm algorithm_b) {
-  if (!algorithm_a && !algorithm_b) {
+    const std::vector<NamedIpuSchedulerAlgorithm>& algorithms) {
+  if (algorithms.empty()) {
     return xla::FailedPrecondition(
-        "Cannot construct BestIpuSchedule when both inputs are invalid");
-  }
-
-  // Handle cases with invalid algorithms
-  if (!algorithm_a) {
-    return algorithm_b;
-  }
-
-  if (!algorithm_b) {
-    return algorithm_a;
+        "Cannot construct BestIpuSchedule when the input is empty");
   }
 
   return IpuSchedulerAlgorithm{
-      [algorithm_a, algorithm_b](
+      [algorithms](
           HloComputation* computation,
           const TuplePointsToAnalysis& tuple_points_to_analysis,
           const LogicalBuffer::SizeFunction& size_function,
@@ -125,83 +116,55 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
         std::unique_ptr<HloAliasAnalysis> alias_analysis =
             HloAliasAnalysis::NewEmptyAnalysis(computation->parent());
 
-        auto schedule_a_status =
-            algorithm_a(computation, tuple_points_to_analysis, size_function,
-                        memory_by_computation);
+        struct ScheduleResult {
+          int64 schedule_memory;
+          std::string algorithm_name;
+          HloInstructionSequence schedule;
+        };
+        absl::optional<ScheduleResult> minimum_memory_schedule;
+        Status last_error = Status::OK();
 
-        auto schedule_b_status =
-            algorithm_b(computation, tuple_points_to_analysis, size_function,
-                        memory_by_computation);
+        // TODO(T9495): Consider parallel execution.
+        for (const auto& algorithm : algorithms) {
+          CHECK(algorithm.function) << "Invalid function: " << algorithm.name;
+          const auto schedule_or_status =
+              algorithm.function(computation, tuple_points_to_analysis,
+                                 size_function, memory_by_computation);
+          if (!schedule_or_status.ok()) {
+            last_error = schedule_or_status.status();
+            // Keep looking for an algorithm that can produce a schedule.
+            continue;
+          }
+          const auto schedule = schedule_or_status.ValueOrDie();
 
-        // If no valid schedule could be produced return the first failure
-        if (!schedule_a_status.ok() && !schedule_b_status.ok()) {
-          schedule_b_status.IgnoreError();
-          return schedule_a_status;
+          // TODO(T9494): Replace the heap simulator.
+          TF_ASSIGN_OR_RETURN(const int64 schedule_memory,
+                              HeapSimulator::MinimumMemoryForComputation(
+                                  *computation, schedule, *alias_analysis,
+                                  size_function, &memory_by_computation));
+
+          VLOG(2) << "Scheduler " << algorithm.name
+                  << " produced a schedule for " << computation->name()
+                  << " with estimated memory consumption " << schedule_memory;
+
+          if (!minimum_memory_schedule.has_value() ||
+              schedule_memory < minimum_memory_schedule->schedule_memory) {
+            minimum_memory_schedule =
+                ScheduleResult{schedule_memory, algorithm.name, schedule};
+          }
         }
 
-        // If schedule A is invalid, return B
-        if (!schedule_a_status.ok()) {
-          schedule_a_status.IgnoreError();
-          return schedule_b_status;
+        // If no schedule was found, return the last error.
+        if (!minimum_memory_schedule.has_value()) {
+          CHECK(!last_error.ok());
+          return last_error;
         }
 
-        // If schedule B is invalid, return A
-        if (!schedule_b_status.ok()) {
-          schedule_b_status.IgnoreError();
-          return schedule_a_status;
-        }
+        VLOG(1) << "Chosen scheduler for " << computation->name() << ": "
+                << minimum_memory_schedule->algorithm_name;
 
-        // If both schedules succeeded, we must evaluate which is better
-        // TODO(T9494): Replace the heap simulator
-        auto schedule_a = schedule_a_status.ValueOrDie();
-        auto schedule_b = schedule_b_status.ValueOrDie();
-
-        TF_ASSIGN_OR_RETURN(
-            const int64 schedule_a_memory,
-            HeapSimulator::MinimumMemoryForComputation(
-                *computation, schedule_a, *alias_analysis, size_function,
-                &memory_by_computation));
-
-        TF_ASSIGN_OR_RETURN(
-            const int64 schedule_b_memory,
-            HeapSimulator::MinimumMemoryForComputation(
-                *computation, schedule_b, *alias_analysis, size_function,
-                &memory_by_computation));
-
-        // If schedule A is better than B, return A
-        if (schedule_a_memory < schedule_b_memory) {
-          return schedule_a;
-        }
-
-        // Otherwise return schedule A
-        return schedule_b;
+        return minimum_memory_schedule->schedule;
       }};
-}
-
-StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const std::vector<IpuSchedulerAlgorithm>& algorithms) {
-  if (algorithms.empty()) {
-    return xla::FailedPrecondition(
-        "Cannot construct BestIpuSchedule when the input is empty");
-  }
-
-  auto algo_predicate = [](IpuSchedulerAlgorithm algo) -> bool {
-    return static_cast<bool>(algo);
-  };
-
-  if (absl::c_none_of(algorithms, algo_predicate)) {
-    return xla::FailedPrecondition(
-        "Cannot construct BestIpuSchedule when none of the inputs are valid");
-  }
-
-  // Iteratively apply the binary `BestIpuSchedule`.
-  // TODO(T9495) Consider building a balanced tree for parallel execution
-  IpuSchedulerAlgorithm result;
-  for (auto& algo : algorithms) {
-    TF_ASSIGN_OR_RETURN(result, BestIpuSchedule(result, algo));
-  }
-
-  return result;
 }
 
 IpuScheduler::IpuScheduler(const LogicalBuffer::SizeFunction& size_function,

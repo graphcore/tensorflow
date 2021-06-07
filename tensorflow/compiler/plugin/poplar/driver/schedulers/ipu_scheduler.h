@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_IPU_SCHEDULER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_IPU_SCHEDULER_H_
 
+#include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -37,6 +38,11 @@ using IpuSchedulerAlgorithm = std::function<StatusOr<HloInstructionSequence>(
     const LogicalBuffer::SizeFunction&,
     const absl::flat_hash_map<const HloComputation*, int64>&)>;
 
+struct NamedIpuSchedulerAlgorithm {
+  std::string name;
+  IpuSchedulerAlgorithm function;
+};
+
 /**
  * Convert a tensorflow MemorySchedulerAlgorithm to a IpuSchedulerAlgorithm
  *
@@ -58,18 +64,6 @@ MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
     IpuSchedulerAlgorithm algorithm);
 
 /**
- * Given two scheduling algorithms, create a new schedule algorithm which will
- * return the best of the given scheduling algorithms.
- *
- * @param algorithm_a The first algorithm
- * @param algorithm_b The second algorithm
- *
- * @returns a valid IpuSchedulerAlgorithm, or a failure status
- */
-StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    IpuSchedulerAlgorithm algorithm_a, IpuSchedulerAlgorithm algorithm_b);
-
-/**
  * Given a set of scheduling algorithms, create a new schedule algorithm which
  * will return the best of the given scheduling algorithms.
  *
@@ -78,7 +72,7 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
  * @returns a valid IpuSchedulerAlgorithm
  */
 StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
-    const std::vector<IpuSchedulerAlgorithm>& algorithms);
+    const std::vector<NamedIpuSchedulerAlgorithm>& algorithms);
 
 /**
  * An HLO module pass which applies the given scheduling algorithm to each

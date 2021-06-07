@@ -841,23 +841,29 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   return Status::OK();
 }
 
-StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
+StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
     CompilerResources& res) {
-  std::vector<IpuSchedulerAlgorithm> schedulers;
+  std::vector<NamedIpuSchedulerAlgorithm> schedulers;
   bool all = res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
-  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
-    schedulers.push_back(CreateClusteringMemoryScheduler(res.information));
-  }
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.push_back(
-        MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
+         MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)});
+  }
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
+         CreateClusteringMemoryScheduler(res.information)});
   }
   if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
     schedulers.push_back(
-        CreateLivenessLookAheadMemoryScheduler(res.information));
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
+         CreateLivenessLookAheadMemoryScheduler(res.information)});
   }
   if (res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
-    schedulers.push_back(CreateShortestPathScheduler(res.information));
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
+         CreateShortestPathScheduler(res.information)});
   }
 
   if (!schedulers.size()) {
