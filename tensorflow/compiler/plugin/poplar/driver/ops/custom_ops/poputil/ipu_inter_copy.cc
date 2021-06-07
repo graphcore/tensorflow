@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -63,6 +64,12 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
   }
 
   const int64 src_shard = GetShardForOutputIndex(src, 0);
+
+  // multi-device sharding is not compatible with any other sharding.
+  if ((src_shard == Devices::All && dst_shard != Devices::All) ||
+      (dst_shard == Devices::All && src_shard != Devices::All)) {
+    return false;
+  }
 
   if (src_tileset == TILESET_COMPUTE_TILES) {
     CHECK_LT(src_shard, res.shard_compute_graphs.size()) << src->ToString();

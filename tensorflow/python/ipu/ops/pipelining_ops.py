@@ -262,6 +262,9 @@ class PipelineStageOptions:
     return self._proto
 
 
+_ALL_DEVICES = -1
+
+
 def pipeline(computational_stages,
              gradient_accumulation_count=None,
              gradient_accumulation_dtype=None,

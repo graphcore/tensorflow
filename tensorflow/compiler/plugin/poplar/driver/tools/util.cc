@@ -36,6 +36,14 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+bool operator==(const int64 lhs, const Devices rhs) {
+  return lhs == static_cast<int64>(rhs);
+}
+
+bool operator==(const Devices lhs, const int64 rhs) { return (rhs == lhs); }
+bool operator!=(const int64 lhs, const Devices rhs) { return !(lhs == rhs); }
+bool operator!=(const Devices lhs, const int64 rhs) { return !(lhs == rhs); }
+
 void StripAllInstructionLayouts(const HloModule* module) {
   for (auto* comp : module->computations()) {
     if (IsPopOpsFusion(comp)) {
