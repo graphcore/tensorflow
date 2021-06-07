@@ -267,6 +267,13 @@ the model is the number of mini-batches for which the gradients are
 accumulated multiplied by the mini-batch size multiplied by the replication
 factor.
 
+The choice of gradient accumulation count impacts the time spent in the ramp-up
+and ramp-down stages of pipeline execution. As the gradient accumulation
+count increases, the proportion of cycles spent on the ramp-up/ramp-down phases
+decreases, with respect to the total number of cycles required to process the batch.
+As weight updates are performed after the ramp-down phase, a higher gradient accumulation
+count also results in a smaller proportion of cycles spent on weight updates.
+
 There are multiple convenient ways to use gradient accumulation with minimal
 modifications to your model.
 
