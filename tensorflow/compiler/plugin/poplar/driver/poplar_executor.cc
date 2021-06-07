@@ -924,10 +924,12 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     auto* infeed_dataset_iterator = itr->second.get();
     auto& shapes = infeed_dataset_iterator->GetShapes();
     auto& queues = infeed_dataset_iterator->GetInfeedQueues();
+    CHECK_EQ(queues.size(), current_replication_factor_);
 
     for (auto replica_id = 0; replica_id < current_replication_factor_;
          ++replica_id) {
       auto& replica_queues = queues[replica_id];
+      CHECK_EQ(replica_queues.size(), shapes.size());
       for (size_t j = 0; j < shapes.size(); ++j) {
         const auto bytes = ShapeUtil::ByteSizeOf(shapes[j]);
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
