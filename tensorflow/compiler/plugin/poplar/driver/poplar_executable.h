@@ -36,29 +36,48 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 struct CompilerAnnotations;
-struct CompilerResources;
 
-class PoplarExecutableCore {
+class CompilerResources;
+
+// A Poplar executable is a wrapper around an Engine, with
+// the execution Sequence program, input tensors and output
+// tensor recorded.
+class PoplarExecutable : public Executable {
  public:
-  PoplarExecutableCore(
-      std::unique_ptr<poplar::Engine> engine,
-      const InputOutputAliasingMap& input_output_aliasing_map,
-      bool is_constant_graph,
-      std::vector<std::vector<Literal>> constant_literal_output,
-      bool is_remap_graph, bool is_scalar_elementwise_graph,
-      bool loaded_from_cache, std::vector<uint64> remaped_output,
-      uint32 replication_factor, const InfeedInfos& infeed_infos,
-      const OutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
-      StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
-      SendRecvInfos&& recv_infos,
-      HostEmbeddingInfos&& host_embedding_lookup_infos,
-      HostEmbeddingInfos&& host_embedding_update_infos,
-      HostEmbeddingInfos&& host_embedding_notify_infos,
-      RemoteParameterInfos&& remote_parameter_infos, bool logging_cycle_count,
-      const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
-      const std::vector<string>& checkpoint_feeds_order);
+  PoplarExecutable(std::unique_ptr<HloModule> hlo_module,
+                   std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
+                   std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
+                   std::unique_ptr<poplar::Engine> engine,
+                   const InputOutputAliasingMap& input_output_aliasing_map,
+                   const bool is_constant_graph,
+                   std::vector<std::vector<Literal>> literal_output,
+                   const bool is_remap_graph,
+                   const bool is_scalar_elementwise_graph,
+                   std::vector<uint64> remaped_output,
+                   uint32 replication_factor_, const InfeedInfos& infeed_infos,
+                   const OutfeedInfos& outfeed_infos, StreamInfos&& stream_info,
+                   StreamMetaInfos&& stream_meta_info,
+                   SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos,
+                   HostEmbeddingInfos&& host_embedding_lookup_infos,
+                   HostEmbeddingInfos&& host_embedding_update_infos,
+                   HostEmbeddingInfos&& host_embedding_notify_infos,
+                   RemoteParameterInfos&& remote_parameter_infos,
+                   const bool logging_cycle_count,
+                   const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
+                   const std::vector<string>& checkpoint_feeds_order);
 
-  ~PoplarExecutableCore();
+  ~PoplarExecutable() override;
+
+  StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
+      const ServiceExecutableRunOptions* run_options,
+      std::vector<ExecutionInput> arguments,
+      HloExecutionProfile* hlo_execution_profile) override;
+
+  static int64 ShapeSizeBytes(const Shape& shape);
+
+  int64 ExecutionCount() const { return execution_count_; }
+
+  void OnEngineLoaded() { execution_count_ = 0; }
 
   const InputOutputAliasingMap& GetInputOutputAliasingMap() const {
     return input_output_aliasing_map_;
@@ -66,8 +85,12 @@ class PoplarExecutableCore {
 
   poplar::Engine* Engine() const { return poplar_engine_.get(); }
 
-  const std::vector<std::vector<Literal>>& ConstantLiteralOutput() const {
-    return constant_literal_output_;
+  void SetLiteralValue(std::vector<std::vector<Literal>>&& literals) {
+    literal_output_ = std::move(literals);
+  }
+
+  const std::vector<std::vector<Literal>>& LiteralValue() const {
+    return literal_output_;
   }
 
   const InfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
@@ -102,17 +125,19 @@ class PoplarExecutableCore {
 
   const uint32 GetReplicationFactor() const { return replication_factor_; }
 
-  bool IsConstantGraph() const { return is_constant_graph_; }
+  const bool IsConstantGraph() const { return is_constant_graph_; }
 
   const std::vector<uint64>& RemapMap() const { return remaped_output_; }
 
-  bool IsRemapGraph() const { return is_remap_graph_; }
+  const bool IsRemapGraph() const { return is_remap_graph_; }
 
-  bool IsLoadedFromCache() const { return loaded_from_cache_; }
+  const bool IsLoadedFromCache() const { return loaded_from_cache_; }
 
-  bool IsScalarElementwiseGraph() const { return is_scalar_elementwise_graph_; }
+  const bool IsScalarElementwiseGraph() const {
+    return is_scalar_elementwise_graph_;
+  }
 
-  bool LoggingCycleCount() const { return logging_cycle_count_; }
+  const bool LoggingCycleCount() const { return logging_cycle_count_; }
 
   const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
     return key_id_mappings_;
@@ -127,8 +152,10 @@ class PoplarExecutableCore {
     int64 process_count;
   };
 
-  static StatusOr<std::unique_ptr<PoplarExecutableCore>> Deserialize(
-      const HloModule* module,
+  static StatusOr<std::unique_ptr<PoplarExecutable>> Deserialize(
+      std::unique_ptr<HloModule> hlo_module,
+      std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
+      std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
       absl::optional<RuntimeReplicaOptions> runtime_replica_options,
       const ModuleFilenames& filenames);
 
@@ -151,148 +178,10 @@ class PoplarExecutableCore {
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,
-                       const PoplarExecutableCore& poplar_executable,
+                       const PoplarExecutable& poplar_executable,
                        const poplar::OptionFlags& device_opts,
                        const poplar::OptionFlags& engine_opts,
                        const poplar::Target& target);
-
- private:
-  // If you add fields which are specific to a compiled engine, then you will
-  // need to add them to the poplar_executable.proto, and the serialization
-  // code.
-  std::unique_ptr<poplar::Engine> poplar_engine_;
-  InputOutputAliasingMap input_output_aliasing_map_;
-  std::vector<std::vector<Literal>> constant_literal_output_;
-  const bool is_constant_graph_;
-  std::vector<uint64> remaped_output_;
-  const bool is_remap_graph_;
-  const bool is_scalar_elementwise_graph_;
-  const bool loaded_from_cache_;
-  uint32 replication_factor_;
-  InfeedInfos infeed_infos_;
-  OutfeedInfos outfeed_infos_;
-  StreamInfos stream_infos_;
-  StreamMetaInfos stream_meta_infos_;
-  SendRecvInfos send_infos_;
-  SendRecvInfos recv_infos_;
-  HostEmbeddingInfos host_embedding_lookup_infos_;
-  HostEmbeddingInfos host_embedding_update_infos_;
-  HostEmbeddingInfos host_embedding_notify_infos_;
-  RemoteParameterInfos remote_parameter_infos_;
-  const bool logging_cycle_count_;
-  VerifiedStreamsIndices::KeyIdMappings key_id_mappings_;
-  const std::vector<string> checkpoint_feeds_order_;
-
-  TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutableCore);
-};
-
-class PoplarExecutable : public Executable {
- public:
-  PoplarExecutable(std::unique_ptr<HloModule> hlo_module,
-                   std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
-                   std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
-                   std::unique_ptr<PoplarExecutableCore> executable_core);
-
-  StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
-      const ServiceExecutableRunOptions* run_options,
-      std::vector<ExecutionInput> arguments,
-      HloExecutionProfile* hlo_execution_profile) override;
-
-  static int64 ShapeSizeBytes(const Shape& shape);
-
-  int64 ExecutionCount() const { return execution_count_; }
-
-  void OnEngineLoaded() { execution_count_ = 0; }
-
-  const InputOutputAliasingMap& GetInputOutputAliasingMap() const {
-    return executable_core_->GetInputOutputAliasingMap();
-  }
-
-  poplar::Engine* Engine() const { return executable_core_->Engine(); }
-
-  void SetLiteralValue(std::vector<std::vector<Literal>>&& literals) {
-    CHECK(IsScalarElementwiseGraph());
-    literal_output_ = std::move(literals);
-  }
-
-  const std::vector<std::vector<Literal>>& LiteralValue() const {
-    if (IsConstantGraph()) {
-      return executable_core_->ConstantLiteralOutput();
-    }
-    return literal_output_;
-  }
-
-  const InfeedInfos& GetInfeedInfos() const {
-    return executable_core_->GetInfeedInfos();
-  }
-
-  const OutfeedInfos& GetOutfeedInfos() const {
-    return executable_core_->GetOutfeedInfos();
-  }
-
-  const HostEmbeddingInfos& GetHostEmbeddingLookupInfos() const {
-    return executable_core_->GetHostEmbeddingLookupInfos();
-  }
-
-  const HostEmbeddingInfos& GetHostEmbeddingUpdateInfos() const {
-    return executable_core_->GetHostEmbeddingUpdateInfos();
-  }
-
-  const HostEmbeddingInfos& GetHostEmbeddingNotifyInfos() const {
-    return executable_core_->GetHostEmbeddingNotifyInfos();
-  }
-
-  const RemoteParameterInfos& GetRemoteParameterInfos() const {
-    return executable_core_->GetRemoteParameterInfos();
-  }
-
-  const StreamInfos& GetStreamInfos() const {
-    return executable_core_->GetStreamInfos();
-  }
-
-  const StreamMetaInfos& GetStreamMetaInfos() const {
-    return executable_core_->GetStreamMetaInfos();
-  }
-
-  const SendRecvInfos& GetSendInfos() const {
-    return executable_core_->GetSendInfos();
-  }
-
-  const SendRecvInfos& GetRecvInfos() const {
-    return executable_core_->GetRecvInfos();
-  }
-
-  const uint32 GetReplicationFactor() const {
-    return executable_core_->GetReplicationFactor();
-  }
-
-  bool IsConstantGraph() const { return executable_core_->IsConstantGraph(); }
-
-  const std::vector<uint64>& RemapMap() const {
-    return executable_core_->RemapMap();
-  }
-
-  bool IsRemapGraph() const { return executable_core_->IsRemapGraph(); }
-
-  bool IsLoadedFromCache() const {
-    return executable_core_->IsLoadedFromCache();
-  }
-
-  bool IsScalarElementwiseGraph() const {
-    return executable_core_->IsScalarElementwiseGraph();
-  }
-
-  bool LoggingCycleCount() const {
-    return executable_core_->LoggingCycleCount();
-  }
-
-  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return executable_core_->KeyIdMappings();
-  }
-
-  const std::vector<string>& CheckpointFeedsOrder() const {
-    return executable_core_->CheckpointFeedsOrder();
-  }
 
  private:
   Status ExecuteComputeFunction(
@@ -305,9 +194,32 @@ class PoplarExecutable : public Executable {
 
   friend class GraphCompileIoMapTest;
 
-  std::unique_ptr<PoplarExecutableCore> executable_core_;
+  // If you add fields which are specific to a compiled engine, then you will
+  // need to add them to the poplar_executable.proto, and the serialization code
+  // in PoplarExecutable.
+  std::unique_ptr<poplar::Engine> poplar_engine_;
+  InputOutputAliasingMap input_output_aliasing_map_;
   std::vector<std::vector<Literal>> literal_output_;
+  const bool is_constant_graph_;
+  std::vector<uint64> remaped_output_;
+  const bool is_remap_graph_;
   int64 execution_count_;
+  uint32 replication_factor_;
+  InfeedInfos infeed_infos_;
+  OutfeedInfos outfeed_infos_;
+  StreamInfos stream_infos_;
+  StreamMetaInfos stream_meta_infos_;
+  SendRecvInfos send_infos_;
+  SendRecvInfos recv_infos_;
+  HostEmbeddingInfos host_embedding_lookup_infos_;
+  HostEmbeddingInfos host_embedding_update_infos_;
+  HostEmbeddingInfos host_embedding_notify_infos_;
+  RemoteParameterInfos remote_parameter_infos_;
+  bool loaded_from_cache_;
+  bool logging_cycle_count_;
+  const bool is_scalar_elementwise_graph_;
+  VerifiedStreamsIndices::KeyIdMappings key_id_mappings_;
+  const std::vector<string> checkpoint_feeds_order_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);
 };
