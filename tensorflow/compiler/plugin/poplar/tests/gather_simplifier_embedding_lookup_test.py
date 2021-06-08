@@ -44,7 +44,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.parameters(range(1, 10, 2))
   def testGatherLookupRandomize(self, y_0):
-    report_helper = tu.ReportHelper(self)
+    report_helper = tu.ReportHelper()
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
     cfg = IPUConfig()
@@ -92,7 +92,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     if y_0 == 1:
       ok = ok[:-1]
     # pylint: enable=line-too-long
-    report_helper.assert_all_compute_sets_and_list(report, ok)
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

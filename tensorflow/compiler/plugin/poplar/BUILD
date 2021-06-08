@@ -3763,6 +3763,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/triangular_solve_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 4,  # Run all tests in parallel to improve performance
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

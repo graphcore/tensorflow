@@ -14,9 +14,10 @@
 #  =============================================================================
 
 import numpy as np
+import pva
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -63,6 +64,12 @@ def inference(x):
 
 class MatMulSizeTest(xla_test.XLATestCase):
   def testInference(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       x = array_ops.placeholder(datatype, shape=[2, 112 * 112 * 4])
       y_ = array_ops.placeholder(datatype, shape=[2, 64])
@@ -74,20 +81,24 @@ class MatMulSizeTest(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       data = np.zeros([2, 112 * 112 * 4])
       labels = np.zeros([2, 64])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
-      report.parse_log()
 
-      report.assert_total_tile_memory(12320768)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 12181182)
 
   def testTrainingBs1(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 112 * 112 * 4])
@@ -102,19 +113,24 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       data = np.zeros([1, 112 * 112 * 4])
       labels = np.zeros([1, 64])
 
       sess.run(train, feed_dict={x: data, y_: labels})
-      report.parse_log()
-      report.assert_total_tile_memory(7352862)
+
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 7142699)
 
   def testTrainingBs2(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       x = array_ops.placeholder(datatype, shape=[2, 112 * 112 * 4])
       y_ = array_ops.placeholder(datatype, shape=[2, 64])
@@ -127,19 +143,25 @@ class MatMulSizeTest(xla_test.XLATestCase):
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
-      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       data = np.zeros([2, 112 * 112 * 4])
       labels = np.zeros([2, 64])
 
       sess.run(train, feed_dict={x: data, y_: labels})
-      report.parse_log()
-      report.assert_total_tile_memory(16329767)
+
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 16126623)
 
   def testSerializedMatmul(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def serialized_matmul(lhs, rhs, num_splits):
@@ -173,14 +195,14 @@ class MatMulSizeTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         out = ipu.ipu_compiler.compile(model, [x, y, z])
 
-      report = ReportJSON(self, sess)
       output = sess.run(out,
                         feed_dict={k: np.ones(k.shape)
                                    for k in (x, y, z)})
       self.assertAllClose(np.full([B, I], 129.0), output[0])
-      report.parse_log()
-      report.assert_total_tile_memory(126942643)
-      report.assert_max_tile_memory(86813)
+
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 126942643)
+    self.assert_max_tile_memory(report, 86813)
 
 
 if __name__ == "__main__":

@@ -18,9 +18,10 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import pva
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -76,6 +77,13 @@ def fc(name, x, num_units_out):
 
 class CombinedWeightsTest(xla_test.XLATestCase):
   def testMergedWeightDownload(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       x = array_ops.placeholder(datatype, shape=[16, 4])
       y_ = array_ops.placeholder(datatype, shape=[16, 256])
@@ -87,31 +95,28 @@ class CombinedWeightsTest(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
-      report = ReportJSON(self,
-                          sess,
-                          compile_ipu_code=True,
-                          device_count_override=1)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       data = np.zeros([16, 4])
       labels = np.zeros([16, 256])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
-      report.parse_log()
 
-      # Find the first case - the download weights sequence
-      download_weights_index = report.get_first_program_of_type(
-          'Switch')['children'][0]
+    report = pva.openReport(report_helper.find_report())
 
-      self.assertLess(
-          len(report.get_program(download_weights_index)['children']), 12,
-          "The download weights sequence should not have lots of entries "
-          "(because the copies will have been merged)")
+    # Find the first case - the download weights sequence
+    download_weights = next(
+        t for t in report.compilation.programs
+        if t.type == pva.Program.Type.OnEveryTileSwitch).children[0]
 
-      # Also check the overall size
-      report.assert_total_tile_memory(9052606, tolerance=0.1)
+    self.assertLess(
+        len(download_weights.children), 12,
+        "The download weights sequence should not have lots of entries "
+        "(because the copies will have been merged)")
+
+    # Also check the overall size
+    self.assert_total_tile_memory(report, 9052606, tolerance=0.1)
 
 
 if __name__ == "__main__":

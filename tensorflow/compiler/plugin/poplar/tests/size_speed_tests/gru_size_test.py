@@ -18,9 +18,10 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pva
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -62,6 +63,12 @@ def _tfGRU(x, initial_state):
 
 class GRUSizeTest(xla_test.XLATestCase):
   def RunLayer(self, layer_func, x):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device('cpu'):
         px = array_ops.placeholder(dataType, shape=x.shape)
@@ -70,16 +77,16 @@ class GRUSizeTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(layer_func, inputs=[px, pinitial_state])
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       result = sess.run(r, {
           px: x,
           pinitial_state: np.ones(pinitial_state.shape),
       })
-      report.parse_log()
-      size = report.get_total_tile_memory()
+
+    report = pva.openReport(report_helper.find_report())
+    size = sum(tile.memory.total.excludingGaps
+               for tile in report.compilation.tiles)
     return (size, result)
 
   # Test which verifies that:

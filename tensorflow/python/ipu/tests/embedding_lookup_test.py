@@ -14,16 +14,16 @@
 # ==============================================================================
 
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
+import pva
 
 from tensorflow.python import ipu
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
@@ -353,13 +353,17 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     # Tests the behaviour when the input is allocated for a different op.
     # The input should be cloned into a correctly mapped tensor, to avoid
     # memory spikes.
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float32, shape=[16, 16])
         updates = array_ops.placeholder(np.float32, shape=[1024, 16])
         indices = array_ops.placeholder(np.int32, shape=[1024])
-
-      report = tu.ReportJSON(self, sess)
 
       def model(x, updates, indices):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -384,14 +388,13 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       }
 
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
       sess.run(result, feed_dict=fd)
-      report.parse_log()
 
       # Large memory spikes are generated when the input for a MultiUpdateAdd
       # is not mapped in the scheme expected by poplibs.
-      report.assert_max_tile_memory(2520, tolerance=0.1)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 2520, tolerance=0.1)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only

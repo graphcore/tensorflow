@@ -18,6 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import pva
+import test_utils as tu
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
@@ -26,6 +28,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.layers import convolutional
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.ops import array_ops
@@ -480,6 +483,12 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       report.assert_all_compute_sets_and_list(ok)
 
   def testNormCacheConstants(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def model(x, y, z):
@@ -513,31 +522,26 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         res = ipu_compiler.compile(model, inputs=[x, y, z])
 
-      report = ReportJSON(self, sess)
       tu.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
-
       r = sess.run(res, {x: np.ones(x.shape), y: np.ones(y.shape), z: [1.0]})
       self.assertAllClose(r[0], np.full(r[0].shape, 2))
 
-      report.parse_log()
-
-      report.assert_total_tile_memory(1656434)
-      report.assert_max_tile_memory(1487)
-
-      # Would fail if there were two batch norms in the graph
-      ok = [
-          '__seed*',
-          '*[cC]opy',
-          'moments/SquaredDifference/square',
-          'moments/SquaredDifference/subtract',
-          'a/batch-norm-inference',
-          'add/add*/Add',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 1510562)
+    self.assert_max_tile_memory(report, 1383)
+    # Would fail if there were two batch norms in the graph
+    ok = [
+        '__seed*',
+        '*[cC]opy',
+        'moments/SquaredDifference/square',
+        'moments/SquaredDifference/subtract',
+        'a/batch-norm-inference',
+        'add/add*/Add',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

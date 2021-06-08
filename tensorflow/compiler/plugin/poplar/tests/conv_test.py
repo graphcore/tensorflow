@@ -19,16 +19,14 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pva
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.python import ipu
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops import variables
-from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
@@ -389,6 +387,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.assert_all_compute_sets_and_list(ok)
 
   def testDataLayout(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa1 = array_ops.placeholder(np.float32, [1, 14, 14, 64], name="a")
@@ -403,9 +407,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         op2 = nn_ops.convolution(pa2, pb2, padding="SAME", data_format='NCHW')
         op2 = nn_ops.bias_add(op2, bi2, data_format='NCHW')
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           pa1: np.zeros([1, 14, 14, 64]),
           pb1: np.zeros([3, 3, 64, 128]),
@@ -417,14 +418,17 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       result = sess.run(op1, fd)
       self.assertAllClose(result, np.zeros([1, 14, 14, 128]))
 
-      report.parse_log()
-      mem_nhwc = report.get_total_tile_memory()
+      report = pva.openReport(report_helper.find_report())
+      mem_nhwc = sum(tile.memory.total.excludingGaps
+                     for tile in report.compilation.tiles)
+      report_helper.clear_reports()
 
       result = sess.run(op2, fd)
       self.assertAllClose(result, np.zeros([1, 128, 14, 14]))
 
-      report.parse_log()
-      mem_nchw = report.get_total_tile_memory()
+      report = pva.openReport(report_helper.find_report())
+      mem_nchw = sum(tile.memory.total.excludingGaps
+                     for tile in report.compilation.tiles)
 
       self.assertTrue((mem_nhwc - mem_nchw) / mem_nhwc > -0.1)
 
