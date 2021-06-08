@@ -37,7 +37,6 @@ from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.data.ops.dataset_ops import Dataset
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework.test_util import TensorFlowTestCase
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu import utils
@@ -193,130 +192,18 @@ class TensorMap(object):
     return mappings
 
 
-# Members of this class are attached to TensorFlowTestCase.
-class TestCaseExtensions(object):
-  def _assert_all_in_tolerance(self, actual, expected, tolerance=0.001):
-    """Asserts that all values are within relative tolerance of expected.
-    Only intended to be used with integer values.
-    """
-    low = int(expected * (1.0 - tolerance))
-    high = int(expected * (1.0 + tolerance))
-    self.assertAllInRange(actual, low, high)
-
-  def assert_all_compute_sets_and_list(self, report, ok):
-    """Asserts all the compute sets match a pattern in the whitelist and also
-    asserts that all the whitelist patterns match at least one compute set.
-    """
-    not_in_whitelist = []
-    not_in_report = []
-    whitelist = ['*' + x + '*' for x in ok]
-
-    for expected in whitelist:
-      if not any(
-          fnmatch.fnmatch(actual.name, expected)
-          for actual in report.compilation.computeSets):
-        not_in_report.append(expected)
-    for actual in report.compilation.computeSets:
-      if not any(
-          fnmatch.fnmatch(actual.name, expected) for expected in whitelist):
-        not_in_whitelist.append(actual.name)
-
-    error_msg = "\n"
-    if not_in_report:
-      error_msg = "Whitelist items [%s] not found in compute sets:\n\t%s" % (
-          ",".join(not_in_report), "\n\t".join(
-              cs.name for cs in report.compilation.computeSets))
-    if not_in_report and not_in_whitelist:
-      error_msg += "\n"
-    if not_in_whitelist:
-      error_msg += "Compute sets items [%s] not found in whitelist:\n\t%s" % (
-          ",".join(not_in_whitelist), "\n\t".join(ok))
-
-    self.assertFalse(not_in_report + not_in_whitelist, error_msg)
-
-  def assert_compute_sets_matches(self, report, expr, num_matches, msg=None):
-    """Asserts the number of compute sets in the report which match expr."""
-    cs_names = (cs.name for cs in report.compilation.computeSets)
-    self.assertEqual(count_matches_in_list(cs_names, expr), num_matches, msg)
-
-  def assert_each_tile_memory_is_less_than(self,
-                                           report,
-                                           max_expected,
-                                           tolerance=0.01):
-    """Assert total memory (excluding gaps) on each tile is below max."""
-    high = int(max_expected * (1.0 + tolerance))
-    tile_memory = [
-        tile.memory.total.excludingGaps for tile in report.compilation.tiles
-    ]
-    self.assertAllInRange(tile_memory, 0, high)
-
-  def assert_total_tile_memory(self, report, expected, tolerance=0.01):
-    """Assert total memory (excluding gaps) across all tiles is close to
-    expected.
-    """
-    total_memory = sum(tile.memory.total.excludingGaps
-                       for tile in report.compilation.tiles)
-    self._assert_all_in_tolerance([total_memory], expected, tolerance)
-
-  def assert_max_tile_memory(self, report, expected, tolerance=0.01):
-    """Assert peak tile memory (excluding gaps) is close to expected."""
-    max_memory = max(tile.memory.total.excludingGaps
-                     for tile in report.compilation.tiles)
-    self._assert_all_in_tolerance([max_memory], expected, tolerance)
-
-  def assert_always_live_memory(self, report, expected, tolerance=0.01):
-    """Assert total always-live memory across all tiles is close to
-    expected.
-    """
-    always_live_memory = sum(tile.memory.alwaysLiveBytes
-                             for tile in report.compilation.tiles)
-    self._assert_all_in_tolerance([always_live_memory], expected, tolerance)
-
-  def assert_execution_report_cycles(self,
-                                     report,
-                                     idx,
-                                     expected,
-                                     tolerance=0.01):
-    """Asserts the total cycles on each tile are close to expected for the
-    specified execution.
-    """
-    steps = report.execution.runs[idx].steps
-    n_tiles = len(steps[0].cyclesByTile)
-    cycles = [
-        sum(step.cyclesByTile[t] for step in steps) for t in range(n_tiles)
-    ]
-    self._assert_all_in_tolerance(cycles, expected, tolerance)
-
-
-# Attach everything from TestCaseExtensions onto TensorFlowTestCase.
-# Note that XLATestCase inherits from TensorFlowTestCase.
-for attr in dir(TestCaseExtensions):
-  if not attr.startswith('__'):
-    setattr(TensorFlowTestCase, attr, getattr(TestCaseExtensions, attr))
-
-
+# Helps with generating and cleaning up report files for tests.
 class ReportHelper(object):
-  """ ReportHelper creates a temporary directory for reports to be generated
-  in. `set_autoreport_options` configures poplar to use this directory.
-
-  Reports are generated in unique subdirectories of the temporary directory and
-  can be found by calling `find_report` or `find_reports`.
-
-  Reports can also be cleared by calling `clear_reports`.
-
-  All files are automatically cleaned up when the object is destroyed.
-  """
-  def __init__(self):
-    self._directory = tempfile.mkdtemp(prefix=f"tf_")
-    # Used to give a better error message if no reports were generated because
-    # you forgot to call set_autoreport_options.
-    self._set_options_called = False
+  def __init__(self, test):
+    self._test = test
+    self._directory = tempfile.mkdtemp(prefix=f"tf_{type(test).__name__}_")
+    self._setup_called = False
 
   def _find_report_subdirectories(self):
     # Find all subdirectories in the report directory.
     directory = pathlib.Path(self._directory)
     if not directory.exists():
-      if not self._set_options_called:
+      if not self._setup_called:
         raise RuntimeError("To use this helper you must setup the poplar " +
                            "autoReport options with set_autoreport_options.")
       raise IOError(
@@ -327,29 +214,19 @@ class ReportHelper(object):
   def _find_report_files_in_subdirectory(self, directory):
     return directory.glob("*.pop")
 
-  def set_autoreport_options(self,
-                             cfg,
-                             *,
-                             output_graph_profile=True,
-                             output_execution_profile=False):
-    """Sets autoReport engine options in the IPUConfig."""
-    self._set_options_called = True
+  # Sets autoReport engine options in the IPUConfig.
+  def set_autoreport_options(self, cfg):
+    self._setup_called = True
     options = {
         "autoReport.directory": self._directory,
-        "autoReport.outputGraphProfile": str(output_graph_profile).lower(),
-        "autoReport.outputExecutionProfile":
-        str(output_execution_profile).lower(),
+        "autoReport.outputGraphProfile": "true",
     }
     cfg.compilation_poplar_options = options
     cfg._profiling.auto_assign_report_subdirectories = True  # pylint: disable=protected-access
 
-  def assert_num_reports(self, n):
-    """Asserts the number of reports found matches the number given."""
-    num_reports = len(self.find_reports())
-    assert num_reports == n, f"Expected {n} report(s) but found {num_reports}"
-
+  # Finds and returns the paths to generated report files.
+  # Asserts the number of reports found is equal to assert_count.
   def find_reports(self):
-    """Finds and returns the paths to generated report files."""
     paths = []
     for d in self._find_report_subdirectories():
       files_ = list(self._find_report_files_in_subdirectory(d))
@@ -363,26 +240,48 @@ class ReportHelper(object):
 
     return paths
 
-  def find_report(self):
-    """Finds and returns the paths to the generated report file.
-    Asserts the only one report has been generated.
-    """
-    reports = self.find_reports()
-    num_reports = len(reports)
-    assert num_reports == 1, f"Expected 1 report but found {num_reports}"
-    return reports[0]
-
+  # Delete the report directory and all contents.
   def clear_reports(self):
-    """Clears all existing reports and their subdirectories."""
-    # Remove the whole directory and recreate it rather than removing each
-    # subdirectory individually.
     shutil.rmtree(self._directory)
-    os.mkdir(self._directory)
 
-  # Automatically clean up all files when this instance is destroyed.
+  # Automatically clean up report files when this instance is destroyed.
   def __del__(self):
     # Ignore errors to clean up as much as possible.
     shutil.rmtree(self._directory, ignore_errors=True)
+
+  # Asserts the number of reports found matches the number given.
+  def assert_num_reports(self, n):
+    self._test.assertLen(self.find_reports(), n)
+
+  # Asserts all the compute sets match a pattern in the whitelist and also
+  # asserts that all the whitelist patterns match at least one compute set.
+  def assert_all_compute_sets_and_list(self, report, ok):
+    not_in_whitelist = []
+    not_in_report = []
+    whitelist = ['*' + x + '*' for x in ok]
+
+    for expected in whitelist:
+      if (not any(
+          fnmatch.fnmatch(actual.name, expected)
+          for actual in report.compilation.computeSets)):
+        not_in_report.append(expected)
+    for actual in report.compilation.computeSets:
+      if (not any(
+          fnmatch.fnmatch(actual.name, expected) for expected in whitelist)):
+        not_in_whitelist.append(actual.name)
+
+    error_msg = "\n"
+    if not_in_report:
+      error_msg = "Whitelist items [%s] not found in compute sets:\n\t%s" % (
+          ",".join(not_in_report), "\n\t".join(
+              cs.name for cs in report.compilation.computeSets))
+    if not_in_report and not_in_whitelist:
+      error_msg += "\n"
+    if not_in_whitelist:
+      error_msg += "Compute sets items [%s] not found in whitelist:\n\t%s" % (
+          ",".join(not_in_whitelist), "\n\t".join(ok))
+
+    self._test.assertFalse(not_in_report + not_in_whitelist, error_msg)
 
 
 class ReportJSON(object):

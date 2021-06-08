@@ -18,7 +18,6 @@ import signal
 
 import absl.testing
 import numpy as np
-import pva
 import test_utils as tu
 
 from tensorflow.python.framework import ops
@@ -44,7 +43,6 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
-from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.client import session
 
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -86,13 +84,6 @@ def hostembedding_test_graph(flags):
   poplar_flags += flags
 
   with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-    cfg = IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.optimizations.minimum_remote_tensor_size = 1
-    cfg.configure_ipu_system()
-
     embedding = embedding_ops.create_host_embedding("test",
                                                     shape=[2, 2],
                                                     dtype=np.float32,
@@ -130,18 +121,20 @@ def hostembedding_test_graph(flags):
     dequeue_outfeed = outfeed_queue.dequeue()
 
     with session.Session() as sess:
+      report = tu.ReportJSON(None, sess, minimum_remote_tensor_size=1)
+
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
-      report_helper.clear_reports()
+
+      report.reset()
 
       with embedding.register(sess):
         sess.run(run_loop)
         sess.run(dequeue_outfeed)
 
-  # TODO: Get the memory_test_graph working with embedding and multiprocessing.Pool.
-  report = pva.openReport(report_helper.find_report())
-  return sum(tile.memory.total.excludingGaps
-             for tile in report.compilation.tiles)
+        report.parse_log()
+        # TODO: Get the memory_test_graph working with embedding and multiprocessing.Pool.
+        return report.get_total_tile_memory()
 
 
 def memory_test_graph(flags=""):
@@ -149,12 +142,6 @@ def memory_test_graph(flags=""):
   poplar_flags += flags
 
   with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-    cfg = IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.optimizations.minimum_remote_tensor_size = 1
-    cfg.configure_ipu_system()
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 4])
@@ -225,16 +212,16 @@ def memory_test_graph(flags=""):
         loop_ret = ipu_compiler.compile(my_net, inputs=inputs)
 
       outfeed_op = outfeed_queue.dequeue()
+      report = tu.ReportJSON(None, sess, minimum_remote_tensor_size=1)
 
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
       sess.run(infeed_queue.initializer)
+      report.reset()
       sess.run(loop_ret, feed_dict=dict(zip(inputs, [10.01])))
       sess.run(outfeed_op)
 
-  report = pva.openReport(report_helper.find_report())
-  return sum(tile.memory.total.excludingGaps
-             for tile in report.compilation.tiles)
+      report.parse_log()
+      return report.get_total_tile_memory()
 
 
 class SyntheticDataMemoryUsage(absl.testing.parameterized.TestCase):
@@ -245,9 +232,8 @@ class SyntheticDataMemoryUsage(absl.testing.parameterized.TestCase):
   def setUpClass(cls):
     cls.reference_usage = run_graph(memory_test_graph)
 
-  @absl.testing.parameterized.parameters(*filter(
-      lambda category:
-      (category != "hostembedding" and category != "seed"), categories))
+  @absl.testing.parameterized.parameters(
+      *filter(lambda category: category != "hostembedding", categories))
   def testCategories(self, category):
     self.assertIsNotNone(SyntheticDataMemoryUsage.reference_usage)
 

@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import pva
 
 from tensorflow.compiler.tests import xla_test
 import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
@@ -125,12 +124,6 @@ def max_pool(x, ksize=3, stride=2):
 
 class Resnet18_No_Batchnorm(xla_test.XLATestCase):
   def testInference(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
       y_ = array_ops.placeholder(datatype, shape=[1, 1000])
@@ -142,24 +135,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 25260426)
+      report.parse_log()
+      report.assert_total_tile_memory(25521214)
 
   def testTraining(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -174,24 +163,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 44803529)
+      report.assert_total_tile_memory(44803529)
 
   def testTrainingMomentum(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -206,24 +191,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
         train = momentum.MomentumOptimizer(0.01, 0.9).minimize(loss)
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45529234)
+      report.assert_total_tile_memory(45722042)
 
   def testTrainingInLoop(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -246,24 +227,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         train = ipu.ipu_compiler.compile(model, inputs=[x, y_])
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45425859)
+      report.assert_total_tile_memory(45425859)
 
   def testTrainingMomentumInLoop(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -285,24 +262,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         train = ipu.ipu_compiler.compile(model, inputs=[x, y_])
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 42426150)
+      report.assert_total_tile_memory(42426150)
 
   def testTrainingInLoopWithGradientAccumulation(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -326,24 +299,20 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         train = ipu.ipu_compiler.compile(model, inputs=[x, y_])
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 47911788)
+      report.assert_total_tile_memory(48315778)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
-    cfg = ipu.utils.IPUConfig()
-    report_helper = tu.ReportHelper()
-    report_helper.set_autoreport_options(cfg)
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
     with self.session() as sess:
 
       x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -366,16 +335,18 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         train = ipu.ipu_compiler.compile(model, inputs=[x, y_])
 
+      report = tu.ReportJSON(self, sess)
+
       sess.run(variables.global_variables_initializer())
-      report_helper.clear_reports()
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
 
-    report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 44311808)
+      report.assert_total_tile_memory(44746446)
 
 
 if __name__ == "__main__":
