@@ -19,8 +19,6 @@ from __future__ import print_function
 import json
 import os
 from pathlib import Path
-import re
-import shutil
 import numpy as np
 import test_utils as tu
 
@@ -164,7 +162,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
         self.assertTrue(len(repdirs) == num_dirs)
 
   def testAutoAssignReportSubdirectoriesAllowsMultipleReports(self):
-    report_helper = tu.ReportHelper(self)
+    report_helper = tu.ReportHelper()
     cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     report_helper.set_autoreport_options(cfg)
@@ -182,7 +180,7 @@ class AutoReportDirTest(xla_test.XLATestCase):
       report_helper.assert_num_reports(2)
 
   def testAutoAssignReportSubdirectoriesSubdirectoryReused(self):
-    report_helper = tu.ReportHelper(self)
+    report_helper = tu.ReportHelper()
     cfg = ipu.config.IPUConfig()
     cfg.auto_select_ipus = 1
     report_helper.set_autoreport_options(cfg)

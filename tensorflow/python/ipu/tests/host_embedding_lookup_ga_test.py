@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -27,6 +28,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
 from tensorflow.python.ipu import embedding_ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer as ga
 from tensorflow.python.ipu import loops
 
@@ -72,17 +74,16 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    report_helper = tu.ReportHelper()
+    cfg = IPUConfig()
+    report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
+
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(
           gen_pop_datastream_ops.ipu_host_embedding_register(
               w, "host_embedding", optimizer="SGD+GA"))
@@ -91,11 +92,11 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
           gen_pop_datastream_ops.ipu_host_embedding_deregister(
               w, "host_embedding"))
 
-      # Since we updated with the same activations, we expect to see a 2x
-      self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
-      self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
-      report.parse_log()
-      report.assert_max_tile_memory(772, tolerance=0.3)
+    # Since we updated with the same activations, we expect to see a 2x
+    self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
+    self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
+    report = pva.openReport(report_helper.find_report())
+    self.assert_max_tile_memory(report, 772, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testAGIShape(self):
@@ -134,16 +135,16 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    report_helper = tu.ReportHelper()
+    cfg = IPUConfig()
+    report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
+
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(
           gen_pop_datastream_ops.ipu_host_embedding_register(
               w, "host_embedding", optimizer="SGD+GA"))
@@ -152,11 +153,11 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
           gen_pop_datastream_ops.ipu_host_embedding_deregister(
               w, "host_embedding"))
 
-      # Since we updated with the same activations, we expect to see a 2x
-      self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
-      self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
-      report.parse_log()
-      report.assert_max_tile_memory(5852, tolerance=0.3)
+    # Since we updated with the same activations, we expect to see a 2x
+    self.assertAllClose(result[0][0] * 3, np.take(v, i_h, axis=0))
+    self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
+    report = pva.openReport(report_helper.find_report())
+    self.assert_max_tile_memory(report, 5852, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testTrainNoExec(self):
@@ -180,17 +181,14 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       with host_embedding.register(sess):
         # training=False should ignore the number of expected updates.
@@ -220,17 +218,14 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       with host_embedding.register(sess):
         result = sess.run([r], {i: i_h})
@@ -280,8 +275,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i, w])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.experimental.always_rearrange_copies_on_the_host = True
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
@@ -289,9 +283,7 @@ class HostEmbeddingLookupGATest(test_util.TensorFlowTestCase):
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
       w_h = np.random.rand(256, 128).astype(np.float32)
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       with host_embedding.register(sess):
         result = sess.run([r], {i: i_h, w: w_h})
