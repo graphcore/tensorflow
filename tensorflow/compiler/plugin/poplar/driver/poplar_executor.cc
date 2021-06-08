@@ -1989,6 +1989,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   // Get remote memory support.
   target_hash.push_back(SupportsRemoteBuffers());
 
+  // Whether multi-replica distribution is enabled or not. This impacts
+  // the syncReplicasIndependently Poplar engine option.
+  target_hash.push_back(HasMultiReplicaDistributionOptions());
+
   // Get hashes for GCL compilation parameters.
   absl::c_copy(GetGclHashes(), std::back_inserter(target_hash));
 
