@@ -1016,12 +1016,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       GUARDED_BY(ipu_.Mutex());
 
   struct OutfeedContext {
-    OutfeedContext(const FeedInfo& outfeed_info);
+    OutfeedContext(const FeedInfo& outfeed_info, int64 replication_factor);
     OutfeedContext() = delete;
 
-    bool Matches(const FeedInfo& outfeed_info);
+    bool Matches(const FeedInfo& other_outfeed_info,
+                 int64 other_replication_factor) const;
 
     const PoplarFeedConfig config;
+    const int64 replication_factor;
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
@@ -1029,7 +1031,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
     std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
-    int64 replication_factor;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // moving a tensor from the device.
     std::recursive_mutex mutex;

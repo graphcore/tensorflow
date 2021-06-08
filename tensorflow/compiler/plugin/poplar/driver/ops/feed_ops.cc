@@ -217,7 +217,6 @@ StatusOr<poplar::program::Program> CreateOutfeed(
   const HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;
   outfeed_config.ParseFromString(outfeed->outfeed_config());
-  outfeed_config.set_replication_factor(res.local_replication_factor);
 
   FeedInfo info(outfeed_config.feed_id(), outfeed_config,
                 outfeed->operands()[0]->shape());

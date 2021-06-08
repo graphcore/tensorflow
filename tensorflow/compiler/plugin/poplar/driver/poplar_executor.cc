@@ -397,21 +397,23 @@ PoplarExecutor::TensorControl::~TensorControl() {
   tensorflow::port::AlignedFree(data);
 }
 
-PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
+PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info,
+                                               int64 replication_factor)
     : config(outfeed_info.config),
+      replication_factor(replication_factor),
       shapes(GetOutfeedShapes(FlattenedXlaShape(outfeed_info.shape),
-                              outfeed_info.config.replication_factor())),
+                              replication_factor)),
       tf_data_types(outfeed_info.config.tf_data_types().size()),
       tf_shapes(shapes.size()),
       callback_to_io_thread_queues(shapes.size()) {
   CHECK_EQ(shapes.size(), tf_data_types.size());
-  replication_factor = config.replication_factor();
   for (uint64 i = 0; i < shapes.size(); i++) {
     tf_data_types[i] = static_cast<tensorflow::DataType>(
         outfeed_info.config.tf_data_types()[i]);
     tensorflow::XLAShapeToTensorShape(shapes[i], &tf_shapes[i]);
 
     // Set up the queue per tensor per replica.
+    CHECK_GT(replication_factor, 0);
     const int64 num_bytes_per_replica =
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
     for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
@@ -423,9 +425,10 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
   }
 }
 
-bool PoplarExecutor::OutfeedContext::Matches(const FeedInfo& outfeed_info) {
-  auto s = GetOutfeedShapes(FlattenedXlaShape(outfeed_info.shape),
-                            outfeed_info.config.replication_factor());
+bool PoplarExecutor::OutfeedContext::Matches(
+    const FeedInfo& other_outfeed_info, int64 other_replication_factor) const {
+  const auto s = GetOutfeedShapes(FlattenedXlaShape(other_outfeed_info.shape),
+                                  other_replication_factor);
   if (s.size() != shapes.size()) {
     return false;
   }
@@ -435,7 +438,7 @@ bool PoplarExecutor::OutfeedContext::Matches(const FeedInfo& outfeed_info) {
     }
   }
   return google::protobuf::util::MessageDifferencer::Equivalent(
-      config, outfeed_info.config);
+      config, other_outfeed_info.config);
 }
 
 PoplarExecutor::PoplarExecutor()
@@ -950,8 +953,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 
 Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
   for (auto& infeed_info : infeed_infos) {
-    // Set from the compiler resources in DeferredVisitor::HandleInfeed.
-    const int64 replication_factor = infeed_info.config.replication_factor();
+    const int64 replication_factor = current_replication_factor_;
     const std::string& feed_id = infeed_info.config.feed_id();
 
     auto iter = infeed_iterators_.find(feed_id);
@@ -3272,7 +3274,8 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
     auto outfeed_id = outfeed_info.config.feed_id();
     const auto existing_feed = outfeed_contexts_.find(outfeed_id);
     if (existing_feed != outfeed_contexts_.end()) {
-      if (!existing_feed->second->Matches(outfeed_info)) {
+      if (!existing_feed->second->Matches(outfeed_info,
+                                          current_replication_factor_)) {
         return xla::FailedPrecondition(
             "Outfeed with id='%s' already exists but with a different tensor "
             "shape or replication factor. Consider changing the `feed_name` "
@@ -3291,8 +3294,8 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
                         "Consider changing the `outfeed_mode` in "
                         "IPUOutfeedQueue.";
       }
-      outfeed_contexts_[outfeed_id] =
-          absl::make_unique<OutfeedContext>(outfeed_info);
+      outfeed_contexts_[outfeed_id] = absl::make_unique<OutfeedContext>(
+          outfeed_info, current_replication_factor_);
     }
   }
   return Status::OK();
@@ -3570,7 +3573,8 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
     TF_RETURN_IF_ERROR(PopulateOutputBuffer(*result_buffer, executable,
                                             allocator, *output_allocator,
                                             output_shape));
-    // Create outfeed queues.
+    // Create outfeed queues with the correct replication factor.
+    SetCurrentReplicationFactor(executable.GetReplicationFactor());
     TF_RETURN_IF_ERROR(RegisterOutfeeds(executable.GetOutfeedInfos()));
   } else {
     if (!executable.has_module()) {
