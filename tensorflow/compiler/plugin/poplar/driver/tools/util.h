@@ -51,6 +51,21 @@ bool check_convert_ok(const To& to, const From& from) {
 }
 }  // namespace
 
+/**
+ * Enumeration used to represent a symbolic device ID.
+ *
+ * Currently only `All` is available. This device ID is used to represent the
+ * whole logical Poplar device.
+ */
+enum class Devices : int64 {
+  All = -1,
+};
+
+bool operator==(const int64 lhs, const Devices rhs);
+bool operator==(const Devices rhs, const int64 lhs);
+bool operator!=(const int64 lhs, const Devices rhs);
+bool operator!=(const Devices rhs, const int64 lhs);
+
 template <typename To, typename From>
 absl::optional<To> convert_array(const From& from) {
   To out;

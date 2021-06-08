@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,34 +13,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_EXPRESSION_OUTLINER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_EXPRESSION_OUTLINER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
-#include "tensorflow/compiler/xla/statusor.h"
 
 namespace xla {
 
 class HloModule;
-class HloComputation;
 
 namespace poplarplugin {
 
-// Extract elementwise ops into a called sub-graph.
-class ExpressionOutliner : public HloModulePass {
+// Pass which checks that resource update is in a correct format:
+// * make sure that all users of the resource update are unique GTE
+//   instructions with each GTE only having a single user.
+class ResourceUpdateChecker : public HloModulePass {
  public:
-  explicit ExpressionOutliner(int64 maximum_num_elements = -1);
-  absl::string_view name() const override { return "expression-outliner"; }
+  absl::string_view name() const override { return "resource-update-checker"; }
 
-  StatusOr<bool> Run(HloModule* module);
-
- private:
-  StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp);
-
-  const int64 maximum_num_elements_;
+  StatusOr<bool> Run(HloModule* module) override;
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_INVARIANT_PASSES_RESOURCE_UPDATE_CHECKER_H_

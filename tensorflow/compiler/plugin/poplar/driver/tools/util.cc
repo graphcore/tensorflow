@@ -36,6 +36,14 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+bool operator==(const int64 lhs, const Devices rhs) {
+  return lhs == static_cast<int64>(rhs);
+}
+
+bool operator==(const Devices lhs, const int64 rhs) { return (rhs == lhs); }
+bool operator!=(const int64 lhs, const Devices rhs) { return !(lhs == rhs); }
+bool operator!=(const Devices lhs, const int64 rhs) { return !(lhs == rhs); }
+
 void StripAllInstructionLayouts(const HloModule* module) {
   for (auto* comp : module->computations()) {
     if (IsPopOpsFusion(comp)) {
@@ -336,15 +344,6 @@ bool IsFusion(const HloInstruction* inst, const std::string& name) {
   return inst->opcode() == HloOpcode::kFusion &&
          IsFusionComputationWithPrefix(inst->fused_instructions_computation(),
                                        name);
-}
-
-bool IsArithmeticExpressionFusion(const HloComputation* comp) {
-  return IsFusionComputationWithPrefix(comp, "_arithmetic_expression");
-}
-
-bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kFusion &&
-         IsArithmeticExpressionFusion(inst->fused_instructions_computation());
 }
 
 namespace {

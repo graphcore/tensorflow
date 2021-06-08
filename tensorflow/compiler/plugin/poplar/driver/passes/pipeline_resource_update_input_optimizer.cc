@@ -152,13 +152,18 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
             << operand->ToString();
     TF_RETURN_IF_ERROR(resource_update->ReplaceOperandWith(input_idx, operand));
 
+    HloInstruction* parameter =
+        resource_update_comp->parameter_instruction(input_idx);
+
     if (elementwise_modifier) {
+      // Ensure the parameter has the right shape (the modifier might have a
+      // different data type).
+      *parameter->mutable_shape() = operand->shape();
+
       HloInstruction* modifier = elementwise_modifier->modifier;
       int64 modifier_operand_idx = elementwise_modifier->modifier_operand_idx;
 
       VLOG(1) << "Adding elementwise modifier " << modifier->ToString();
-      HloInstruction* parameter =
-          resource_update_comp->parameter_instruction(input_idx);
 
       // Get the operands for the modifier inside of the resource update.
       std::vector<HloInstruction*> operands(modifier->operand_count());
@@ -180,6 +185,8 @@ StatusOr<bool> PipelineResourceUpdateInputOptimizer::OptimizePipeline(
               modifier->CloneWithNewOperands(modifier->shape(), operands));
       // Replace all the uses with it.
       TF_RETURN_IF_ERROR(parameter->ReplaceAllUsesWith(in_resource_modifier));
+    } else {
+      CHECK_EQ(parameter->shape(), operand->shape());
     }
     changed = true;
   }

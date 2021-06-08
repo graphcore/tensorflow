@@ -48,6 +48,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/no_control_deps_checker.h"
+#include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/resource_update_checker.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
@@ -802,14 +803,14 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     for (unsigned hw_id : resources.shard_to_ipu_id) {
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
-  } else {  // !ShardingEnabled(module)
-    if (tilesets.has_value()) {
-      resources.compute_graph.emplace(
-          main_graph.createVirtualGraph(tilesets->compute_tiles));
+  }
 
-      resources.io_graph.emplace(
-          main_graph.createVirtualGraph(tilesets->io_tiles));
-    }
+  if (tilesets.has_value()) {
+    resources.compute_graph.emplace(
+        main_graph.createVirtualGraph(tilesets->compute_tiles));
+
+    resources.io_graph.emplace(
+        main_graph.createVirtualGraph(tilesets->io_tiles));
   }
 
   std::stringstream codelets_cpp_src{
@@ -839,23 +840,29 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   return Status::OK();
 }
 
-StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
+StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
     CompilerResources& res) {
-  std::vector<IpuSchedulerAlgorithm> schedulers;
+  std::vector<NamedIpuSchedulerAlgorithm> schedulers;
   bool all = res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
-  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
-    schedulers.push_back(CreateClusteringMemoryScheduler(res.information));
-  }
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.push_back(
-        MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
+         MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)});
+  }
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::CLUSTERING) {
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
+         CreateClusteringMemoryScheduler(res.information)});
   }
   if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
     schedulers.push_back(
-        CreateLivenessLookAheadMemoryScheduler(res.information));
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
+         CreateLivenessLookAheadMemoryScheduler(res.information)});
   }
   if (res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
-    schedulers.push_back(CreateShortestPathScheduler(res.information));
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
+         CreateShortestPathScheduler(res.information)});
   }
 
   if (!schedulers.size()) {
@@ -1414,6 +1421,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<SliceOptimizer>(resources.annotations);
       pipeline.AddPass<FuseOpsLate>(resources.annotations);
       pipeline.AddPass<HloPassFix<FuseOpsIntoPoplarOps>>(resources.annotations);
+      pipeline.AddPass<ExpressionOutliner>(/*maximum_num_elements=*/8);
       pipeline.AddPass<ElementwiseSimplifier>();
       pipeline.AddPass<ElementwiseBroadcastConverter>();
       pipeline.AddPass<FuseWideConst>(resources.annotations);
@@ -1457,12 +1465,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<HloCSE>(true);
       pipeline.AddPass<OutlineRemoteBuffers>();
       pipeline.AddPass<ResourceUpdateCopyInserter>();
+      pipeline.AddPass<ResourceUpdateFixer>();
     }
 
     // Passes below this point need to respect control dependencies.
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
           "with control dependencies");
+      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
       pipeline.AddPass<HostEmbeddingNotification>();
       pipeline.AddPass<RecomputationInputRemover>();
       pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
@@ -1512,6 +1523,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     {
       auto& pipeline = optimizer_pipeline.AddPass<HloPassPipeline>(
           "with inplace information");
+      pipeline.AddInvariantChecker<ResourceUpdateChecker>();
+
       pipeline.AddPass<InplaceFinder>();
       pipeline.AddPass<ExpressionOutliner>();
       pipeline.AddPass<PipelineCopyInserter>();

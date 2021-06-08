@@ -16,10 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
-
-#include <vector>
-
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -37,10 +33,6 @@ class ResourceUpdateFixer : public HloModulePass {
   absl::string_view name() const override { return "resource-update-fixer"; }
 
   StatusOr<bool> Run(HloModule* module) override;
-
- private:
-  // Fix a pipeline.
-  StatusOr<bool> FixPipeline(HloInstruction* pipeline_op);
 };
 
 }  // namespace poplarplugin
