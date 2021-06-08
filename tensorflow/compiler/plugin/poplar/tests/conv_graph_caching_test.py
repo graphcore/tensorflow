@@ -18,12 +18,14 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import pva
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -364,6 +366,12 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       report.assert_compute_sets_matches('*Convolve', 1)
 
   def testConvolutionEvenWhenNotInplace(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         filter_sizes = constant_op.constant([2, 2, 3, 5], np.int32)
@@ -387,11 +395,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                   conv_scaled_inplace(input2, grads2, 0.1) +
                   conv_scaled_inplace(input3, grads3, 0.2))
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
 
       r = sess.run(
           result, {
@@ -419,12 +423,18 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                                 [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
       # yapf: enable
 
-      report.parse_log()
+    report = pva.openReport(report_helper.find_report())
 
-      # We still reuse the code even though only one conv is inplace.
-      report.assert_compute_sets_matches('*Convolve', 1)
+    # We still reuse the code even though only one conv is inplace.
+    self.assert_compute_sets_matches(report, '*Convolve', 1)
 
   def testConvolutionsWithBroadcast(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def model(device):
@@ -436,22 +446,17 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           y = nn.conv2d(y, w_bcast, strides=1, padding="SAME", name="b")
           return sess.run(y, {x: np.ones(x.shape)})
 
-      report = tu.ReportJSON(self, sess)
-
-      report.reset()
-
       ipu_result = model("/device:IPU:0")
       cpu_result = model("cpu")
       self.assertAllClose(cpu_result, ipu_result)
 
-      report.parse_log()
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 9951854, tolerance=0.2)
+    self.assert_max_tile_memory(report, 7446, tolerance=0.2)
 
-      report.assert_total_tile_memory(9951854, tolerance=0.2)
-      report.assert_max_tile_memory(7446, tolerance=0.2)
-
-      # Would fail if there were two convolutions in the graph
-      ok = ['__seed*', 'a/convolution', 'Copy_']
-      report.assert_all_compute_sets_and_list(ok)
+    # Would fail if there were two convolutions in the graph
+    ok = ['__seed*', 'a/convolution', 'Copy_']
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

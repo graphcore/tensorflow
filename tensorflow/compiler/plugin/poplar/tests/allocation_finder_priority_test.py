@@ -19,6 +19,7 @@ from __future__ import print_function
 import os
 import numpy as np
 from absl.testing import parameterized
+import pva
 import test_utils as tu
 
 from tensorflow.python import ipu
@@ -59,6 +60,11 @@ class AllocationFinderPriorityTest(xla_test.XLATestCase,
   # The memory usage should be similar.
   @parameterized.parameters([True, False])
   def testMatmulAndEmbedding(self, transpose_matmul):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def model(ids):
@@ -69,15 +75,13 @@ class AllocationFinderPriorityTest(xla_test.XLATestCase,
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         output = ipu.ipu_compiler.compile(model, [ids_ph])
 
-      report = tu.ReportJSON(self, sess, compile_ipu_code=True)
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       sess.run(output, {ids_ph: np.ones([50])})
 
-      report.parse_log()
-      report.assert_total_tile_memory(51592689)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_total_tile_memory(report, 51592689)
 
 
 if __name__ == "__main__":
