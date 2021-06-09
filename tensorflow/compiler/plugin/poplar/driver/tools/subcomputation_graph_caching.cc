@@ -47,6 +47,26 @@ RemoteBufferHandleVectors GetInputRemoteBufferHandles(
   }
   return handles;
 }
+
+ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgRBVectors& inputs,
+                                             bool reallocate) {
+  ReallocateInputsInfo reallocate_inputs;
+  reallocate_inputs.reserve(inputs.size());
+  for (const auto& input : inputs) {
+    reallocate_inputs.emplace_back(input.size(), reallocate);
+    if (!reallocate) {
+      // If there is a hint provided not to reallocate, any inputs which are not
+      // parallel writeable are still reallocated.
+      for (int64 i = 0; i != input.size(); ++i) {
+        if (input[i] && input[i]->IsTensor()) {
+          const poplar::Tensor& t = input[i]->AsTensor();
+          reallocate_inputs.back()[i] = !t.isParallelWriteable();
+        }
+      }
+    }
+  }
+  return reallocate_inputs;
+}
 }  // namespace
 
 size_t SubcomputationGraphCacheKeyHash::operator()(
@@ -103,7 +123,7 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
             res, inputs, computation->name(),
             /*allocate_all_input_tensors=*/true,
             /*dependent_computations=*/std::vector<const DeferredVisitor*>{},
-            !keep_input_layouts);
+            GetReallocateInputsInfo(inputs, !keep_input_layouts));
 
     DeferredVisitor* def_visitor =
         const_cast<DeferredVisitor*>(deferred_visitor.get());

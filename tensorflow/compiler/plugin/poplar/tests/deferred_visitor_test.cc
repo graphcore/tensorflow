@@ -860,6 +860,8 @@ func2 {
   p0.2 = f32[8,8] parameter(0)
   p1.2 = f32[8,8] parameter(1)
   dot.2 = f32[8,8] dot(p0.2, p1.2), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  p2.2 = f32[8,8] parameter(2)
+  add.2 = f32[8,8] add(dot.2, p2.2)
   ROOT t.2 = (f32[8,8]) tuple(dot.2)
 }
 
@@ -870,7 +872,10 @@ ENTRY main {
   main_dot = f32[8,8] dot(arg0, arg1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
 
   c1 = (f32[8,8]) call(main_dot, arg0), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
-  c2 = (f32[8,8]) call(arg1, main_dot), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  zero = f32[] constant(0)
+  bzero = f32[8,8] broadcast(zero), dimensions={}
+  c2 = (f32[8,8]) call(arg1, main_dot, bzero), to_apply=func2, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
   c1_gte = f32[8,8] get-tuple-element(c1), index=0
   c2_gte = f32[8,8] get-tuple-element(c2), index=0
   ROOT root_t = (f32[8,8],f32[8,8]) tuple(c1_gte, c2_gte)
@@ -895,7 +900,7 @@ ENTRY main {
   }
 
   EntryVisitor visitor(*resources.get(), entry_computation);
-  VLOG(0) << module->ToString();
+
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
   auto entry_tensor_map =
       resources->tensor_maps.GetTensorMapForComputation("main");
@@ -928,6 +933,22 @@ ENTRY main {
   // c2 is not allowed to reallocate.
   EXPECT_EQ(main_dot_ts[0].getContiguousRegions(),
             p1_2_ts[0].getContiguousRegions());
+
+  // bzero input to c2 has aliasing therefore it's reallocated.
+  HloInstruction* bzero = FindInstruction(module.get(), "bzero");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto bzero_ts,
+      FindInstructionOutputTensors(entry_tensor_map, *resources.get(), bzero));
+  ASSERT_EQ(bzero_ts.size(), 1);
+
+  HloInstruction* p2_2 = FindInstruction(module.get(), "p2.2");
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto p2_2_ts,
+      FindInstructionOutputTensors(func2_tensor_map, *resources.get(), p2_2));
+  ASSERT_EQ(p2_2_ts.size(), 1);
+
+  EXPECT_NE(bzero_ts[0].getContiguousRegions(),
+            p2_2_ts[0].getContiguousRegions());
 }
 
 TEST_F(DeferredVisitorTest, TestConditional) {

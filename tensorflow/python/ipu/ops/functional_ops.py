@@ -58,11 +58,11 @@ def outlined_function(func=None,
       device before the function call is executed. Enabling this can increase
       performance as any inter IPU communication can be more efficiently
       scheduled and any duplicated copies can be elided.
-    keep_input_layouts: Whether to keep the layouts of the function inputs when
-      calling the function or re-allocate them based on the operations inside
-      the function. Reallocating them can improve the performance, but it can
-      also increase the IPU code size. When set to 'None', this option will be
-      decided automatically.
+    keep_input_layouts: A hint to decide whether to keep the layouts of the
+      function inputs when calling the function or re-allocate them based on the
+      operations inside the function. Reallocating them can improve the
+      performance, but it can also increase the IPU code size. When set to
+      'None', this option will be decided automatically.
     name: The name of the function.
 
   Returns:
