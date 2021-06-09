@@ -109,9 +109,6 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"tensor_map_file_path", "Directory for tensor map dump files."},
       {"null_data_feed",
        "Don't provide data to an infeed, for performance measurement."},
-      {"dump_text_reports_to_stdio",
-       "If profiling is enabled, write a text copy of the profile to the "
-       "standard output stream."},
       {"fallback_scheduler",
        "Use the sync list scheduler rather than the default one."},
       {"show_progress_bar",
