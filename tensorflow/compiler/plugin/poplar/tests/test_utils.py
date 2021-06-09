@@ -238,6 +238,41 @@ class TestCaseExtensions(object):
     cs_names = (cs.name for cs in report.compilation.computeSets)
     self.assertEqual(count_matches_in_list(cs_names, expr), num_matches, msg)
 
+  def assert_compute_sets_contain_list(self, report, ok):
+    """Asserts that of all the whitelist patterns match at least one compute
+    set in the report.
+    """
+    whitelist = ['*' + x + '*' for x in ok]
+    not_in_report = []
+    for expected in whitelist:
+      if not any(
+          fnmatch.fnmatch(actual.name, expected)
+          for actual in report.compilation.computeSets):
+        not_in_report.append(expected)
+
+    self.assertFalse(
+        not_in_report,
+        "Whitelist items [%s] not found in compute sets:\n\t%s" %
+        (",".join(not_in_report), "\n\t".join(
+            cs.name for cs in report.compilation.computeSets)))
+
+  def assert_compute_sets_not_in_blacklist(self, report, blacklist):
+    """Asserts that no compute sets in the report match any of the blacklist
+    items.
+    """
+    blacklist = ['*' + x + '*' for x in blacklist]
+    in_report = []
+    for item in blacklist:
+      if any(
+          fnmatch.fnmatch(cs.name, item)
+          for cs in report.compilation.computeSets):
+        in_report.append(item)
+
+    self.assertFalse(
+        in_report, "Blacklist items [%s] found in compute sets:\n\t%s" %
+        (",".join(in_report), "\n\t".join(
+            cs.name for cs in report.compilation.computeSets)))
+
   def assert_each_tile_memory_is_less_than(self,
                                            report,
                                            max_expected,
@@ -294,7 +329,7 @@ for attr in dir(TestCaseExtensions):
     setattr(TensorFlowTestCase, attr, getattr(TestCaseExtensions, attr))
 
 
-class ReportHelper(object):
+class ReportHelper():
   """ ReportHelper creates a temporary directory for reports to be generated
   in. `set_autoreport_options` configures poplar to use this directory.
 

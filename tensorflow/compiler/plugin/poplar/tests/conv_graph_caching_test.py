@@ -302,6 +302,12 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       self.assertAllEqual(report.get_ml_type_counts(), [0, 7, 0, 3])
 
   def testConvolutionApply(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         filter_sizes = constant_op.constant([2, 2, 3, 5], np.int32)
@@ -328,11 +334,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                   conv_scaled_inplace(input2, grads2, weights2, 0.1) +
                   conv_scaled_inplace(input3, grads3, weights3, 0.2))
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
 
       r = sess.run(
           result, {
@@ -347,23 +349,22 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
               weights3: np.ones([2, 2, 3, 5]),
               vlr: 0.1,
           })
-      # yapf: disable
-      self.assertAllClose(r, [[[[-48.2, -48.2, -48.2, -48.2, -48.2],
-                                [-48.2, -48.2, -48.2, -48.2, -48.2],
-                                [-48.2, -48.2, -48.2, -48.2, -48.2],],
-                               [[-41.8, -41.8, -41.8, -41.8, -41.8],
-                                [-41.8, -41.8, -41.8, -41.8, -41.8],
-                                [-41.8, -41.8, -41.8, -41.8, -41.8],],],
-                              [[[-41.8, -41.8, -41.8, -41.8, -41.8],
-                                [-41.8, -41.8, -41.8, -41.8, -41.8],
-                                [-41.8, -41.8, -41.8, -41.8, -41.8],],
-                               [[-36.2, -36.2, -36.2, -36.2, -36.2],
-                                [-36.2, -36.2, -36.2, -36.2, -36.2],
-                                [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
-      # yapf: enable
-      report.parse_log()
-
-      report.assert_compute_sets_matches('*Convolve', 1)
+    # yapf: disable
+    self.assertAllClose(r, [[[[-48.2, -48.2, -48.2, -48.2, -48.2],
+                              [-48.2, -48.2, -48.2, -48.2, -48.2],
+                              [-48.2, -48.2, -48.2, -48.2, -48.2],],
+                             [[-41.8, -41.8, -41.8, -41.8, -41.8],
+                              [-41.8, -41.8, -41.8, -41.8, -41.8],
+                              [-41.8, -41.8, -41.8, -41.8, -41.8],],],
+                            [[[-41.8, -41.8, -41.8, -41.8, -41.8],
+                              [-41.8, -41.8, -41.8, -41.8, -41.8],
+                              [-41.8, -41.8, -41.8, -41.8, -41.8],],
+                             [[-36.2, -36.2, -36.2, -36.2, -36.2],
+                              [-36.2, -36.2, -36.2, -36.2, -36.2],
+                              [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
+    # yapf: enable
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_matches(report, '*Convolve', 1)
 
   def testConvolutionEvenWhenNotInplace(self):
     cfg = IPUConfig()

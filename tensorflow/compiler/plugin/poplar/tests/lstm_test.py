@@ -22,21 +22,19 @@ from absl.testing import parameterized
 
 import os
 import numpy as np
+import pva
 import test_utils as tu
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.ipu.ops import rnn_ops_grad
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.python.ops import rnn
-from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
@@ -394,6 +392,12 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
     self.assertAllClose(output_cpu, output_ipu)
 
   def testLSTMCached(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       pinputs1 = array_ops.placeholder(dataType,
                                        [seq_len, batch_size, input_size],
@@ -434,11 +438,9 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
-      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
@@ -446,13 +448,19 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      report.parse_log()
-      report.assert_compute_sets_matches('*/OutputGate/Op/Multiply', 1,
-                                         'One fwd LSTM')
-      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 1,
-                                         'One bwd LSTM')
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_matches(report, '*/OutputGate/Op/Multiply', 1,
+                                     'One fwd LSTM')
+    self.assert_compute_sets_matches(report, '*/MulOGate/Op/Multiply', 1,
+                                     'One bwd LSTM')
 
   def testLSTMNotCached(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       # Note here the second LSTM is larger.
       pinputs1 = array_ops.placeholder(dataType,
@@ -494,11 +502,9 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
-      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
@@ -507,12 +513,11 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      report.parse_log()
-
-      report.assert_compute_sets_matches('*/OutputGate/Op/Multiply', 2,
-                                         "Two fwd LSTMs")
-      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 2,
-                                         "Two bwd LSTMs")
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_matches(report, '*/OutputGate/Op/Multiply', 2,
+                                     "Two fwd LSTMs")
+    self.assert_compute_sets_matches(report, '*/MulOGate/Op/Multiply', 2,
+                                     "Two bwd LSTMs")
 
 
 if __name__ == "__main__":

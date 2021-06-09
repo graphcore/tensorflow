@@ -20,21 +20,19 @@ from __future__ import print_function
 
 import os
 import numpy as np
-from test_utils import ReportJSON
+import pva
+from test_utils import ReportJSON, ReportHelper
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.ipu.ops import rnn_ops_grad
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.python.ops import rnn
-from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
@@ -393,6 +391,12 @@ class GRUTest(xla_test.XLATestCase):
         self.assertAllClose(output_cpu, output_ipu)
 
   def testGRUCached(self):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       pinputs1 = array_ops.placeholder(dataType,
                                        [seq_len, batch_size, input_size],
@@ -429,11 +433,9 @@ class GRUTest(xla_test.XLATestCase):
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
-      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createGRUInput(0.5, pinputs1.shape),
@@ -441,15 +443,20 @@ class GRUTest(xla_test.XLATestCase):
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      report.parse_log()
-
-      report.assert_compute_sets_matches(
-          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 2,
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 2,
           "There should be two fwd GRUs")
-      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 1,
-                                         "There should be one bwd GRU")
+      self.assert_compute_sets_matches(report, '*/MulOGate/Op/Multiply', 1,
+                                       "There should be one bwd GRU")
 
   def testGRUNotCached(self):
+    cfg = IPUConfig()
+    report_helper = ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       # Note here the second GRU is larger.
       pinputs1 = array_ops.placeholder(dataType,
@@ -487,11 +494,9 @@ class GRUTest(xla_test.XLATestCase):
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
-      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createGRUInput(0.5, pinputs1.shape),
@@ -499,12 +504,12 @@ class GRUTest(xla_test.XLATestCase):
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      report.parse_log()
-      report.assert_compute_sets_matches(
-          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 4,
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 4,
           "There should be four fwd GRUs")
-      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 2,
-                                         "There should be two bwd GRUs")
+      self.assert_compute_sets_matches(report, '*/MulOGate/Op/Multiply', 2,
+                                       "There should be two bwd GRUs")
 
 
 if __name__ == "__main__":

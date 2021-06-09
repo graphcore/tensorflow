@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+import pva
 from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -101,6 +102,8 @@ class GclTest(test_util.TensorFlowTestCase):
       compiled_model = ipu.ipu_compiler.compile(my_model, [inputs])
 
     cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
     cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = num_replicas * num_shards
     cfg.gcl_poplar_options = {'useSynclessCollectives': 'true'}
@@ -109,13 +112,12 @@ class GclTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
       [result] = sess.run(compiled_model, {inputs: 1.0})
-      self.assertEqual(result, sum(range(1, num_replicas + 1)))
-      report.parse_log()
-      report.assert_compute_sets_contain_list(
-          ["my_all_reduce/all-reduce.*/AllReduceGCL"])
+
+    self.assertEqual(result, sum(range(1, num_replicas + 1)))
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_contain_list(
+        report, ["my_all_reduce/all-reduce.*/AllReduceGCL"])
 
 
 if __name__ == "__main__":

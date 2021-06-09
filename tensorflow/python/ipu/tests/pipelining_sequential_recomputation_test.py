@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+import pva
 from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
@@ -430,8 +431,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=[])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
       cfg.optimizations.enable_graph_outlining = True
       cfg.auto_select_ipus = 2
       cfg.allow_recompute = True
@@ -440,24 +441,19 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
-      report = tu.ReportJSON(self, session, configure_device=False)
-
       session.run(variables.global_variables_initializer())
       session.run(infeed_queue.initializer)
-      report.reset()
 
       session.run(compiled_model_pipeline)
 
-      report.parse_log()
-
-      # Check that there is no compute set for recomputed stats.
-      # pylint: disable=line-too-long
-      bad = [
-          'stage2/batch_normalization/FusedBatchNorm*/Recomputed/batch-norm-statistics*'
-      ]
-      # pylint: enable=line-too-long
-
-      report.assert_compute_sets_not_in_blacklist(bad)
+    # Check that there is no compute set for recomputed stats.
+    # pylint: disable=line-too-long
+    bad = [
+        'stage2/batch_normalization/FusedBatchNorm*/Recomputed/batch-norm-statistics*'
+    ]
+    # pylint: enable=line-too-long
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_not_in_blacklist(report, bad)
 
 
 if __name__ == "__main__":
