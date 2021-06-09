@@ -100,8 +100,7 @@ using OutfeedQueueType = SPSCOutfeedQueue<2048>;
 
 class ModuleFilenames {
  public:
-  ModuleFilenames(const HloModule& module, int64 device_hash,
-                  const std::string& serialization_folder);
+  ModuleFilenames(uint64 hash, const std::string& serialization_folder);
   std::string CachedExecutableFilename() const;
   std::string CompilationLockFilename() const;
   std::string SerializedExecutableFilename() const;
@@ -568,6 +567,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.selection_order();
   }
 
+  int64 GetPoplarDeviceHash() const { return poplar_device_hash_; }
+
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
@@ -621,7 +622,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool HaveCachedExecutable(const ModuleFilenames& filenames) const;
 
-  ModuleFilenames GetModuleFilenames(const HloModule& module) const;
+  ModuleFilenames GetModuleFilenames(uint64 hash) const;
 
   // Cleanup function called before the IPU device configurations are
   // reset.

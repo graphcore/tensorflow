@@ -30,6 +30,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 REPORT_DIR_PREFIX = "tf_report_"
 
@@ -173,6 +174,8 @@ class AutoReportDirTest(xla_test.XLATestCase):
       sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
       # Assert one report generated.
       report_helper.assert_num_reports(1)
+
+      sess.run(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
 
       run_graph_op_2, x_2 = createSimpleGraph()
       sess.run(run_graph_op_2, {x_2: np.full((2, 2), 10)})
