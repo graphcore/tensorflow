@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
@@ -26,6 +27,7 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -37,6 +39,12 @@ from tensorflow.python.framework import constant_op
 
 class WideConstExpansionTest(xla_test.XLATestCase):
   def testCheckMaxTileSize(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       dtype = np.float32
       shape = (1024, 2048)
@@ -51,21 +59,25 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         c = constant_op.constant(4, shape=shape, dtype=dtype, name="c")
         output = a + pb + c
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
 
-      report.parse_log()
-      report.assert_max_tile_memory(6240)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 6084)
+      report_helper.clear_reports()
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
       self.assertAllClose(np.full(shape, 7, dtype=dtype), out)
 
-      report.parse_log()
-      report.assert_max_tile_memory(23462)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 23462)
 
   def testWideConstantWithAllocationTarget(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       # This test will fail if the dynamic slice is not mapped correctly.
       dtype = np.float32
@@ -94,25 +106,25 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       y = sess.run(r, {y: [10]})
       self.assertAllClose(y[0], [19])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
-          'Mean/reduce', 'Mean/multiply', 'add*/add*/Add',
-          'add_*/fusion/Op/Add'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
-      report.assert_max_tile_memory(8936)
-      report.assert_always_live_memory(299760)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
+        'Mean/reduce', 'Mean/multiply', 'add*/add*/Add', 'add_*/fusion/Op/Add'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_max_tile_memory(report, 8824)
+    self.assert_always_live_memory(report, 169636)
 
   def testCheckMaxTileSizePadding(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(a, b):
@@ -134,20 +146,22 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = ipu_compiler.compile(my_graph, [pa, pb])
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       out = sess.run(out, {pa: np.ones(pa.shape), pb: np.ones(pb.shape)})
       self.assertAllClose(np.zeros(pb.shape), out[0])
 
-      report.parse_log()
-      report.assert_max_tile_memory(77762)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_max_tile_memory(report, 77762)
 
   def testCheckMaxTileSizePadding2(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(a, b):
@@ -167,18 +181,14 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = ipu_compiler.compile(my_graph, [pa, pb])
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       out = sess.run(out, {pa: np.ones(pa.shape), pb: np.ones(pb.shape)})
       self.assertAllClose(np.full(pb.shape, 65.0), out[0])
 
-      report.parse_log()
-      report.assert_max_tile_memory(2594)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_max_tile_memory(report, 2478)
 
 
 if __name__ == "__main__":

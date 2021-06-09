@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -25,6 +26,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.ipu import embedding_ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.training import gradient_descent as gd
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
@@ -60,20 +62,19 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
       tu.add_hw_ci_connection_options(cfg)
+    else:
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
     cfg.configure_ipu_system()
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(
           gen_pop_datastream_ops.ipu_host_embedding_register(
               w, "host_embedding"))
@@ -85,9 +86,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Since we updated with the same activations, we expect to see a 2x
       self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
-      report.parse_log()
-      if not tu.has_ci_ipus():
-        report.assert_max_tile_memory(772, tolerance=0.3)
+
+    if not tu.has_ci_ipus():
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 772, tolerance=0.3)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -117,13 +119,17 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
       tu.add_hw_ci_connection_options(cfg)
+    else:
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
+
     cfg.configure_ipu_system()
+
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
@@ -141,9 +147,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       # Since we updated with the same activations, we expect to see a 2x
       self.assertAllClose(result[0][0] * 2, np.take(v, i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
-      report.parse_log()
-      if not tu.has_ci_ipus():
-        report.assert_max_tile_memory(5852, tolerance=0.3)
+
+    if not tu.has_ci_ipus():
+      report = pva.openReport(report_helper.find_report())
+      self.assert_max_tile_memory(report, 5852, tolerance=0.3)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -168,8 +175,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
@@ -178,9 +184,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       with host_embedding.register(sess):
         # training=False should ignore the number of expected updates.
@@ -211,8 +215,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.auto_select_ipus = 1
     cfg.ipu_model.compile_ipu_code = False
     if tu.has_ci_ipus():
@@ -221,9 +224,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
 
       with host_embedding.register(sess):
         result = sess.run([r], {i: i_h})
