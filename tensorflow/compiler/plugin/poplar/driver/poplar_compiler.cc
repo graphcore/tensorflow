@@ -888,12 +888,6 @@ void GetCompileProfileStream(const std::unique_ptr<poplar::Engine>& engine,
     poplar::serializeToJSON(report_stream, rep);
   }
 
-  if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
-    auto opts = poplar_executor->GetReportGraphFlags();
-    SetFlagIfNotPresent(opts, "showVarStorage", "true");
-    poplar::printGraphSummary(std::cout, rep, opts);
-  }
-
   if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
     LOG(INFO)
         << "Dropping a Poplar compilation report of size "

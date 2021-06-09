@@ -429,7 +429,8 @@ Environment variable changes
 ''''''''''''''''''''''''''''
 
 The ``dump_text_reports_to_stdio`` flag passed to ``TF_POPLAR_OPTIONS`` has been
-deprecated. Use the PopVision Graph Analyser to manually inspect profiles.
+deprecated and has no effect. Use the PopVision Graph Analyser to manually
+inspect profiles.
 
 Release 2.0
 ~~~~~~~~~~~

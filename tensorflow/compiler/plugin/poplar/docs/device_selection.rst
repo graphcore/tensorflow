@@ -260,10 +260,6 @@ some help for each option. The available options are described below:
     - Description
   * - ``--dump_schedule_as_dot``
     - Dump the schedule of the XLA graph to the user console.
-  * - ``--dump_text_reports_to_stdio``
-    - If profiling is enabled, then a text summary of the profile will be dumped
-      to standard output, in addition to the normal report processing.
-      DEPRECATED: Use the PopVision Graph Analyser to manually inspect profiles.
   * - :samp:`--executable_cache_path={path}`
     - Enables the Poplar executable cache.
       See :ref:`caching_executables`.
