@@ -791,6 +791,7 @@ cc_library(
         "driver/tools/execution_counter_util.h",
         "driver/tools/generic_graph_caching.h",
         "driver/tools/io_thread.h",
+        "driver/tools/make_visitor.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/poplar_range_sampler.h",
         "driver/tools/poplar_util.h",

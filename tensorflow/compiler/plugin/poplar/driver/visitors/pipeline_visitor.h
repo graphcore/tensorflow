@@ -29,6 +29,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+namespace pipelinevisitorutils {
+struct PipelineSchedulerUtil;
+}
+
 struct CompilerResources;
 
 class PipelineVisitor : public InplaceDeferredVisitor {
@@ -47,6 +51,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
                   const DeferredArgRBVectors& inputs,
                   const HloInstructionDescription& description,
                   const poplar::DebugNameAndId& debug_name_and_id);
+
+  ~PipelineVisitor();
 
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleClamp);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleSelect);
@@ -132,7 +138,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   Status HandleDeferredAllocationWhile(HloInstruction* inst) override;
   Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
 
-  PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule_;
+  std::unique_ptr<pipelinevisitorutils::PipelineSchedulerUtil>
+      pipeline_scheduler_util_;
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> inter_ipu_copy_sequences_;
   std::vector<poplar::program::Sequence> fifo_sequences_;

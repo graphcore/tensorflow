@@ -35,8 +35,8 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedOrder4) {
   std::vector<char> elements = {'a', 'b', 'c', 'd'};
   std::vector<int> offsets = {0, 1, 2, 3};
 
-  auto schedule =
-      util::FlattenSchedule(util::ConstructSchedule(offsets, elements, false));
+  auto schedule = util::FlattenSchedule(
+      util::GroupedScheduler().ConstructSchedule(offsets, elements));
 
   std::string result(schedule.begin(), schedule.end());
   EXPECT_EQ(result, "dcbadcbadcbadcba");
@@ -51,7 +51,7 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedResize) {
   std::vector<char> elements = {'a', 'b', 'c', 'd'};
   std::vector<int> offsets = {0, 1, 2, 3};
 
-  auto schedule = util::ConstructSchedule(offsets, elements, false);
+  auto schedule = util::GroupedScheduler().ConstructSchedule(offsets, elements);
 
   for (auto& step : schedule) {
     step.resize(1);
@@ -69,7 +69,7 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedPadLeft) {
   std::vector<char> elements = {'a', 'b', 'c', 'd'};
   std::vector<int> offsets = {0, 1, 2, 3};
 
-  auto schedule = util::ConstructSchedule(offsets, elements, false);
+  auto schedule = util::GroupedScheduler().ConstructSchedule(offsets, elements);
   schedule = util::LeftPadSchedule(schedule, '.');
 
   auto schedule_flat = util::FlattenSchedule(schedule);
@@ -84,7 +84,7 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedPadRight) {
   std::vector<char> elements = {'a', 'b', 'c', 'd'};
   std::vector<int> offsets = {0, 1, 2, 3};
 
-  auto schedule = util::ConstructSchedule(offsets, elements, false);
+  auto schedule = util::GroupedScheduler().ConstructSchedule(offsets, elements);
   schedule = util::RightPadSchedule(schedule, '.');
 
   auto schedule_flat = util::FlattenSchedule(schedule);
@@ -100,8 +100,8 @@ TEST_F(PipelineVisitorUtilTest, ConstructScheduleGroupedConcat) {
   std::vector<char> B = {'w', 'x', 'y', 'z'};
   std::vector<int> offsets = {0, 1, 2, 3};
 
-  auto A_sched = util::ConstructSchedule(offsets, A, false);
-  auto B_sched = util::ConstructSchedule(offsets, B, false);
+  auto A_sched = util::GroupedScheduler().ConstructSchedule(offsets, A);
+  auto B_sched = util::GroupedScheduler().ConstructSchedule(offsets, B);
   auto schedule = util::ConcatSchedule(A_sched, B_sched);
   auto schedule_flat = util::FlattenSchedule(schedule);
 
