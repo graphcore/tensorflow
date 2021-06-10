@@ -18,6 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import pva
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import dtypes
@@ -30,12 +32,16 @@ from tensorflow.python.ops import random_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python import ipu
 
-from test_utils import ReportJSON
-
 
 class SubcomputationGraphCachingTest(xla_test.XLATestCase):
   @test_util.deprecated_graph_mode_only
   def testSimpleCaching(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def f_1(x):
@@ -55,15 +61,20 @@ class SubcomputationGraphCachingTest(xla_test.XLATestCase):
         i_x1 = np.full((2, 2), 10)
         i_z = np.full((2), 8)
 
-        report = ReportJSON(self, sess)
         sess.run(r1, {x1: i_x1, z: i_z})
-        report.parse_log()
 
-        report.assert_compute_sets_matches(
-            '*namef1*', 1, "There should be only one f_1 due to cash.")
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*namef1*', 1, "There should be only one f_1 due to cash.")
 
   @test_util.deprecated_graph_mode_only
   def testNotSameFunctions(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     # f_1, f_2 are not the same
     with self.session() as sess:
 
@@ -88,18 +99,23 @@ class SubcomputationGraphCachingTest(xla_test.XLATestCase):
         r1 = ipu.ipu_compiler.compile(f_cond, inputs=[x1])
         i_x1 = np.full((8, 2), 10)
 
-        report = ReportJSON(self, sess)
         sess.run(r1, {x1: i_x1})
-        report.parse_log()
 
-        report.assert_compute_sets_matches(
-            '*namef1*', 1, "There should be only one f_1 due to cash.")
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*namef1*', 1, "There should be only one f_1 due to cash.")
 
-        report.assert_compute_sets_matches(
-            '*namef2*', 1, "There should be only one f_2 due to cash.")
+      self.assert_compute_sets_matches(
+          report, '*namef2*', 1, "There should be only one f_2 due to cash.")
 
   @test_util.deprecated_graph_mode_only
   def testSameFunctions(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     # f_1, f_2 are the same
     with self.session() as sess:
 
@@ -124,19 +140,24 @@ class SubcomputationGraphCachingTest(xla_test.XLATestCase):
         r1 = ipu.ipu_compiler.compile(f_cond, inputs=[x1])
         i_x1 = np.full((2, 2), 10)
 
-        report = ReportJSON(self, sess)
         sess.run(r1, {x1: i_x1})
-        report.parse_log()
 
-        report.assert_compute_sets_matches(
-            '*namef1*', 1, "There should be only one f_1 due to cash.")
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*namef1*', 1, "There should be only one f_1 due to cash.")
 
-        report.assert_compute_sets_matches(
-            '*namef2*', 0,
-            "There should not be f_2, as it is the same as f_1, due to cash.")
+      self.assert_compute_sets_matches(
+          report, '*namef2*', 0,
+          "There should not be f_2, as it is the same as f_1, due to cash.")
 
   @test_util.deprecated_graph_mode_only
   def testWhenSideEffect(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def f_1(x):
@@ -161,14 +182,13 @@ class SubcomputationGraphCachingTest(xla_test.XLATestCase):
         i_x1 = np.full((2, 2), 10)
         i_z = np.full((2), 8)
 
-        report = ReportJSON(self, sess)
         sess.run(r1, {x1: i_x1, z: i_z})
-        report.parse_log()
 
-        report.assert_compute_sets_matches(
-            '*namef1*', 2,
-            "f1 should be on the list twice as it should not be cashed "
-            "due to SideEffect.")
+      report = pva.openReport(report_helper.find_report())
+      self.assert_compute_sets_matches(
+          report, '*namef1*', 2,
+          "f1 should be on the list twice as it should not be cashed "
+          "due to SideEffect.")
 
 
 if __name__ == "__main__":

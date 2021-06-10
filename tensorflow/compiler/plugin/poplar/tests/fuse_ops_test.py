@@ -19,12 +19,14 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pva
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import dtypes
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
@@ -387,6 +389,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionBiasApply(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -405,26 +412,18 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
-
+      report_helper.clear_reports()
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log(
-          assert_len=6,
-          assert_msg=
-          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_compute_sets_contain_list(ok)
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
+    ]
+    # pylint: enable=line-too-long
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_contain_list(report, ok)
 
   def testConvolutionBiasApplyVariableLR(self):
     with self.session() as sess:

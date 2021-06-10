@@ -7,8 +7,9 @@ import "tensorflow/core/framework/types.proto";
 // Message which is stored as the config field for an HloInstruction for an
 // HloInfeedInstruction/HloOutfeedInstruction instruction.
 message PoplarFeedConfig {
-	// The replication factor of this feed.
-	int64 replication_factor = 1;
+	// Removed: The replication factor of this feed.
+	reserved 1;
+	reserved "replication_factor";
 
 	// The unique name of this feed.
 	string feed_id = 2;

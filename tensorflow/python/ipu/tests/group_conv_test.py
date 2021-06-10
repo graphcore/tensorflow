@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import pva
 
 from absl.testing import parameterized
 
@@ -64,6 +65,11 @@ def _compare_ipu_to_cpu(test_wrapper,
                         compute_sets=None,
                         partial_compute_sets=None):
   def _run_on_ipu():
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       g.add_to_collection("run_type", "ipu")
@@ -74,17 +80,17 @@ def _compare_ipu_to_cpu(test_wrapper,
         with ipu.scopes.ipu_scope("/device:IPU:0"):
           res = ipu.ipu_compiler.compile(model_fn, inputs=inputs)
 
-      report = tu.ReportJSON(test_wrapper, session)
       tu.move_variable_initialization_to_cpu()
       session.run(variables.global_variables_initializer())
-      report.reset()
+
       session.run(res, fd)
 
-      report.parse_log()
+      report = pva.openReport(report_helper.find_report())
       if compute_sets:
-        report.assert_all_compute_sets_and_list(compute_sets)
+        test_wrapper.assert_all_compute_sets_and_list(report, compute_sets)
       if partial_compute_sets:
-        report.assert_compute_sets_contain_list(partial_compute_sets)
+        test_wrapper.assert_compute_sets_contain_list(report,
+                                                      partial_compute_sets)
 
       tvars = session.run(variables.trainable_variables())
       return tvars

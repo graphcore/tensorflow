@@ -508,7 +508,6 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
 
   xla::poplarplugin::PoplarFeedConfig infeed_config;
   infeed_config.ParseFromString(infeed->infeed_config());
-  infeed_config.set_replication_factor(resources_.local_replication_factor);
 
   // Multiple infeed queues are not supported.
   if (absl::c_any_of(resources_.annotations.infeed_infos,

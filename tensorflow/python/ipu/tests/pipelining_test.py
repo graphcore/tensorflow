@@ -15,6 +15,7 @@
 
 from functools import partial
 import numpy as np
+import pva
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -1196,6 +1197,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testOutfeedLossAccumulated(self):
     """ Tests accumulating the loss from the optimizer function. """
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def stage1(x):
@@ -1225,24 +1234,19 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
 
-      report = tu.ReportJSON(self,
-                             sess,
-                             pipelining=True,
-                             compile_ipu_code=True,
-                             tiles_per_ipu=128)
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(pipeline)
       # Loss of '1' is accumulated 8 times.
       self.assertAllEqual([8], sess.run(outfed))
-      report.parse_log()
-      # There should be 2 GA-adds. One for the weight and one for the outfeed.
-      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-      report.assert_compute_sets_contain_list(ok)
+
+    # There should be 2 GA-adds. One for the weight and one for the outfeed.
+    report = pva.openReport(report_helper.find_report())
+    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    self.assert_compute_sets_contain_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTraining(self):
@@ -1250,6 +1254,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     Tests accumulating an output from the last computational stage when
     training.
     """
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
     with tu.ipu_session() as sess:
 
       def stage1(x):
@@ -1278,25 +1289,19 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
-      report = tu.ReportJSON(self,
-                             sess,
-                             pipelining=True,
-                             compile_ipu_code=True,
-                             tiles_per_ipu=128)
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(pipeline)
       # '1' is accumulated 8 times.
       self.assertAllEqual([[8]], sess.run(outfed))
 
-      report.parse_log()
-      # There should be 2 GA-adds. One for the weight and one for the outfeed.
-      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-      report.assert_compute_sets_contain_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # There should be 2 GA-adds. One for the weight and one for the outfeed.
+    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    self.assert_compute_sets_contain_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTrainingSetDtype(self):
@@ -1366,6 +1371,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     Tests accumulating two outputs from the last computational stage when
     training.
     """
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def stage1(x, y):
@@ -1394,32 +1407,34 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
 
-      report = tu.ReportJSON(self,
-                             sess,
-                             pipelining=True,
-                             compile_ipu_code=True,
-                             tiles_per_ipu=128)
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(pipeline)
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
       self.assertAllEqual([[8], [16]], sess.run(outfed))
 
-      report.parse_log()
-      # There should be 3 GA-adds. One for the weight and one for each output.
-      ok = [
-          'GradientAccumulatorAdd', 'GradientAccumulatorAdd_1',
-          'GradientAccumulatorAdd_2'
-      ]
-      report.assert_compute_sets_contain_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # There should be 3 GA-adds. One for the weight and one for each output.
+    ok = [
+        'GradientAccumulatorAdd', 'GradientAccumulatorAdd_1',
+        'GradientAccumulatorAdd_2'
+    ]
+    self.assert_compute_sets_contain_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInference(self):
     """ Tests accumulating an output from the last computational stage. """
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def identity(x):
@@ -1438,29 +1453,31 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
-      report = tu.ReportJSON(self,
-                             sess,
-                             pipelining=True,
-                             compile_ipu_code=True,
-                             tiles_per_ipu=128)
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(pipeline)
       # '1' is accumulated 8 times.
       self.assertAllEqual([[8]], sess.run(outfed))
 
-      report.parse_log()
-      # There should be 1 GA-add for the outfeed.
-      ok = ['GradientAccumulatorAdd']
-      report.assert_compute_sets_contain_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # There should be 1 GA-add for the outfeed.
+    ok = ['GradientAccumulatorAdd']
+    self.assert_compute_sets_contain_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInferenceMultipleOutputs(self):
     """ Tests accumulating 2 outputs from the last computational stage. """
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = True
+    cfg.ipu_model.tiles_per_ipu = 128
+    cfg.auto_select_ipus = 4
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def identity(x, y):
@@ -1479,25 +1496,19 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0, 2.0])
 
-      report = tu.ReportJSON(self,
-                             sess,
-                             pipelining=True,
-                             compile_ipu_code=True,
-                             tiles_per_ipu=128)
       utils.move_variable_initialization_to_cpu()
 
       outfed = outfeed_queue.dequeue()
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(pipeline)
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
       self.assertAllEqual([[8], [16]], sess.run(outfed))
 
-      report.parse_log()
-      # There should be a GA-add for each output from the last stage.
-      ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-      report.assert_compute_sets_contain_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # There should be a GA-add for each output from the last stage.
+    ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
+    self.assert_compute_sets_contain_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedDictInference(self):
