@@ -42,7 +42,7 @@ POPNN_AUGRU_NUM_GATES = 3
 __all__ = ["PopnnLSTM", "PopnnGRU", "PopnnDynamicGRU", "PopnnAUGRU"]
 
 
-class _PopnnRNN(base_layer.Layer):
+class _PopnnRNN(base_layer.Layer):  #pylint: disable=W0223
   """Base class for implementing XLA and Popnn compatible RNN layers.
   """
   def __init__(self,
@@ -371,6 +371,68 @@ class PopnnLSTM(_PopnnRNN):
     for sp in self.state_shape(batch_size):
       res.append(array_ops.zeros(sp, dtype=self.dtype))
     return rnn_cell.LSTMStateTuple(*res)
+
+
+class PopnnDynamicLSTM(PopnnLSTM):
+  #pylint: disable=W0223
+  def call(self, inputs, seq_len, initial_state=None, training=True):
+    #pylint: disable=W0221
+    """Runs the forward step for the LSTM model.
+
+    Args:
+      inputs: 3D tensor with shape [time_len, batch_size, input_size].
+      seq_len: 1-D tensor with the sequence length of samples in each batch.
+      initial_state: An `LSTMStateTuple` of state tensors, each shaped
+        `[batch_size, num_units]`. If not provided, the state is
+        initialized to zeros.
+      training: Set to False to use the LSTM model in inference mode.
+
+    Returns:
+      A tuple of output and output state.
+
+      * output: a tensor of shape [time_len, batch_size, num_units].
+      * output_state: An `LSTMStateTuple` of the same shape and structure as
+        initial_state.
+
+    Raises:
+      ValueError: if initial_state is not valid.
+
+    """
+
+    dtype = self.dtype
+    inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+
+    batch_size = array_ops.shape(inputs)[1]
+
+    if initial_state is not None and not isinstance(initial_state,
+                                                    rnn_cell.LSTMStateTuple):
+      raise ValueError("Invalid initial_state type: `%s`, expecting "
+                       "`LSTMStateTuple`." % type(initial_state))
+
+    if initial_state is None:
+      # Create a zero state.
+      initial_state = self._zero_state(batch_size)
+
+    c, h = initial_state
+    h = ops.convert_to_tensor(h, dtype=dtype)
+    c = ops.convert_to_tensor(c, dtype=dtype)
+
+    outputs, output_h, output_c, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
+        inputs=inputs,
+        seq_len=seq_len,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=self.biases,
+        input_h_state=h,
+        input_c_state=c,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        activation=self._activation,
+        recurrent_activation=self._recurrent_activation,
+        name=self._name)
+    state = rnn_cell.LSTMStateTuple(output_c, output_h)
+
+    return outputs, state
 
 
 class PopnnGRU(_PopnnRNN):

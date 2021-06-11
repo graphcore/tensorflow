@@ -43,7 +43,8 @@ num_training_steps = 100
 lr = 10
 
 
-def _PopnnLSTM(x, h, c, y):
+# pylint: disable=unused-argument
+def _PopnnLSTM(x, h, c, y, sequence_len=None):
   lstm_cell = ipu.ops.rnn_ops.PopnnLSTM(
       num_hidden,
       dtype=dataType,
@@ -58,7 +59,22 @@ def _PopnnLSTM(x, h, c, y):
   return [loss, train]
 
 
-def _tfLSTM(x, h, c, y):
+def _PopnnLSTM_DynamicLSTM(x, h, c, y, sequence_len=None):
+  lstm_cell = ipu.ops.rnn_ops.PopnnDynamicLSTM(
+      num_hidden,
+      dtype=dataType,
+      weights_initializer=init_ops.zeros_initializer(dtype=dataType),
+      bias_initializer=init_ops.zeros_initializer(dtype=dataType))
+  state = rnn_cell.LSTMStateTuple(c, h)
+  outputs, _ = lstm_cell(x, sequence_len, initial_state=state, training=True)
+  softmax = nn.softmax_cross_entropy_with_logits_v2(
+      logits=outputs[-1], labels=array_ops.stop_gradient(y))
+  loss = math_ops.reduce_mean(softmax)
+  train = gradient_descent.GradientDescentOptimizer(lr).minimize(loss)
+  return [loss, train]
+
+
+def _tfLSTM(x, h, c, y, sequence_len=None):
   lstm_cell = rnn_cell.LSTMCell(
       num_hidden,
       name='basic_lstm_cell',
@@ -67,6 +83,7 @@ def _tfLSTM(x, h, c, y):
   state = rnn_cell.LSTMStateTuple(c, h)
   outputs, _ = rnn.dynamic_rnn(lstm_cell,
                                x,
+                               sequence_length=sequence_len,
                                dtype=dataType,
                                initial_state=state,
                                time_major=True)
@@ -82,15 +99,23 @@ def get_one_hot(a, num_classes):
 
 
 class LstmTrainingTest(xla_test.XLATestCase):
-  def _RunLayer(self, layer_func, x, y):
+  def _RunLayer(self, layer_func, x, y, s=None):
     with self.session() as sess:
       with ops.device('cpu'):
         px = array_ops.placeholder(dataType, shape=x.shape)
         ph = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
         pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
         py = array_ops.placeholder(dataType, shape=y.shape)
+
+        compile_inputs = [px, ph, pc, py]
+        fd = {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape), py: y}
+        if s is not None:
+          ps = array_ops.placeholder(np.int32, shape=s.shape)
+          compile_inputs.append(ps)
+          fd[ps] = s
+
       with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc, py])
+        r = ipu.ipu_compiler.compile(layer_func, inputs=compile_inputs)
 
       opts = IPUConfig()
       opts._profiling.profiling = True  # pylint: disable=protected-access
@@ -99,7 +124,6 @@ class LstmTrainingTest(xla_test.XLATestCase):
       opts.configure_ipu_system()
 
       sess.run(variables.global_variables_initializer())
-      fd = {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape), py: y}
       losses = []
       for _ in range(0, num_training_steps):
         loss = sess.run(r, fd)
@@ -132,6 +156,32 @@ class LstmTrainingTest(xla_test.XLATestCase):
     # Check that the loss is the same for the reference as well
     ref_losses = self._RunLayer(_tfLSTM, X, labels)
     self.assertAllClose(custom_losses, ref_losses, atol=0.01)
+
+  def testTrainingWithSeqLen(self):
+    np.random.seed(42)
+    nums = np.arange(batch_size + seq_len)
+    # prepare the dataset of input to output pairs encoded as integers
+    inputs = []
+    for i in range(0, len(nums) - seq_len):
+      sequence = nums[i:i + seq_len]
+      inputs.append(sequence)
+    X = np.reshape(inputs, (seq_len, batch_size, input_size))
+    S = np.array([(i % seq_len) + 1 for i in range(batch_size)])
+    # normalize
+    X = X / float(len(nums))
+
+    # Generate a target
+    labels = np.zeros([batch_size, num_hidden], dtype=dataType)
+    labels[:, 0] = 1.
+
+    custom_losses = self._RunLayer(_PopnnLSTM_DynamicLSTM, X, labels, s=S)
+
+    # Check the loss goes down
+    self.assertTrue(custom_losses[0] > custom_losses[-1])
+    # Check that the loss is the same for the reference as well
+    ref_losses = self._RunLayer(_tfLSTM, X, labels, s=S)
+    self.assertTrue(ref_losses[0] > ref_losses[-1])
+    self.assertAllClose(custom_losses, ref_losses, rtol=0.05)
 
 
 if __name__ == "__main__":
