@@ -104,8 +104,8 @@ absl::optional<std::string> GetPoplarEngineOption(const std::string& opt) {
   return attributes[opt].asString();
 }
 
-uint64 GetShardForOutputIndex(const HloInstruction* inst,
-                              int flattened_output_tuple_index) {
+int64 GetShardForOutputIndex(const HloInstruction* inst,
+                             int flattened_output_tuple_index) {
   if (inst->has_sharding()) {
     const auto& sharding = GetShardingDeviceIdVector(inst->sharding());
 
@@ -143,6 +143,7 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
             << "IO tiles not allocated, but requested by " << inst->ToString();
         return *res.io_graph;
       } else {
+        CHECK_GE(device_id, 0) << inst->ToString();
         CHECK_LT(device_id, res.shard_io_graphs.size()) << inst->ToString();
         return res.shard_io_graphs[device_id];
       }
@@ -153,6 +154,7 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
       return res.compute_graph.has_value() ? *res.compute_graph
                                            : *res.main_graph;
     } else {
+      CHECK_GE(device_id, 0) << inst->ToString();
       CHECK_LT(device_id, res.shard_compute_graphs.size()) << inst->ToString();
       return res.shard_compute_graphs[device_id];
     }

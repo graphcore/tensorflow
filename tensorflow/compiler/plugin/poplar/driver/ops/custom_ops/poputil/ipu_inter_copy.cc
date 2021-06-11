@@ -72,7 +72,9 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
   }
 
   if (src_tileset == TILESET_COMPUTE_TILES) {
+    CHECK_GE(src_shard, 0) << src->ToString();
     CHECK_LT(src_shard, res.shard_compute_graphs.size()) << src->ToString();
+    CHECK_GE(dst_shard, 0) << inst->ToString();
     CHECK_LT(dst_shard, res.shard_compute_graphs.size()) << inst->ToString();
     const poplar::Graph& src_compute_graph =
         res.shard_compute_graphs[src_shard];
@@ -89,7 +91,9 @@ StatusOr<bool> SrcAndDstGraphsCompatible(CompilerResources& res,
   } else {
     // If I/O tiles are being used, the number of I/O tiles on each device must
     // match for the compute or io graphs to be compatible.
+    CHECK_GE(src_shard, 0) << src->ToString();
     CHECK_LT(src_shard, res.shard_io_graphs.size()) << src->ToString();
+    CHECK_GE(dst_shard, 0) << inst->ToString();
     CHECK_LT(dst_shard, res.shard_io_graphs.size()) << inst->ToString();
     const poplar::Graph& src_io_graph = res.shard_io_graphs[src_shard];
     const poplar::Graph& dst_io_graph = res.shard_io_graphs[dst_shard];
@@ -106,10 +110,9 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
     const HloInstruction* src, int64 output_flat_tuple_index, int64 dst_shard,
     const Shape& output_shape, TensorMap& tensor_map,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
   TensorLocation output_location{inst, output_flat_tuple_index};
 
-  TF_ASSIGN_OR_RETURN(bool tiles_match,
+  TF_ASSIGN_OR_RETURN(const bool tiles_match,
                       SrcAndDstGraphsCompatible(res, inst, src, dst_shard));
 
   if (HasTensorAllocationTarget(output_location, res) || !tiles_match) {
@@ -124,6 +127,10 @@ StatusOr<TensorCopyInfo> GetTensorCopyInfo(
                                   tensor_map, {debug_name_and_id, "output"}));
     return TensorCopyInfo{input, input.flatten(), output, output.flatten()};
   }
+
+  CHECK_GE(dst_shard, 0);
+  CHECK_LT(dst_shard, res.shard_to_ipu_id.size());
+  const unsigned dst_device_id = res.shard_to_ipu_id[dst_shard];
 
   // No tensor target and src and dst graphs have equivalent tiles available so
   // reuse the src tensor preserving aliasing.
