@@ -73,12 +73,43 @@ poplar::Tensor PackLstmKernel(poplar::Tensor input_weights,
                         FlattenWeight(output_weights));
 }
 
-class LstmLayerFwdOp : public PoplarOpDef {
+class LstmLayerBaseOp : public PoplarOpDef {
+ protected:
+  virtual std::vector<poplar::Tensor> GetOutputParams(bool training) {
+    return std::vector<poplar::Tensor>{OutputTensorCount()};
+  }
+
+  virtual poputil::graphfn::Signature GetSignature(
+      const std::vector<poplar::Tensor>& args, bool training) {
+    poputil::graphfn::Signature signature;
+    int64 total_param_count = InputTensorCount() + OutputTensorCount();
+    const auto& name_list = NameList();
+
+    for (int64 i = 0; i < total_param_count; ++i) {
+      if (i < InputTensorCount()) {
+        signature.push_back(poputil::graphfn::input(args[i], name_list[i]));
+      } else {
+        signature.push_back(poputil::graphfn::created(name_list[i]));
+      }
+    }
+    return signature;
+  }
+
+  virtual void SetOutputTensor(std::vector<poplar::Tensor>& args,
+                               const HloInstruction* inst,
+                               TensorMap& tensor_map, bool training) {
+    for (int64 j = 0; j < OutputTensorCount(); ++j) {
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, j, args[j + InputTensorCount()]));
+    }
+  }
+
+ public:
   StatusOr<poplar::Tensor> Allocator(
       poplar::Graph& graph, CompilerResources& res, const std::string& name,
       const TensorTarget& tensor_target, const TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerFwdOp");
+    PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
 
@@ -115,6 +146,11 @@ class LstmLayerFwdOp : public PoplarOpDef {
         return popnn::lstm::createWeightsBiases(
             graph, lstm_params, {debug_info}, lstm_opts, &res.matmul_cache);
       }
+      case 5: {
+        // Allocate DynamicLSTM seq_len
+        return popops::createSliceableTensor(
+            graph, poplar::INT, {lstm_params.rnn.batchSize}, {0}, {1}, 0, name);
+      }
       default: {
         return xla::FailedPrecondition(
             "Trying to allocate LstmLayerFwdOp tensor for an index out of "
@@ -125,35 +161,29 @@ class LstmLayerFwdOp : public PoplarOpDef {
     }
   }
 
-  StatusOr<poplar::program::Program> Creator(
+  virtual StatusOr<poplar::program::Program> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerFwdOp");
-    poplar::program::Sequence seq({}, debug_info);
+      const poplar::DebugContext& debug_context) {
+    PoplarOpDefDebugInfo debug_info(debug_context, ClassName());
+    poplar::program::Sequence seq({}, {debug_info});
 
-    // Do not expand aliasing when creating a cached op - the input will be
-    // reallocated if required.
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_seq,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_h_state,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_c_state,
-        FindInstructionInput(tensor_map, res, inst, 2, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_kernel,
-        FindInstructionInput(tensor_map, res, inst, 3, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_biases,
-        FindInstructionInput(tensor_map, res, inst, 4, seq, debug_info,
-                             /*expand_aliasing*/ false));
+    auto lstm_inst = Cast<HloRNNInstruction>(inst);
+    bool training = lstm_inst->is_training();
+
+    std::vector<poplar::Tensor> args;
+    for (int64 i = 0; i < InputTensorCount(); ++i) {
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor input_tensor,
+          FindInstructionInput(tensor_map, res, inst, i, seq, debug_info,
+                               /*expand_aliasing*/ false));
+      args.push_back(input_tensor);
+    }
+
+    auto output_args = GetOutputParams(training);
+    args.insert(args.end(), output_args.begin(), output_args.end());
+
+    poputil::graphfn::Signature signature = GetSignature(args, training);
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
@@ -162,238 +192,340 @@ class LstmLayerFwdOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
-    auto lstm_inst = Cast<HloRNNInstruction>(inst);
-    bool is_training = lstm_inst->is_training();
-
     poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, lstm_params, lstm_opts, is_training, input_size,
-                 output_size,
-                 debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
-      poplar::Tensor input_seq = args[0];
-      poplar::Tensor input_h_state = args[1];
-      poplar::Tensor input_c_state = args[2];
-      poplar::Tensor kernel = args[3];
-      poplar::Tensor biases = args[4];
-
-      popnn::lstm::LstmWeights weights;
-      std::tie(weights.inputWeights, weights.outputWeights) =
-          UnpackLstmKernel(kernel, input_size, output_size);
-      weights.biases = biases;
-      popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
-
-      auto intermediates_ptr = is_training ? &args[8] : nullptr;
-      std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
-          graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
-          prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
-      args[6] =
-          poputil::duplicate(graph, args[5][lstm_params.rnn.timeSteps - 1],
-                             prog, {debug_name_and_id, "outputHState"});
+    auto func = [&graph, &res, &inst, this, lstm_params, lstm_opts, input_size,
+                 output_size, debug_name_and_id,
+                 training](std::vector<poplar::Tensor>& args,
+                           poplar::program::Sequence& prog) {
+      LowerToPoplar(graph, res, inst, lstm_params, lstm_opts, input_size,
+                    output_size, training, debug_name_and_id, args, prog);
     };
-
-    poplar::Tensor output, output_h_state, output_c_state, intermediates;
-    std::vector<poplar::Tensor> args = {arg_input_seq,     arg_input_h_state,
-                                        arg_input_c_state, arg_kernel,
-                                        arg_biases,        output,
-                                        output_h_state,    output_c_state};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(arg_input_seq, "input_seq"),
-        poputil::graphfn::input(arg_input_h_state, "input_h_state"),
-        poputil::graphfn::input(arg_input_c_state, "input_c_state"),
-        poputil::graphfn::input(arg_kernel, "kernel"),
-        poputil::graphfn::input(arg_biases, "biases"),
-        poputil::graphfn::created("output"),
-        poputil::graphfn::created("output_h_state"),
-        poputil::graphfn::created("output_c_state")};
-    if (is_training) {
-      args.push_back(intermediates);
-      signature.push_back(poputil::graphfn::created("intermediates"));
-    }
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
         inst, graph, res, seq, func, signature, args,
         lstm_inst->AllocatingIndices(), lstm_inst->LayoutDependencies()));
 
-    output = args[5];
-    output_h_state = args[6];
-    output_c_state = args[7];
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, output_h_state));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, output_c_state));
-    if (is_training) {
-      intermediates = args[8];
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 3, intermediates));
-    }
+    SetOutputTensor(args, inst, tensor_map, training);
     return seq;
+  }
+
+ protected:
+  virtual const std::string ClassName() const = 0;
+
+  virtual std::vector<const char*> NameList() const = 0;
+
+  virtual int64 InputTensorCount() const = 0;
+
+  virtual int64 OutputTensorCount() const = 0;
+
+  virtual void LowerToPoplar(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      popnn::lstm::LstmParams lstm_params, const poplar::OptionFlags& lstm_opts,
+      const int64& input_size, const int64& output_size, bool training,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      std::vector<poplar::Tensor>& args, poplar::program::Sequence& prog) = 0;
+};
+
+class LstmLayerFwdOp : public LstmLayerBaseOp {
+ public:
+  LstmLayerFwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override { return "LstmLayerFwdOp"; }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq", "input_h_state", "input_c_state",  "kernel",
+        "bias",      "output",        "output_h_state", "output_c_state"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 5; }
+
+  int64 OutputTensorCount() const override { return 3; }
+
+  std::vector<poplar::Tensor> GetOutputParams(bool training) override {
+    auto args = LstmLayerBaseOp::GetOutputParams(training);
+    if (training) {
+      poplar::Tensor intermediates;
+      args.push_back(intermediates);
+    }
+    return args;
+  }
+
+  poputil::graphfn::Signature GetSignature(
+      const std::vector<poplar::Tensor>& args, bool training) override {
+    auto signature = LstmLayerBaseOp::GetSignature(args, training);
+
+    if (training) {
+      signature.push_back(poputil::graphfn::created("intermediates"));
+    }
+    return signature;
+  }
+
+  void SetOutputTensor(std::vector<poplar::Tensor>& args,
+                       const HloInstruction* inst, TensorMap& tensor_map,
+                       bool training) override {
+    const int64 total_param_count = InputTensorCount() + OutputTensorCount();
+    LstmLayerBaseOp::SetOutputTensor(args, inst, tensor_map, training);
+    if (training) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, OutputTensorCount(),
+                                  args[total_param_count]));
+    }
+  }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::lstm::LstmParams lstm_params,
+                     const poplar::OptionFlags& lstm_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training,
+                     const poplar::DebugNameAndId& debug_name_and_id,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_h_state = args[1];
+    poplar::Tensor input_c_state = args[2];
+    poplar::Tensor kernel = args[3];
+    poplar::Tensor biases = args[4];
+
+    popnn::lstm::LstmWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackLstmKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+    popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
+
+    auto intermediates_ptr = training ? &args[8] : nullptr;
+
+    std::tie(args[5], args[7]) = popnn::lstm::lstmFwd(
+        graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
+        prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+    args[6] = poputil::duplicate(graph, args[5][lstm_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(LstmLayerFwd, LstmLayerFwdOp);
 
-class LstmLayerBwdOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
-      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-      const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "LstmLayerBwdOp");
-    poplar::program::Sequence seq({}, debug_info);
+class LstmLayerBwdOp : public LstmLayerBaseOp {
+ public:
+  LstmLayerBwdOp() = default;
 
-    // Do not expand aliasing when creating a cached op - the input will be
-    // reallocated if required.
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_seq,
-        FindInstructionInput(tensor_map, res, inst, 0, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_h_state,
-        FindInstructionInput(tensor_map, res, inst, 1, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_input_c_state,
-        FindInstructionInput(tensor_map, res, inst, 2, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_kernel,
-        FindInstructionInput(tensor_map, res, inst, 3, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_biases,
-        FindInstructionInput(tensor_map, res, inst, 4, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output,
-        FindInstructionInput(tensor_map, res, inst, 5, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output_h_state,
-        FindInstructionInput(tensor_map, res, inst, 6, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output_c_state,
-        FindInstructionInput(tensor_map, res, inst, 7, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_intermediates,
-        FindInstructionInput(tensor_map, res, inst, 8, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output_backprop,
-        FindInstructionInput(tensor_map, res, inst, 9, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output_h_state_backprop,
-        FindInstructionInput(tensor_map, res, inst, 10, seq, debug_info,
-                             /*expand_aliasing*/ false));
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor arg_output_c_state_backprop,
-        FindInstructionInput(tensor_map, res, inst, 11, seq, debug_info,
-                             /*expand_aliasing*/ false));
+ protected:
+  const std::string ClassName() const override { return "LstmLayerBwdOp"; }
 
-    TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
-                        GetLstmParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst, res));
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {"input_seq",
+                                                 "input_h_state",
+                                                 "input_c_state",
+                                                 "kernel",
+                                                 "bias",
+                                                 "output",
+                                                 "output_h_state",
+                                                 "output_c_state",
+                                                 "intermediates",
+                                                 "output_backprop",
+                                                 "output_h_state_backprop",
+                                                 "output_c_state_backprop",
+                                                 "input_backprop",
+                                                 "input_h_state_backprop",
+                                                 "input_c_state_backprop",
+                                                 "kernel_backprop",
+                                                 "biases_backprop"};
+    return name_list;
+  }
 
-    auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
-    auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
+  int64 InputTensorCount() const override { return 12; }
 
-    poplar::DebugNameAndId debug_name_and_id(debug_info);
-    auto func = [&graph, &res, lstm_params, lstm_opts, input_size, output_size,
-                 debug_name_and_id](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
-      poplar::Tensor input_seq = args[0];
-      poplar::Tensor input_h_state = args[1];
-      poplar::Tensor input_c_state = args[2];
-      poplar::Tensor kernel = args[3];
-      poplar::Tensor biases = args[4];
-      poplar::Tensor output = args[5];
-      poplar::Tensor output_h_state = args[6];
-      poplar::Tensor output_c_state = args[7];
-      poplar::Tensor intermediates = args[8];
-      poplar::Tensor output_backprop = args[9];
-      poplar::Tensor output_h_state_backprop = args[10];
-      poplar::Tensor output_c_state_backprop = args[11];
+  int64 OutputTensorCount() const override { return 5; }
 
-      popnn::lstm::LstmWeights weights;
-      std::tie(weights.inputWeights, weights.outputWeights) =
-          UnpackLstmKernel(kernel, input_size, output_size);
-      weights.biases = biases;
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::lstm::LstmParams lstm_params,
+                     const poplar::OptionFlags& lstm_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training,
+                     const poplar::DebugNameAndId& debug_name_and_id,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_h_state = args[1];
+    poplar::Tensor input_c_state = args[2];
+    poplar::Tensor kernel = args[3];
+    poplar::Tensor biases = args[4];
+    poplar::Tensor output = args[5];
+    poplar::Tensor output_h_state = args[6];
+    poplar::Tensor output_c_state = args[7];
+    poplar::Tensor intermediates = args[8];
+    poplar::Tensor output_backprop = args[9];
+    poplar::Tensor output_h_state_backprop = args[10];
+    poplar::Tensor output_c_state_backprop = args[11];
 
-      popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
+    popnn::lstm::LstmWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackLstmKernel(kernel, input_size, output_size);
+    weights.biases = biases;
 
-      popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
-                         output_h_state_backprop, prog,
-                         {debug_name_and_id, "outputGradient"});
+    popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
 
-      popnn::lstm::LstmWeights weights_backprop;
-      popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
-          graph, lstm_params, prog, init_state, intermediates, weights,
-          input_seq, output, output_backprop, &output_c_state_backprop,
-          &args[12], weights_backprop, {debug_name_and_id}, lstm_opts,
-          &res.matmul_cache);
-      args[13] = init_state_backprop.output;
-      args[14] = init_state_backprop.cellState;
-      args[15] = PackLstmKernel(weights_backprop.inputWeights,
-                                weights_backprop.outputWeights);
-      args[16] = weights_backprop.biases;
-    };
+    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
+                       output_h_state_backprop, prog,
+                       {debug_name_and_id, "outputGradient"});
 
-    poplar::Tensor input_backprop, input_h_state_backprop,
-        input_c_state_backprop, kernel_backprop, biases_backprop;
-    std::vector<poplar::Tensor> args = {arg_input_seq,
-                                        arg_input_h_state,
-                                        arg_input_c_state,
-                                        arg_kernel,
-                                        arg_biases,
-                                        arg_output,
-                                        arg_output_h_state,
-                                        arg_output_c_state,
-                                        arg_intermediates,
-                                        arg_output_backprop,
-                                        arg_output_h_state_backprop,
-                                        arg_output_c_state_backprop,
-                                        input_backprop,
-                                        input_h_state_backprop,
-                                        input_c_state_backprop,
-                                        kernel_backprop,
-                                        biases_backprop};
-    poputil::graphfn::Signature signature = {
-        poputil::graphfn::input(arg_input_seq, "input_seq"),
-        poputil::graphfn::input(arg_input_h_state, "input_h_state"),
-        poputil::graphfn::input(arg_input_c_state, "input_c_state"),
-        poputil::graphfn::input(arg_kernel, "kernel"),
-        poputil::graphfn::input(arg_biases, "biases"),
-        poputil::graphfn::input(arg_output, "output"),
-        poputil::graphfn::input(arg_output_h_state, "output_h_state"),
-        poputil::graphfn::input(arg_output_c_state, "output_c_state"),
-        poputil::graphfn::input(arg_intermediates, "intermediates"),
-        poputil::graphfn::input(arg_output_backprop, "output_backprop"),
-        poputil::graphfn::input(arg_output_h_state_backprop,
-                                "output_h_state_backprop"),
-        poputil::graphfn::input(arg_output_c_state_backprop,
-                                "output_c_state_backprop"),
-        poputil::graphfn::created("input_backprop"),
-        poputil::graphfn::created("input_h_state_backprop"),
-        poputil::graphfn::created("input_c_state_backprop"),
-        poputil::graphfn::created("kernel_backprop"),
-        poputil::graphfn::created("biases_backprop")};
-
-    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
-                                                     func, signature, args));
-
-    input_backprop = args[12];
-    input_h_state_backprop = args[13];
-    input_c_state_backprop = args[14];
-    kernel_backprop = args[15];
-    biases_backprop = args[16];
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, input_h_state_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, input_c_state_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 3, kernel_backprop));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 4, biases_backprop));
-    return seq;
+    popnn::lstm::LstmWeights weights_backprop;
+    popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
+        graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
+        output, output_backprop, &output_c_state_backprop, &args[12],
+        weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+    args[13] = init_state_backprop.output;
+    args[14] = init_state_backprop.cellState;
+    args[15] = PackLstmKernel(weights_backprop.inputWeights,
+                              weights_backprop.outputWeights);
+    args[16] = weights_backprop.biases;
   }
 };
 REGISTER_POPLAR_OP(LstmLayerBwd, LstmLayerBwdOp);
+
+class DynamicLstmLayerFwdOp : public LstmLayerFwdOp {
+ public:
+  DynamicLstmLayerFwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override {
+    return "DynamicLstmLayerFwdOp";
+  }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {
+        "input_seq", "input_h_state", "input_c_state",  "kernel",        "bias",
+        "seq_len",   "output",        "output_h_state", "output_c_state"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 6; }
+
+  int64 OutputTensorCount() const override { return 3; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::lstm::LstmParams lstm_params,
+                     const poplar::OptionFlags& lstm_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training,
+                     const poplar::DebugNameAndId& debug_name_and_id,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_h_state = args[1];
+    poplar::Tensor input_c_state = args[2];
+    poplar::Tensor kernel = args[3];
+    poplar::Tensor biases = args[4];
+    poplar::Tensor seq_len = args[5];
+
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
+    lstm_params.rnn.varTimeSteps = seq_len;
+
+    popnn::lstm::LstmWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackLstmKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+    popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
+
+    auto intermediates_ptr = training ? &args[9] : nullptr;
+
+    std::tie(args[6], args[8]) = popnn::lstm::lstmFwd(
+        graph, lstm_params, init_state, input_seq, weights, intermediates_ptr,
+        prog, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+    args[7] = poputil::duplicate(graph, args[6][lstm_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
+  }
+};
+REGISTER_POPLAR_OP(DynamicLstmLayerFwd, DynamicLstmLayerFwdOp);
+
+class DynamicLstmLayerBwdOp : public LstmLayerBwdOp {
+ public:
+  DynamicLstmLayerBwdOp() = default;
+
+ protected:
+  const std::string ClassName() const override {
+    return "DynamicLstmLayerBwdOp";
+  }
+
+  std::vector<const char*> NameList() const override {
+    static std::vector<const char*> name_list = {"input_seq",
+                                                 "input_h_state",
+                                                 "input_c_state",
+                                                 "kernel",
+                                                 "bias",
+                                                 "seq_len",
+                                                 "output",
+                                                 "output_h_state",
+                                                 "output_c_state",
+                                                 "intermediates",
+                                                 "output_backprop",
+                                                 "output_h_state_backprop",
+                                                 "output_c_state_backprop",
+                                                 "input_backprop",
+                                                 "input_h_state_backprop",
+                                                 "input_c_state_backprop",
+                                                 "kernel_backprop",
+                                                 "biases_backprop"};
+    return name_list;
+  }
+
+  int64 InputTensorCount() const override { return 13; }
+
+  int64 OutputTensorCount() const override { return 5; }
+
+  void LowerToPoplar(poplar::Graph& graph, CompilerResources& res,
+                     const HloInstruction* inst,
+                     popnn::lstm::LstmParams lstm_params,
+                     const poplar::OptionFlags& lstm_opts,
+                     const int64& input_size, const int64& output_size,
+                     bool training,
+                     const poplar::DebugNameAndId& debug_name_and_id,
+                     std::vector<poplar::Tensor>& args,
+                     poplar::program::Sequence& prog) override {
+    poplar::Tensor input_seq = args[0];
+    poplar::Tensor input_h_state = args[1];
+    poplar::Tensor input_c_state = args[2];
+    poplar::Tensor kernel = args[3];
+    poplar::Tensor biases = args[4];
+    poplar::Tensor seq_len = args[5];
+    poplar::Tensor output = args[6];
+    poplar::Tensor output_h_state = args[7];
+    poplar::Tensor output_c_state = args[8];
+    poplar::Tensor intermediates = args[9];
+    poplar::Tensor output_backprop = args[10];
+    poplar::Tensor output_h_state_backprop = args[11];
+    poplar::Tensor output_c_state_backprop = args[12];
+
+    seq_len = seq_len.reinterpret(poplar::UNSIGNED_INT);
+    lstm_params.rnn.varTimeSteps = seq_len;
+
+    popnn::lstm::LstmWeights weights;
+    std::tie(weights.inputWeights, weights.outputWeights) =
+        UnpackLstmKernel(kernel, input_size, output_size);
+    weights.biases = biases;
+
+    popnn::lstm::LstmState init_state = {input_h_state, input_c_state};
+
+    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
+                       output_h_state_backprop, prog,
+                       {debug_name_and_id, "outputGradient"});
+
+    popnn::lstm::LstmWeights weights_backprop;
+    popnn::lstm::LstmState init_state_backprop = popnn::lstm::lstmBwdWithWU(
+        graph, lstm_params, prog, init_state, intermediates, weights, input_seq,
+        output, output_backprop, &output_c_state_backprop, &args[13],
+        weights_backprop, {debug_name_and_id}, lstm_opts, &res.matmul_cache);
+    args[14] = init_state_backprop.output;
+    args[15] = init_state_backprop.cellState;
+    args[16] = PackLstmKernel(weights_backprop.inputWeights,
+                              weights_backprop.outputWeights);
+    args[17] = weights_backprop.biases;
+  }
+};
+REGISTER_POPLAR_OP(DynamicLstmLayerBwd, DynamicLstmLayerBwdOp);
 
 }  // namespace
 }  // namespace poplarplugin

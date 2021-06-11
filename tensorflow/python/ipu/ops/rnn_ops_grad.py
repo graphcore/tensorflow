@@ -45,6 +45,35 @@ def _popnn_lstm_layer_backward(op, *grads):
       is_training=op.get_attr("is_training"))
 
 
+@ops.RegisterGradient("PopnnDynamicLstmLayer")
+def _popnn_dynamic_lstm_layer_backward(op, *grads):
+  """Gradients for the PopnnDynamicLstmLayer op."""
+  if not op.get_attr("is_training"):
+    raise ValueError(
+        "To use PopnnDynamicLstmLayer in gradients, is_training must be set to"
+        " True.")
+  g = gen_popnn_ops.popnn_dynamic_lstm_layer_backprop(
+      inputs=op.inputs[0],
+      input_h_state=op.inputs[1],
+      input_c_state=op.inputs[2],
+      kernel=op.inputs[3],
+      biases=op.inputs[4],
+      seq_len=op.inputs[5],
+      output=op.outputs[0],
+      output_h_state=op.outputs[1],
+      output_c_state=op.outputs[2],
+      intermediates=op.outputs[3],
+      output_backprop=grads[0],
+      output_h_state_backprop=grads[1],
+      output_c_state_backprop=grads[2],
+      activation=op.get_attr("activation"),
+      recurrent_activation=op.get_attr("recurrent_activation"),
+      num_channels=op.get_attr("num_channels"),
+      partials_dtype=op.get_attr("partials_dtype"),
+      is_training=op.get_attr("is_training"))
+  return [g[0], g[1], g[2], g[3], g[4], None]
+
+
 @ops.RegisterGradient("PopnnGRULayer")
 def _popnn_gru_layer_backward(op, *grads):
   """Gradients for the PopnnGRULayer op."""

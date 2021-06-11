@@ -111,6 +111,8 @@ enum PoplarOp {
   HistogramUpdate = 107;
   Erf = 108;
   ConvWithReverse = 109;
+  DynamicLstmLayerBwd = 110;
+  DynamicLstmLayerFwd = 111;
   
   // Supported Fusions.
   Conv_biasadd = 200;

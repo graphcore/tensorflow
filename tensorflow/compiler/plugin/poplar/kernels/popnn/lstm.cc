@@ -39,6 +39,20 @@ limitations under the License.
 using namespace xla::poplarplugin;
 
 namespace tensorflow {
+
+enum LstmType { LSTM = 0, DYNAMIC_LSTM };
+
+static PoplarOp get_lstm_type(LstmType lstm_type, bool is_fwd) {
+  switch (lstm_type) {
+    case LstmType::LSTM:
+      return is_fwd ? PoplarOp::LstmLayerFwd : PoplarOp::LstmLayerBwd;
+    case LstmType::DYNAMIC_LSTM:
+      return is_fwd ? PoplarOp::DynamicLstmLayerFwd
+                    : PoplarOp::DynamicLstmLayerBwd;
+  }
+}
+
+template <LstmType lstm_type>
 class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnLstmLayerOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
@@ -109,6 +123,16 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
         errors::InvalidArgument(absl::StrFormat(
             "The biases tensor needs to be of shape [4, %u].", num_channels_)));
 
+    if (lstm_type == LstmType::DYNAMIC_LSTM) {
+      TensorShape expected_seq_len_shape;
+      TensorShapeUtils::MakeShape(std::vector<int64>({batch_size}),
+                                  &expected_seq_len_shape);
+      OP_REQUIRES(
+          ctx, ctx->InputShape(5) == expected_seq_len_shape,
+          errors::InvalidArgument(absl::StrFormat(
+              "The seq_len tensor needs to be of shape [%u].", batch_size)));
+    }
+
     xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, batch_size, num_channels_});
     xla::Shape output_h_state_shape =
@@ -137,9 +161,9 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
       args.push_back(ctx->Input(idx));
     }
 
-    xla::XlaOp output_tuple =
-        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::LstmLayerFwd), args,
-                        output_tuple_shape, attribute_map_.Serialise());
+    xla::XlaOp output_tuple = xla::CustomCall(
+        &b, PoplarOp_Name(get_lstm_type(lstm_type, /*is_fwd=*/true)), args,
+        output_tuple_shape, attribute_map_.Serialise());
 
     xla::XlaOp output_seq = xla::GetTupleElement(output_tuple, 0);
     xla::XlaOp output_h_state = xla::GetTupleElement(output_tuple, 1);
@@ -166,8 +190,11 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnLstmLayerOp);
 };  // namespace tensorflow
-REGISTER_IPU_OP("PopnnLstmLayer", PopnnLstmLayerOp);
+REGISTER_IPU_OP("PopnnLstmLayer", PopnnLstmLayerOp<LstmType::LSTM>);
+REGISTER_IPU_OP("PopnnDynamicLstmLayer",
+                PopnnLstmLayerOp<LstmType::DYNAMIC_LSTM>);
 
+template <LstmType lstm_type>
 class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnLstmLayerBackpropOp(OpKernelConstruction* ctx)
@@ -226,9 +253,9 @@ class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
       args.push_back(ctx->Input(idx));
     }
 
-    xla::XlaOp output_tuple =
-        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::LstmLayerBwd), args,
-                        output_tuple_shape, attribute_map_.Serialise());
+    xla::XlaOp output_tuple = xla::CustomCall(
+        &b, PoplarOp_Name(get_lstm_type(lstm_type, /*is_fwd=*/false)), args,
+        output_tuple_shape, attribute_map_.Serialise());
     xla::XlaOp input_backprop = xla::GetTupleElement(output_tuple, 0);
     xla::XlaOp input_h_state_backprop = xla::GetTupleElement(output_tuple, 1);
     xla::XlaOp input_c_state_backprop = xla::GetTupleElement(output_tuple, 2);
@@ -245,5 +272,9 @@ class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnLstmLayerBackpropOp);
 };
-REGISTER_IPU_OP("PopnnLstmLayerBackprop", PopnnLstmLayerBackpropOp);
+REGISTER_IPU_OP("PopnnLstmLayerBackprop",
+                PopnnLstmLayerBackpropOp<LstmType::LSTM>);
+REGISTER_IPU_OP("PopnnDynamicLstmLayerBackprop",
+                PopnnLstmLayerBackpropOp<LstmType::DYNAMIC_LSTM>);
+
 }  // namespace tensorflow
