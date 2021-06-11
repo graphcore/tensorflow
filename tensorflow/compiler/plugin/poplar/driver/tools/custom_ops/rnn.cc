@@ -46,14 +46,12 @@ StatusOr<ActivationType> strToActivationType(const std::string name) {
 RNNAttributes::RNNAttributes(int32 num_channels, bool is_training,
                              xla::PrimitiveType partials_xla_type,
                              ActivationType activation,
-                             ActivationType recurrent_activation,
-                             bool output_full_sequence)
+                             ActivationType recurrent_activation)
     : num_channels(num_channels),
       is_training(is_training),
       partials_xla_type(partials_xla_type),
       activation(activation),
-      recurrent_activation(recurrent_activation),
-      output_full_sequence(output_full_sequence) {}
+      recurrent_activation(recurrent_activation) {}
 // Helper for parsing the attribute map when converting the custom call
 // instruction.
 StatusOr<RNNAttributes> RNNAttributes::Parse(
@@ -76,9 +74,6 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
       std::string recurrent_activation_string,
       attribute_map.GetAttributeAsString("recurrent_activation"));
 
-  TF_ASSIGN_OR_RETURN(bool output_full_sequence,
-                      attribute_map.GetAttributeAsBool("output_full_sequence"));
-
   TF_ASSIGN_OR_RETURN(ActivationType activation,
                       strToActivationType(activation_string));
 
@@ -88,7 +83,7 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
   xla::PrimitiveType partials_xla_type;
   TF_CHECK_OK(DataTypeToPrimitiveType(partials_dtype, &partials_xla_type));
   return RNNAttributes(num_channels, is_training, partials_xla_type, activation,
-                       recurrent_activation, output_full_sequence);
+                       recurrent_activation);
 }
 }  // namespace rnn_helper
 
@@ -101,9 +96,6 @@ int32 HloRNNInstruction::num_channels() const { return num_channels_; }
 xla::PrimitiveType HloRNNInstruction::partials_type() const {
   return partials_type_;
 }
-bool HloRNNInstruction::output_full_sequence() const {
-  return output_full_sequence_;
-}
 
 std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
@@ -112,8 +104,6 @@ std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
   attributes.push_back("num_channels=" + std::to_string(num_channels_));
   attributes.push_back("partials_type=" +
                        xla::PrimitiveType_Name(partials_type_));
-  attributes.push_back("output_full_sequence=" +
-                       std::to_string(output_full_sequence_));
 
   return attributes;
 }

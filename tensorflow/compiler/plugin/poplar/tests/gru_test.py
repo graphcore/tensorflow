@@ -71,8 +71,7 @@ class GRUTest(xla_test.XLATestCase):
                    training,
                    name,
                    activation='tanh',
-                   recurrent_activation='sigmoid',
-                   output_full_sequence=True):
+                   recurrent_activation='sigmoid'):
     #pylint: disable=unused-argument
     del name
     with ops.device("/device:CPU:0"):
@@ -85,7 +84,7 @@ class GRUTest(xla_test.XLATestCase):
                     weights_value, dataType),
                 bias_initializer=init_ops.constant_initializer(0.0, dataType),
                 time_major=True,
-                return_sequences=output_full_sequence,
+                return_sequences=True,
                 stateful=True,
                 reset_after=False)
       outputs = gru(inputs, initial_state=initial_state, training=training)
@@ -102,8 +101,7 @@ class GRUTest(xla_test.XLATestCase):
                 training,
                 name,
                 activation='tanh',
-                recurrent_activation='sigmoid',
-                output_full_sequence=True):
+                recurrent_activation='sigmoid'):
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("gru_layer", use_resource=True):
         kernel = _get_variable(
@@ -124,7 +122,6 @@ class GRUTest(xla_test.XLATestCase):
             biases=biases,
             initial_state=initial_state,
             is_training=training,
-            output_full_sequence=output_full_sequence,
             name=name)
       else:
         outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
@@ -143,8 +140,7 @@ class GRUTest(xla_test.XLATestCase):
       return outputs
 
   def _RunGRULayerInference(self, name, input_value, weights_value, seq_val,
-                            init_state_value, output_full_sequence,
-                            gru_layer_function):
+                            init_state_value, gru_layer_function):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -156,15 +152,13 @@ class GRUTest(xla_test.XLATestCase):
           np.int32, [batch_size],
           name="seq_len") if seq_val is not None else None
 
-      gru_output_seq = gru_layer_function(
-          inputs=pinputs,
-          weights_value=weights_value,
-          seq_length=pseq_len,
-          seq_val=seq_val,
-          initial_state=pinitial_state,
-          training=False,
-          output_full_sequence=output_full_sequence,
-          name=name)
+      gru_output_seq = gru_layer_function(inputs=pinputs,
+                                          weights_value=weights_value,
+                                          seq_length=pseq_len,
+                                          seq_val=seq_val,
+                                          initial_state=pinitial_state,
+                                          training=False,
+                                          name=name)
 
       inputs = _createGRUInput(input_value, pinputs.shape)
       initial_state = _createGRUInitialState(init_state_value,
@@ -184,41 +178,26 @@ class GRUTest(xla_test.XLATestCase):
                               input_value,
                               weights_value,
                               init_state_value,
-                              seq_val=None,
-                              output_full_sequence=True):
+                              seq_val=None):
     ops.reset_default_graph()
-    popnn_out = self._RunGRULayerInference(
-        name=name,
-        input_value=input_value,
-        weights_value=weights_value,
-        seq_val=seq_val,
-        init_state_value=init_state_value,
-        output_full_sequence=output_full_sequence,
-        gru_layer_function=self._GRULayer)
-    ref_out = self._RunGRULayerInference(
-        name=name,
-        input_value=input_value,
-        weights_value=weights_value,
-        seq_val=seq_val,
-        init_state_value=init_state_value,
-        output_full_sequence=output_full_sequence,
-        gru_layer_function=self._GRULayerCPU)
-    # Check that the whole output sequence matches
+    popnn_out = self._RunGRULayerInference(name=name,
+                                           input_value=input_value,
+                                           weights_value=weights_value,
+                                           seq_val=seq_val,
+                                           init_state_value=init_state_value,
+                                           gru_layer_function=self._GRULayer)
+    ref_out = self._RunGRULayerInference(name=name,
+                                         input_value=input_value,
+                                         weights_value=weights_value,
+                                         seq_val=seq_val,
+                                         init_state_value=init_state_value,
+                                         gru_layer_function=self._GRULayerCPU)
+    # Check that the whole outupt sequence matches
     self.assertAllClose(popnn_out, ref_out)
 
   def testGRULayerInference(self):
     ReportJSON(self)
     np.random.seed(0)
-
-    # Run with outputFullSequence false
-    weight0 = 1.
-    for init_state_value in [0., 1.]:
-      self._RunInferenceComparison('not-full-sequence',
-                                   input_value=0.,
-                                   weights_value=weight0,
-                                   init_state_value=init_state_value,
-                                   output_full_sequence=False)
-
     # Run with all-0 weights
     weight0 = 0.
     for init_state_value in [0., 1.]:
@@ -243,7 +222,7 @@ class GRUTest(xla_test.XLATestCase):
                                      weights_value=weight,
                                      init_state_value=init_state_value)
 
-    # Run with '1' seq_len
+    # Run with '1'' seq_len
     assert batch_size == 1
     weight0 = 0.
     for init_state_value in [0., 1.]:
@@ -264,8 +243,7 @@ class GRUTest(xla_test.XLATestCase):
 
   def _RunGRULayerTraining(self, name, input_value, weights_value, seq_val,
                            init_state_value, training_steps, labels_array,
-                           output_full_sequence, gru_layer_function,
-                           device_string):
+                           gru_layer_function, device_string):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -289,11 +267,8 @@ class GRUTest(xla_test.XLATestCase):
                                     seq_val=seq_val,
                                     initial_state=initial_state,
                                     training=True,
-                                    output_full_sequence=output_full_sequence,
                                     name=name)
-        # Average over sequence
-        if output_full_sequence:
-          logits = math_ops.reduce_mean(logits, axis=0)
+        logits = math_ops.reduce_mean(logits, axis=0)
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
@@ -320,21 +295,18 @@ class GRUTest(xla_test.XLATestCase):
                              weights_value,
                              init_state_value,
                              training_steps,
-                             seq_val=None,
-                             output_full_sequence=True):
+                             seq_val=None):
     labels_array = np.ones(shape=[batch_size], dtype=np.int32)
     ops.reset_default_graph()
-    popnn_losses = self._RunGRULayerTraining(
-        name=name,
-        input_value=input_value,
-        weights_value=weights_value,
-        seq_val=seq_val,
-        init_state_value=init_state_value,
-        training_steps=training_steps,
-        labels_array=labels_array,
-        output_full_sequence=output_full_sequence,
-        gru_layer_function=self._GRULayer,
-        device_string="/device:IPU:0")
+    popnn_losses = self._RunGRULayerTraining(name=name,
+                                             input_value=input_value,
+                                             weights_value=weights_value,
+                                             seq_val=seq_val,
+                                             init_state_value=init_state_value,
+                                             training_steps=training_steps,
+                                             labels_array=labels_array,
+                                             gru_layer_function=self._GRULayer,
+                                             device_string="/device:IPU:0")
     ops.reset_default_graph()
     ref_losses = self._RunGRULayerTraining(
         name=name,
@@ -344,7 +316,6 @@ class GRUTest(xla_test.XLATestCase):
         init_state_value=init_state_value,
         training_steps=training_steps,
         labels_array=labels_array,
-        output_full_sequence=output_full_sequence,
         gru_layer_function=self._GRULayerCPU,
         device_string="/device:CPU:0")
     self.assertAllClose(popnn_losses, ref_losses)
@@ -361,16 +332,6 @@ class GRUTest(xla_test.XLATestCase):
                                     weights_value=weight,
                                     init_state_value=init_state_value,
                                     training_steps=3)
-
-    # Run with outputFullSequence false
-    for weight in np.random.rand(3):
-      for init_state_value in [0., 1.]:
-        self._RunTrainingComparison('rand',
-                                    input_value=0.,
-                                    weights_value=weight,
-                                    init_state_value=init_state_value,
-                                    training_steps=3,
-                                    output_full_sequence=False)
 
     # Run with a sequence length
     assert batch_size == 1
@@ -414,7 +375,6 @@ class GRUTest(xla_test.XLATestCase):
                                             training=False,
                                             name=None,
                                             activation=act,
-                                            output_full_sequence=True,
                                             recurrent_activation=rec_act)
 
         fd = {pinputs: inputs, pinitial_state: initial_state}
@@ -459,7 +419,6 @@ class GRUTest(xla_test.XLATestCase):
                                 seq_val=None,
                                 initial_state=initial_state,
                                 training=True,
-                                output_full_sequence=True,
                                 name=name)
 
         with variable_scope.variable_scope("gru_layer1", use_resource=True):
@@ -521,7 +480,6 @@ class GRUTest(xla_test.XLATestCase):
                                 seq_val=None,
                                 initial_state=initial_state,
                                 training=True,
-                                output_full_sequence=True,
                                 name=name)
 
         with variable_scope.variable_scope("gru_layer1", use_resource=True):

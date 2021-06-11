@@ -109,8 +109,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                     training,
                     name,
                     activation='tanh',
-                    recurrent_activation='sigmoid',
-                    output_full_sequence=True):
+                    recurrent_activation='sigmoid'):
     del forget_bias
     del name
     with ops.device("/device:CPU:0"):
@@ -124,7 +123,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                   bias_initializer=init_ops.constant_initializer(
                       0.0, dataType),
                   time_major=True,
-                  return_sequences=output_full_sequence,
+                  return_sequences=True,
                   stateful=True,
                   unit_forget_bias=False)
       outputs = lstm(inputs, initial_state=initial_state, training=training)
@@ -138,8 +137,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                  training,
                  name,
                  activation='tanh',
-                 recurrent_activation='sigmoid',
-                 output_full_sequence=True):
+                 recurrent_activation='sigmoid'):
     del forget_bias
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("lstm_layer", use_resource=True):
@@ -160,14 +158,13 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
           biases=biases,
           input_h_state=initial_state[0],
           input_c_state=initial_state[1],
-          output_full_sequence=output_full_sequence,
           is_training=training,
           name=name)
       return outputs
 
   def _RunLSTMLayerInference(self, name, input_value, forget_bias,
                              weights_value, h_value, c_value,
-                             output_full_sequence, lstm_layer_function):
+                             lstm_layer_function):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -178,14 +175,13 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
       pinitial_c_state = array_ops.placeholder(dataType,
                                                [batch_size, num_channels],
                                                name="init_c_state")
-      lstm_output_seq = lstm_layer_function(
-          inputs=pinputs,
-          weights_value=weights_value,
-          initial_state=(pinitial_h_state, pinitial_c_state),
-          forget_bias=forget_bias,
-          training=False,
-          output_full_sequence=output_full_sequence,
-          name=name)
+      lstm_output_seq = lstm_layer_function(inputs=pinputs,
+                                            weights_value=weights_value,
+                                            initial_state=(pinitial_h_state,
+                                                           pinitial_c_state),
+                                            forget_bias=forget_bias,
+                                            training=False,
+                                            name=name)
 
       inputs = _createLSTMInput(input_value, batch_size, seq_len, input_size)
       initial_state = _createLSTMInitialState(h_value, c_value, batch_size,
@@ -198,14 +194,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
       sess.run(variables.global_variables_initializer())
       return sess.run(lstm_output_seq, fd)
 
-  def _RunInferenceComparison(self,
-                              name,
-                              input_value,
-                              forget_bias,
-                              weights_value,
-                              h_value,
-                              c_value,
-                              output_full_sequence=True):
+  def _RunInferenceComparison(self, name, input_value, forget_bias,
+                              weights_value, h_value, c_value):
     ops.reset_default_graph()
     popnn_out = self._RunLSTMLayerInference(
         name=name,
@@ -214,7 +204,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         forget_bias=forget_bias,
         h_value=h_value,
         c_value=c_value,
-        output_full_sequence=output_full_sequence,
         lstm_layer_function=self._LSTMLayer)
     ref_out = self._RunLSTMLayerInference(
         name=name,
@@ -223,9 +212,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         forget_bias=forget_bias,
         h_value=h_value,
         c_value=c_value,
-        output_full_sequence=output_full_sequence,
         lstm_layer_function=self._LSTMLayerCPU)
-    # Check that the whole output sequence matches
+    # Check that the whole outupt sequence matches
     self.assertAllClose(popnn_out, ref_out)
 
   @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
@@ -267,22 +255,9 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                    h_value=h_init,
                                    c_value=c_init)
 
-  def testLSTMLayerInferenceAllOneWeightNotFullSequence(self):
-    tu.ReportJSON(self, eager_mode=True)
-    np.random.seed(0)
-    weight1 = 1.
-    self._RunInferenceComparison('not-full-sequence',
-                                 input_value=0.,
-                                 forget_bias=0.,
-                                 weights_value=weight1,
-                                 h_value=0.,
-                                 c_value=1.,
-                                 output_full_sequence=False)
-
   def _RunLSTMLayerTraining(self, name, input_value, forget_bias,
                             weights_value, h_value, c_value, training_steps,
-                            labels_array, output_full_sequence,
-                            lstm_layer_function, device_string):
+                            labels_array, lstm_layer_function, device_string):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -305,11 +280,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                                     initial_c_state),
                                      forget_bias=forget_bias,
                                      training=True,
-                                     output_full_sequence=output_full_sequence,
                                      name=name)
-        # Average over sequence
-        if output_full_sequence:
-          logits = math_ops.reduce_mean(logits, axis=0)
+        logits = math_ops.reduce_mean(logits, axis=0)
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
@@ -328,8 +300,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
       return losses
 
   def _RunTrainingComparison(self, name, input_value, forget_bias,
-                             weights_value, h_value, c_value,
-                             output_full_sequence, training_steps):
+                             weights_value, h_value, c_value, training_steps):
     labels_array = np.ones(shape=[batch_size], dtype=np.int32)
     ops.reset_default_graph()
     popnn_losses = self._RunLSTMLayerTraining(
@@ -341,7 +312,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         c_value=c_value,
         training_steps=training_steps,
         labels_array=labels_array,
-        output_full_sequence=output_full_sequence,
         lstm_layer_function=self._LSTMLayer,
         device_string="/device:IPU:0")
     ops.reset_default_graph()
@@ -354,7 +324,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         c_value=c_value,
         training_steps=training_steps,
         labels_array=labels_array,
-        output_full_sequence=output_full_sequence,
         lstm_layer_function=self._LSTMLayerCPU,
         device_string="/device:CPU:0")
     self.assertAllClose(popnn_losses, ref_losses)
@@ -372,20 +341,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                   weights_value=weight,
                                   h_value=h_init,
                                   c_value=c_init,
-                                  training_steps=2,
-                                  output_full_sequence=True)
-
-  def testLSTMLayerTrainingNotFullSequence(self):
-    np.random.seed(42)
-
-    self._RunTrainingComparison('rand',
-                                input_value=0.,
-                                forget_bias=0.,
-                                weights_value=1.,
-                                h_value=0.,
-                                c_value=1.,
-                                training_steps=2,
-                                output_full_sequence=False)
+                                  training_steps=2)
 
   @parameterized.named_parameters(*_activationTestCases())
   def testLSTMActivations(self, activation, recurrent_activation):
@@ -418,7 +374,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                                              pinitial_c_state),
                                               forget_bias=forget_bias,
                                               training=False,
-                                              output_full_sequence=True,
                                               name=None,
                                               activation=act,
                                               recurrent_activation=rec_act)
@@ -469,7 +424,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                                 initial_c_state),
                                  forget_bias=0.,
                                  training=True,
-                                 output_full_sequence=True,
                                  name=name)
 
         with variable_scope.variable_scope("lstm_layer1", use_resource=True):
@@ -534,7 +488,6 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                                 initial_c_state),
                                  forget_bias=0.,
                                  training=True,
-                                 output_full_sequence=True,
                                  name=name)
 
         with variable_scope.variable_scope("lstm_layer1", use_resource=True):

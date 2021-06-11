@@ -58,10 +58,6 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
-
-    OP_REQUIRES_OK(
-        ctx, ctx->GetAttr("output_full_sequence", &output_full_sequence_));
-    attribute_map_.AddAttribute("output_full_sequence", output_full_sequence_);
   }
 
  public:
@@ -113,28 +109,17 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
         errors::InvalidArgument(absl::StrFormat(
             "The biases tensor needs to be of shape [4, %u].", num_channels_)));
 
-    xla::Shape output_seq_shape;
-    if (output_full_sequence_) {
-      output_seq_shape = xla::ShapeUtil::MakeShape(
-          input_type, {time_steps, batch_size, num_channels_});
-    } else {
-      output_seq_shape =
-          xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
-    }
+    xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
+        input_type, {time_steps, batch_size, num_channels_});
     xla::Shape output_h_state_shape =
         xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
     xla::Shape output_c_state_shape =
         xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
 
-    // The 6 in intermediate shape represents the number of gates (4) + tanh
+    // The 6 in intermidate shape represents the number of gates (4) + tanh
     // output (1) + cell state (1)
-    int64 gates_dim = 6;
-    // If !outputFullSequence, the outputs are stored in the intermediates.
-    if (!output_full_sequence_) {
-      gates_dim++;
-    }
     xla::Shape intermediates_shape = xla::ShapeUtil::MakeShape(
-        input_type, {time_steps, gates_dim, batch_size, num_channels_});
+        input_type, {time_steps, 6, batch_size, num_channels_});
 
     std::vector<xla::Shape> output_shapes = {
         output_seq_shape, output_h_state_shape, output_c_state_shape};
@@ -178,7 +163,6 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
   int32 num_channels_;
   std::string activation_;
   std::string recurrent_activation_;
-  bool output_full_sequence_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnLstmLayerOp);
 };  // namespace tensorflow
@@ -208,11 +192,6 @@ class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
-
-    bool output_full_sequence;
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("output_full_sequence", &output_full_sequence));
-    attribute_map_.AddAttribute("output_full_sequence", output_full_sequence);
   }
 
  public:

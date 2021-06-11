@@ -301,14 +301,8 @@ class GRULayerFwdOp : public GRULayerBaseOp {
         graph, gru_params, input_state, input_seq, weights, intermediates_ptr,
         prog, {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
-    poplar::Tensor last_output;
-    if (gru_params.outputFullSequence) {
-      last_output = args[4][gru_params.rnn.timeSteps - 1];
-    } else {
-      last_output = args[4];
-    }
-    args[5] = poputil::duplicate(graph, last_output, prog,
-                                 {debug_name_and_id, "outputHState"});
+    args[5] = poputil::duplicate(graph, args[4][gru_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(GRULayerFwd, GRULayerFwdOp);
@@ -365,11 +359,8 @@ class GRULayerBwdOp : public GRULayerBaseOp {
         UnpackGruKernel(kernel, input_size, output_size);
     weights.biases = biases;
 
-    poplar::Tensor last_output = output_backprop;
-    if (gru_params.outputFullSequence) {
-      last_output = last_output[last_output.dim(0) - 1];
-    }
-    popops::addInPlace(graph, last_output, output_state_backprop, prog,
+    popops::addInPlace(graph, output_backprop[output_backprop.dim(0) - 1],
+                       output_state_backprop, prog,
                        {debug_name_and_id, "outputGradient"});
 
     popnn::gru::GruWeights weights_backprop;
@@ -432,14 +423,8 @@ class DynamicGRULayerFwdOp : public GRULayerFwdOp {
                            weights, intermediates_ptr, prog,
                            {debug_name_and_id}, gru_opts, &res.matmul_cache);
 
-    poplar::Tensor last_output;
-    if (gru_params.outputFullSequence) {
-      last_output = args[5][gru_params.rnn.timeSteps - 1];
-    } else {
-      last_output = args[5];
-    }
-    args[6] = poputil::duplicate(graph, last_output, prog,
-                                 {debug_name_and_id, "outputHState"});
+    args[6] = poputil::duplicate(graph, args[5][gru_params.rnn.timeSteps - 1],
+                                 prog, {debug_name_and_id, "outputHState"});
   }
 };
 REGISTER_POPLAR_OP(DynamicGRULayerFwd, DynamicGRULayerFwdOp);

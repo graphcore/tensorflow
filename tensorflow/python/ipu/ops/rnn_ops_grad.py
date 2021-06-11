@@ -42,7 +42,6 @@ def _popnn_lstm_layer_backward(op, *grads):
       recurrent_activation=op.get_attr("recurrent_activation"),
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
-      output_full_sequence=op.get_attr("output_full_sequence"),
       is_training=op.get_attr("is_training"))
 
 
@@ -66,7 +65,6 @@ def _popnn_gru_layer_backward(op, *grads):
       recurrent_activation=op.get_attr("recurrent_activation"),
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
-      output_full_sequence=op.get_attr("output_full_sequence"),
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"))
 
@@ -93,7 +91,6 @@ def _popnn_dynamic_gru_layer_backward(op, *grads):
       recurrent_activation=op.get_attr("recurrent_activation"),
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
-      output_full_sequence=op.get_attr("output_full_sequence"),
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"))
   return [g[0], g[1], g[2], g[3], None]
@@ -122,7 +119,6 @@ def _popnn_augru_layer_backward(op, *grads):
       recurrent_activation=op.get_attr("recurrent_activation"),
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
-      output_full_sequence=op.get_attr("output_full_sequence"),
       is_training=op.get_attr("is_training"),
       reset_after=op.get_attr("reset_after"))
   return [g[0], g[1], g[2], g[3], None, g[4]]

@@ -36,7 +36,6 @@ REGISTER_OP("PopnnLstmLayer")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
-    .Attr("output_full_sequence: bool")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
       TF_RETURN_IF_ERROR(c->GetAttr("num_channels", &num_channels));
@@ -46,17 +45,8 @@ REGISTER_OP("PopnnLstmLayer")
       auto time_steps = c->Dim(inputs, 0);
       auto batch_size = c->Dim(inputs, 1);
 
-      shape_inference::ShapeHandle output_shape;
-      bool output_full_sequence;
-      TF_RETURN_IF_ERROR(
-          c->GetAttr("output_full_sequence", &output_full_sequence));
-      if (output_full_sequence) {
-        output_shape = c->MakeShape({time_steps, batch_size, doc_num_channels});
-      } else {
-        output_shape = c->MakeShape({batch_size, doc_num_channels});
-      }
-
-      c->set_output(0, output_shape);
+      c->set_output(0,
+                    c->MakeShape({time_steps, batch_size, doc_num_channels}));
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
       c->set_output(2, c->MakeShape({batch_size, doc_num_channels}));
       c->set_output(3, c->MakeShape({}));
@@ -90,7 +80,6 @@ REGISTER_OP("PopnnLstmLayerBackprop")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
-    .Attr("output_full_sequence: bool")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
       auto in_h_shape = c->input(1);

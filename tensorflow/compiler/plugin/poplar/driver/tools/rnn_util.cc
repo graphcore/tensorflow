@@ -95,7 +95,6 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
       BASIC_LSTM_CELL_CANDIDATE, BASIC_LSTM_CELL_OUTPUT_GATE};
   lstm_params.activation = activation;
   lstm_params.recurrentActivation = recurrent_activation;
-  lstm_params.outputFullSequence = lstm_inst->output_full_sequence();
   return lstm_params;
 }
 
@@ -154,8 +153,6 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
   gru_params.activation = activation;
   gru_params.recurrentActivation = recurrent_activation;
 
-  gru_params.outputFullSequence = gru_inst->output_full_sequence();
-
   const HloGRUInstructionCommon* gru_common_inst;
   if (IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst)) {
     gru_common_inst = Cast<HloGRUFwdInstruction>(inst);
@@ -190,7 +187,6 @@ StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
   TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
                       PoplarDataType(partials_xla_type));
   gru_opts.set({{"partialsType", partials_poplar_type.toString()}});
-
   return gru_opts;
 }
 

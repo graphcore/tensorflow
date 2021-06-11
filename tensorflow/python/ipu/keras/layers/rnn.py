@@ -584,7 +584,6 @@ class PopnnLSTM(_PopnnRNN):
         input_c_state=c,
         is_training=training,
         partials_dtype=self._partials_dtype,
-        output_full_sequence=self._return_sequences,
         name=self._name)
 
     if self._stateful:
@@ -593,9 +592,12 @@ class PopnnLSTM(_PopnnRNN):
         updates.append(state_ops.assign(state_, state))
       self.add_update(updates)
 
-    if not self._time_major and self._return_sequences:
+    if not self._time_major:
       # Convert output from PopLibs [S, B, N] to Keras [B, S, N]
       output = array_ops.transpose(output, [1, 0, 2])
+
+    if not self._return_sequences:
+      output = output[-1, :, :] if self._time_major else output[:, -1, :]
 
     if self._return_state:
       return output, output_h, output_c
@@ -951,7 +953,6 @@ class PopnnGRU(_PopnnRNN):
         initial_state=initial_state,
         is_training=training,
         partials_dtype=self._partials_dtype,
-        output_full_sequence=self._return_sequences,
         name=self._name,
         reset_after=self._reset_after)
 
@@ -959,9 +960,12 @@ class PopnnGRU(_PopnnRNN):
       updates = [state_ops.assign(self.states[0], output_state)]
       self.add_update(updates)
 
-    if not self._time_major and self._return_sequences:
+    if not self._time_major:
       # Convert output from PopLibs [S, B, N] to Keras [B, S, N]
       output = array_ops.transpose(output, [1, 0, 2])
+
+    if not self._return_sequences:
+      output = output[-1, :, :] if self._time_major else output[:, -1, :]
 
     if self._return_state:
       return output, output_state

@@ -4377,7 +4377,7 @@ HloModule top
 
 ENTRY c1 {
   p = (f32[]) parameter(0)
-  ROOT c = f32[] custom-call(p), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":1, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\", \"output_full_sequence\":true}\n"
+  ROOT c = f32[] custom-call(p), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":1, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\", \"activation\":\"tanh\", \"recurrent_activation\":\"sigmoid\"}\n"
 }
 
 )";
@@ -5066,7 +5066,7 @@ ENTRY main {
   p2 = s32[8] parameter(2)
   p3 = s32[8] parameter(3)
   p4 = s32[8] parameter(4)
-
+  
   w = f16[] constant(2)
   weights = f16[1024, 3] broadcast(w), dimensions={}
 
