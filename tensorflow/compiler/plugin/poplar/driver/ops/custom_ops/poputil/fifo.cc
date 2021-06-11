@@ -195,14 +195,6 @@ poplar::Tensor AddAliasing(const poplar::Tensor& tensor,
   return poplar::concat(output_regions);
 }
 
-bool UseDynamicSliceForFifo(const poplar::Tensor& t) {
-  if (t.elementType() == poplar::SIGNED_CHAR ||
-      t.elementType() == poplar::UNSIGNED_CHAR) {
-    return false;
-  }
-  return true;
-}
-
 class FifoOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
@@ -331,7 +323,7 @@ class FifoOp : public PoplarOpDef {
         // Copy the input into the buffer.
         seq.add(poplar::program::Copy(input_flat, buffer, counter.reshape({1}),
                                       {debug_info}));
-      } else if (UseDynamicSliceForFifo(input_flat)) {
+      } else {
         // Create a buffer of the given depth and the same mapping as the input.
         poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
             graph, input_flat.expand({0}), {0}, {fifo_depth},
@@ -349,32 +341,6 @@ class FifoOp : public PoplarOpDef {
         popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
                               counter.reshape({1}), {0}, {1}, seq,
                               {debug_info, absl::StrCat("push/", tuple_idx)});
-      } else {
-        // Keep the layout of the input for the output.
-        output_flat = graph.clone(
-            input_flat, {debug_info, absl::StrCat("out/", tuple_idx)});
-
-        // Add the copies for each offset.
-        poplar::program::Switch control_switch(counter, {debug_info});
-        for (int64 c = 0; c != fifo_depth; ++c) {
-          poplar::Tensor slice_buffer = graph.clone(
-              input_flat.expand({0}),
-              {debug_info, absl::StrCat("buffer/", tuple_idx)},
-              poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-
-          poplar::program::Sequence case_seq;
-          // Copy the content of the buffer to the output.
-          case_seq.add(poplar::program::Copy(slice_buffer, output_flat, false,
-                                             {debug_info}));
-
-          // Copy the input into the buffer.
-          case_seq.add(poplar::program::Copy(input_flat, slice_buffer, false,
-                                             {debug_info}));
-
-          control_switch.add(c, case_seq);
-        }
-
-        seq.add(control_switch);
       }
 
       // Add the aliasing information back in.
