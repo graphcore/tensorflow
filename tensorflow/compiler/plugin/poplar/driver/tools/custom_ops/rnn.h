@@ -38,36 +38,42 @@ struct RNNAttributes {
   xla::PrimitiveType partials_xla_type;
   ActivationType activation;
   ActivationType recurrent_activation;
+  bool output_full_sequence;
 
  protected:
   RNNAttributes(int32 num_channels, bool is_training,
                 xla::PrimitiveType partials_xla_type, ActivationType activation,
-                ActivationType recurrent_activation);
+                ActivationType recurrent_activation, bool output_full_sequence);
 };
 }  // namespace rnn_helper
 
 class HloRNNInstruction : public HloPoplarInstruction {
  public:
   template <typename... Args>
-  explicit HloRNNInstruction(
-      const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PoplarOp op, bool is_training, rnn_helper::ActivationType activation,
-      rnn_helper::ActivationType recurrent_activation, int32 num_channels,
-      xla::PrimitiveType partials_type, Args&&... attributes)
+  explicit HloRNNInstruction(const Shape& shape,
+                             absl::Span<HloInstruction* const> operands,
+                             PoplarOp op, bool is_training,
+                             rnn_helper::ActivationType activation,
+                             rnn_helper::ActivationType recurrent_activation,
+                             int32 num_channels,
+                             xla::PrimitiveType partials_type,
+                             bool output_full_sequence, Args&&... attributes)
       : HloPoplarInstruction(shape, operands, op, is_training, activation,
                              recurrent_activation, num_channels, partials_type,
-                             attributes...),
+                             output_full_sequence, attributes...),
         is_training_(is_training),
         activation_(activation),
         recurrent_activation_(recurrent_activation),
         num_channels_(num_channels),
-        partials_type_(partials_type) {}
+        partials_type_(partials_type),
+        output_full_sequence_(output_full_sequence) {}
 
   bool is_training() const;
   rnn_helper::ActivationType activation() const;
   rnn_helper::ActivationType recurrent_activation() const;
   int32 num_channels() const;
   xla::PrimitiveType partials_type() const;
+  bool output_full_sequence() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -79,6 +85,7 @@ class HloRNNInstruction : public HloPoplarInstruction {
   rnn_helper::ActivationType recurrent_activation_;
   int32 num_channels_;
   xla::PrimitiveType partials_type_;
+  bool output_full_sequence_;
 };
 
 class HloRNNFwdInstruction : public HloRNNInstruction {
@@ -91,10 +98,10 @@ class HloRNNFwdInstruction : public HloRNNInstruction {
                                 rnn_helper::ActivationType recurrent_activation,
                                 int32 num_channels,
                                 xla::PrimitiveType partials_type,
-                                Args&&... attributes)
+                                bool output_full_sequence, Args&&... attributes)
       : HloRNNInstruction(shape, operands, op, is_training, activation,
                           recurrent_activation, num_channels, partials_type,
-                          attributes...),
+                          output_full_sequence, attributes...),
         op_(op) {}
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -116,10 +123,10 @@ class HloRNNBwdInstruction : public HloRNNInstruction {
                                 rnn_helper::ActivationType recurrent_activation,
                                 int32 num_channels,
                                 xla::PrimitiveType partials_type,
-                                Args&&... attributes)
+                                bool output_full_sequence, Args&&... attributes)
       : HloRNNInstruction(shape, operands, op, is_training, activation,
                           recurrent_activation, num_channels, partials_type,
-                          attributes...),
+                          output_full_sequence, attributes...),
         op_(op) {}
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;

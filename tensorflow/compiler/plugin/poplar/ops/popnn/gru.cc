@@ -34,6 +34,7 @@ REGISTER_OP("PopnnGRULayer")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("output_full_sequence: bool = true")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
@@ -44,8 +45,17 @@ REGISTER_OP("PopnnGRULayer")
       auto time_steps = c->Dim(inputs, 0);
       auto batch_size = c->Dim(inputs, 1);
 
-      c->set_output(0,
-                    c->MakeShape({time_steps, batch_size, doc_num_channels}));
+      shape_inference::ShapeHandle output_shape;
+      bool output_full_sequence;
+      TF_RETURN_IF_ERROR(
+          c->GetAttr("output_full_sequence", &output_full_sequence));
+      if (output_full_sequence) {
+        output_shape = c->MakeShape({time_steps, batch_size, doc_num_channels});
+      } else {
+        output_shape = c->MakeShape({batch_size, doc_num_channels});
+      }
+
+      c->set_output(0, output_shape);
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
       c->set_output(2, c->MakeShape({}));
       return Status::OK();
@@ -74,6 +84,7 @@ REGISTER_OP("PopnnGRULayerBackprop")
     .Attr("is_training: bool")
     .Attr("dtype: {float16, float32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("output_full_sequence: bool")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -106,6 +117,7 @@ REGISTER_OP("PopnnDynamicGRULayer")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("output_full_sequence: bool = true")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
@@ -116,8 +128,17 @@ REGISTER_OP("PopnnDynamicGRULayer")
       auto time_steps = c->Dim(inputs, 0);
       auto batch_size = c->Dim(inputs, 1);
 
-      c->set_output(0,
-                    c->MakeShape({time_steps, batch_size, doc_num_channels}));
+      shape_inference::ShapeHandle output_shape;
+      bool output_full_sequence;
+      TF_RETURN_IF_ERROR(
+          c->GetAttr("output_full_sequence", &output_full_sequence));
+      if (output_full_sequence) {
+        output_shape = c->MakeShape({time_steps, batch_size, doc_num_channels});
+      } else {
+        output_shape = c->MakeShape({batch_size, doc_num_channels});
+      }
+
+      c->set_output(0, output_shape);
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
       c->set_output(2, c->MakeShape({}));
       return Status::OK();
@@ -148,6 +169,7 @@ REGISTER_OP("PopnnDynamicGRULayerBackprop")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("output_full_sequence: bool")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -181,6 +203,7 @@ REGISTER_OP("PopnnAUGRULayer")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32} = DT_FLOAT")
+    .Attr("output_full_sequence: bool = true")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 num_channels;
@@ -191,8 +214,17 @@ REGISTER_OP("PopnnAUGRULayer")
       auto time_steps = c->Dim(inputs, 0);
       auto batch_size = c->Dim(inputs, 1);
 
-      c->set_output(0,
-                    c->MakeShape({time_steps, batch_size, doc_num_channels}));
+      shape_inference::ShapeHandle output_shape;
+      bool output_full_sequence;
+      TF_RETURN_IF_ERROR(
+          c->GetAttr("output_full_sequence", &output_full_sequence));
+      if (output_full_sequence) {
+        output_shape = c->MakeShape({time_steps, batch_size, doc_num_channels});
+      } else {
+        output_shape = c->MakeShape({batch_size, doc_num_channels});
+      }
+
+      c->set_output(0, output_shape);
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
       c->set_output(2, c->MakeShape({}));
       return Status::OK();
@@ -225,6 +257,7 @@ REGISTER_OP("PopnnAUGRULayerBackprop")
     .Attr("dtype: {float16, float32}")
     .Attr("seq_dtype: {int32}")
     .Attr("partials_dtype: {float16, float32}")
+    .Attr("output_full_sequence: bool")
     .Attr("reset_after: bool = false")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);

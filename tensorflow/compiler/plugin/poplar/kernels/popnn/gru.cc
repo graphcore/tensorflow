@@ -77,6 +77,13 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
 
+    output_full_sequence_ = true;
+    if (gru_type == GruType::GRU) {
+      OP_REQUIRES_OK(
+          ctx, ctx->GetAttr("output_full_sequence", &output_full_sequence_));
+    }
+    attribute_map_.AddAttribute("output_full_sequence", output_full_sequence_);
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after_));
     attribute_map_.AddAttribute("reset_after", reset_after_);
   }
@@ -152,12 +159,26 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
       }
     }
 
-    xla::Shape output_seq_shape = xla::ShapeUtil::MakeShape(
-        input_type, {time_steps, batch_size, num_channels_});
+    xla::Shape output_seq_shape;
+    if (output_full_sequence_) {
+      output_seq_shape = xla::ShapeUtil::MakeShape(
+          input_type, {time_steps, batch_size, num_channels_});
+    } else {
+      output_seq_shape =
+          xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
+    }
     xla::Shape output_state_shape =
         xla::ShapeUtil::MakeShape(input_type, {batch_size, num_channels_});
-    // The 3 in intermidate shape represents the number of gates.
-    int num_intermediates = reset_after_ ? 4 : 3;
+    // The 3 in intermediate shape represents the number of gates.
+    int num_intermediates = 3;
+    if (reset_after_) {
+      num_intermediates++;
+    }
+    // When the full sequence isn't output, it goes into the intermediates.
+    if (!output_full_sequence_) {
+      num_intermediates++;
+    }
+
     xla::Shape intermediates_shape = xla::ShapeUtil::MakeShape(
         input_type, {time_steps, num_intermediates, batch_size, num_channels_});
 
@@ -203,6 +224,7 @@ class PopnnGRULayerOp : public XlaOpKernel, IpuOpKernel {
   bool reset_after_;
   std::string activation_;
   std::string recurrent_activation_;
+  bool output_full_sequence_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGRULayerOp);
 };
@@ -239,6 +261,11 @@ class PopnnGRULayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     tensorflow::DataType partials_dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("partials_dtype", &partials_dtype));
     attribute_map_.AddAttribute("partials_dtype", partials_dtype);
+
+    bool output_full_sequence;
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("output_full_sequence", &output_full_sequence));
+    attribute_map_.AddAttribute("output_full_sequence", output_full_sequence);
 
     bool reset_after;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("reset_after", &reset_after));
