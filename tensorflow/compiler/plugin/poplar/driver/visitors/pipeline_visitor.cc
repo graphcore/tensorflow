@@ -547,7 +547,8 @@ PipelineVisitor::PipelineVisitor(
     const HloInstructionDescription& description,
     const poplar::DebugNameAndId& debug_name_and_id)
     : InplaceDeferredVisitor(res, inputs, description, debug_name_and_id, {}),
-      schedule_(schedule),
+      pipeline_scheduler_util_(
+          absl::make_unique<util::PipelineSchedulerUtil>(schedule)),
       copy_sequences_(stage_count, {{}, {debug_name_and_id, "copySeq"}}),
       inter_ipu_copy_sequences_(stage_count,
                                 {{}, {debug_name_and_id, "interIpuCopySeq"}}),
@@ -583,9 +584,11 @@ PipelineVisitor::PipelineVisitor(
   EnterVariableScope();
 }
 
+PipelineVisitor::~PipelineVisitor() = default;
+
 Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   const int64 overlap_length =
-      util::ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
 
   if (iterations % overlap_length) {
     // TODO(T11404)
@@ -609,7 +612,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
   TF_RETURN_IF_ERROR(VerifyPipelineArguments(iterations));
 
   const int64 overlap_length =
-      util::ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
 
   auto ramp_up = GetPipelineRampUpSequence(dnai_);
   auto repeat_block = GetPipelineRepeatBlockSequence(dnai_, iterations);
@@ -1172,9 +1175,7 @@ std::unique_ptr<PipelineVisitor> ParallelPipelineVisitor::Create(
 PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
     const poplar::DebugNameAndId& debug_name_and_id) const {
   std::vector<int> offsets =
-      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
-  const bool is_grouped =
-      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -1187,9 +1188,9 @@ PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
   auto recomputation_sequences = util::ConstructRecomputationRampUpSchedule(
       offsets, recomputation_sequences_, num_backward_stages_);
   auto copy_sequences =
-      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
-  auto inter_ipu_copy_sequences =
-      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, copy_sequences_);
+  auto inter_ipu_copy_sequences = pipeline_scheduler_util_->ConstructSchedule(
+      offsets, inter_ipu_copy_sequences_);
   auto inter_tileset_copy_in_sequences =
       util::ConstructRampUpSchedule(offsets, inter_tileset_copy_in_sequences_);
   auto inter_tileset_copy_out_sequences =
@@ -1221,15 +1222,9 @@ PipelineVisitor::RepeatBlock ParallelPipelineVisitor::GetPipelineRampUpSequence(
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
 
-  // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
-
-  poplar::program::Sequence repeat_block({}, debug_name_and_id);
-  for (const auto& seq : repeat_block_sequences) {
-    repeat_block.add(seq);
-  }
-
-  return {repeat_block, offsets.size() / 2};
+  return {util::DefaultScheduler().CreateRepeatBlock(
+              infeed_sequences, debug_name_and_id, offsets.size()),
+          offsets.size() / 2};
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
@@ -1239,10 +1234,7 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
     int additional_iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
-      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
-
-  const bool is_grouped =
-      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -1252,14 +1244,14 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
   auto program_sequences = util::ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
   auto fifo_sequences =
-      util::ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, fifo_sequences_);
   auto recomputation_sequences = util::ConstructRecomputationRampDownSchedule(
       offsets, recomputation_sequences_, num_backward_stages_, {},
       additional_iterations);
   auto copy_sequences =
-      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
-  auto inter_ipu_copy_sequences =
-      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, copy_sequences_);
+  auto inter_ipu_copy_sequences = pipeline_scheduler_util_->ConstructSchedule(
+      offsets, inter_ipu_copy_sequences_);
   auto inter_tileset_copy_in_sequences = util::ConstructRampDownSchedule(
       offsets, inter_tileset_copy_in_sequences_, {}, additional_iterations);
   auto inter_tileset_copy_out_sequences = util::ConstructRampDownSchedule(
@@ -1290,16 +1282,9 @@ ParallelPipelineVisitor::GetPipelineRampDownSequence(
                           inter_ipu_copy_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
-
-  // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
-
-  poplar::program::Sequence repeat_block({}, debug_name_and_id);
-  for (const auto& seq : repeat_block_sequences) {
-    repeat_block.add(seq);
-  }
-
-  return {repeat_block, offsets.size() / 2};
+  return {util::DefaultScheduler().CreateRepeatBlock(
+              infeed_sequences, debug_name_and_id, offsets.size()),
+          offsets.size() / 2};
 }
 
 // Collect the pipeline stage programs and build the repeat block
@@ -1308,37 +1293,36 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
     const poplar::DebugNameAndId& debug_name_and_id, int64 iterations) const {
   // Find the set of non-overlapping program offsets.
   std::vector<int> offsets =
-      util::ScheduleOffsets(schedule_, stage_ipu_mapping_);
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_);
 
   const int64 num_repeats = ((iterations / offsets.size()) - 1);
   if (num_repeats < 1) {
     return {poplar::program::Sequence({}, debug_name_and_id), 0};
   }
 
-  const bool is_grouped =
-      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
-
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
   auto fifo_sequences =
-      util::ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, fifo_sequences_);
   auto infeed_sequences =
-      util::ConstructSchedule(offsets, infeed_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, infeed_sequences_);
   auto program_sequences =
-      util::ConstructSchedule(offsets, program_sequences_, !is_grouped);
-  auto recomputation_sequences =
-      util::ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, program_sequences_);
+  auto recomputation_sequences = pipeline_scheduler_util_->ConstructSchedule(
+      offsets, recomputation_sequences_);
   auto copy_sequences =
-      util::ConstructSchedule(offsets, copy_sequences_, !is_grouped);
-  auto inter_ipu_copy_sequences =
-      util::ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
-  auto inter_tileset_copy_in_sequences = util::ConstructSchedule(
-      offsets, inter_tileset_copy_in_sequences_, !is_grouped);
-  auto inter_tileset_copy_out_sequences = util::ConstructSchedule(
-      offsets, inter_tileset_copy_out_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, copy_sequences_);
+  auto inter_ipu_copy_sequences = pipeline_scheduler_util_->ConstructSchedule(
+      offsets, inter_ipu_copy_sequences_);
+  auto inter_tileset_copy_in_sequences =
+      pipeline_scheduler_util_->ConstructSchedule(
+          offsets, inter_tileset_copy_in_sequences_);
+  auto inter_tileset_copy_out_sequences =
+      pipeline_scheduler_util_->ConstructSchedule(
+          offsets, inter_tileset_copy_out_sequences_);
   auto outfeed_sequences =
-      util::ConstructSchedule(offsets, outfeed_sequences_, !is_grouped);
+      pipeline_scheduler_util_->ConstructSchedule(offsets, outfeed_sequences_);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -1364,24 +1348,8 @@ ParallelPipelineVisitor::GetPipelineRepeatBlockSequence(
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
 
-  if (is_grouped) {
-    for (auto& seq : infeed_sequences) {
-      seq.resize(1);
-    }
-  }
-
-  // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = util::FlattenSchedule(infeed_sequences);
-
-  poplar::program::Sequence repeat_block({}, debug_name_and_id);
-  for (const auto& seq : repeat_block_sequences) {
-    repeat_block.add(seq);
-  }
-
-  if (is_grouped) {
-    repeat_block = poplar::program::Repeat(offsets.size(), repeat_block,
-                                           {debug_name_and_id});
-  }
+  auto repeat_block = pipeline_scheduler_util_->CreateRepeatBlock(
+      infeed_sequences, debug_name_and_id, offsets.size());
 
   return {
       poplar::program::Repeat(num_repeats, repeat_block, {debug_name_and_id}),

@@ -31,6 +31,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/types/variant.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
@@ -39,6 +41,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/inter_tileset_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/make_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
@@ -424,6 +427,14 @@ std::vector<std::vector<ElementType>> ConcatSchedule(
   return result;
 }
 
+template <typename ElementType>
+static std::vector<std::vector<ElementType>> ForceInterleavedStageOrders(
+    std::vector<std::vector<ElementType>> result) {
+  result = TransposeSchedule(result);
+  result = RotateSchedule(result);
+  return TransposeSchedule(result);
+}
+
 /**
  * Construct a pipeline schedule given an offset and some schedulable
  * components.
@@ -437,18 +448,8 @@ std::vector<std::vector<ElementType>> ConcatSchedule(
  */
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input,
-    bool interleave) {
-  auto result = ConstructScheduleInternal(offsets, input);
-
-  // Force the stages to be added to poplar in a consistent order.
-  if (!interleave) {
-    result = TransposeSchedule(result);
-    result = RotateSchedule(result);
-    result = TransposeSchedule(result);
-  }
-
-  return result;
+    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
+  return ConstructScheduleInternal(offsets, input);
 }
 
 /**
@@ -465,9 +466,9 @@ std::vector<std::vector<ElementType>> ConstructSchedule(
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructScheduleOverlapIO(
     const std::vector<int>& offsets, const std::vector<ElementType>& input) {
-  auto result = ConstructSchedule(offsets, input, false);
-  auto right_padding =
-      SliceSchedule(ConstructSchedule(offsets, input, false), 2);
+  auto result = ForceInterleavedStageOrders(ConstructSchedule(offsets, input));
+  auto right_padding = SliceSchedule(
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), 2);
 
   return ConcatSchedule(result, right_padding);
 }
@@ -528,8 +529,9 @@ std::vector<std::vector<ElementType>> ConstructRampUpScheduleOverlapIO(
     result = LeftPadSchedule(result, empty_element);
   }
 
-  auto right_padding =
-      SliceSchedule(ConstructSchedule(offsets, input, false), 2 - offset);
+  auto right_padding = SliceSchedule(
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)),
+      2 - offset);
   return ConcatSchedule(result, right_padding);
 }
 
@@ -690,8 +692,9 @@ ConstructRecomputationRampUpScheduleOverlapIO(
     result = LeftPadSchedule(result, empty_element);
   }
 
-  auto right_padding =
-      SliceSchedule(ConstructSchedule(offsets, input, false), 2 - offset);
+  auto right_padding = SliceSchedule(
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)),
+      2 - offset);
   return ConcatSchedule(result, right_padding);
 }
 
@@ -753,8 +756,8 @@ std::vector<std::vector<ElementType>> ConstructRampDownScheduleOverlapIO(
     result = RightPadSchedule(result, empty_element);
   }
 
-  auto left_padding =
-      SliceSchedule(ConstructSchedule(offsets, input, false), offset);
+  auto left_padding = SliceSchedule(
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset);
   return ConcatSchedule(left_padding, result);
 }
 
@@ -920,8 +923,8 @@ ConstructRecomputationRampDownScheduleOverlapIO(
     result = RightPadSchedule(result, empty_element);
   }
 
-  auto left_padding =
-      SliceSchedule(ConstructSchedule(offsets, input, false), offset);
+  auto left_padding = SliceSchedule(
+      ForceInterleavedStageOrders(ConstructSchedule(offsets, input)), offset);
   return ConcatSchedule(left_padding, result);
 }
 
@@ -946,6 +949,148 @@ std::vector<ElementType> FlattenSchedule(
 
   return result;
 }
+
+struct DefaultScheduler {
+  template <typename ElementType>
+  std::vector<int> ScheduleOffsets(
+      const std::vector<ElementType>& input) const {
+    return NoUnion(input);
+  }
+
+  template <typename ElementType>
+  std::vector<std::vector<ElementType>> ConstructSchedule(
+      const std::vector<int>& offsets,
+      const std::vector<ElementType>& input) const {
+    return ConstructScheduleInternal(offsets, input);
+  }
+
+  template <typename ElementType>
+  poplar::program::Program CreateRepeatBlock(
+      std::vector<std::vector<ElementType>>& infeed_sequences,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      std::size_t offset_size) const {
+    // Flatten the schedule to a linear sequence.
+    auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
+    poplar::program::Sequence repeat_block({}, debug_name_and_id);
+    for (const auto& seq : repeat_block_sequences) {
+      repeat_block.add(seq);
+    }
+    return repeat_block;
+  }
+};
+
+struct GroupedScheduler : public DefaultScheduler {
+  template <typename ElementType>
+  std::vector<int> ScheduleOffsets(
+      const std::vector<ElementType>& input) const {
+    return AllUnion(input);
+  }
+
+  template <typename ElementType>
+  std::vector<std::vector<ElementType>> ConstructSchedule(
+      const std::vector<int>& offsets,
+      const std::vector<ElementType>& input) const {
+    return ForceInterleavedStageOrders(
+        ConstructScheduleInternal(offsets, input));
+  }
+
+  template <typename ElementType>
+  poplar::program::Program CreateRepeatBlock(
+      std::vector<std::vector<ElementType>>& infeed_sequences,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      std::size_t offset_size) const {
+    for (auto& seq : infeed_sequences) {
+      seq.resize(1);
+    }
+    auto repeat_block = DefaultScheduler().CreateRepeatBlock(
+        infeed_sequences, debug_name_and_id, offset_size);
+    return poplar::program::Repeat(offset_size, repeat_block,
+                                   {debug_name_and_id});
+  }
+};
+
+struct InterleavedScheduler : public DefaultScheduler {
+  template <typename ElementType>
+  std::vector<int> ScheduleOffsets(
+      const std::vector<ElementType>& input) const {
+    return CircularUnion(input);
+  }
+};
+
+struct PipelineSchedulerUtil {
+  absl::variant<DefaultScheduler, GroupedScheduler, InterleavedScheduler> type;
+
+  PipelineSchedulerUtil(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule) {
+    switch (schedule) {
+      case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+        type = GroupedScheduler();
+        break;
+      case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+        type = InterleavedScheduler();
+        break;
+      default:
+        type = DefaultScheduler();
+        break;
+    }
+  }
+
+  template <typename ElementType>
+  std::vector<int> ScheduleOffsets(
+      const std::vector<ElementType>& input) const {
+    // If using c++14 don't need this make visitor can use an auto lambda
+    // absl::visit([&] (const auto s) {return s.ScheduleOffsets(input)});
+    auto vis = make_visitor<std::vector<int>>(
+        [&](const DefaultScheduler& scheduler) {
+          return scheduler.ScheduleOffsets(input);
+        },
+        [&](const GroupedScheduler& scheduler) {
+          return scheduler.ScheduleOffsets(input);
+        },
+        [&](const InterleavedScheduler& scheduler) {
+          return scheduler.ScheduleOffsets(input);
+        });
+    return absl::visit(vis, type);
+  }
+
+  template <typename ElementType>
+  std::vector<std::vector<ElementType>> ConstructSchedule(
+      const std::vector<int>& offsets,
+      const std::vector<ElementType>& input) const {
+    auto vis = make_visitor<std::vector<std::vector<ElementType>>>(
+        [&](const DefaultScheduler& scheduler) {
+          return scheduler.ConstructSchedule(offsets, input);
+        },
+        [&](const GroupedScheduler& scheduler) {
+          return scheduler.ConstructSchedule(offsets, input);
+        },
+        [&](const InterleavedScheduler& scheduler) {
+          return scheduler.ConstructSchedule(offsets, input);
+        });
+    return absl::visit(vis, type);
+  }
+
+  template <typename ElementType>
+  poplar::program::Program CreateRepeatBlock(
+      std::vector<std::vector<ElementType>>& infeed_sequences,
+      const poplar::DebugNameAndId& debug_name_and_id,
+      std::size_t offset_size) const {
+    auto vis = make_visitor<poplar::program::Program>(
+        [&](const DefaultScheduler& scheduler) {
+          return scheduler.CreateRepeatBlock(infeed_sequences,
+                                             debug_name_and_id, offset_size);
+        },
+        [&](const GroupedScheduler& scheduler) {
+          return scheduler.CreateRepeatBlock(infeed_sequences,
+                                             debug_name_and_id, offset_size);
+        },
+        [&](const InterleavedScheduler& scheduler) {
+          return scheduler.CreateRepeatBlock(infeed_sequences,
+                                             debug_name_and_id, offset_size);
+        });
+    return absl::visit(vis, type);
+  }
+};
 
 }  // namespace pipelinevisitorutils
 }  // namespace poplarplugin
