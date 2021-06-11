@@ -515,9 +515,9 @@ bool IsInPipeline(const HloInstruction* inst, CompilerResources& res) {
   return call_sites.size() == 1 && IsPipelineOp(call_sites[0].instruction());
 }
 
-StatusOr<std::string> GetInstructionCompilationInfo(
-    const std::unique_ptr<xla::HloModule>& module, CompilerResources& res) {
-  TF_ASSIGN_OR_RETURN(auto ml_type_map, GetAllNotNoneMlTypes(module.get()));
+StatusOr<std::string> GetInstructionCompilationInfo(const HloModule* module,
+                                                    CompilerResources& res) {
+  TF_ASSIGN_OR_RETURN(auto ml_type_map, GetAllNotNoneMlTypes(module));
   Json::Value ml_types;
 
   for (auto t : ml_type_map) {
