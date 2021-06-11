@@ -1050,46 +1050,13 @@ struct ExecutableCacheLock {
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutableCacheLock);
 };
 
-}  // namespace
-
-StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
-    std::unique_ptr<HloModule> module,
-    perftools::gputools::StreamExecutor* executor,
-    se::DeviceMemoryAllocator* device_allocator) {
+StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
+    HloModule* module, PoplarExecutor* poplar_executor) {
   TENSORFLOW_TRACEPOINT();
-  return std::move(module);
-}
-
-StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
-    std::unique_ptr<HloModule> module,
-    perftools::gputools::StreamExecutor* stream_exec,
-    se::DeviceMemoryAllocator* device_allocator) {
-  TENSORFLOW_TRACEPOINT();
-  if (stream_exec == nullptr) {
-    return tensorflow::errors::Unknown(
-        "NULL stream pointer in Poplar compiler");
-  }
-
-  if (PoplarXlaFlags::Get().help) {
-    std::call_once(help_flag_printed, &PrintHelpString);
-  }
 
   VLOG(1) << "Begin XLA compilation: " << module->name() << " " << std::hex
-          << " (Hash: 0x" << HloHash(module.get()).GetHash() << std::dec
-          << ") for ordinal  " << stream_exec->device_ordinal();
-
-  PoplarExecutor* poplar_executor(
-      static_cast<PoplarExecutor*>(stream_exec->implementation()));
-
-  std::unique_ptr<HloProfileIndexMap> profile_index_map;
-  std::unique_ptr<HloProfilePrinterData> profile_printer;
-  if (module->config().hlo_profiling_enabled()) {
-    const auto& name = module->entry_computation()->name();
-    HloCostAnalysis cost_analysis(ShapeSizeBytesFunction());
-    profile_index_map = absl::make_unique<HloProfileIndexMap>(*module);
-    profile_printer =
-        CreateHloProfilePrinterData(*profile_index_map, cost_analysis, name);
-  }
+          << " (Hash: 0x" << HloHash(module).GetHash() << std::dec
+          << ") for ordinal  " << poplar_executor->device_ordinal();
 
   poplar::OptionFlags opt_flags = poplar_executor->GetOptionsFlags();
 
@@ -1149,19 +1116,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
                             filenames.CompilationLockFilename()));
 
     if (poplar_executor->HaveCachedExecutable(filenames)) {
-      absl::optional<PoplarExecutable::RuntimeReplicaOptions>
+      absl::optional<PoplarExecutableCore::RuntimeReplicaOptions>
           runtime_replica_options = absl::nullopt;
       if (poplar_executor->HasMultiReplicaDistributionOptions()) {
-        runtime_replica_options = PoplarExecutable::RuntimeReplicaOptions{
+        runtime_replica_options = PoplarExecutableCore::RuntimeReplicaOptions{
             poplar_executor->GetMultiReplicaProcessIndex(),
             poplar_executor->GetMultiReplicaProcessCount()};
       }
 
-      TF_ASSIGN_OR_RETURN(std::unique_ptr<PoplarExecutable> poplar_executable,
-                          PoplarExecutable::Deserialize(
-                              std::move(module), std::move(profile_printer),
-                              std::move(profile_index_map),
-                              runtime_replica_options, filenames));
+      TF_ASSIGN_OR_RETURN(std::unique_ptr<PoplarExecutableCore> executable_core,
+                          PoplarExecutableCore::Deserialize(
+                              module, runtime_replica_options, filenames));
 
       if (poplar_executor->EnableSerialization()) {
         TF_RETURN_IF_ERROR(
@@ -1173,10 +1138,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
                              std::ios::binary);
           auto poplar_binary = poplar::Executable::deserialize(file);
 
-          TF_RETURN_IF_ERROR(PoplarExecutable::Export(
-              filenames, poplar_binary, *poplar_executable,
-              {} /* device_opts */, opt_flags,
-              poplar_executor->GetOrCreatePoplarTarget()));
+          TF_RETURN_IF_ERROR(PoplarExecutableCore::Export(
+              filenames, poplar_binary, *executable_core, {} /* device_opts */,
+              opt_flags, poplar_executor->GetOrCreatePoplarTarget()));
         } catch (const std::exception& e) {
           const std::string origin =
               "[Deserialize][File: " + filenames.CachedExecutableFilename() +
@@ -1185,10 +1149,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         }
       }
 
-      VLOG(1) << "Loaded " << poplar_executable->module().name() << " from "
+      VLOG(1) << "Loaded " << module->name() << " from "
               << filenames.CachedExecutableFilename();
 
-      return std::unique_ptr<Executable>(std::move(poplar_executable));
+      return executable_core;
     } else {
       VLOG(1) << "Couldn't find " << filenames.CachedExecutableFilename()
               << " in executable cache";
@@ -1201,7 +1165,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         "devices by running "
         "`tensorflow.python.ipu.utils.configure_ipu_system(ipu_options)`?");
   }
-  std::lock_guard<std::mutex> g(static_mu_);
 
   uint64 start_micros = tensorflow::Env::Default()->NowMicros();
 
@@ -1211,7 +1174,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   // we also make sure `num_ipus` % `num_shards` == 0).
   const poplar::Target& target = poplar_executor->GetOrCreatePoplarTarget();
   const auto num_ipus = target.getNumIPUs();
-  const auto num_shards = NumIPUsInShards(module.get());
+  const auto num_shards = NumIPUsInShards(module);
   const auto replication_factor = num_ipus / num_shards;
   TF_ASSIGN_OR_RETURN(const auto num_io_tiles, GetNumIoTiles(poplar_executor));
 
@@ -1265,7 +1228,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               poplar_executor->GetMinimumRemoteTensorSize());
 
   CompilerResources resources(
-      module.get(), information, poplar_executor->GetConvolutionOptions(),
+      module, information, poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
       poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
@@ -1284,7 +1247,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
       poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles(),
       poplar_executor->GetIoTileAvailableMemoryProportion(),
-      EnableProgressBar(module.get()));
+      EnableProgressBar(module));
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -1472,7 +1435,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<RecomputeInstructions>(resources.recomputation_enabled);
 
       if (resources.recomputation_enabled) {
-        if (UsesRecomputationSuggestions(module.get())) {
+        if (UsesRecomputationSuggestions(module)) {
           LOG(INFO) << "Detected SuggestRecompute operation - this will be "
                        "removed in release 2.2";
 
@@ -1569,11 +1532,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<MultiUseFeedsFinder>();
     }
 
-    TF_RETURN_IF_ERROR(optimizer_pipeline.Run(module.get()).status());
+    TF_RETURN_IF_ERROR(optimizer_pipeline.Run(module).status());
   }
 
   VLOG(1) << "End XLA compilation: " << module->name() << " (Hash: 0x"
-          << std::hex << HloHash(module.get()).GetHash() << ")";
+          << std::hex << HloHash(module).GetHash() << ")";
 
   HloComputation* entry = module->entry_computation();
 
@@ -1590,20 +1553,20 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       entry->root_instruction(), comp_layout->shape(), constant_output);
 
   const bool any_computation_has_side_effects =
-      AnyComputationHasSideEffects(module.get());
+      AnyComputationHasSideEffects(module);
   const auto is_constant_graph =
       is_constant_output && !any_computation_has_side_effects;
 
   std::vector<uint64> remaped_output;
 
   const bool all_outputs_are_parameters =
-      AreAllOutputsParameters(module.get(), remaped_output);
+      AreAllOutputsParameters(module, remaped_output);
 
   bool is_remap_graph =
       all_outputs_are_parameters && !any_computation_has_side_effects;
 
   const bool all_scalar_elementwise_graph =
-      AreAllScalarElementwiseGraph(module.get());
+      AreAllScalarElementwiseGraph(module);
 
   const bool is_scalar_elementwise_graph = all_scalar_elementwise_graph &&
                                            !any_computation_has_side_effects &&
@@ -1628,7 +1591,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   // Strip all layout information, as the Poplar lowering does not use
   // layout information
-  StripAllInstructionLayouts(module.get());
+  StripAllInstructionLayouts(module);
 
   VLOG(1) << "Compiling main computation " << entry->name();
   if (VLOG_IS_ON(1)) {
@@ -1642,7 +1605,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   // Create a call graph of the final compiled module which can be used by the
   // lowering.
-  resources.module_call_graph = CallGraph::Build(module.get());
+  resources.module_call_graph = CallGraph::Build(module);
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
@@ -1651,9 +1614,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   if (compile) {
     if (in_precompile_mode) {
-      TF_RETURN_IF_ERROR(CheckUnsupportedPrecompileInstructions(module.get()));
+      TF_RETURN_IF_ERROR(CheckUnsupportedPrecompileInstructions(module));
     }
-    const bool is_cacheable = IsCacheable(module.get());
+    const bool is_cacheable = IsCacheable(module);
 
     // Generate a framework.json if autoReport.all or directory is configured.
     TF_ASSIGN_OR_RETURN(std::string tensorflow_info,
@@ -1669,8 +1632,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
 
     // Only create the graphs if we are compiling.
-    TF_RETURN_IF_ERROR(
-        CreatePoplarGraphs(resources, module.get(), poplar_executor));
+    TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module, poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
     EntryVisitor visitor(resources, entry);
@@ -1690,7 +1652,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<MapHloInstructionToDebugIdPass>(
           resources.hlo_instruction_to_debug_id_mapping);
 
-      TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
+      TF_RETURN_IF_ERROR(pipeline.Run(module).status());
       VLOG(1) << "End Poplar Pipeline.";
 
       resources.progress_bar->MoveToNextStage();
@@ -1792,7 +1754,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           poplar::OptionFlags options_to_serialize =
               poplar_executor->GetReportExecutionFlags();
 
-          TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+          TF_RETURN_IF_ERROR(PoplarExecutableCore::Serialize(
               filenames, exec, resources.annotations, replication_factor,
               options_to_serialize, logging_cycle_count,
               resources.streams_indices.GetAssignedIds(),
@@ -1808,7 +1770,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           TF_RETURN_IF_ERROR(
               poplar_executor->CreateSerializedExecutableDirIfMissing());
 
-          TF_RETURN_IF_ERROR(PoplarExecutable::Export(
+          TF_RETURN_IF_ERROR(PoplarExecutableCore::Export(
               filenames, exec, resources, replication_factor,
               {} /* device_opts */, opt_flags,
               poplar_executor->GetOrCreatePoplarTarget()));
@@ -1871,24 +1833,72 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   resources.progress_bar->Finish();
 
+  std::unique_ptr<PoplarExecutableCore> executable_core =
+      absl::make_unique<PoplarExecutableCore>(
+          std::move(engine),
+          std::move(resources.annotations.input_output_aliasing_map),
+          is_constant_graph, std::move(constant_output), is_remap_graph,
+          is_scalar_elementwise_graph,
+          /*loaded_from_cache=*/false, std::move(remaped_output),
+          replication_factor, std::move(resources.annotations.infeed_infos),
+          std::move(resources.annotations.outfeed_infos),
+          std::move(resources.annotations.stream_infos),
+          std::move(resources.annotations.stream_meta_infos),
+          std::move(resources.annotations.send_infos),
+          std::move(resources.annotations.recv_infos),
+          std::move(resources.annotations.host_embedding_lookup_infos),
+          std::move(resources.annotations.host_embedding_update_infos),
+          std::move(resources.annotations.host_embedding_notify_infos),
+          std::move(resources.annotations.remote_parameter_infos),
+          logging_cycle_count, resources.streams_indices.GetAssignedIds(),
+          resources.streams_indices.CheckpointFeedsOrder());
+  return executable_core;
+}
+}  // namespace
+
+StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
+    std::unique_ptr<HloModule> module,
+    perftools::gputools::StreamExecutor* executor,
+    se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
+  return std::move(module);
+}
+
+StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
+    std::unique_ptr<HloModule> module,
+    perftools::gputools::StreamExecutor* stream_exec,
+    se::DeviceMemoryAllocator* device_allocator) {
+  TENSORFLOW_TRACEPOINT();
+  if (stream_exec == nullptr) {
+    return tensorflow::errors::Unknown(
+        "NULL stream pointer in Poplar compiler");
+  }
+
+  if (PoplarXlaFlags::Get().help) {
+    std::call_once(help_flag_printed, &PrintHelpString);
+  }
+
+  PoplarExecutor* poplar_executor(
+      static_cast<PoplarExecutor*>(stream_exec->implementation()));
+
+  std::unique_ptr<HloProfileIndexMap> profile_index_map;
+  std::unique_ptr<HloProfilePrinterData> profile_printer;
+  if (module->config().hlo_profiling_enabled()) {
+    const auto& name = module->entry_computation()->name();
+    HloCostAnalysis cost_analysis(ShapeSizeBytesFunction());
+    profile_index_map = absl::make_unique<HloProfileIndexMap>(*module);
+    profile_printer =
+        CreateHloProfilePrinterData(*profile_index_map, cost_analysis, name);
+  }
+
+  std::lock_guard<std::mutex> g(static_mu_);
+
+  TF_ASSIGN_OR_RETURN(auto executable_core,
+                      CompileEngine(module.get(), poplar_executor));
+
   std::unique_ptr<Executable> executable = absl::make_unique<PoplarExecutable>(
       std::move(module), std::move(profile_printer),
-      std::move(profile_index_map), std::move(engine),
-      std::move(resources.annotations.input_output_aliasing_map),
-      is_constant_graph, std::move(constant_output), is_remap_graph,
-      is_scalar_elementwise_graph, std::move(remaped_output),
-      replication_factor, std::move(resources.annotations.infeed_infos),
-      std::move(resources.annotations.outfeed_infos),
-      std::move(resources.annotations.stream_infos),
-      std::move(resources.annotations.stream_meta_infos),
-      std::move(resources.annotations.send_infos),
-      std::move(resources.annotations.recv_infos),
-      std::move(resources.annotations.host_embedding_lookup_infos),
-      std::move(resources.annotations.host_embedding_update_infos),
-      std::move(resources.annotations.host_embedding_notify_infos),
-      std::move(resources.annotations.remote_parameter_infos),
-      logging_cycle_count, resources.streams_indices.GetAssignedIds(),
-      resources.streams_indices.CheckpointFeedsOrder());
+      std::move(profile_index_map), std::move(executable_core));
 
   return executable;
 }
