@@ -108,8 +108,11 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                     forget_bias,
                     training,
                     name,
+                    seq_lens=None,
+                    seq_lens_h=None,
                     activation='tanh',
                     recurrent_activation='sigmoid'):
+    #pylint: disable=unused-argument
     del forget_bias
     del name
     with ops.device("/device:CPU:0"):
@@ -127,6 +130,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                   stateful=True,
                   unit_forget_bias=False)
       outputs = lstm(inputs, initial_state=initial_state, training=training)
+      outputs = outputs if seq_lens_h is None else outputs[0:min(
+          seq_len, seq_lens_h[0])]
       return outputs
 
   def _LSTMLayer(self,
@@ -136,6 +141,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                  forget_bias,
                  training,
                  name,
+                 seq_lens=None,
+                 seq_lens_h=None,
                  activation='tanh',
                  recurrent_activation='sigmoid'):
     del forget_bias
@@ -149,21 +156,37 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                shape=[4, num_channels],
                                initializer=init_ops.constant_initializer(
                                    0.0, dataType))
-      outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
-          activation=activation,
-          recurrent_activation=recurrent_activation,
-          inputs=inputs,
-          num_channels=num_channels,
-          kernel=kernel,
-          biases=biases,
-          input_h_state=initial_state[0],
-          input_c_state=initial_state[1],
-          is_training=training,
-          name=name)
+      if seq_lens is None:
+        outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            inputs=inputs,
+            num_channels=num_channels,
+            kernel=kernel,
+            biases=biases,
+            input_h_state=initial_state[0],
+            input_c_state=initial_state[1],
+            is_training=training,
+            name=name)
+      else:
+        outputs, _, _, _ = gen_popnn_ops.popnn_dynamic_lstm_layer(
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            inputs=inputs,
+            num_channels=num_channels,
+            kernel=kernel,
+            biases=biases,
+            seq_len=seq_lens,
+            input_h_state=initial_state[0],
+            input_c_state=initial_state[1],
+            is_training=training,
+            name=name)
+      outputs = outputs if seq_lens_h is None else outputs[0:min(
+          seq_len, seq_lens_h[0])]
       return outputs
 
   def _RunLSTMLayerInference(self, name, input_value, forget_bias,
-                             weights_value, h_value, c_value,
+                             weights_value, h_value, c_value, seq_lens,
                              lstm_layer_function):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
@@ -175,11 +198,17 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
       pinitial_c_state = array_ops.placeholder(dataType,
                                                [batch_size, num_channels],
                                                name="init_c_state")
+      pseq_lens = array_ops.placeholder(
+          np.int32, [batch_size],
+          name="seq_len") if seq_lens is not None else None
+
       lstm_output_seq = lstm_layer_function(inputs=pinputs,
                                             weights_value=weights_value,
                                             initial_state=(pinitial_h_state,
                                                            pinitial_c_state),
                                             forget_bias=forget_bias,
+                                            seq_lens=pseq_lens,
+                                            seq_lens_h=seq_lens,
                                             training=False,
                                             name=name)
 
@@ -191,11 +220,20 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
           pinitial_h_state: initial_state[0],
           pinitial_c_state: initial_state[1],
       }
+      if seq_lens is not None:
+        fd[pseq_lens] = seq_lens
+
       sess.run(variables.global_variables_initializer())
       return sess.run(lstm_output_seq, fd)
 
-  def _RunInferenceComparison(self, name, input_value, forget_bias,
-                              weights_value, h_value, c_value):
+  def _RunInferenceComparison(self,
+                              name,
+                              input_value,
+                              forget_bias,
+                              weights_value,
+                              h_value,
+                              c_value,
+                              seq_lens=None):
     ops.reset_default_graph()
     popnn_out = self._RunLSTMLayerInference(
         name=name,
@@ -204,6 +242,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         forget_bias=forget_bias,
         h_value=h_value,
         c_value=c_value,
+        seq_lens=seq_lens,
         lstm_layer_function=self._LSTMLayer)
     ref_out = self._RunLSTMLayerInference(
         name=name,
@@ -212,6 +251,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         forget_bias=forget_bias,
         h_value=h_value,
         c_value=c_value,
+        seq_lens=seq_lens,
         lstm_layer_function=self._LSTMLayerCPU)
     # Check that the whole outupt sequence matches
     self.assertAllClose(popnn_out, ref_out)
@@ -246,6 +286,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
   def testLSTMLayerInferenceRandomWeight(self, h_init, c_init):
     tu.ReportJSON(self, eager_mode=True)
     np.random.seed(0)
+
     # Run with random weights
     for weight in np.random.rand(3):
       self._RunInferenceComparison('rand',
@@ -255,14 +296,29 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                    h_value=h_init,
                                    c_value=c_init)
 
+    # seq_len 1
+    for weight in np.random.rand(3):
+      self._RunInferenceComparison('rand',
+                                   input_value=0.,
+                                   forget_bias=0.,
+                                   weights_value=weight,
+                                   h_value=h_init,
+                                   c_value=c_init,
+                                   seq_lens=[1])
+
   def _RunLSTMLayerTraining(self, name, input_value, forget_bias,
                             weights_value, h_value, c_value, training_steps,
-                            labels_array, lstm_layer_function, device_string):
+                            seq_lens, labels_array, lstm_layer_function,
+                            device_string):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
                                       name="inputs")
       plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
+
+      pseq_lens = array_ops.placeholder(
+          np.int32, [batch_size],
+          name="seq_len") if seq_lens is not None else None
 
       with ops.device(device_string):
         with variable_scope.variable_scope("lstm_layer", use_resource=True):
@@ -279,6 +335,8 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                      initial_state=(initial_h_state,
                                                     initial_c_state),
                                      forget_bias=forget_bias,
+                                     seq_lens=pseq_lens,
+                                     seq_lens_h=seq_lens,
                                      training=True,
                                      name=name)
         logits = math_ops.reduce_mean(logits, axis=0)
@@ -294,13 +352,23 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
           pinputs: inputs,
           plabels: labels_array,
       }
+      if seq_lens is not None:
+        fd[pseq_lens] = seq_lens
+
       for _ in range(0, training_steps):
         l, _ = sess.run([loss, train], fd)
         losses.append(l)
       return losses
 
-  def _RunTrainingComparison(self, name, input_value, forget_bias,
-                             weights_value, h_value, c_value, training_steps):
+  def _RunTrainingComparison(self,
+                             name,
+                             input_value,
+                             forget_bias,
+                             weights_value,
+                             h_value,
+                             c_value,
+                             training_steps,
+                             seq_lens=None):
     labels_array = np.ones(shape=[batch_size], dtype=np.int32)
     ops.reset_default_graph()
     popnn_losses = self._RunLSTMLayerTraining(
@@ -311,6 +379,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         h_value=h_value,
         c_value=c_value,
         training_steps=training_steps,
+        seq_lens=seq_lens,
         labels_array=labels_array,
         lstm_layer_function=self._LSTMLayer,
         device_string="/device:IPU:0")
@@ -323,6 +392,7 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
         h_value=h_value,
         c_value=c_value,
         training_steps=training_steps,
+        seq_lens=seq_lens,
         labels_array=labels_array,
         lstm_layer_function=self._LSTMLayerCPU,
         device_string="/device:CPU:0")
@@ -342,6 +412,17 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
                                   h_value=h_init,
                                   c_value=c_init,
                                   training_steps=2)
+
+    # seq_len=1
+    for weight in np.random.rand(3):
+      self._RunTrainingComparison('rand',
+                                  input_value=0.,
+                                  forget_bias=0.,
+                                  weights_value=weight,
+                                  h_value=h_init,
+                                  c_value=c_init,
+                                  training_steps=2,
+                                  seq_lens=[1])
 
   @parameterized.named_parameters(*_activationTestCases())
   def testLSTMActivations(self, activation, recurrent_activation):

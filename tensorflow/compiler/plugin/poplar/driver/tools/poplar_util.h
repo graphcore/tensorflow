@@ -171,8 +171,8 @@ StatusOr<TensorOrRemoteBuffer> GetOrCreateRemoteParameterBuffer(
 
 bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
 
-StatusOr<std::string> GetInstructionCompilationInfo(
-    const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);
+StatusOr<std::string> GetInstructionCompilationInfo(const HloModule* module,
+                                                    CompilerResources& res);
 
 // Add a copy between two tensors with compatbile aliasing Poplar Tensors.
 poplar::program::Sequence TensorCopyWithAliasing(
