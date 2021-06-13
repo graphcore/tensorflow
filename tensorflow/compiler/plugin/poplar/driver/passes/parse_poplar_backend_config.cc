@@ -52,6 +52,136 @@ StatusOr<pipeline_config::RecomputationMode> ParseRecomputationMode(
   }
   return parsed;
 }
+
+static Status InitialiseFunctionConfig(
+    const FrontendAttributes& attributes,
+    PoplarBackendConfig::CallConfig::FunctionConfig* function_config) {
+  TF_ASSIGN_OR_RETURN(std::string unique_sharding_str,
+                      GetAttribute(attributes, UNIQUE_SHARDING));
+  bool unique_sharding = std::stoi(unique_sharding_str);
+  function_config->set_unique_sharding(unique_sharding);
+  TF_ASSIGN_OR_RETURN(std::string keep_input_layouts_str,
+                      GetAttribute(attributes, KEEP_INPUT_LAYOUTS));
+  bool keep_input_layouts = std::stoi(keep_input_layouts_str);
+  function_config->set_keep_input_layouts(keep_input_layouts);
+  return Status::OK();
+}
+
+static Status InitialisePipelineConfig(
+    const FrontendAttributes& attributes,
+    PoplarBackendConfig::CallConfig::PipelineConfig* pipeline_config) {
+  // Get the pipeline depth.
+  TF_ASSIGN_OR_RETURN(std::string gradient_accumulation_count_str,
+                      GetAttribute(attributes, GRADIENT_ACCUMULATION_COUNT));
+  int64 gradient_accumulation_count =
+      std::stoll(gradient_accumulation_count_str);
+  pipeline_config->set_gradient_accumulation_count(gradient_accumulation_count);
+
+  // Get the batch serialization iterations.
+  TF_ASSIGN_OR_RETURN(
+      std::string batch_serialization_iterations_str,
+      GetAttribute(attributes, PIPELINE_BATCH_SERIALIZATION_ITERATIONS));
+  int64 batch_serialization_iterations =
+      std::stoll(batch_serialization_iterations_str);
+  pipeline_config->set_batch_serialization_iterations(
+      batch_serialization_iterations);
+
+  // Get the repeat count.
+  TF_ASSIGN_OR_RETURN(std::string repeat_count_str,
+                      GetAttribute(attributes, PIPELINE_REPEAT_COUNT));
+  int64 repeat_count = std::stoll(repeat_count_str);
+  pipeline_config->set_repeat_count(repeat_count);
+
+  // Get the schedule.
+  TF_ASSIGN_OR_RETURN(std::string schedule_str,
+                      GetAttribute(attributes, PIPELINE_SCHEDULE));
+  auto schedule =
+      static_cast<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
+          std::stoi(schedule_str));
+  pipeline_config->set_schedule({schedule});
+
+  // Set the offload activations flag.
+  TF_ASSIGN_OR_RETURN(std::string offload_activations_str,
+                      GetAttribute(attributes, OFFLOAD_ACTIVATIONS));
+  TF_ASSIGN_OR_RETURN(auto offload_activations,
+                      ParseThreeState(offload_activations_str));
+  pipeline_config->set_offload_activations(offload_activations);
+
+  // Set the partition variables flag.
+  TF_ASSIGN_OR_RETURN(std::string partition_variables_str,
+                      GetAttribute(attributes, PARTITION_VARIABLES));
+  TF_ASSIGN_OR_RETURN(auto partition_variables,
+                      ParseThreeState(partition_variables_str));
+  pipeline_config->set_partition_variables(partition_variables);
+
+  // Set the offload variables flag.
+  TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
+                      GetAttribute(attributes, OFFLOAD_VARIABLES));
+  TF_ASSIGN_OR_RETURN(auto offload_variables,
+                      ParseThreeState(offload_variables_str));
+  pipeline_config->set_offload_variables(offload_variables);
+
+  // Set the offload gradient accumulation buffers flag.
+  TF_ASSIGN_OR_RETURN(
+      std::string offload_gradient_accumulation_buffers_str,
+      GetAttribute(attributes, OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS));
+  TF_ASSIGN_OR_RETURN(
+      auto offload_gradient_accumulation_buffers,
+      ParseThreeState(offload_gradient_accumulation_buffers_str));
+  pipeline_config->set_offload_gradient_accumulation_buffers(
+      offload_gradient_accumulation_buffers);
+
+  // Set the recomputation mode flag.
+  TF_ASSIGN_OR_RETURN(std::string recomputation_mode_str,
+                      GetAttribute(attributes, RECOMPUTATION_MODE));
+  TF_ASSIGN_OR_RETURN(auto recomputation_mode,
+                      ParseRecomputationMode(recomputation_mode_str));
+  pipeline_config->set_recomputation_mode(recomputation_mode);
+  return Status::OK();
+}
+
+static Status InitialisePipelineStageConfig(
+    const FrontendAttributes& attributes,
+    PoplarBackendConfig::CallConfig::PipelineStageConfig*
+        pipeline_stage_config) {
+  // Get the stage id.
+  TF_ASSIGN_OR_RETURN(std::string stage_id_str,
+                      GetAttribute(attributes, PIPELINE_STAGE_ID));
+  int64 stage_id = std::stoll(stage_id_str);
+  pipeline_stage_config->set_stage_id(stage_id);
+  return Status::OK();
+}
+
+static Status InitialiseResourceUpdateConfig(
+    const FrontendAttributes& attributes,
+    PoplarBackendConfig::CallConfig::ResourceUpdateConfig*
+        resource_update_config) {
+  // Get the offload variables flag.
+  TF_ASSIGN_OR_RETURN(
+      std::string offload_variables_str,
+      GetAttribute(attributes, OFFLOAD_WEIGHT_UPDATE_VARIABLES));
+  TF_ASSIGN_OR_RETURN(auto offload_variables,
+                      ParseThreeState(offload_variables_str));
+  resource_update_config->set_offload_variables(offload_variables);
+
+  // Get the partition offload variables flag.
+  TF_ASSIGN_OR_RETURN(
+      std::string partition_offload_variables_str,
+      GetAttribute(attributes, PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES));
+  TF_ASSIGN_OR_RETURN(auto partition_offload_variables,
+                      ParseThreeState(partition_offload_variables_str));
+  resource_update_config->set_partition_offloaded_variables(
+      partition_offload_variables);
+
+  // Get the num batches to accumulate flag.
+  TF_ASSIGN_OR_RETURN(std::string num_batches_to_accumulate_str,
+                      GetAttribute(attributes, NUM_BATCHES_TO_ACCUMULATE));
+  auto num_batches_to_accumulate = std::stoi(num_batches_to_accumulate_str);
+  resource_update_config->set_num_batches_to_accumulate(
+      num_batches_to_accumulate);
+  return Status::OK();
+}
+
 }  // namespace
 
 StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
@@ -76,137 +206,24 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           call_config->set_type(type);
           switch (type) {
             case PoplarBackendConfig::CallConfig::Function: {
-              auto* function_config = call_config->mutable_function_config();
-              TF_ASSIGN_OR_RETURN(std::string unique_sharding_str,
-                                  GetAttribute(attributes, UNIQUE_SHARDING));
-              bool unique_sharding = std::stoi(unique_sharding_str);
-              function_config->set_unique_sharding(unique_sharding);
-              TF_ASSIGN_OR_RETURN(std::string keep_input_layouts_str,
-                                  GetAttribute(attributes, KEEP_INPUT_LAYOUTS));
-              bool keep_input_layouts = std::stoi(keep_input_layouts_str);
-              function_config->set_keep_input_layouts(keep_input_layouts);
+              TF_RETURN_IF_ERROR(InitialiseFunctionConfig(
+                  attributes, call_config->mutable_function_config()));
               break;
             }
             case PoplarBackendConfig::CallConfig::Pipeline: {
-              auto* pipeline_config = call_config->mutable_pipeline_config();
-              // Get the pipeline depth.
-              TF_ASSIGN_OR_RETURN(
-                  std::string gradient_accumulation_count_str,
-                  GetAttribute(attributes, GRADIENT_ACCUMULATION_COUNT));
-              int64 gradient_accumulation_count =
-                  std::stoll(gradient_accumulation_count_str);
-              pipeline_config->set_gradient_accumulation_count(
-                  gradient_accumulation_count);
-
-              // Get the batch serialization iterations.
-              TF_ASSIGN_OR_RETURN(
-                  std::string batch_serialization_iterations_str,
-                  GetAttribute(attributes,
-                               PIPELINE_BATCH_SERIALIZATION_ITERATIONS));
-              int64 batch_serialization_iterations =
-                  std::stoll(batch_serialization_iterations_str);
-              pipeline_config->set_batch_serialization_iterations(
-                  batch_serialization_iterations);
-
-              // Get the repeat count.
-              TF_ASSIGN_OR_RETURN(
-                  std::string repeat_count_str,
-                  GetAttribute(attributes, PIPELINE_REPEAT_COUNT));
-              int64 repeat_count = std::stoll(repeat_count_str);
-              pipeline_config->set_repeat_count(repeat_count);
-
-              // Get the schedule.
-              TF_ASSIGN_OR_RETURN(std::string schedule_str,
-                                  GetAttribute(attributes, PIPELINE_SCHEDULE));
-              auto schedule = static_cast<
-                  PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
-                  std::stoi(schedule_str));
-              pipeline_config->set_schedule({schedule});
-
-              // Set the offload activations flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string offload_activations_str,
-                  GetAttribute(attributes, OFFLOAD_ACTIVATIONS));
-              TF_ASSIGN_OR_RETURN(auto offload_activations,
-                                  ParseThreeState(offload_activations_str));
-              pipeline_config->set_offload_activations(offload_activations);
-
-              // Set the partition variables flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string partition_variables_str,
-                  GetAttribute(attributes, PARTITION_VARIABLES));
-              TF_ASSIGN_OR_RETURN(auto partition_variables,
-                                  ParseThreeState(partition_variables_str));
-              pipeline_config->set_partition_variables(partition_variables);
-
-              // Set the offload variables flag.
-              TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
-                                  GetAttribute(attributes, OFFLOAD_VARIABLES));
-              TF_ASSIGN_OR_RETURN(auto offload_variables,
-                                  ParseThreeState(offload_variables_str));
-              pipeline_config->set_offload_variables(offload_variables);
-
-              // Set the offload gradient accumulation buffers flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string offload_gradient_accumulation_buffers_str,
-                  GetAttribute(attributes,
-                               OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS));
-              TF_ASSIGN_OR_RETURN(
-                  auto offload_gradient_accumulation_buffers,
-                  ParseThreeState(offload_gradient_accumulation_buffers_str));
-              pipeline_config->set_offload_gradient_accumulation_buffers(
-                  offload_gradient_accumulation_buffers);
-
-              // Set the recomputation mode flag.
-              TF_ASSIGN_OR_RETURN(std::string recomputation_mode_str,
-                                  GetAttribute(attributes, RECOMPUTATION_MODE));
-              TF_ASSIGN_OR_RETURN(
-                  auto recomputation_mode,
-                  ParseRecomputationMode(recomputation_mode_str));
-              pipeline_config->set_recomputation_mode(recomputation_mode);
+              TF_RETURN_IF_ERROR(InitialisePipelineConfig(
+                  attributes, call_config->mutable_pipeline_config()));
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
             case PoplarBackendConfig::CallConfig::PipelineStageBackward: {
-              auto* pipeline_stage_config =
-                  call_config->mutable_pipeline_stage_config();
-              // Get the stage id.
-              TF_ASSIGN_OR_RETURN(std::string stage_id_str,
-                                  GetAttribute(attributes, PIPELINE_STAGE_ID));
-              int64 stage_id = std::stoll(stage_id_str);
-              pipeline_stage_config->set_stage_id(stage_id);
+              TF_RETURN_IF_ERROR(InitialisePipelineStageConfig(
+                  attributes, call_config->mutable_pipeline_stage_config()));
               break;
             }
             case PoplarBackendConfig::CallConfig::ResourceUpdate: {
-              auto* resource_update_config =
-                  call_config->mutable_resource_update_config();
-              // Get the offload variables flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string offload_variables_str,
-                  GetAttribute(attributes, OFFLOAD_WEIGHT_UPDATE_VARIABLES));
-              TF_ASSIGN_OR_RETURN(auto offload_variables,
-                                  ParseThreeState(offload_variables_str));
-              resource_update_config->set_offload_variables(offload_variables);
-
-              // Get the partition offload variables flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string partition_offload_variables_str,
-                  GetAttribute(attributes,
-                               PARTITION_OFFLOADED_WEIGHT_UPDATE_VARIABLES));
-              TF_ASSIGN_OR_RETURN(
-                  auto partition_offload_variables,
-                  ParseThreeState(partition_offload_variables_str));
-              resource_update_config->set_partition_offloaded_variables(
-                  partition_offload_variables);
-
-              // Get the num batches to accumulate flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string num_batches_to_accumulate_str,
-                  GetAttribute(attributes, NUM_BATCHES_TO_ACCUMULATE));
-              auto num_batches_to_accumulate =
-                  std::stoi(num_batches_to_accumulate_str);
-              resource_update_config->set_num_batches_to_accumulate(
-                  num_batches_to_accumulate);
+              TF_RETURN_IF_ERROR(InitialiseResourceUpdateConfig(
+                  attributes, call_config->mutable_resource_update_config()));
             }
             default: { break; }
           }
