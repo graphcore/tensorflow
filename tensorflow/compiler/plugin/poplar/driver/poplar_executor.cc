@@ -2049,11 +2049,9 @@ Status PoplarExecutor::CreateSerializedExecutableDirIfMissing() const {
   return CreateDirIfMissing(SerializationFolder());
 }
 
-ModuleFilenames::ModuleFilenames(const HloModule& module, int64 device_hash,
+ModuleFilenames::ModuleFilenames(uint64 hash,
                                  const std::string& serialization_folder)
-    : basename_(tensorflow::strings::Printf(
-          "%0llx",
-          tensorflow::Hash64Combine(HloHash(&module).GetHash(), device_hash))),
+    : basename_(tensorflow::strings::Printf("%0llx", hash)),
       serialization_folder_(serialization_folder) {}
 
 std::string ModuleFilenames::CachedExecutableFilename() const {
@@ -2066,9 +2064,8 @@ std::string ModuleFilenames::CompilationLockFilename() const {
                                   basename_ + ".compile_lock");
 }
 
-ModuleFilenames PoplarExecutor::GetModuleFilenames(
-    const HloModule& module) const {
-  return ModuleFilenames(module, poplar_device_hash_, SerializationFolder());
+ModuleFilenames PoplarExecutor::GetModuleFilenames(uint64 hash) const {
+  return ModuleFilenames(hash, SerializationFolder());
 }
 
 bool PoplarExecutor::HaveCachedExecutable(
