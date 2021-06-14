@@ -96,10 +96,23 @@ PoplarExecutableCache::GetOrCompileExecutable(
   }
   CHECK(executable_core);
 
+  // Create the infeed translation (currently trivial).
+  TranslatedInfeedInfos translated_infeed_infos;
+  for (auto& canonical_info : executable_core->GetInfeedInfos()) {
+    translated_infeed_infos.insert(
+        {canonical_info.config.feed_id(), canonical_info});
+  }
+
+  TranslatedOutfeedInfos translated_outfeed_infos;
+  for (auto& canonical_info : executable_core->GetOutfeedInfos()) {
+    translated_outfeed_infos.insert(
+        {canonical_info.config.feed_id(), canonical_info});
+  }
+
   return absl::make_unique<PoplarExecutable>(
       std::move(hlo_module), std::move(hlo_profile_printer),
-      std::move(hlo_profile_index_map), std::move(executable_core));
+      std::move(hlo_profile_index_map), translated_infeed_infos,
+      translated_outfeed_infos, std::move(executable_core));
 }
-
 }  // namespace poplarplugin
 }  // namespace xla

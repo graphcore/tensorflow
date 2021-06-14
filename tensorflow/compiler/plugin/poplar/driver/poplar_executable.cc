@@ -40,8 +40,8 @@ PoplarExecutableCore::PoplarExecutableCore(
     std::vector<std::vector<Literal>> constant_literal_output,
     bool is_remap_graph, bool is_scalar_elementwise_graph,
     bool loaded_from_cache, std::vector<uint64> remaped_output,
-    uint32 replication_factor, const InfeedInfos& infeed_infos,
-    const OutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
+    uint32 replication_factor, const CanonicalInfeedInfos& infeed_infos,
+    const CanonicalOutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
     StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
     SendRecvInfos&& recv_infos,
     HostEmbeddingInfos&& host_embedding_lookup_infos,
@@ -180,16 +180,14 @@ PoplarExecutableCore::Deserialize(
 
   const bool logging_cycle_count = proto.logging_cycle_count();
 
-  InfeedInfos infeeds;
+  CanonicalInfeedInfos infeeds;
   for (const auto& infeed : proto.infeeds()) {
-    infeeds.emplace(infeed.stream_prefix(), infeed.config(),
-                    Shape(infeed.shape()));
+    infeeds.emplace(infeed.config(), Shape(infeed.shape()));
   }
 
-  OutfeedInfos outfeeds;
+  CanonicalOutfeedInfos outfeeds;
   for (const auto& outfeed : proto.outfeeds()) {
-    outfeeds.emplace(outfeed.stream_prefix(), outfeed.config(),
-                     Shape(outfeed.shape()));
+    outfeeds.emplace(outfeed.config(), Shape(outfeed.shape()));
   }
 
   SendRecvInfos sends;
@@ -297,14 +295,12 @@ PoplarExecutableCore::Deserialize(
 
   for (const auto& infeed : annotations.infeed_infos) {
     auto* feed = proto.add_infeeds();
-    feed->set_stream_prefix(infeed.stream_prefix);
     *(feed->mutable_config()) = infeed.config;
     *(feed->mutable_shape()) = infeed.shape.ToProto();
   }
 
   for (const auto& outfeed : annotations.outfeed_infos) {
     auto* feed = proto.add_outfeeds();
-    feed->set_stream_prefix(outfeed.stream_prefix);
     *(feed->mutable_config()) = outfeed.config;
     *(feed->mutable_shape()) = outfeed.shape.ToProto();
   }
@@ -388,7 +384,7 @@ PoplarExecutableCore::Deserialize(
 namespace {
 Status ExportInternal(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
-    const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
+    const CanonicalInfeedInfos& infeeds, const CanonicalOutfeedInfos& outfeeds,
     const SendRecvInfos& sends, const SendRecvInfos& recvs,
     const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
     const InputOutputAliasingMap& io_map, uint32 replication_count,
@@ -487,9 +483,13 @@ PoplarExecutable::PoplarExecutable(
     std::unique_ptr<HloModule> hlo_module,
     std::unique_ptr<HloProfilePrinterData> profile_printer,
     std::unique_ptr<HloProfileIndexMap> profile_index_map,
+    const TranslatedInfeedInfos& infeed_infos,
+    const TranslatedOutfeedInfos& outfeed_infos,
     std::shared_ptr<PoplarExecutableCore> executable_core)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
+      infeed_infos_(infeed_infos),
+      outfeed_infos_(outfeed_infos),
       executable_core_(std::move(executable_core)) {
   TENSORFLOW_TRACEPOINT();
 }

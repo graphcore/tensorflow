@@ -585,8 +585,9 @@ Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
 }  // namespace
 
 StatusOr<ipu::Metadata> CreateExecutableMetadata(
-    const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
-    const OutfeedInfos& outfeed_infos, uint32 replication_count,
+    const InputOutputAliasingMap& io_map,
+    const CanonicalInfeedInfos& infeed_infos,
+    const CanonicalOutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
     const poplar::OptionFlags& engine_opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
@@ -667,11 +668,11 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         }
         ipu::TensorInfo t;
         ipu::VerificationInfo info;
-        t.SetHandle(GetInfeedCopyHandle(infeed.stream_prefix, stream_idx));
+        t.SetHandle(GetInfeedCopyHandle(infeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(infeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
         if (use_verified_transfers) {
-          auto key_id = indices.at(t.Handle());
+          auto key_id = indices.at(infeed.config.feed_id());
           info.SetInfo(key_id.key, key_id.id);
         }
         builder.AddInfeedStream(infeed.config.feed_id(), t, info);
@@ -695,11 +696,11 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         }
         ipu::TensorInfo t;
         ipu::VerificationInfo info;
-        t.SetHandle(GetOutfeedCopyHandle(outfeed.stream_prefix, stream_idx));
+        t.SetHandle(GetOutfeedCopyHandle(outfeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(outfeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
         if (use_verified_transfers) {
-          auto key_id = indices.at(t.Handle());
+          auto key_id = indices.at(outfeed.config.feed_id());
           info.SetInfo(key_id.key, key_id.id);
         }
         builder.AddOutfeedStream(outfeed.config.feed_id(), t, info);

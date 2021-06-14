@@ -106,14 +106,13 @@ const std::vector<std::string>& VerifiedStreamsIndices::CheckpointFeedsOrder()
 
 Status VerifiedStreamsIndices::InitializeFeedStream(
     const std::string& feed_name, int64 stream_idx,
-    const std::string& stream_handle, poplar::program::Sequence& seq,
-    const HloInstruction* inst,
+    poplar::program::Sequence& seq, const HloInstruction* inst,
     const poplar::DebugNameAndId& debug_name_and_id) {
   // Only needed for verified streams.
   if (!resources_->use_verified_transfers) {
     return Status::OK();
   }
-  if (feeds_streams_.find(stream_handle) == feeds_streams_.end()) {
+  if (feeds_streams_.find(feed_name) == feeds_streams_.end()) {
     TF_ASSIGN_OR_RETURN(IpuOptions::VerifiedInfo info, GetFeedInfo(feed_name));
     if (info.start_id() >= 0 && next_start_id_ > 0) {
       return xla::FailedPrecondition(
@@ -127,7 +126,7 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
                           GetStreamId(feed_name, stream_idx, inst));
       info.set_start_id(stream_id);
     }
-    Index new_index{stream_handle};
+    Index new_index{feed_name};
     new_index.IncrementNumTensors();
     poplar::Tensor feed_index = GetFeedIndexTensor(feed_name);
     poplar::Tensor stream_index;
@@ -135,11 +134,10 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
       // Create a copy to avoid conflicts with other streams.
       TF_ASSIGN_OR_RETURN(
           stream_index,
-          AddPlainTensor(
-              GetMasterGraph(*resources_),
-              {debug_name_and_id, absl::StrCat(stream_handle, "Index")},
-              XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
-              *resources_));
+          AddPlainTensor(GetMasterGraph(*resources_),
+                         {debug_name_and_id, absl::StrCat(feed_name, "Index")},
+                         XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
+                         *resources_));
       load_checkpoint_.add(poplar::program::Copy(feed_index, stream_index,
                                                  false, {debug_name_and_id}));
     } else {
@@ -147,7 +145,7 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
     }
     new_index.Initialize(*resources_, stream_index);
     new_index.SetKeyAndStartId(info.key(), info.start_id());
-    feeds_streams_.insert({stream_handle, new_index});
+    feeds_streams_.insert({feed_name, new_index});
   }
   return Status::OK();
 }
