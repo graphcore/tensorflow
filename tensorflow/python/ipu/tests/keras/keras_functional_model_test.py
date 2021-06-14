@@ -1050,10 +1050,10 @@ class IPUModelModelTest(test.TestCase):
       for w2, w3 in zip(w_2, w_3):
         self.assertFalse(np.all(w2 == w3))
 
-      # Don't need to compile the graph again.
+      # Should have compiled the graph once more
       evts = ipu.ops.summary_ops.get_ipu_reports()
       evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(0, len(evts))
+      self.assertEqual(1, len(evts))
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):

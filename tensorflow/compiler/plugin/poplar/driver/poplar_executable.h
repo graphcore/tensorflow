@@ -191,7 +191,7 @@ class PoplarExecutable : public Executable {
   PoplarExecutable(std::unique_ptr<HloModule> hlo_module,
                    std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
                    std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
-                   std::shared_ptr<PoplarExecutableCore> executable_core);
+                   std::unique_ptr<PoplarExecutableCore> executable_core);
 
   StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
@@ -305,7 +305,7 @@ class PoplarExecutable : public Executable {
 
   friend class GraphCompileIoMapTest;
 
-  std::shared_ptr<PoplarExecutableCore> executable_core_;
+  std::unique_ptr<PoplarExecutableCore> executable_core_;
   std::vector<std::vector<Literal>> literal_output_;
   int64 execution_count_;
 
