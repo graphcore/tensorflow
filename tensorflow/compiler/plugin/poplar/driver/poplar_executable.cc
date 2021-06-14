@@ -23,7 +23,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_executable_cache.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
@@ -270,9 +269,8 @@ PoplarExecutableCore::Deserialize(
 
   std::unique_ptr<PoplarExecutableCore> executable_core =
       absl::make_unique<PoplarExecutableCore>(
-          std::move(engine), std::move(iomap),
-          /*is_constant_graph=*/false, std::vector<std::vector<Literal>>{},
-          /*is_remap_graph=*/false,
+          std::move(engine), std::move(iomap), /*is_constant_graph=*/false,
+          std::vector<std::vector<Literal>>{}, /*is_remap_graph=*/false,
           /*is_scalar_elementwise_graph=*/false,
           /*loaded_from_cache=*/true, std::vector<uint64>{}, replication_factor,
           std::move(infeeds), std::move(outfeeds), StreamInfos{},
@@ -487,7 +485,7 @@ PoplarExecutable::PoplarExecutable(
     std::unique_ptr<HloModule> hlo_module,
     std::unique_ptr<HloProfilePrinterData> profile_printer,
     std::unique_ptr<HloProfileIndexMap> profile_index_map,
-    std::shared_ptr<PoplarExecutableCore> executable_core)
+    std::unique_ptr<PoplarExecutableCore> executable_core)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       executable_core_(std::move(executable_core)) {

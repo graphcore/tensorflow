@@ -151,7 +151,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_executable_cache.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/convolution_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/ctc_preplanning.h"
@@ -1051,8 +1050,7 @@ struct ExecutableCacheLock {
 };
 
 StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
-    HloModule* module, PoplarExecutor* poplar_executor,
-    uint64 executable_hash) {
+    HloModule* module, PoplarExecutor* poplar_executor) {
   TENSORFLOW_TRACEPOINT();
 
   VLOG(1) << "Begin XLA compilation: " << module->name() << " " << std::hex
@@ -1108,8 +1106,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   std::unique_ptr<ExecutableCacheLock> executable_cache_lock;
 
-  ModuleFilenames filenames =
-      poplar_executor->GetModuleFilenames(executable_hash);
+  ModuleFilenames filenames = poplar_executor->GetModuleFilenames(*module);
 
   if (poplar_executor->HaveExecutableCache()) {
     TF_RETURN_IF_ERROR(poplar_executor->CreateExecutableCacheDirIfMissing());
@@ -1898,11 +1895,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   std::lock_guard<std::mutex> g(static_mu_);
 
-  TF_ASSIGN_OR_RETURN(
-      std::unique_ptr<Executable> executable,
-      PoplarExecutableCache::GetInstance().GetOrCompileExecutable(
-          std::move(module), std::move(profile_printer),
-          std::move(profile_index_map), poplar_executor, CompileEngine));
+  TF_ASSIGN_OR_RETURN(auto executable_core,
+                      CompileEngine(module.get(), poplar_executor));
+
+  std::unique_ptr<Executable> executable = absl::make_unique<PoplarExecutable>(
+      std::move(module), std::move(profile_printer),
+      std::move(profile_index_map), std::move(executable_core));
 
   return executable;
 }
