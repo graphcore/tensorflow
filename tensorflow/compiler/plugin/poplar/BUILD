@@ -338,6 +338,7 @@ cc_library(
         "driver/tools/custom_ops/user_op_hlo.cc",
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.cc",
         "driver/tools/elementwise_cluster.cc",
+        "driver/tools/feed_info.cc",
         "driver/tools/find_all_users.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
@@ -3537,6 +3538,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "feed_info_test",
+    srcs = ["tests/feed_info_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     testonly = 1,
@@ -5299,6 +5313,18 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "compile_cache_test",
+    size = "large",
+    srcs = ["tests/compile_cache_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -5321,6 +5347,7 @@ test_suite(
         "clear_xla_cache_test",
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
+        "compile_cache_test",
         "computation_flattener_test",
         "conditional_test",
         "constant_nan_test",
@@ -5354,6 +5381,7 @@ test_suite(
         "extract_outside_compilation_pass_test",
         "f16_constant_folding_test",
         "f16_test",
+        "feed_info_test",
         "find_all_users_test",
         "forward_allocation_test",
         "function_combiner_test",

@@ -307,7 +307,9 @@ class IpuSerializationTest(xla_test.XLATestCase):
         {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
       infeed_name = FeedId.Next("feed")
+      infeed_canonical_name = '1'
       outfeed_name = FeedId.Next("feed")
+      outfeed_canonical_name = '2'
       infeed_spec = dataset.element_spec[0]
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, infeed_name)
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(outfeed_name)
@@ -335,8 +337,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
         folder = os.path.join(tmp, "saved")
 
         opts = utils.VerificationOptions()
-        opts.infeeds[infeed_name] = utils.KeyId(1)
-        opts.outfeeds[outfeed_name] = utils.KeyId(2)
+        opts.infeeds[infeed_canonical_name] = utils.KeyId(1)
+        opts.outfeeds[outfeed_canonical_name] = utils.KeyId(2)
         opts.checkpoint_in.key = 3
         opts.checkpoint_out.key = 4
 
@@ -386,8 +388,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
                     shape=[2 * 2],
                     dtype=dtypes.int32,
                     name="checkpointClear:0"), "output_data")],
-                                  [(infeed_spec, infeed_name)],
-                                  [(outfed_result, outfeed_name)])
+                                  [(infeed_spec, infeed_canonical_name)],
+                                  [(outfed_result, outfeed_canonical_name)])
             self._validate_secure_metadata(opts, metadata)
           else:
             self.assertEqual(name, "%s.ipu_bin" % module_hash)
@@ -401,7 +403,9 @@ class IpuSerializationTest(xla_test.XLATestCase):
         {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
       infeed_name = FeedId.Next("feed")
+      infeed_canonical_name = '1'
       outfeed_name = FeedId.Next("feed")
+      outfeed_canonical_name = '2'
       infeed_spec = dataset.element_spec[0]
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, infeed_name)
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(outfeed_name)
@@ -456,12 +460,13 @@ class IpuSerializationTest(xla_test.XLATestCase):
           if name == module_hash + ".json":
             with open(os.path.join(folder, name), "r") as metadata_file:
               metadata = json.load(metadata_file)
-            self._validateStreams(
-                metadata, [(const, "input_data"), (inp2, "parameter")],
-                [(tensor_spec.TensorSpec(
-                    shape=[], dtype=dtypes.float32,
-                    name="XLA_Retvals:0"), "output_data")],
-                [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
+            self._validateStreams(metadata, [
+                (const, "input_data"), (inp2, "parameter")
+            ], [(tensor_spec.TensorSpec(shape=[],
+                                        dtype=dtypes.float32,
+                                        name="XLA_Retvals:0"), "output_data")],
+                                  [(infeed_spec, infeed_canonical_name)],
+                                  [(outfed_result, outfeed_canonical_name)])
           else:
             self.assertEqual(name, "%s.ipu_bin" % module_hash)
 
