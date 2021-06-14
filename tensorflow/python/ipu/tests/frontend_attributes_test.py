@@ -17,6 +17,7 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.python import ipu
@@ -311,7 +312,9 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess)
 
       for output, expected_output, fd in outputs:
+        sess.run(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
         sess.run(variables.global_variables_initializer())
+
         report.reset()
         sess.run(output, fd)
         report.parse_log()
