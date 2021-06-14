@@ -511,7 +511,7 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
 
   // Multiple infeed queues are not supported.
   if (absl::c_any_of(resources_.annotations.infeed_infos,
-                     [&](const FeedInfo& info) {
+                     [&](const CanonicalFeedInfo& info) {
                        return info.config.feed_id() != infeed_config.feed_id();
                      })) {
     return xla::FailedPrecondition(
@@ -556,7 +556,7 @@ Status DeferredVisitor::HandleInfeed(HloInstruction* inst) {
   }
   has_infeed_ = true;
 
-  FeedInfo info(infeed_config.feed_id(), infeed_config, infeed->shape());
+  CanonicalFeedInfo info(infeed_config, infeed->shape());
   TF_RETURN_IF_ERROR(AddInfeedInfo(resources_.annotations, info));
 
   return Status::OK();

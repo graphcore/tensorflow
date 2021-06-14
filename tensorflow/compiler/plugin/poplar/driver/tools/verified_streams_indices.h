@@ -96,7 +96,6 @@ class VerifiedStreamsIndices {
   const KeyIdMappings& GetAssignedIds() const;
 
   Status InitializeFeedStream(const std::string& feed_name, int64 stream_idx,
-                              const std::string& stream_handle,
                               poplar::program::Sequence& seq,
                               const HloInstruction* inst,
                               const poplar::DebugNameAndId& debug_name_and_id);

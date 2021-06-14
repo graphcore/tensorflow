@@ -208,7 +208,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
     }
 
     for (const auto& infeed_info : annotations.infeed_infos) {
-      VLOG(1) << "Connecting infeed " << infeed_info.stream_prefix
+      VLOG(1) << "Connecting infeed " << infeed_info.config.feed_id()
               << " of shape " << infeed_info.shape << ".";
       const Shape& shape = infeed_info.shape;
       EXPECT_TRUE(shape.IsTuple());
@@ -217,7 +217,7 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
       auto size = ShapeUtil::ElementsIn(input_shape);
       for (auto replica_id = 0; replica_id < param.replication_factor;
            ++replica_id) {
-        auto handle = GetInfeedCopyHandle(infeed_info.stream_prefix, 0);
+        auto handle = GetInfeedCopyHandle(infeed_info.config.feed_id(), 0);
         std::unique_ptr<poplar::StreamCallback> infeed_callback =
             absl::make_unique<TestStreamCallback>(handle, size, 1);
         engine.connectStreamToCallback(handle, replica_id,

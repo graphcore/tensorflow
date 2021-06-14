@@ -650,7 +650,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int64 GetReplicationFactorForOutfeed(const std::string& feed_id) const;
 
-  Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
+  Status RegisterOutfeeds(const TranslatedOutfeedInfos& outfeed_infos);
 
   bool HasOutfeed(const std::string& feed_id) const;
   Status DeleteOutfeed(const std::string& feed_id);
@@ -929,21 +929,25 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   // Connect buffers provided by infeed transfer manager to Poplar
   // HostToDevice FIFO
-  void ConnectInfeedsToStreamCallback(const InfeedInfos& infeed_infos);
+  void ConnectInfeedsToStreamCallback(
+      const TranslatedInfeedInfos& infeed_infos);
 
-  Status SetupInfeedReplication(const InfeedInfos& infeed_infos);
+  Status SetupInfeedReplication(const TranslatedInfeedInfos& infeed_infos);
 
   // Connect buffers provided by transfer manager to Poplar
   // deviceToHostFIFO()
-  void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos);
+  void ConnectOutfeedToStreamCallback(
+      const TranslatedOutfeedInfos& outfeed_infos);
 
-  IOFunction CreateInfeedIOThreadFunction(const FeedInfo& infeed_info);
-  IOFunction CreateOutfeedIOThreadFunction(const FeedInfo& outfeed_info);
+  IOFunction CreateInfeedIOThreadFunction(
+      const TranslatedFeedInfo& infeed_info);
+  IOFunction CreateOutfeedIOThreadFunction(
+      const TranslatedFeedInfo& outfeed_info);
 
   // Creates and launches the threads which send/receive data from the Poplar
   // stream callbacks.
-  void LaunchInfeedThreads(const InfeedInfos& infeed_infos);
-  void LaunchOutfeedThreads(const OutfeedInfos& outfeed_infos);
+  void LaunchInfeedThreads(const TranslatedInfeedInfos& infeed_infos);
+  void LaunchOutfeedThreads(const TranslatedOutfeedInfos& outfeed_infos);
 
   // Blocks until all the IOThreads stop.
   void StopIOThreads();
@@ -1030,10 +1034,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       GUARDED_BY(ipu_.Mutex());
 
   struct OutfeedContext {
-    OutfeedContext(const FeedInfo& outfeed_info, int64 replication_factor);
+    OutfeedContext(const PoplarFeedConfig& config, const Shape& shape,
+                   int64 replication_factor);
     OutfeedContext() = delete;
 
-    bool Matches(const FeedInfo& other_outfeed_info,
+    bool Matches(const TranslatedFeedInfo& other_outfeed_info,
                  int64 other_replication_factor) const;
 
     const PoplarFeedConfig config;

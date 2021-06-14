@@ -24,30 +24,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/feed_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 namespace xla {
-using FlattenedInstMap = absl::flat_hash_map<HloInstruction*, HloInstruction*>;
-
-class HloInfeedInstruction;
-
 namespace poplarplugin {
-
-struct FeedInfo {
-  FeedInfo(const std::string& stream_prefix, const PoplarFeedConfig& config,
-           const Shape& shape)
-      : stream_prefix(stream_prefix), config(config), shape(shape) {}
-  FeedInfo() = delete;
-
-  bool operator<(const FeedInfo& rhs) const {
-    return stream_prefix < rhs.stream_prefix;
-  }
-
-  std::string stream_prefix;
-  PoplarFeedConfig config;
-  Shape shape;
-};
+using FlattenedInstMap = absl::flat_hash_map<HloInstruction*, HloInstruction*>;
 
 struct SendRecvInfo {
   SendRecvInfo(const std::string& stream_handle,
@@ -112,8 +95,6 @@ struct RemoteParameterInfo {
   }
 };
 
-using OutfeedInfos = std::set<FeedInfo>;
-using InfeedInfos = std::set<FeedInfo>;
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
@@ -198,9 +179,8 @@ struct CompilerAnnotations {
 
   TensorAllocationMap tensor_allocation_map;
 
-  InfeedInfos infeed_infos;
-
-  OutfeedInfos outfeed_infos;
+  CanonicalInfeedInfos infeed_infos;
+  CanonicalOutfeedInfos outfeed_infos;
 
   StreamInfos stream_infos;
 
@@ -222,13 +202,13 @@ struct CompilerAnnotations {
 };
 
 inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,
-                            const FeedInfo& feed_info) {
+                            const CanonicalFeedInfo& feed_info) {
   auto other_info_itr = compiler_annotations.infeed_infos.find(feed_info);
   if (other_info_itr != compiler_annotations.infeed_infos.end() &&
       feed_info.shape != other_info_itr->shape) {
     return xla::FailedPrecondition(
         "Infeeds with matching name '%s' have different shapes.",
-        feed_info.stream_prefix);
+        feed_info.config.feed_id());
   }
 
   if (other_info_itr == compiler_annotations.infeed_infos.end()) {
@@ -239,13 +219,13 @@ inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,
 }
 
 inline Status AddOutfeedInfo(CompilerAnnotations& compiler_annotations,
-                             const FeedInfo& feed_info) {
+                             const CanonicalFeedInfo& feed_info) {
   auto other_info_itr = compiler_annotations.outfeed_infos.find(feed_info);
   if (other_info_itr != compiler_annotations.outfeed_infos.end() &&
       feed_info.shape != other_info_itr->shape) {
     return xla::FailedPrecondition(
         "Outfeeds with matching name '%s' have different shapes.",
-        feed_info.stream_prefix);
+        feed_info.config.feed_id());
   }
 
   if (other_info_itr == compiler_annotations.outfeed_infos.end()) {

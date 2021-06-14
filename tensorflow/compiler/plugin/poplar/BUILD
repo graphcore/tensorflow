@@ -552,6 +552,7 @@ cc_library(
         "driver/tools/custom_ops/weights_transpose_chans_flip_xy.h",
         "driver/tools/elementwise_cluster.h",
         "driver/tools/extension_registry.h",
+        "driver/tools/feed_info.h",
         "driver/tools/find_all_users.h",
         "driver/tools/flags.h",
         "driver/tools/hlo_hash.h",
