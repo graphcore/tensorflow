@@ -457,19 +457,15 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     validation_execs = num_epochs * validation_steps
 
     # Training and validation
-    report_helper.assert_num_reports(4)
+    report_helper.assert_num_reports(2)
 
-    # # Training report
-    # report = pva.openReport(report_helper.find_reports()[0])
-    # self.assert_number_of_executions(report, train_execs // 2)
-    # report = pva.openReport(report_helper.find_reports()[2])
-    # self.assert_number_of_executions(report, train_execs // 2)
+    # Training report
+    report = pva.openReport(report_helper.find_reports()[0])
+    self.assert_number_of_executions(report, train_execs)
 
-    # # Validation report
-    # report = pva.openReport(report_helper.find_reports()[1])
-    # self.assert_number_of_executions(report, validation_execs // 2)
-    # report = pva.openReport(report_helper.find_reports()[3])
-    # self.assert_number_of_executions(report, validation_execs // 2)
+    # Validation report
+    report = pva.openReport(report_helper.find_reports()[1])
+    self.assert_number_of_executions(report, validation_execs)
 
   @test_util.run_v2_only
   def test_unsupported_data_types(self):
