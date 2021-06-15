@@ -81,7 +81,7 @@ class AllocationFinderPriorityTest(xla_test.XLATestCase,
       sess.run(output, {ids_ph: np.ones([50])})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 51592689)
+    self.assert_total_tile_memory(report, 51076429)
 
 
 if __name__ == "__main__":
