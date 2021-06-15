@@ -1040,8 +1040,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Allocator that should be used for infeeds.
   InfeedAllocator infeed_allocator;
 
+  mutable std::mutex infeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
-      infeed_iterators_;
+      infeed_iterators_ GUARDED_BY(infeeds_mutex_);
 
   mutable std::mutex outfeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>

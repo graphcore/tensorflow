@@ -915,6 +915,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     return;
   }
 
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (const auto& infeed_info : infeed_infos) {
     auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
     if (itr == infeed_iterators_.end()) {
@@ -951,6 +952,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 }
 
 Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (auto& infeed_info : infeed_infos) {
     const int64 replication_factor = current_replication_factor_;
     const std::string& feed_id = infeed_info.config.feed_id();
@@ -1023,6 +1025,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
     const FeedInfo& infeed_info) {
   TENSORFLOW_TRACEPOINT();
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   // Find the iterator.
   auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
   if (itr == infeed_iterators_.end()) {
@@ -3190,6 +3193,7 @@ void PoplarExecutor::CreateInfeedIterator(
     tensorflow::data::DatasetBase* dataset) {
   TENSORFLOW_TRACEPOINT();
   auto& feed_id = config.feed_id();
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   if (infeed_iterators_.contains(feed_id)) {
     LOG(FATAL) << "Infeed with id='" << feed_id
                << "' already exists. Consider changing the `feed_name` in "
@@ -3204,7 +3208,7 @@ void PoplarExecutor::CreateInfeedIterator(
 Status PoplarExecutor::DeleteInfeedIterator(const std::string& feed_id) {
   TENSORFLOW_TRACEPOINT();
   std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
-
+  std::unique_lock<std::mutex> il(infeeds_mutex_);
   if (io_threads_.size()) {
     return xla::FailedPrecondition(
         "Cannot delete infeed with id='%s' while in use", feed_id.c_str());
