@@ -18,10 +18,11 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import pva
 import numpy as np
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
@@ -31,12 +32,14 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 
 
-def count_event_type(events, event_type):
-  return sum([1 if x.type == event_type else 0 for x in events])
-
-
 class WhileLoopPerfTest(xla_test.XLATestCase):
   def testIpuWhilePerfTest(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def cond(i, v):
@@ -61,19 +64,14 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-      report = ReportJSON(self, sess)
-      report.reset()
-
       result = sess.run(r, {v: np.zeros([500], np.int32)})
       self.assertAllClose(result[0], np.broadcast_to(45, [500]))
 
-      report.parse_log()
-
-      # Check that there is only one real compile
-      report.assert_contains_one_compile_event()
-
-      # Check that there is only one execute
-      report.assert_num_execution_reports_equal(1)
+    # Check that there is only one real compile
+    report_helper.assert_num_reports(1)
+    report = pva.openReport(report_helper.find_report())
+    # Check that there is only one execute
+    self.assert_number_of_executions(report, 1)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import pva
 import numpy as np
 import test_utils as tu
 
@@ -25,6 +26,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import nn
@@ -32,6 +34,12 @@ from tensorflow.python.ops import nn
 
 class UpdateOpDependenciesTest(xla_test.XLATestCase):
   def testDontOutlineInplaceExpression(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [])
@@ -40,17 +48,19 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         pd = array_ops.placeholder(np.float32, [])
         e = pa + pb - pc + pd
 
-      report = tu.ReportJSON(self, sess)
-
-      report.reset()
       fd = {pa: 1, pb: 2, pc: 3, pd: 4}
       result = sess.run(e, fd)
       self.assertAllClose(result, 4)
 
-      report.parse_log()
-      report.assert_contains_no_compile_event()
+    report_helper.assert_num_reports(0)
 
   def tesInplaceAddCopyWithInplacePeer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       data_a = np.array([[10, -20], [5, 1]])
       data_b = np.array([[-12, 11], [12, -13]])
@@ -61,9 +71,6 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         d = pa + pb
         e = c / d
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           pa: data_a,
           pb: data_b,
@@ -72,18 +79,21 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       np_result = np.transpose(data_a) / (data_a + data_b)
       self.assertAllClose(result, np_result)
 
-      report.parse_log(
-          assert_len=4,
-          assert_msg="engine, compile_begin, compile_end, execute")
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'Copy_XLA_Args/arg0.*_to_transpose/transpose', 'add/add.*/AddTo',
-          'truediv/divide.*/Op/Divide'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'host-exchange-local-copy-',
+        'Copy_XLA_Args/arg0.*_to_transpose/transpose', 'add/add.*/AddTo',
+        'truediv/divide.*/Op/Divide'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def tesInplaceAddCopyWithInplacePeer2(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       data_a = np.array([[10, -10], [-5, 5]])
       data_b = np.array([[-15, 15], [25, -25]])
@@ -97,8 +107,6 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         c = a * pb + pc
         d = b / c
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
       fd = {
           pa: data_a,
           pb: data_b,
@@ -109,19 +117,22 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(d, fd)
       self.assertAllClose(result, np_result)
 
-      report.parse_log(
-          assert_len=4,
-          assert_msg="engine, compile_begin, compile_end, execute")
-
-      ok = [
-          '__seed*', 'Copy_XLA_Args/arg0.*_to_transpose/transpose'
-          'mul/multiply.*/Op/Multiply', 'add/add.*/AddTo',
-          'mul_1/multiply.*/Op/Multiply', 'add_1/add.*/AddTo',
-          'truediv/divide.*/Op/Divide'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'Copy_XLA_Args/arg0.*_to_transpose/transpose'
+        'mul/multiply.*/Op/Multiply', 'add/add.*/AddTo',
+        'mul_1/multiply.*/Op/Multiply', 'add_1/add.*/AddTo',
+        'truediv/divide.*/Op/Divide'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testInplaceOpAddCopyWithInplaceParent(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3])
@@ -134,8 +145,6 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         g = array_ops.slice(pa, [1], [2])
         h = f + g
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
       fd = {
           pa: [1, 2, 3],
           pb: [5, 6, 7],
@@ -144,18 +153,21 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(h, fd)
       self.assertAllClose(result, [5, 7])
 
-      report.parse_log(
-          assert_len=4,
-          assert_msg="engine, compile_begin, compile_end, execute")
-
-      ok = [
-          '__seed*', 'truediv/*/expression/Op/Add',
-          'truediv/*/expression/Op/Divide', 'add_1/add.*/Add',
-          'host-exchange-local-copy'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'truediv/*/expression/Op/Add',
+        'truediv/*/expression/Op/Divide', 'add_1/add.*/Add',
+        'host-exchange-local-copy'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testInplaceTuple(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_net(x):
@@ -176,23 +188,18 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float32, [4])
 
-      report = tu.ReportJSON(self, sess)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[x])
 
-      report.reset()
       x, y = sess.run(r, {x: np.full([4], 2)})
       self.assertAllClose(x, np.full([4], np.tanh(2)))
       self.assertAllClose(y, np.full([4], np.tanh(2)))
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh',
-          'Tanh_1/tanh*/Op/Tanh'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh', 'Tanh_1/tanh*/Op/Tanh'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

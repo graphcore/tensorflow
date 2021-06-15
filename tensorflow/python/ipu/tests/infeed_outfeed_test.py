@@ -55,6 +55,10 @@ next_feed_id.feed_count = 0
 class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -74,13 +78,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10,
                                                   shape=[4, 4],
                                                   repeat=False)
@@ -102,13 +109,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(46, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -133,13 +143,17 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTupleMerge(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.optimizations.merge_infeed_io_copies = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -164,13 +178,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, merge_infeed_io_copies=True)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNamed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -198,7 +215,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(4, [4, 4]))
@@ -206,6 +222,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRepeats(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -224,13 +244,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(5, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -254,13 +277,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -291,13 +317,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(129.5, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRuns(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -316,7 +345,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         return ipu.ipu_compiler.compile(my_net)
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(program(0))
       self.assertAllClose(result[0], np.broadcast_to(0, [4, 4]))
@@ -332,6 +360,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoInfeedsDifferentPrograms(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -354,7 +386,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         return ipu.ipu_compiler.compile(my_net)
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue1.initializer)
       sess.run(infeed_queue2.initializer)
       result = sess.run(program(5, infeed_queue1))
@@ -368,6 +399,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUndefinedShape(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
     with self.assertRaisesRegex(ValueError, r'Output shape \((\?|None),'):
@@ -375,6 +410,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMultipleInitializations(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     _ = infeed_queue.initializer
@@ -385,6 +424,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       _ = infeed_queue.initializer
 
   def _testDatasetExceptionTerminates(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     # Normally we would use the deprecated_graph_mode_only decorator but this
     # function is being called inside a subprocess independently.
     with context.graph_mode():
@@ -402,6 +445,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(r)
 
   def testDatasetExceptionTerminates(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     TIMEOUT = 10
     cmd = [
         sys.executable, __file__, "{}.{}".format(
@@ -415,6 +462,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
@@ -452,6 +503,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMultipleOutfeedEnqueue(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -474,6 +528,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMultipleOutfeedEnqueueDifferentGraphs(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -511,6 +568,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleOutfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -531,7 +591,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
       self.assertAllClose(result[0], np.broadcast_to(21, [4, 4]))
@@ -542,6 +601,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMultipleOutfeedsInSameGraph(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
     outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -570,7 +632,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dequeued2 = outfeed_queue2.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(res, {v: 0.0})
       out1, out2 = sess.run([dequeued1, dequeued2])
       self.assertAllEqual(np.arange(0, 100, step=10), out1)
@@ -578,6 +639,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -599,7 +664,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
@@ -611,6 +675,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -640,7 +708,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -666,6 +733,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTupleLast(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -696,7 +767,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -708,6 +778,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -737,7 +811,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -773,6 +846,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamedLast(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -803,7 +880,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -815,6 +891,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeedAndOutfeedGetAll(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -860,6 +939,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeedAndOutfeedGetLast(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
@@ -908,6 +991,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentPrograms(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
@@ -943,7 +1029,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       outfed1 = sess.run(outfeed1)
@@ -958,6 +1043,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNonTensorOutputs(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -980,7 +1069,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
@@ -993,6 +1081,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
@@ -1028,7 +1119,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
@@ -1043,6 +1133,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsSameFeedName(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
     outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
@@ -1076,7 +1169,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfeed_queue1.dequeue()
     outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess)
       sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       with self.assertRaisesRegex(errors.FailedPreconditionError,
                                   'Outfeed with id=\'a\' already exists'):
@@ -1084,6 +1176,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithNestedDictNotUnpacked(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     x = {
         "x0": np.ones(shape=[2], dtype=np.float32),
         "x1": np.ones(shape=[2], dtype=np.float32)
@@ -1112,6 +1208,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithOnlyDictIsUnpacked(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     x = {
         "x0": np.ones(shape=[2], dtype=np.float32),
         "x1": np.ones(shape=[2], dtype=np.float32)
@@ -1139,6 +1239,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedDeleteBeforeInitializeShouldRaiseException(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10)
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "delete_name")
     delete_op = infeed_queue.deleter
@@ -1149,6 +1253,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedNameCanBeReusedAfterDeletion(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     for _ in range(2):
       dataset = tu.create_single_increasing_dataset(10)
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "reuse_name")
@@ -1158,6 +1266,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedRestart(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     # Note: This is not something that we encourage or need to support,
     # but it is the current behaviour that we document in this test:
     # The infeed can be restarted by calling the `deleter` and then the
@@ -1191,6 +1303,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedOutfeedContinuousDequeuing(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     num_iterations = 1000
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
@@ -1226,6 +1342,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInfeedOutfeedContinuousDequeuingGetLastBeforeEnqueued(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     num_iterations = 1000
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
@@ -1253,6 +1373,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNameCanBeReusedAfterDeletion(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     for _ in range(2):
       outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
           "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
@@ -1267,6 +1391,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNameCanBeReusedWithSameShape(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with session_lib.Session() as sess:
       outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
           "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
@@ -1292,6 +1420,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNameCannotBeReusedWithDifferentShape(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with session_lib.Session() as sess:
       outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
           "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
@@ -1318,6 +1450,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNameCannotBeReusedWithDifferentType(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with session_lib.Session() as sess:
       outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
           "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
@@ -1344,6 +1480,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testCannotFeedInt64(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = dataset_ops.Dataset.range(5)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -1367,6 +1507,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testFeedBools(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     left = [False, False, True, True]
     right = [False, True, False, True]
     dataset = dataset_ops.Dataset.from_tensor_slices((left, right))
@@ -1393,6 +1537,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testHashTableInDataPipeline(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     keys = constant_op.constant(["brain", "salad", "surgery"])
     values = constant_op.constant([0, 1, 2], np.int32)
     table = lookup_ops.StaticHashTableV1(
@@ -1418,6 +1566,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testFeedInt8(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, dtype=np.int8, shape=[])
 
     def m(x):

@@ -33,6 +33,7 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
@@ -43,12 +44,13 @@ offline_compilation_needed = "--use_ipu_model" in os.environ.get(
     "TF_POPLAR_FLAGS", "")
 
 
-def _extra_ipu_config(opts):
+def _extra_ipu_config(cfg):
   if offline_compilation_needed:
-    opts.device_connection.version = 'ipu1'
-    opts.device_connection.type = ipu.utils.DeviceConnectionType.NEVER
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.device_connection.version = 'ipu1'
+    cfg.device_connection.type = ipu.utils.DeviceConnectionType.NEVER
     return
-  tu.add_hw_ci_connection_options(opts)
+  tu.add_hw_ci_connection_options(cfg)
 
 
 @contextlib.contextmanager
@@ -108,7 +110,16 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       def my_net(x):
         return x * x
 
@@ -117,7 +128,6 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
@@ -125,20 +135,30 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             res = []
           else:
             raise
-        events = report.get_event_trace(sess)
-        return res, events
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return res, num_reports
 
     with _temporary_executable_cache():
-      result0, report0 = self._run_in_new_process(build_and_run_model)
-      result1, report1 = self._run_in_new_process(build_and_run_model)
+      result0, num_reports_0 = self._run_in_new_process(build_and_run_model)
+      result1, num_reports_1 = self._run_in_new_process(build_and_run_model)
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, tu.count_ipu_compilations(report0))
-      self.assertEqual(0, tu.count_ipu_compilations(report1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       dataset = dataset_ops.Dataset.from_tensor_slices(
           np.ones(10, dtype=np.float32))
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
@@ -159,7 +179,6 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         dequeued = outfeed_queue.dequeue()
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         sess.run(infeed_queue.initializer)
         try:
           res, deq = sess.run([result, dequeued], {v: 0.0})
@@ -169,23 +188,33 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             deq = []
           else:
             raise
-        events = report.get_event_trace(sess)
-        return res, deq, events
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return res, deq, num_reports
 
     with _temporary_executable_cache():
-      result0, dequeued0, events0 = self._run_in_new_process(
+      result0, dequeued0, num_reports_0 = self._run_in_new_process(
           build_and_run_model)
-      result1, dequeued1, events1 = self._run_in_new_process(
+      result1, dequeued1, num_reports_1 = self._run_in_new_process(
           build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
       self.assertEqual(result0, result1)
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(0, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       def my_net(x):
         return gen_sendrecv_ops.ipu_send_to_host(x,
                                                  tensor_name="test_tensor",
@@ -205,23 +234,32 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             recv_device="/device:CPU:0")
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         _, received = sess.run([send_op, recv_op], feed_dict={v: 1.0})
-        events = report.get_event_trace(sess)
-        return received, events
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return received, num_reports
 
     with _temporary_executable_cache():
-      received0, events0 = self._run_in_new_process(build_and_run_model)
-      received1, events1 = self._run_in_new_process(build_and_run_model)
+      received0, num_reports_0 = self._run_in_new_process(build_and_run_model)
+      received1, num_reports_1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 1.0)
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(0, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       def my_net(x):
         return x * x
 
@@ -230,7 +268,6 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           res = sess.run(result, {v: [1.0, 2.0]})
         except errors.InvalidArgumentError as e:
@@ -238,22 +275,23 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             res = []
           else:
             raise
-        events = report.get_event_trace(sess)
-        return res, events
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return res, num_reports
 
     with _temporary_executable_cache():
       # Since each Graph will have its own XLA compilation cache,
       # the cache we test is the last-level Poplar executable cache.
 
       with ops.Graph().as_default():
-        result0, events0 = build_and_run_model()
+        result0, num_reports_0 = build_and_run_model()
 
       with ops.Graph().as_default():
-        result1, events1 = build_and_run_model()
+        result1, num_reports_1 = build_and_run_model()
 
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(0, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
@@ -322,7 +360,16 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_outside_compilation_scope(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       def my_net(x):
         y = x * x
         with ipu.scopes.outside_compilation_scope():
@@ -334,23 +381,32 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         received = sess.run(result, feed_dict={v: 1.0})
-        events = report.get_event_trace(sess)
-        return received, events
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return received, num_reports
 
     with _temporary_executable_cache():
-      received0, events0 = self._run_in_new_process(build_and_run_model)
-      received1, events1 = self._run_in_new_process(build_and_run_model)
+      received0, num_reports_0 = self._run_in_new_process(build_and_run_model)
+      received1, num_reports_1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 4.0)
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(0, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       cwd = os.getcwd()
       outputs = {
           "output_types": [dtypes.float32],
@@ -374,7 +430,6 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
         except errors.InvalidArgumentError as e:
@@ -382,20 +437,31 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             pass
           else:
             raise
-        return report.get_event_trace(sess)
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return num_reports
 
     with _temporary_executable_cache():
-      events0 = self._run_in_new_process(build_and_run_model)
-      events1 = self._run_in_new_process(build_and_run_model)
+      num_reports_0 = self._run_in_new_process(build_and_run_model)
+      num_reports_1 = self._run_in_new_process(build_and_run_model)
       # Expect second compilation as the executable should not be cached
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(1, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 1)
 
   @tu.skip_with_asan("non-deterministic dlopen user ops addresses with asan")
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
+    # Use the same report_helper to ensure the autoReport options are
+    # identical on each run so they do not affect the device hashes.
+    report_helper = tu.ReportHelper()
+
     def build_and_run_model():
+      cfg = IPUConfig()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.configure_ipu_system()
+
       cwd = os.getcwd()
       outputs = {
           "output_types": [dtypes.float32],
@@ -419,7 +485,6 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
       with session.Session() as sess:
-        report = tu.ReportJSON(self, sess, set_opts_fn=_extra_ipu_config)
         try:
           sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
         except errors.InvalidArgumentError as e:
@@ -427,14 +492,16 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             pass
           else:
             raise
-        return report.get_event_trace(sess)
+      num_reports = len(report_helper.find_reports())
+      report_helper.clear_reports()
+      return num_reports
 
     with _temporary_executable_cache():
-      events0 = self._run_in_new_process(build_and_run_model)
-      events1 = self._run_in_new_process(build_and_run_model)
+      num_reports_0 = self._run_in_new_process(build_and_run_model)
+      num_reports_1 = self._run_in_new_process(build_and_run_model)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, tu.count_ipu_compilations(events0))
-      self.assertEqual(0, tu.count_ipu_compilations(events1))
+      self.assertEqual(num_reports_0, 1)
+      self.assertEqual(num_reports_1, 0)
 
 
 if __name__ == "__main__":
