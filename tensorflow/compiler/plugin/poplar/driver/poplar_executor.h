@@ -971,16 +971,16 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // replica subset feature.
   int64 current_replication_factor_;
 
-  bool device_attached_;
-
   class IPUConfig {
    public:
     bool DeviceConfigured() const;
+    bool DeviceAttached() const;
     bool TargetConfigured() const;
     const poplar::Target& Target();
     const poplar::Target& TargetOrDie() const;
     const poplar::Device& Device() const;
     void SetDevice(poplar::Device&& device);
+    void SetDeviceAttached();
     void SetDeviceAndTarget(poplar::Device&& device);
     void SetTarget(const poplar::Target& target);
     void ClearDevice();
@@ -988,9 +988,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::recursive_mutex& Mutex();
 
    private:
+    bool device_attached_ = false;
     absl::optional<poplar::Device> device_;
     absl::optional<poplar::Target> target_;
-    std::recursive_mutex mutex_;
+    mutable std::recursive_mutex mutex_;
   };
   IPUConfig ipu_;
 
