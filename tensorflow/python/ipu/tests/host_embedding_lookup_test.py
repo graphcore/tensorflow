@@ -139,9 +139,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     with sl.Session() as sess:
       i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
-      report.reset()
       sess.run(
           gen_pop_datastream_ops.ipu_host_embedding_register(
               w, "host_embedding"))

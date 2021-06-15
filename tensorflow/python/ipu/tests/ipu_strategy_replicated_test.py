@@ -23,7 +23,8 @@ from tensorflow.python.eager import def_function
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_strategy
-from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
@@ -34,6 +35,13 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_all_reduce(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 2
+    cfg.device_connection.enable_remote_buffers = True
+    cfg.device_connection.type = utils.DeviceConnectionType.ON_DEMAND
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     def make_all_reduce_function(reduce_op):
@@ -45,9 +53,6 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
 
       return all_reduce_function
 
-    report = tu.ReportJSON(self, eager_mode=True, replicated=True, use_hw=True)
-    report.reset()
-
     with strategy.scope():
       summed = strategy.run(make_all_reduce_function(reduce_util.ReduceOp.SUM))
       self.assertEqual(1.0, summed.numpy())
@@ -58,10 +63,14 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def test_optimizer(self):
-    strategy = ipu_strategy.IPUStrategyV1()
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 2
+    cfg.device_connection.enable_remote_buffers = True
+    cfg.device_connection.type = utils.DeviceConnectionType.ON_DEMAND
+    cfg.configure_ipu_system()
 
-    report = tu.ReportJSON(self, eager_mode=True, replicated=True, use_hw=True)
-    report.reset()
+    strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
       initial_variable = 2.0

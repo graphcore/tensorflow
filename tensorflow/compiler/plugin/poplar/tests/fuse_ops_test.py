@@ -48,83 +48,95 @@ from tensorflow.random import normal
 
 class IpuFuseOpsTest(xla_test.XLATestCase):
   def testSigmoid(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa)
 
-      report = tu.ReportJSON(self, sess)
-
-      report.reset()
-
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.002473, 0.5, 0.997527])
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testSigmoidNotInplace(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa) + pa
 
-      report = tu.ReportJSON(self, sess)
-
-      report.reset()
-
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [-5.997527, 0.5, 6.997527])
 
-      report.parse_log(assert_len=4)
-
-      # pylint: disable=line-too-long
-      ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add']
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = ['__seed*', 'Sigmoid/sigmoid/Nonlinearity', 'add/add.*/Add']
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testSigmoidGrad(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="grad")
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_math_ops.sigmoid_grad(pa, pb)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.25, 0.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'SigmoidGrad/sigmoid-grad/NonLinearityGrad']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'SigmoidGrad/sigmoid-grad/NonLinearityGrad']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testRelu(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.0, 6.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'Relu/relu/Nonlinearity']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'Relu/relu/Nonlinearity']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testReluExpr(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def relu_like(x):
       return math_ops.maximum(x, array_ops.zeros_like(x))
 
@@ -145,93 +157,102 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       fe = {
           x: input_values,
           lr: 0.1,
       }
       sess.run((loss, train), fe)
 
-      report.parse_log(assert_len=6)
-
-      ok = [
-          '__seed*',
-          '/OnTileCopy',
-          'GradientDescent/update_vs',
-          'Sum/reduce',
-          'Maximum/relu/Nonlinearity',
-          'gradients/vs/Maximum_grad',
-          'gradients/vs/a/Conv2D_grad',
-          'vs/a/BiasAdd',
-          'vs/a/Conv2D',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*',
+        '/OnTileCopy',
+        'GradientDescent/update_vs',
+        'Sum/reduce',
+        'Maximum/relu/Nonlinearity',
+        'gradients/vs/Maximum_grad',
+        'gradients/vs/a/Conv2D_grad',
+        'vs/a/BiasAdd',
+        'vs/a/Conv2D',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testReluNotInPlace(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa) + pa
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [1, -2, 1]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2, -2, 2])
 
-      report.parse_log(assert_len=4)
-
-      # pylint: disable=line-too-long
-      ok = ['__seed*', 'Relu/relu/Nonlinearity', 'add/add.*/Add']
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = ['__seed*', 'Relu/relu/Nonlinearity', 'add/add.*/Add']
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testReluNotInPlace2(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [5], name="a")
         b = array_ops.concat([pa, pa], axis=0)
         c = nn_ops.relu(b)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [-2, -1, 0, 1, 2]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0, 0, 0, 1, 2, 0, 0, 0, 1, 2])
       self.assertTrue(len(result) == 10)
 
-      report.parse_log()
-
-      # pylint: disable=line-too-long
-      ok = ['__seed*', 'Relu/relu/Nonlinearity']
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = ['__seed*', 'Relu/relu/Nonlinearity']
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testReluGrad(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="grad")
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_nn_ops.relu_grad(pa, pb)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.5, 1.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'ReluGrad/relu-grad/NonLinearityGrad']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'ReluGrad/relu-grad/NonLinearityGrad']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testMaxPool(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
@@ -242,21 +263,23 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                         padding='SAME',
                         name="max")
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           pa: np.ones([1, 1, 10, 10]),
       }
       result = sess.run(c, fd)
       self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'max/max-pool*/maxPool5x5']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'max/max-pool*/maxPool5x5']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testFwdAndBwdMaxPool(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       input_values = np.arange(16).reshape(1, 4, 4, 1)
       output_grad = np.full((1, 2, 2, 1), 0.1)
@@ -277,9 +300,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                                      data_format='NCHW',
                                      padding='SAME')
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fe = {
           pa: input_values,
           pb: output_grad,
@@ -290,15 +310,20 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           input_grad, [[[[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]],
                         [[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]]]])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', '[cC]opy*', 'MaxPool/max-pool*/maxPool2x2/',
-          'MaxPoolGrad/max-pool-grad*/maxPool2x2'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', '[cC]opy*', 'MaxPool/max-pool*/maxPool2x2/',
+        'MaxPoolGrad/max-pool-grad*/maxPool2x2'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddTo(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -306,21 +331,21 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const = array_ops.constant(2.0, np.float16)
         c = pa + pb * const
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFrom(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -330,21 +355,21 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         # still should match as it will be reordered
         c = pa - const * pb
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddToVariable(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -352,21 +377,21 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa + pb * pc
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFromVariable(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -374,21 +399,21 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa - pc * pb
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionBiasApply(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
@@ -416,16 +441,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report_helper.clear_reports()
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
+    report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
         '__seed*',
         'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
     ]
     # pylint: enable=line-too-long
-    report = pva.openReport(report_helper.find_report())
     self.assert_compute_sets_contain_list(report, ok)
 
   def testConvolutionBiasApplyVariableLR(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -445,40 +476,39 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2]), lr: 0.1})
 
-      report.parse_log(
-          assert_len=6,
-          assert_msg=
-          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*', 'copy*/OnTileCopy-', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
+        'vs/conv2d_1/BiasAdd/fusion.1/Op/Add',
+        'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.2/ReduceFinalStage/IntermediateToOutput/Reduce',
+        'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
+        'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply*/Op/Multiply',
+        'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/Subtract',
+        'vs/conv2d/BiasAdd/fusion*/Op/Add',
+        'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
+        'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
+        'vs/conv2d/Conv2D/convolution*/Conv_1x1'
+    ]
+    # pylint: enable=line-too-long
 
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*', 'copy*/OnTileCopy-', 'vs/conv2d/BiasAdd/fusion*/Op/Add',
-          'vs/conv2d_1/BiasAdd/fusion.1/Op/Add',
-          'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.2/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
-          'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply*/Op/Multiply',
-          'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/Subtract',
-          'vs/conv2d/BiasAdd/fusion*/Op/Add',
-          'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
-          'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
-          'vs/conv2d/Conv2D/convolution*/Conv_1x1'
-      ]
-      # pylint: enable=line-too-long
-
-      report.assert_all_compute_sets_and_list(ok)
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testAvgPoolValid(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       np.random.seed(0)
       shape = [1, 10, 10, 1]
@@ -495,22 +525,23 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                              padding='VALID',
                              name="avg")
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'avg/avg-pool*/avgPool10x10']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'avg/avg-pool*/avgPool10x10']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testAvgPoolValidWithBroadcast(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       np.random.seed(0)
       shape = [1, 10, 10, 1]
@@ -529,22 +560,23 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                              padding='VALID',
                              name="avg")
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testAvgPoolSameWithReshape(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       np.random.seed(0)
       shape = [1, 10, 10, 1]
@@ -570,31 +602,29 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                              padding='SAME',
                              name="avg")
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'avg/avg-pool*/avgPool5x5']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testFullyConnectedWithBias(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[2, 2])
         weights = array_ops.placeholder(np.float32, shape=[2, 2])
         bias = array_ops.placeholder(np.float32, shape=[2])
         x_new = nn.xw_plus_b(x, weights, bias)
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       out = sess.run(x_new, {
           x: np.full([2, 2], 3),
@@ -603,26 +633,26 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       })
       self.assertAllClose(np.full([2, 2], 25), out)
 
-      report.parse_log(
-          assert_len=4,
-          assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy',
-          'xw_plus_b/MatMul/dot.*/Conv_1', 'xw_plus_b/fusion/Op/Add'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'host-exchange-local-copy', 'xw_plus_b/MatMul/dot.*/Conv_1',
+        'xw_plus_b/fusion/Op/Add'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testBatchedMatmulWithBias(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[2, 2, 2])
         weights = array_ops.placeholder(np.float32, shape=[2, 2])
         bias = array_ops.placeholder(np.float32, shape=[2])
         x_new = x @ weights + bias
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       out = sess.run(
           x_new, {
@@ -632,17 +662,20 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(np.full([2, 2, 2], 25), out)
 
-      report.parse_log(
-          assert_len=4,
-          assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy', '[cC]opy_',
-          'matmul/dot*/Conv', 'add/fusion/Op/Add'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'host-exchange-local-copy', '[cC]opy_', 'matmul/dot*/Conv',
+        'add/fusion/Op/Add'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvWithBnAndRelu(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -654,28 +687,25 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           y = layers_norm.batch_normalization(y, fused=True)
           y = nn_ops.relu(y)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log(
-          assert_len=6,
-          assert_msg=
-          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', '[cC]opy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
-          'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
-          'vs/Relu/relu/Nonlinearity'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', '[cC]opy_',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/conv2d/BiasAdd',
+        'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
+        'vs/Relu/relu/Nonlinearity'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testBiasApplyFixedLR(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       input_values = np.ones((1, 4, 4, 2))
 
@@ -695,10 +725,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
       fe = {
           x: input_values,
       }
@@ -715,6 +742,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertTrue(found)
 
   def testBiasApplyVariableLR(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       input_values = np.ones((1, 4, 4, 2))
 
@@ -734,10 +765,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
-
       sess.run(variables.global_variables_initializer())
-      report.reset()
       fe = {
           x: input_values,
           lr: 0.1,
@@ -755,6 +783,12 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertTrue(found)
 
   def testUnsortedSegmentSumConstLR(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def network(x, y1, y2):
@@ -787,13 +821,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y1 = array_ops.placeholder(np.int32, shape=[10])
         y2 = array_ops.placeholder(np.int32, shape=[10])
 
-      report = tu.ReportJSON(self, sess)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2])
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       out = sess.run(r, {
           x: np.ones(x.shape),
           y1: np.ones(y1.shape),
@@ -801,21 +833,26 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       })
       self.assertAllClose(out, [-4000.0])
 
-      report.parse_log(assert_len=6)
-
-      ok = [
-          '__seed*',
-          'host-exchange-local-copy-*/OnTileCopy-0',
-          '/negate/Op/Negate',
-          'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
-          '[cC]opy*/OnTileCopy',
-          'vs/Gather*/multi-slice',
-          'vs/add/add*/Add',
-          'vs/Sum/reduce*/Reduce',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*',
+        'host-exchange-local-copy-*/OnTileCopy-0',
+        '/negate/Op/Negate',
+        'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        '[cC]opy*/OnTileCopy',
+        'vs/Gather*/multi-slice',
+        'vs/add/add*/Add',
+        'vs/Sum/reduce*/Reduce',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testUnsortedSegmentSumVariableLR(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def network(x, y1, y2, lr):
@@ -849,13 +886,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y2 = array_ops.placeholder(np.int32, shape=[10])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, lr])
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       out = sess.run(
           r, {
               x: np.ones(x.shape),
@@ -865,21 +900,26 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(out, [-4000.0])
 
-      report.parse_log()
-
-      ok = [
-          '__seed*',
-          'host-exchange-local-copy-*/OnTileCopy-0',
-          '/negate/Op/Negate',
-          'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
-          '[cC]opy*/OnTileCopy',
-          'vs/Gather*/multi-slice',
-          'vs/add/add*/Add',
-          'vs/Sum/reduce*/Reduce',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*',
+        'host-exchange-local-copy-*/OnTileCopy-0',
+        '/negate/Op/Negate',
+        'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        '[cC]opy*/OnTileCopy',
+        'vs/Gather*/multi-slice',
+        'vs/add/add*/Add',
+        'vs/Sum/reduce*/Reduce',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScatterSingleLookup(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def network(x, y, la, lr):
@@ -905,13 +945,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         la = array_ops.placeholder(np.float32, shape=[10, 200])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y, la, lr])
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       out = sess.run(
           r, {
               x: np.ones(x.shape),
@@ -921,26 +959,31 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(out, [1.0])
 
-      report.parse_log()
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
-          'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
-          'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
-          'gradients/vs/absolute_difference/Abs_grad/Sign',
-          'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
-          'vs/embedding_lookup/multi-slice',
-          'vs/absolute_difference/Sub/subtract.*/Subtract',
-          'vs/absolute_difference/Abs/abs.*/Op/Absolute',
-          'vs/absolute_difference/Sum/reduce',
-          'vs/absolute_difference/value/multiply',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
+        'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
+        'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
+        'gradients/vs/absolute_difference/Abs_grad/Sign',
+        'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
+        'vs/embedding_lookup/multi-slice',
+        'vs/absolute_difference/Sub/subtract.*/Subtract',
+        'vs/absolute_difference/Abs/abs.*/Op/Absolute',
+        'vs/absolute_difference/Sum/reduce',
+        'vs/absolute_difference/value/multiply',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScatterMultipleLookupsWithReshape(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def network(x, y1, y2, la, lr):
@@ -970,13 +1013,11 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         la = array_ops.placeholder(np.float32, shape=[10, 400])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess)
-
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, la, lr])
 
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
       out = sess.run(
           r, {
               x: np.ones(x.shape),
@@ -987,25 +1028,31 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(out, [1.0])
 
-      report.parse_log()
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'host-exchange-local-copy-*/OnTileCopy-0',
-          'gradients/vs/absolute_difference/Abs_grad/Sign',
-          'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
-          '/negate/Op/Negate',
-          'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
-          'vs/embedding_lookup*/multi-slice',
-          'vs/absolute_difference/Sub/subtract.*/Subtract',
-          'vs/absolute_difference/Abs/abs.*/Op/Absolute',
-          'vs/absolute_difference/Sum/reduce',
-          'vs/absolute_difference/value/multiply',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+      '__seed*',
+      'host-exchange-local-copy-*/OnTileCopy-0',
+      'gradients/vs/absolute_difference/Abs_grad/Sign',
+      'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
+      '/negate/Op/Negate',
+      'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
+      'vs/embedding_lookup*/multi-slice',
+      'vs/absolute_difference/Sub/subtract.*/Subtract',
+      'vs/absolute_difference/Abs/abs.*/Op/Absolute',
+      'vs/absolute_difference/Sum/reduce',
+      'vs/absolute_difference/value/multiply',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddaXbY(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         px = array_ops.placeholder(np.float16, [3])
@@ -1014,21 +1061,19 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const_b = array_ops.constant(3.0, np.float16)
         axby = const_a * px + const_b * py
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
       result = sess.run(axby, fd)
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractaXbY(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         px = array_ops.placeholder(np.float16, [3])
@@ -1037,16 +1082,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const_b = array_ops.constant(3.0, np.float16)
         axby = const_a * px - const_b * py
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
       result = sess.run(axby, fd)
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
-      report.parse_log(assert_len=4)
-
   def testScaledAddaXbYMixed(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         px = array_ops.placeholder(np.float16, [3])
@@ -1057,9 +1103,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         scale_b_16 = math_ops.cast(scale_b, dtypes.float16)
         axby = scale_a_16 * px + scale_b_16 * py
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           px: [2.0, 0.5, 1.0],
           py: [1.0, 2.0, 3.0],
@@ -1069,16 +1112,19 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(axby, fd)
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   # Using a scale smaller than a float16 can represent
   # to ensure the cast is not actually being performed
   def testScaledAddXbYMixedSmallScale(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         px = array_ops.placeholder(np.float16, [3])
@@ -1086,9 +1132,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         scale_b = array_ops.placeholder(np.float32, [])
         scale_b_16 = math_ops.cast(scale_b, dtypes.float16)
         xby = px + scale_b_16 * py
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       # Note that the output xby is still a float16 so py is scaled up
       # to ensure the output is representable as a float16
@@ -1100,14 +1143,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(xby, fd)
       self.assertAllClose(result, [7.0e-4, 7.0e-4, 11.0e-4])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledAddToVariableFor2Scales(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -1115,9 +1161,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float16, [3])
         pb_scale = array_ops.placeholder(np.float16, [1])
         c = pa_scale * pa + pb_scale * pb
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       fd = {
           pa: [2.0, 0.5, 1.0],
@@ -1128,14 +1171,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'add/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testScaledSubtractFromVariableFor2Scales(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [3])
@@ -1143,9 +1189,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float16, [3])
         pb_scale = array_ops.placeholder(np.float16, [1])
         c = pa_scale * pa - pb_scale * pb
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           pa: [2.0, 0.5, 1.0],
           pb: [1.0, 2.0, 3.0],
@@ -1155,14 +1198,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'host-exchange-local-copy-', 'sub/scaled-inplace*/AddTo']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testPopOpNormScaleAddLiteralScalars(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def build_graph():
       k_constant6 = array_ops.constant([[0.0, 0.0], [0.0, 0.0]])
       k_constant5 = array_ops.constant([[1.0, 1.0], [1.0, 1.0]])
@@ -1178,43 +1224,46 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         r = xla.compile(build_graph, inputs=[])
-      report = tu.ReportJSON(self, sess)
-      report.reset()
       sess.run(r)
 
-      report.parse_log()
-      ok = [
-          'random_normal/RandomStandardNormal/rng.*/normal',
-          'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+      'random_normal/RandomStandardNormal/rng.*/normal',
+      'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testSquareSum(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.reduce_sum(pa * pa)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, 72)
 
-      report.parse_log(assert_len=4)
-
-      ok = ['__seed*', 'Sum/fusion*/Reduce']
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'Sum/fusion*/Reduce']
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testSquareSumHalfs(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [2], name="a")
         c = math_ops.reduce_mean(pa * pa)
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       # These values are too big to for float16 when squared and summed
       # but since the squaring and summation happen in float32 we should
@@ -1223,15 +1272,20 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, np.float16(32770.0))
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply*/Multiply',
-          'Mean/convert*/Cast', 'copy*_host-exchange-local-copy-*/OnTileCopy-*'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'Mean/fusion*/Reduce', 'Mean/multiply*/Multiply',
+        'Mean/convert*/Cast', 'copy*_host-exchange-local-copy-*/OnTileCopy-*'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionWithReverseWeights(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, [1, 4, 4, 2], name="x")
@@ -1256,10 +1310,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         loss = math_ops.reduce_mean(y)
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
-
-      report = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       train, loss = sess.run(
           [train, loss], {
@@ -1286,27 +1338,27 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           k2, np.array([[[[-3.3111112, -3.0111113], [-2.7777781,
                                                      -1.277778]]]]))
 
-      report.parse_log(
-          assert_len=6,
-          assert_msg=
-          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'copy*/OnTileCopy-',
-          'vs/conv2d_1/Conv2D/convolution*/Conv_1x1/Convolve',
-          'vs/conv2d/Conv2D/convolution*/Conv_2x2/Convolve',
-          'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_3x3/',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
-          'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
-          'Mean/',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'copy*/OnTileCopy-',
+        'vs/conv2d_1/Conv2D/convolution*/Conv_1x1/Convolve',
+        'vs/conv2d/Conv2D/convolution*/Conv_2x2/Convolve',
+        'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_3x3/',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo',
+        'gradients/vs/conv2d_1/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
+        'Mean/',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testUniformScaleAdd(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def fn():
@@ -1322,6 +1374,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(res[1] - res[0], 10)
 
   def testNormalScaleAdd(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def fn():

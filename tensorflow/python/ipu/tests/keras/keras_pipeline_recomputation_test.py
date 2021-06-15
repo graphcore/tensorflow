@@ -13,7 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
-from tensorflow.compiler.plugin.poplar.tests import test_utils
+import pva
+
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
@@ -26,6 +28,14 @@ from tensorflow.python.training import gradient_descent
 class KerasPipelineRecomputationTest(test.TestCase):
   @test_util.run_v2_only
   def testRecomputationCheckpoint(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 2
+    cfg.allow_recompute = True
+    cfg.configure_ipu_system()
+
     IM_SIZE = [64, 64, 3]
     BATCH_SIZE = 1
     NUM_FILTERS = 4
@@ -35,12 +45,6 @@ class KerasPipelineRecomputationTest(test.TestCase):
     ds = dataset_ops.Dataset.from_tensors((constant_d, constant_l))
     ds = ds.repeat(64)
     ds = ds.batch(BATCH_SIZE, drop_remainder=True)
-
-    report = test_utils.ReportJSON(self,
-                                   device_count_override=2,
-                                   eager_mode=True,
-                                   allow_recompute=True)
-    report.reset()
 
     def make_model(checkpoints=False):
       input_layer = keras.layers.Input(shape=IM_SIZE)
@@ -75,14 +79,24 @@ class KerasPipelineRecomputationTest(test.TestCase):
     with strategy.scope():
       m = make_model(checkpoints=False)
       m.fit(ds)
-      report.parse_log()
-      recomp_peak_liveness = report.get_peak_liveness()
+      report = pva.openReport(report_helper.find_report())
+      recomp_always_live = sum(tile.memory.alwaysLiveBytes
+                               for tile in report.compilation.tiles)
+      recomp_peak_liveness = recomp_always_live + max(
+          step.notAlwaysLiveBytes
+          for step in report.compilation.livenessProgramSteps)
 
-      report.reset()
+      report_helper.clear_reports()
+
       m = make_model(checkpoints=True)
       m.fit(ds)
-      report.parse_log()
-      ckpt_peak_liveness = report.get_peak_liveness()
+
+      report = pva.openReport(report_helper.find_report())
+      ckpt_always_live = sum(tile.memory.alwaysLiveBytes
+                             for tile in report.compilation.tiles)
+      ckpt_peak_liveness = ckpt_always_live + max(
+          step.notAlwaysLiveBytes
+          for step in report.compilation.livenessProgramSteps)
       self.assertGreater(recomp_peak_liveness, ckpt_peak_liveness)
 
 

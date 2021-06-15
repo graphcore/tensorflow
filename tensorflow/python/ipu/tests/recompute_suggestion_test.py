@@ -15,6 +15,7 @@
 
 import os
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -28,6 +29,13 @@ from tensorflow.python.ops import variables
 class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testRecomputeSuggestion(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.allow_recompute = True
+    cfg.configure_ipu_system()
+
     def my_model(a):
       b = array_ops.constant(np.random.rand(5, 5),
                              dtype=np.float32,
@@ -54,27 +62,22 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
 
     with tu.ipu_session(
         disable_grappler_optimizers=['arithmetic_optimization']) as sess:
-      report = tu.ReportJSON(self,
-                             sess,
-                             replicated=False,
-                             allow_recompute=True)
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
       sess.run(out, {inp: np.ones([5, 5])})
-      report.parse_log()
 
-      # 5 adds in a graph that only defined 4
-      ok = [
-          '__seed*',
-          'add_1/add.1/Op/Add',
-          'add_2/add.10/Op/Add',
-          'add_1/add.1.clone.1/Op/Add',
-          'add/add.4/Op/Add',
-          'add_1/add.1.clone/Op/Add',
-          'add_3/add.12/Op/Add',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # 5 adds in a graph that only defined 4
+    ok = [
+        '__seed*',
+        'add_1/add.1/Op/Add',
+        'add_2/add.10/Op/Add',
+        'add_1/add.1.clone.1/Op/Add',
+        'add/add.4/Op/Add',
+        'add_1/add.1.clone/Op/Add',
+        'add_3/add.12/Op/Add',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

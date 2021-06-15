@@ -30,7 +30,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
-from tensorflow.python.training import gradient_descent
 
 
 class IpuXlaConvTest(xla_test.XLATestCase):
@@ -87,7 +86,14 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                               np.zeros(self._ip_shp([1, 14, 14, 128], fmt)))
 
   def testConv3x3_WithBias(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     for fmt in self.data_formats:
+      report_helper.clear_reports()
       with self.session() as sess:
         with ops.device("/device:IPU:0"):
           pa = array_ops.placeholder(np.float32,
@@ -102,9 +108,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                       name='cnv3')
           output = nn_ops.bias_add(output, bi, data_format=fmt, name='ba3')
 
-        report = tu.ReportJSON(self, sess)
-        report.reset()
-
         fd = {
             pa: np.zeros(self._ip_shp([1, 14, 14, 64], fmt)),
             pb: np.zeros([3, 3, 64, 128]),
@@ -114,17 +117,23 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         self.assertAllClose(result,
                             np.zeros(self._ip_shp([1, 14, 14, 128], fmt)))
 
-        report.parse_log()
+      report = pva.openReport(report_helper.find_report())
+      ok = [
+          '__seed*', 'host-exchange-local-copy-',
+          'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/Op/Add'
+      ]
 
-        ok = [
-            '__seed*', 'host-exchange-local-copy-',
-            'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/Op/Add'
-        ]
-
-        report.assert_all_compute_sets_and_list(ok)
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testConv8x8_WithBias(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     for fmt in self.data_formats:
+      report_helper.clear_reports()
       with self.session() as sess:
         with ops.device("/device:IPU:0"):
           inp = array_ops.placeholder(np.float32,
@@ -140,9 +149,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                  name='cnv4')
           output = nn_ops.bias_add(output, bia, data_format=fmt, name='ba4')
 
-        report = tu.ReportJSON(self, sess)
-        report.reset()
-
         fd = {
             inp: np.zeros(self._ip_shp([1, 84, 84, 4], fmt)),
             wei: np.zeros([8, 8, 4, 16]),
@@ -152,17 +158,23 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         self.assertAllClose(result, np.zeros(self._ip_shp([1, 20, 20, 16],
                                                           fmt)))
 
-        report.parse_log()
-
-        ok = [
-            '__seed*', 'host-exchange-local-copy-',
-            'Copy_{*/input,*/weights}_to_{*actsRearranged,*weightsRearranged}',
-            'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
-        ]
-        report.assert_all_compute_sets_and_list(ok)
+      report = pva.openReport(report_helper.find_report())
+      ok = [
+          '__seed*', 'host-exchange-local-copy-',
+          'Copy_{*/input,*/weights}_to_{*actsRearranged,*weightsRearranged}',
+          'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
+      ]
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testConv1x1_WithBias(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     for fmt in self.data_formats:
+      report_helper.clear_reports()
       with self.session() as sess:
         with ops.device("/device:IPU:0"):
           inp = array_ops.placeholder(np.float32,
@@ -178,9 +190,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                  name='cnv5')
           output = nn_ops.bias_add(output, bia, data_format=fmt, name='ba5')
 
-        report = tu.ReportJSON(self, sess)
-        report.reset()
-
         fd = {
             inp: np.zeros(self._ip_shp([1, 1, 1, 4], fmt)),
             wei: np.zeros([1, 1, 4, 16]),
@@ -189,15 +198,20 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         result = sess.run(output, fd)
         self.assertAllClose(result, np.zeros(self._ip_shp([1, 1, 1, 16], fmt)))
 
-        report.parse_log()
-
-        ok = [
-            '__seed*', 'Copy_', 'cnv5*/convolution.*/Conv_1x1',
-            'ba5*/fusion/Op/Add'
-        ]
-        report.assert_all_compute_sets_and_list(ok)
+      report = pva.openReport(report_helper.find_report())
+      ok = [
+          '__seed*', 'Copy_', 'cnv5*/convolution.*/Conv_1x1',
+          'ba5*/fusion/Op/Add'
+      ]
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvBackpropInput(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         ins = constant_op.constant([2, 8, 8, 3], np.int32)
@@ -210,9 +224,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                               strides=[1, 1, 1, 1],
                                               padding="SAME")
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           fil: np.zeros([2, 2, 3, 5]),
           bck: np.zeros([2, 8, 8, 5]),
@@ -220,18 +231,23 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       result = sess.run(output, fd)
       self.assertAllClose(result, np.zeros([2, 8, 8, 3]))
 
-      report.parse_log()
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'Copy_',
-          'Conv2DBackpropInput/conv-with-reverse/Conv_2x2',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'Copy_',
+        'Conv2DBackpropInput/conv-with-reverse/Conv_2x2',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvBackpropFilter(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         inp = array_ops.placeholder(np.float32, [2, 8, 8, 3])
@@ -244,9 +260,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                                strides=[1, 1, 1, 1],
                                                padding="SAME")
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {
           inp: np.zeros([2, 8, 8, 3]),
           bck: np.zeros([2, 8, 8, 5]),
@@ -254,16 +267,21 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       result = sess.run(output, fd)
       self.assertAllClose(result, np.zeros([2, 2, 3, 5]))
 
-      report.parse_log()
-
-      ok = [
-          '__seed*',
-          'Copy_',
-          'Conv2DBackpropFilter/convolution.*/Conv_8x8',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*',
+        'Copy_',
+        'Conv2DBackpropFilter/convolution.*/Conv_8x8',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDepthwiseConv3x2(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 2, 2, 3], name="a")
@@ -271,9 +289,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float32, [6], name="c")
         c = nn.depthwise_conv2d(pa, pb, strides=[1, 1, 1, 1], padding="SAME")
         output = c + pc
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       fd = {
           pa: [[[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]],
@@ -285,15 +300,20 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           result, [[[[7, 6, 9, 7, 7, 4], [25, 21, 21, 16, 13, 7]],
                     [[43, 36, 33, 25, 19, 10], [61, 51, 45, 34, 25, 13]]]])
 
-      report.parse_log()
-
-      ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        '__seed*', 'host-exchange-local-copy-',
+        'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDepthwiseConv3x1(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 2, 2, 3], name="a")
@@ -301,9 +321,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float32, [3], name="c")
         c = nn.depthwise_conv2d(pa, pb, strides=[1, 1, 1, 1], padding="SAME")
         output = c + pc
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       fd = {
           pa: [[[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]],
@@ -314,17 +331,22 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       self.assertAllClose(
           result, [[[[7, 9, 7], [25, 21, 13]], [[43, 33, 19], [61, 45, 25]]]])
 
-      report.parse_log()
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDepthwiseConvBackpropInput(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = constant_op.constant([1, 8, 8, 3], dtype=np.int32)  # input sizes
@@ -336,25 +358,27 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                                       strides=[1, 1, 1, 1],
                                                       padding="SAME")
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {filt: np.zeros([3, 3, 3, 2]), outb: np.zeros([1, 8, 8, 6])}
       result = sess.run(c, fd)
       self.assertAllClose(result, np.zeros([1, 8, 8, 3]))
 
-      report.parse_log()
-
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*', 'copy*OnTileCopy-',
-          'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/Convolve',
-          'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/WeightsTranspose'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*', 'copy*OnTileCopy-',
+        'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/Convolve',
+        'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_3x3/WeightsTranspose'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDepthwiseConvBackpropInput1x1(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = constant_op.constant([1, 8, 8, 3], dtype=np.int32)  # input sizes
@@ -366,25 +390,21 @@ class IpuXlaConvTest(xla_test.XLATestCase):
                                                       strides=[1, 1, 1, 1],
                                                       padding="SAME")
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       fd = {pb: np.zeros([1, 1, 3, 2]), pc: np.zeros([1, 8, 8, 6])}
       result = sess.run(c, fd)
       self.assertAllClose(result, np.zeros([1, 8, 8, 3]))
 
-      report.parse_log()
+    report = pva.openReport(report_helper.find_report())
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'Copy_',
+        'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/*Transpose',
+        'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_1x1',
+    ]
+    # pylint: enable=line-too-long
 
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'Copy_',
-          'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/*Transpose',
-          'DepthwiseConv2dNativeBackpropInput/conv-with-reverse/Conv_1x1',
-      ]
-      # pylint: enable=line-too-long
-
-      report.assert_all_compute_sets_and_list(ok)
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDataLayout(self):
     cfg = IPUConfig()

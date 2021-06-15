@@ -18,9 +18,11 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import pva
 import sys
 
 from absl.testing import parameterized
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import combinations
@@ -28,13 +30,11 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors_impl
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import loops
-from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.scopes import ipu_scope, outside_compilation_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python.ipu.config import IPUConfig
 
 
@@ -194,30 +194,31 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       compiled_without_outside_scope = ipu_compiler.compile(
           without_outside_scope, inputs=[input1, input2])
 
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts.optimizations.maximum_send_recv_cluster_size = 12
-      opts.configure_ipu_system()
-
-      report = ReportJSON(self, sess, configure_device=False)
+      cfg = IPUConfig()
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
+      cfg.optimizations.maximum_send_recv_cluster_size = 12
+      cfg.configure_ipu_system()
 
       def count_stream_copies(compiled_func):
-        report.reset()
+        report_helper.clear_reports()
+
         out1, out2 = sess.run(compiled_func, {
             input1: [1.0, 1.0],
             input2: [1.0]
         })
         self.assertAllEqual(out1, [3.0, 3.0])
         self.assertAllEqual(out2, [6.0])
-        report.parse_log()
 
-        main_program_index = report.get_first_program_of_type(
-            'Switch')['children'][1]
-        main_program_seq = map(
-            report.get_program,
-            report.get_program(main_program_index)['children'])
+        report = pva.openReport(report_helper.find_report())
+
+        main_program = next(
+            p for p in report.compilation.programs
+            if p.type == pva.Program.Type.OnEveryTileSwitch).children[1]
+
         stream_copies = [
-            p for p in main_program_seq if p['type'] == 'StreamCopy'
+            p for p in main_program.children
+            if p.type == pva.Program.Type.StreamCopyBegin
         ]
         return len(stream_copies)
 

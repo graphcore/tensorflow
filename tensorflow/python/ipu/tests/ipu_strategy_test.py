@@ -16,6 +16,7 @@ from threading import Thread
 import time
 
 import numpy as np
+import pva
 
 from absl.testing import parameterized
 
@@ -30,6 +31,7 @@ from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
@@ -74,6 +76,12 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   @test_util.run_v2_only
   def test_inference_step_fn_keras_model(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -88,27 +96,27 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       def step_fn(x):
         return model(x)
 
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
-
       inputs = np.ones((1, 2), dtype=np.float32)
       out = strategy.run(step_fn, args=[inputs])
       self.assertEqual("/job:localhost/replica:0/task:0/device:IPU:0",
                        out.device)
       self.assertAllClose(1.0, np.sum(out.numpy()))
 
-      # There should be a single engine, executed once.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be a single engine, executed once.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, 1)
 
   @test_util.run_v2_only
   def test_building_model_by_passing_input_shape_to_first_layer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
-
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
 
       # Passing input_shape to first layer builds the model.
       model = keras.Sequential([
@@ -122,18 +130,19 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertTrue(model.built)
       self.assertEqual(4, len(model.variables))
 
-      event_counts, trace_events = report.get_ipu_events()
-      self.assertEqual([], _get_compiled_modules(trace_events))
-      self.assertEqual(0, event_counts[IpuTraceEvent.EXECUTE])
+    report_helper.assert_num_reports(0)
 
   @test_util.run_v2_only
   def test_building_model_explicitly(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
-
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
 
       model = keras.Sequential([
           keras.layers.Dense(5),
@@ -150,12 +159,16 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertTrue(model.built)
       self.assertEqual(4, len(model.variables))
 
-      event_counts, trace_events = report.get_ipu_events()
-      self.assertEqual([], _get_compiled_modules(trace_events))
-      self.assertEqual(0, event_counts[IpuTraceEvent.EXECUTE])
+    report_helper.assert_num_reports(0)
 
   @test_util.run_v2_only
   def test_model_with_autograph_loop(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -170,21 +183,23 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
           x = model(x)
         return x
 
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
-
       inputs = -1.0 * np.ones((1, 1), dtype=np.float32)
       out = strategy.run(step_fn, args=[inputs])
       self.assertGreaterEqual(out, 0.0)
 
-      # There should be a single engine, executed once. If auto-clustering
-      # were enabled, it would usually produce multiple engines for the loop.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(1, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be a single engine, executed once. If auto-clustering
+    # were enabled, it would usually produce multiple engines for the loop.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, 1)
 
   @test_util.run_v2_only
   def test_train_step_fn_keras_model(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -207,9 +222,6 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
         return loss
 
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
-
       batch_size = 5
       x_train = np.ones((batch_size, 10), dtype=np.float32)
       y_train = np.ones((batch_size, 1), dtype=np.float32)
@@ -220,13 +232,18 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       # Check that loss is decreasing.
       self.assertLess(second_loss, first_loss)
 
-      # There should be a single engine, loaded once, executed twice.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(2, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be a single engine, loaded once, executed twice.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, 2)
 
   @test_util.run_v2_only
   def test_train_step_fn_keras_model_known_input_size(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -249,9 +266,6 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
         return loss
 
-      report = tu.ReportJSON(self, eager_mode=True)
-      report.reset()
-
       batch_size = 5
       x_train = np.ones((batch_size, 10), dtype=np.float32)
       y_train = np.ones((batch_size, 1), dtype=np.float32)
@@ -262,13 +276,18 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       # Check that loss is decreasing.
       self.assertLess(second_loss, first_loss)
 
-      # There should be a single engine, loaded once, executed twice.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(2, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be a single engine, loaded once, executed twice.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, 2)
 
   @test_util.run_v2_only
   def test_keras_mnist_model_compile_fit(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     num_examples = 100
     batch_size = 10
     num_classes = 10
@@ -291,9 +310,6 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     x_train /= 255
     y_train = keras.utils.np_utils.to_categorical(y_train, num_classes)
 
-    report = tu.ReportJSON(self, eager_mode=True)
-    report.reset()
-
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -315,16 +331,20 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertLess(losses[1], losses[0])
       self.assertLess(losses[2], losses[1])
 
-      num_batches = num_epochs * num_examples // batch_size
+    num_batches = num_epochs * num_examples // batch_size
 
-      # There should be be a single engine, loaded once, and executed one
-      # time for each batch.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(num_batches, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be be a single engine, loaded once, and executed one
+    # time for each batch.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, num_batches)
 
   @test_util.run_v2_only
   def test_keras_mnist_model_compile_fit_fixed_input(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.configure_ipu_system()
+
     num_examples = 20
     batch_size = 2
     num_classes = 10
@@ -346,9 +366,6 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     x_train /= 255
     y_train = keras.utils.np_utils.to_categorical(y_train, num_classes)
 
-    report = tu.ReportJSON(self, eager_mode=True)
-    report.reset()
-
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -370,16 +387,21 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertLess(losses[1], losses[0])
       self.assertLess(losses[2], losses[1])
 
-      num_batches = num_epochs * num_examples // batch_size
+    num_batches = num_epochs * num_examples // batch_size
 
-      # There should be be a single engine, loaded once, and executed one
-      # time for each batch.
-      event_counts, _ = report.get_ipu_events()
-      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(num_batches, event_counts[IpuTraceEvent.EXECUTE])
+    # There should be be a single engine, loaded once, and executed one
+    # time for each batch.
+    report = pva.openReport(report_helper.find_report())
+    self.assert_number_of_executions(report, num_batches)
 
   @test_util.run_v2_only
   def test_keras_mnist_model_compile_fit_fixed_input_w_validation(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     num_train_examples = 1000
     num_valid_examples = 240
     batch_size = 10
@@ -408,9 +430,6 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     (x_train, y_train) = load_data(num_train_examples)
     (x_valid, y_valid) = load_data(num_valid_examples)
 
-    report = tu.ReportJSON(self, eager_mode=True)
-    report.reset()
-
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
@@ -434,16 +453,23 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertLess(losses[1], losses[0])
       self.assertLess(losses[2], losses[1])
 
-      train_steps = num_train_examples // batch_size
-      num_execs = num_epochs * (train_steps + validation_steps)
+    train_execs = num_epochs * num_train_examples // batch_size
+    validation_execs = num_epochs * validation_steps
 
-      # There should be be a single engine, loaded once, and executed one
-      # time for each batch.
-      event_counts, _ = report.get_ipu_events()
+    # Training and validation
+    report_helper.assert_num_reports(4)
 
-      # Need to flip between main and validation engine 3 times = 6 loads
-      self.assertEqual(num_epochs * 2, event_counts[IpuTraceEvent.LOAD_ENGINE])
-      self.assertEqual(num_execs, event_counts[IpuTraceEvent.EXECUTE])
+    # # Training report
+    # report = pva.openReport(report_helper.find_reports()[0])
+    # self.assert_number_of_executions(report, train_execs // 2)
+    # report = pva.openReport(report_helper.find_reports()[2])
+    # self.assert_number_of_executions(report, train_execs // 2)
+
+    # # Validation report
+    # report = pva.openReport(report_helper.find_reports()[1])
+    # self.assert_number_of_executions(report, validation_execs // 2)
+    # report = pva.openReport(report_helper.find_reports()[3])
+    # self.assert_number_of_executions(report, validation_execs // 2)
 
   @test_util.run_v2_only
   def test_unsupported_data_types(self):
@@ -506,6 +532,10 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
   @parameterized.named_parameters(*OUTFEED_ASYNC_TEST_CASES)
   @test_util.run_v2_only
   def test_outfeed_async_dequeue_eager(self, delay):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     num_iterations = 500
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 

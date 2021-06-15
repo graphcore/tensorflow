@@ -43,28 +43,37 @@ class TestClearXlaCompilationCache(xla_test.XLATestCase):
     self.feed_dict_ = {placeholder_input: [1.0]}
 
   def testCachedCompilationByDefault(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, compile_ipu_code=True)
-
       sess.run(self.outputs_, self.feed_dict_)
       sess.run(self.outputs_, self.feed_dict_)
       sess.run(self.outputs_, self.feed_dict_)
 
-      events = report.get_event_trace(sess)
-      self.assertEqual(tu.count_ipu_compilations(events), 1)
+      report_helper.assert_num_reports(1)
 
   def testClearingCausesRecompilation(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, compile_ipu_code=True)
-
       sess.run(self.outputs_, self.feed_dict_)
+      report_helper.assert_num_reports(1)
+
+      report_helper.clear_reports()
       sess.run([gen_ipu_ops.ipu_clear_all_xla_compilation_caches()])
       sess.run(self.outputs_, self.feed_dict_)
+      report_helper.assert_num_reports(1)
+
+      report_helper.clear_reports()
       sess.run([gen_ipu_ops.ipu_clear_all_xla_compilation_caches()])
       sess.run(self.outputs_, self.feed_dict_)
-
-      events = report.get_event_trace(sess)
-      self.assertEqual(tu.count_ipu_compilations(events), 3)
+      report_helper.assert_num_reports(1)
 
   def testClearingEmptyCacheIsSafe(self):
     with session.Session() as sess:
