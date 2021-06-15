@@ -32,15 +32,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTuple(self):
@@ -52,7 +43,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -85,7 +76,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
                                                   shape=[4, 4],
                                                   repeat=False)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -123,7 +114,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -160,7 +151,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -196,7 +187,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     # Note how the parameters are swapped around.
     def body(v1, v2, b, a):
@@ -229,7 +220,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -259,7 +250,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def cond(i, _):
       return i < 20
@@ -301,7 +292,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def cond(i, _):
       return i < 20
@@ -336,7 +327,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def program(iters):
       def body(v, x):
@@ -376,10 +367,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
-    infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset1, feed_name=next_feed_id())
-    infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset2, feed_name=next_feed_id())
+    infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset1)
+    infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset2)
 
     def program(iters, infeed_queue):
       def body(v, x):
@@ -417,7 +406,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net(iters):
       def body(loss, x):
@@ -457,7 +446,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
@@ -492,8 +481,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def inner_body(v):
       outfeed = outfeed_queue2.enqueue(v)
@@ -534,8 +523,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, x):
       v = v + x
@@ -580,8 +569,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -640,9 +629,9 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -687,8 +676,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -757,9 +746,9 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -794,10 +783,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1(v):
       outfeed = outfeed_queue1.enqueue(v)
@@ -848,8 +835,7 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1():
       with variable_scope.variable_scope("", use_resource=True):
@@ -888,10 +874,8 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1(v):
       outfeed = outfeed_queue1.enqueue(v)
@@ -933,51 +917,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       outfed2 = sess.run(outfeed2)
       for i in range(7):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
-
-  @test_util.deprecated_graph_mode_only
-  def testTwoOutfeedsDifferentProgramsSameFeedName(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.io_tiles.num_io_tiles = 32
-    cfg.io_tiles.place_ops_on_io_tiles = True
-    cfg.configure_ipu_system()
-
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
-
-    def body1(v):
-      outfeed = outfeed_queue1.enqueue(v)
-      v = v + 1
-      return (v, outfeed)
-
-    def my_net1(v):
-      r = ipu.loops.repeat(5, body1, (v))
-      return r
-
-    def body2(v):
-      outfeed = outfeed_queue2.enqueue(v)
-      v = v + 1
-      return (v, outfeed)
-
-    def my_net2(v):
-      r = ipu.loops.repeat(7, body2, (v))
-      return r
-
-    with ops.device('cpu'):
-      v1 = array_ops.placeholder(np.float32, [4, 4])
-      v2 = array_ops.placeholder(np.float32, [5, 5])
-
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
-      res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
-
-    outfeed_queue1.dequeue()
-    outfeed_queue2.dequeue()
-    with session_lib.Session() as sess:
-      sess.run(res1, {v1: np.ones([4, 4], np.float32)})
-      with self.assertRaisesRegex(errors.FailedPreconditionError,
-                                  'Outfeed with id=\'a\' already exists'):
-        sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
 
 
 if __name__ == "__main__":

@@ -30,6 +30,17 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest, deprecation
 
+_uid_counter = 0
+_uid_lock = threading.Lock()
+
+
+def _generate_unique_name():
+  with _uid_lock:
+    global _uid_counter
+    uid = _uid_counter
+    _uid_counter += 1
+  return str(uid)
+
 
 class IPUOutfeedMode(Enum):
   """Types used to control the IPUOutfeedQueue modes.
@@ -67,15 +78,19 @@ class IPUOutfeedQueue:
   replication_factor is now set automatically based on the model."""
   _io_batch_size_deprecated_instructions = """Accumulate the results manually or
   use accumulate_outfeed when using pipelining."""
+  _feed_name_deprecated_instructions = """No change needed.
+  feed_name is now automatically generated."""
 
   @deprecation.deprecated_args(None,
                                _replication_factor_deprecated_instructions,
                                "replication_factor")
   @deprecation.deprecated_args(None, _io_batch_size_deprecated_instructions,
                                "io_batch_size")
+  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
+                               "feed_name")
   def __init__(
       self,
-      feed_name,
+      feed_name=None,  # pylint: disable=unused-argument
       outfeed_mode=None,
       device_ordinal=0,
       replication_factor=None,  # pylint: disable=unused-argument
@@ -113,7 +128,7 @@ class IPUOutfeedQueue:
 
     self._outfeed_all = self._outfeed_mode == IPUOutfeedMode.ALL
     self._device_ordinal = device_ordinal
-    self._feed_name = str(feed_name)
+    self._feed_name = _generate_unique_name()
 
     self._operations = []
     self._structure = None
@@ -134,7 +149,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
        def body(v):
          v = v + 1
@@ -155,7 +170,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
        def body(v):
          v = v + 1
@@ -177,7 +192,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
        def body(v):
          v = v + 1
@@ -273,7 +288,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
         def body(input):
           output = input + 1
@@ -312,7 +327,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
         def body(input):
           output = input + 1
@@ -355,7 +370,7 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
         def body(input):
           output = input + 1

@@ -41,8 +41,8 @@ class IterationCounterTest(test_util.TensorFlowTestCase):
     dataset = dataset.map(lambda i: math_ops.cast(i, np.int32))
     dataset = dataset.batch(batch_size=1, drop_remainder=True)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed1")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed1")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(x):
       with variable_scope.variable_scope("vs", use_resource=True):

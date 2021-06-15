@@ -25,6 +25,7 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training.basic_session_run_hooks import NeverTriggerTimer
 from tensorflow.python.training.basic_session_run_hooks import SecondOrStepTimer
+from tensorflow.python.util import deprecation
 
 
 class IPULoggingTensorHook(session_run_hook.SessionRunHook):
@@ -39,14 +40,20 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
 
   LoggingMode = ipu_outfeed_queue.IPUOutfeedMode
 
-  def __init__(self,
-               every_n_iter=None,
-               every_n_secs=None,
-               at_end=False,
-               formatter=None,
-               logging_mode=LoggingMode.LAST,
-               feed_name="logging_hook",
-               replication_factor=1):
+  _feed_name_deprecated_instructions = """No change needed.
+  feed_name is now automatically generated."""
+
+  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
+                               "feed_name")
+  def __init__(
+      self,
+      every_n_iter=None,
+      every_n_secs=None,
+      at_end=False,
+      formatter=None,
+      logging_mode=LoggingMode.LAST,
+      feed_name=None,  # pylint: disable=unused-argument
+      replication_factor=1):  # pylint: disable=unused-argument
     """Initializes the hook.
 
     Args:
@@ -61,7 +68,6 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
       logging_mode: `IPULoggingTensorHook.LoggingMode` that determines the
         behaviour when enqueuing multiple tensor values between dequeues
         (e.g. print all of them or only the last one).
-      feed_name: `string`. The name of the outfeed queue. Must be unique.
       replication_factor: `int`, the number of replicas from which logging
         is performed.
     """
@@ -81,7 +87,7 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     self._formatter = formatter
 
     self._outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=feed_name, outfeed_mode=logging_mode)
+        outfeed_mode=logging_mode)
 
     self._dequeue_op = None
     self._deleter_op = None

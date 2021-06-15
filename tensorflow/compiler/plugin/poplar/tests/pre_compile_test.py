@@ -128,8 +128,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
     def build_and_run_model():
       dataset = dataset_ops.Dataset.from_tensor_slices(
           np.ones(10, dtype=np.float32))
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
       def body(v, x):
         v = v + x

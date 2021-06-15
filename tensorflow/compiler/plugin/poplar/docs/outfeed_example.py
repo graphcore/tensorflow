@@ -15,8 +15,8 @@ ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[2, 20]))
 ds = ds.repeat()
 
 # Host side queues that handle data transfer to and from the device
-infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
-outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
 
 # A simple inference step that predicts classes for an image with a model

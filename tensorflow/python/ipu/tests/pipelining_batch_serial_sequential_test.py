@@ -49,8 +49,8 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):

@@ -28,17 +28,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
-def next_feed_id():
-  with next_feed_id._lock:  # pylint: disable=protected-access
-    result = 'feed' + str(next_feed_id._feed_count)  # pylint: disable=protected-access
-    next_feed_id._feed_count += 1
-    return result
-
-
-next_feed_id._feed_count = 0  # pylint: disable=protected-access
-next_feed_id._lock = threading.Lock()  # pylint: disable=protected-access
-
-
 class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
   @staticmethod
   def _run_in_threads(fns):
@@ -89,9 +78,8 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
       def build_and_run_model():
         dataset = dataset_ops.Dataset.from_tensor_slices(
             np.ones(10, dtype=np.float32))
-        infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-            dataset, next_feed_id())
-        outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+        infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+        outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
         def body(v, x):
           v = v + x
@@ -131,9 +119,8 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
         barrier.wait()
         dataset = dataset_ops.Dataset.from_tensor_slices(
             np.ones(10, dtype=np.float32))
-        infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-            dataset, next_feed_id())
-        outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+        infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+        outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
         def body(v, x):
           v = v + x

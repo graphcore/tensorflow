@@ -134,8 +134,8 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
 
     with strategy.scope():
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def stage1(lr, images, labels):
         partial = keras.layers.Dense(256, activation="relu")(images)

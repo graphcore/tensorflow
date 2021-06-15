@@ -49,15 +49,6 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 def _gradient_accumulation_loop(test_wrapper,
                                 fwd_fn,
                                 inputs_fn,
@@ -77,8 +68,8 @@ def _gradient_accumulation_loop(test_wrapper,
   with g.as_default(), test_wrapper.test_session(graph=g) as session:
     dataset = dataset_fn()
     inputs = inputs_fn()
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     with variable_scope.variable_scope("ipu", use_resource=True, reuse=False):
 
@@ -576,8 +567,8 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     labels = np.repeat(y, gradient_accumulation_count)
     dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     class CastingGradientDescent(optimizer_lib.Optimizer):  # pylint: disable=abstract-method
       """Compute update using the dtype of the gradient, and then cast to
