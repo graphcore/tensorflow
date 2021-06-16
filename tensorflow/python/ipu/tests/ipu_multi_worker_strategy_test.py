@@ -857,8 +857,8 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
       labels = [y] * num_iterations * gradient_accumulation_count
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def stage1(feature, label):
         w0 = variable_scope.get_variable(name="w0", initializer=initial_w0)
@@ -970,8 +970,8 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
 
     with strategy.scope():
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def stage1(lr, images, labels):
         partial = keras.layers.Dense(256, activation="relu")(images)
@@ -1225,7 +1225,7 @@ class IPUMultiWorkerStrategyV1MultiProcessTest(googletest.TestCase):
       dataset = dataset_ops.Dataset.from_tensor_slices([0.0]).repeat()
       # Test with a dataset host op.
       dataset = dataset.map(lambda x: x + task_id)
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "distributed")
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       def body(v, x):
         v += x

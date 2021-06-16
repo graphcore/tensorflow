@@ -38,7 +38,7 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_dual_increasing_dataset(3)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       def my_net(lr):
         def my_model(lr, loss, x, y):

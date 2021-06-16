@@ -56,8 +56,7 @@ single TensorFlow constant, and then maps the output of that DataSet into a
 pair of tensors.  It then arranges for the DataSet to be repeated indefinitely.
 
 After the DataSet is constructed, the two data feed queues are constructed. The
-``IPUInfeedQueue`` takes the DataSet as a parameter, along with a name.  Every
-queue in the system must have a unique name.
+``IPUInfeedQueue`` takes the DataSet as a parameter.
 
 The ``IPUOutfeedQueue`` has extra options to control how it collects and outputs
 the data sent to it.  None of these are used in this example.

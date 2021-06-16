@@ -43,8 +43,8 @@ class GclTest(test_util.TensorFlowTestCase):
     a = np.ones([tiles_per_ipu, 1], dtype=np.float32)
     b = np.ones([tiles_per_ipu, 1], dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors((a, b))
-    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net():
       with ipu_shard(0):

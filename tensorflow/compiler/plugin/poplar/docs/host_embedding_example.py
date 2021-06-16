@@ -39,7 +39,7 @@ ds = ds.batch(batch_size, drop_remainder=True)
 ds = ds.repeat()
 
 # The host side queues
-infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
+infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
 
 # Set the learning rate
 lr = 0.0001

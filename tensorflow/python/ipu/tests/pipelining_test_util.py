@@ -37,15 +37,6 @@ from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 def get_num_ipus(device_mapping):
   min_ipus = max(device_mapping) + 1
   return int(math.pow(2, math.ceil(math.log2(min_ipus))))
@@ -163,8 +154,8 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       if device_mapping is None:
         device_mapping = range(len(stages))
@@ -273,8 +264,8 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       def opt_fn(loss):
         global_replication_factor = replication_factor * (process_count or 1)

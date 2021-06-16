@@ -36,17 +36,7 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
 # Various graph constructor helpers
-
-
 def _get_variable(name, shape, init):
   return variable_scope.get_variable(name,
                                      shape,
@@ -130,7 +120,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -148,7 +138,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -192,7 +182,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -210,7 +200,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -256,7 +246,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -274,7 +264,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -319,7 +309,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -337,7 +327,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
@@ -388,7 +378,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -406,7 +396,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                      inputs=[x, l])
+                                                       inputs=[x, l])
 
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()

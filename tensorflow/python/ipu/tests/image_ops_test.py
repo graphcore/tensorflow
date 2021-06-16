@@ -25,15 +25,6 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 class ImageOpsTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testNormaliseImage(self):
@@ -45,8 +36,8 @@ class ImageOpsTest(test_util.TensorFlowTestCase):
                                                     shape=im_shape,
                                                     dtype=np.float32)
 
-      infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-      outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+      infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
       def body(image):
         if im_type:

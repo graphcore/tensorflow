@@ -44,11 +44,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors((data, data))
-    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset,
-                                             feed_name="infeed_" +
-                                             str(proportion))
-    outfeed = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed_" +
-                                                str(proportion))
+    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net():
       with ops.name_scope("infeed"):
@@ -126,7 +123,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     data = np.arange(128, dtype=np.float16)
     dataset = dataset_ops.Dataset.from_tensors(data)
-    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="infeed")
+    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net():
       with ops.name_scope("infeed"):
@@ -180,7 +177,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors(data)
-    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="infeed2")
+    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net():
       with ipu_shard(0):
@@ -241,7 +238,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     dataset = dataset_ops.Dataset.from_tensors(data)
-    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="infeed3")
+    infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net():
       with ipu_shard(0):
@@ -307,7 +304,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     data = np.ones((tiles_per_ipu, tiles_per_ipu), dtype=np.float32)
     a = array_ops.placeholder(np.float32, data.shape)
-    outfeed = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+    outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net(a):
       with ipu_shard(0):

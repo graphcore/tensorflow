@@ -25,15 +25,6 @@ from tensorflow.python.ops import nn
 from tensorflow.python.platform import test
 import test_utils as tu
 
-feed_counter = 0
-
-
-def generate_feed_name():
-  global feed_counter
-  feed_counter += 1
-
-  return "feed" + str(feed_counter)
-
 
 # pylint: disable=abstract-method
 class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
@@ -144,8 +135,7 @@ class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
     normalised_refs, mean_refs, var_refs = self._reference_training(
         acts_val, scale_val, offset_val, epsilon, replicas, group_size)
 
-    fwd_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=generate_feed_name())
+    fwd_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def fwd_fn(acts, scale, offset):
       # Slice out the input based on the replica index.
@@ -206,8 +196,7 @@ class DistributedBatchNormTest(xla_test.XLATestCase, parameterized.TestCase):
         grad_val, acts_val, scale_val, mean_refs, var_refs, epsilon, replicas,
         batch_size, group_size)
 
-    grad_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=generate_feed_name())
+    grad_outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def grad_fn(grad, acts, scale, mean, var):
       # Slice out the values based on replica index.

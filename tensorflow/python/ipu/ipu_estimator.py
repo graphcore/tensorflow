@@ -278,38 +278,6 @@ class _IPUOutfeedLifecycleHook(session_run_hook.SessionRunHook):
       self._run_delete_op_in_new_graph_and_session()
 
 
-class _FeedIdAllocator:
-  """Allocates feed IDs with maximum reuse to minimize recompilations.
-  The feeds are deleted after each IPUEstimator function call,
-  so the IDs only need to be different for function calls that can
-  overlap (e.g. from different threads)."""
-
-  _lock = threading.Lock()  # Protecting all class members.
-  _thread_ids = []  # All the threads that have ever allocated an ID.
-
-  @classmethod
-  def _alloc_thread_index(cls):
-    thread_id = _thread.get_ident()
-
-    with cls._lock:
-      if not thread_id in cls._thread_ids:
-        cls._thread_ids.append(thread_id)
-      index = cls._thread_ids.index(thread_id)
-
-    assert index >= 0
-    return index
-
-  @classmethod
-  def alloc_infeed_id(cls, mode):
-    index = cls._alloc_thread_index()
-    return "ipu_estimator_{}_{}_infeed".format(index, mode)
-
-  @classmethod
-  def alloc_outfeed_id(cls, mode):
-    index = cls._alloc_thread_index()
-    return "ipu_estimator_{}_{}_outfeed".format(index, mode)
-
-
 class _IPUGlobalStepCounterAndStopHook(session_run_hook.SessionRunHook):
   def __init__(self, iterations_per_loop, num_steps, final_step):
     if num_steps is None and final_step is None:
@@ -797,7 +765,6 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
 
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
         dataset,
-        _FeedIdAllocator.alloc_infeed_id(mode),
         prefetch_depth=config.ipu_run_config.prefetch_depth)
     hooks.append(_IPUInfeedLifecycleHook(infeed_queue))
 
@@ -805,7 +772,6 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
       outfeed_queue = None
     else:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          _FeedIdAllocator.alloc_outfeed_id(mode),
           outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
       hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
 

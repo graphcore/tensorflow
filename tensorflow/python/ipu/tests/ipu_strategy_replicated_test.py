@@ -81,7 +81,7 @@ class IPUStrategyV1ReplicatedTest(test_util.TensorFlowTestCase):
       data = [1.0, 2.0]
       dataset = dataset_ops.Dataset.from_tensor_slices((data))
       dataset = dataset.repeat(num_iterations)
-      infeed = ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="feed")
+      infeed = ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       optimizer = keras.optimizer_v2.gradient_descent.SGD(learning_rate)
 

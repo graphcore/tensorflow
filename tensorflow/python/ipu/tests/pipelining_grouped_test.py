@@ -117,8 +117,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed1")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed1")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -177,8 +177,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -245,8 +245,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed4")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed4")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
     device_mapping = [2, 0, 1]
 
     def stage1(c, **kwargs):
@@ -314,8 +314,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed5")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed5")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
     device_mapping = [2, 2, 2]
 
     def stage1(c, **kwargs):
@@ -386,8 +386,8 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed6")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed6")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -444,7 +444,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     with ops.device('cpu'):
       y = array_ops.placeholder(np.float32, shape=[])
@@ -493,7 +493,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testDuplicateInputsOutputs(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed9")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def stage1(x, y):
       return x, y, y, x

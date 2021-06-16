@@ -257,7 +257,7 @@ class WhileLoopTest(xla_test.XLATestCase):
                                                   data_shape=[4, 1, 8],
                                                   label_shape=[4, 1, 128])
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       def my_net():
         def my_model(loss, x, y):

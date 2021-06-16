@@ -214,7 +214,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testReuseSequence(self):
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue("outfeed-1")
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def inner_loop(x):
       @ipu.outlined_function

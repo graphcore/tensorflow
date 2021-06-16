@@ -27,10 +27,9 @@ def run_collective_ops(inputs, generate_collective_ops, num_replicas):
   with tu.ipu_session() as sess:
     dataset = dataset_ops.Dataset.from_tensor_slices(inputs)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
-                                                       feed_name="infeed")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net(x):
       y = generate_collective_ops(x)

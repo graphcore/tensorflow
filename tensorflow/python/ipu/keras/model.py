@@ -538,9 +538,9 @@ class _IpuModelBase(KerasModel):
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
-          ds, "infeed", prefetch_depth=prefetch_depth)
-      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-          "outfeed", outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
+          ds,
+          prefetch_depth=prefetch_depth)
+      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)

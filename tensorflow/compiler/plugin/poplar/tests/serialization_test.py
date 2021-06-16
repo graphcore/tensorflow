@@ -306,13 +306,11 @@ class IpuSerializationTest(xla_test.XLATestCase):
         "os.environ",
         {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
-      infeed_name = FeedId.Next("feed")
       infeed_canonical_name = '1'
-      outfeed_name = FeedId.Next("feed")
       outfeed_canonical_name = '2'
       infeed_spec = dataset.element_spec[0]
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, infeed_name)
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(outfeed_name)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
       def body(const, inp):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -402,13 +400,11 @@ class IpuSerializationTest(xla_test.XLATestCase):
         "os.environ",
         {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
-      infeed_name = FeedId.Next("feed")
       infeed_canonical_name = '1'
-      outfeed_name = FeedId.Next("feed")
       outfeed_canonical_name = '2'
       infeed_spec = dataset.element_spec[0]
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, infeed_name)
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(outfeed_name)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
       def body(const, inp):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -476,8 +472,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
       num_elements = 10
       shape = (3, 5)
       dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, FeedId.Next("infeed"))
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       with tempfile.TemporaryDirectory() as tmp_folder:
         output_folder = self._create_tmp_symlink(tmp_folder)
@@ -519,8 +514,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
         return (image_1, array_ops.reshape(image_2, shape_2))
 
       dataset = dataset.map(dataset_parser)
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, FeedId.Next("infeed"))
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       with tempfile.TemporaryDirectory() as tmp_folder:
         output_folder = self._create_tmp_symlink(tmp_folder)
@@ -550,8 +544,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
         return {"a": image_1, "b": array_ops.reshape(image_2, shape_2)}
 
       dataset = dataset.map(dataset_parser)
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, FeedId.Next("infeed"))
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       with tempfile.TemporaryDirectory() as tmp_folder:
         output_folder = self._create_tmp_symlink(tmp_folder)
@@ -581,8 +574,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
         return {"a": image_1, "b": array_ops.reshape(image_2, shape_2)}
 
       dataset = dataset.map(dataset_parser)
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, FeedId.Next("infeed"))
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       with tempfile.TemporaryDirectory() as tmp_folder:
         output_folder = self._create_tmp_symlink(tmp_folder)

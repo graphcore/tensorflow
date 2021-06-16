@@ -535,7 +535,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     num_iterations = 500
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     @def_function.function
     def training_step(x):

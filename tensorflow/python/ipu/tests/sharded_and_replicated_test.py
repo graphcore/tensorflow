@@ -38,15 +38,6 @@ from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 class TestShardedAndReplicated(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
@@ -55,10 +46,8 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
       shape = [2]
       dataset = tu.create_single_increasing_dataset(3, shape)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name=next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
       def body(v, x):
         with ipu.scopes.ipu_shard(0):
@@ -106,8 +95,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
     with sl.Session() as sess:
       dataset = tu.create_dual_increasing_dataset(3)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       def my_graph(in_loss, inp, lab):
         with ops.device("/device:IPU:0"):
@@ -184,8 +172,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
     with sl.Session() as sess:
       dataset = tu.create_dual_increasing_dataset(3)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       def my_graph(in_loss, inp, lab):
         with ops.device("/device:IPU:0"):
@@ -315,10 +302,8 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
       dataset = tu.create_single_increasing_dataset(3, shape)
 
       # Setup/run the first program with a replication factor of 2
-      infeed_queue_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
-      outfeed_queue_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name=next_feed_id())
+      infeed_queue_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
       body_sharded = self.create_body_2shards(outfeed_queue_sharded)
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
@@ -330,10 +315,8 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
       sess.run(result_sharded)
 
       # Setup/run the second program with a replication factor of 4
-      infeed_queue_not_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
-      outfeed_queue_not_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name=next_feed_id())
+      infeed_queue_not_sharded = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue_not_sharded = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
       body_not_sharded = self.create_body_not_sharded(
           outfeed_queue_not_sharded)
 
@@ -366,8 +349,7 @@ class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
       shape = [2]
       dataset = tu.create_single_increasing_dataset(3, shape)
 
-      shared_infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, feed_name=next_feed_id())
+      shared_infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
       sess.run(shared_infeed_queue.initializer)
 
       # Setup/run the first program with a replication factor of 2

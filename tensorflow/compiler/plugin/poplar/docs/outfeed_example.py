@@ -7,7 +7,7 @@ from tensorflow import keras
 import tensorflow as tf
 
 # The host side queue
-outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
 
 # A custom training loop

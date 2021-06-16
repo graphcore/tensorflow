@@ -349,8 +349,8 @@ def pipeline(computational_stages,
     #...
 
     # Create the data queues from/to IPU.
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Create a pipelined model which is split accross two stages.
     def stage1(image):
@@ -410,8 +410,8 @@ def pipeline(computational_stages,
     #...
 
     # Create the data queues from/to IPU.
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Create a pipelined model which is split accross two stages.
     def stage1(lr, images, labels):

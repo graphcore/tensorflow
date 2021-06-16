@@ -74,12 +74,9 @@ class FifoTest(test_util.TensorFlowTestCase):
     def dataset_fn():
       return tu.create_single_increasing_dataset(10, shape=[1])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset_fn(),
-                                                       feed_name="infeed")
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name="outfeed1")
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name="outfeed2")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset_fn())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(x):
       x1 = ipu.internal_ops.fifo(x, 5, offload=True)

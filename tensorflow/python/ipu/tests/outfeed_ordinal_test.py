@@ -31,10 +31,8 @@ class OutfeedOrdinalTest(test_util.TensorFlowTestCase):
     cfg.auto_select_ipus = [1, 1]
     cfg.configure_ipu_system()
 
-    outfeed_1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed1',
-                                                      device_ordinal=0)
-    outfeed_2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue('outfeed2',
-                                                      device_ordinal=1)
+    outfeed_1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(device_ordinal=0)
+    outfeed_2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(device_ordinal=1)
 
     def graph1(tensor):
       enqueue_op = outfeed_1.enqueue(tensor)
