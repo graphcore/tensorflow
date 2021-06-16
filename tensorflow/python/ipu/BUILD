@@ -1438,19 +1438,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "augru_test",
-    size = "medium",
-    srcs = ["tests/augru_test.py"],
-    shard_count = 6,
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-    ],
-)
-
-tf_py_test(
     name = "candidate_sampler_test",
     size = "large",
     srcs = ["tests/candidate_sampler_test.py"],
