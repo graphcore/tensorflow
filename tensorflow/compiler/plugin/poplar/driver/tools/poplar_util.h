@@ -93,8 +93,8 @@ bool JsonParse(const std::string& json_str, Json::Value& attributes);
 absl::optional<std::string> GetPoplarEngineOption(const std::string& opt);
 
 // Get the shard Id for a given output of the given instruction.
-uint64 GetShardForOutputIndex(const HloInstruction* inst,
-                              int flattened_output_tuple_index);
+int64 GetShardForOutputIndex(const HloInstruction* inst,
+                             int flattened_output_tuple_index);
 
 // Get the virtual graph for a particular output of an operation. Operations
 // like Parameter, Infeed, Call, While, Tuple can have multiple tensor

@@ -322,6 +322,10 @@ class TestCaseExtensions(object):
     ]
     self._assert_all_in_tolerance(cycles, expected, tolerance)
 
+  def assert_number_of_executions(self, report, n):
+    """Asserts the number of executions in the report."""
+    self.assertLen(report.execution.runs, n)
+
 
 # Attach everything from TestCaseExtensions onto TensorFlowTestCase.
 # Note that XLATestCase inherits from TensorFlowTestCase.
@@ -366,14 +370,24 @@ class ReportHelper():
                              cfg,
                              *,
                              output_graph_profile=True,
-                             output_execution_profile=False):
-    """Sets autoReport engine options in the IPUConfig."""
+                             output_execution_profile=False,
+                             max_execution_reports=1000):
+    """Sets autoReport engine options in the IPUConfig.
+
+    Set outputExecutionProfile to True to allow execution reports to be
+    generated.
+
+    If execution reports are enabled, max_execution_reports controls the
+    maximum number of executions included in a report.
+    """
     self._set_options_called = True
     options = {
         "autoReport.directory": self._directory,
         "autoReport.outputGraphProfile": str(output_graph_profile).lower(),
         "autoReport.outputExecutionProfile":
         str(output_execution_profile).lower(),
+        "autoReport.executionProfileProgramRunCount":
+        str(max_execution_reports),
     }
     cfg.compilation_poplar_options = options
     cfg._profiling.auto_assign_report_subdirectories = True  # pylint: disable=protected-access
@@ -384,7 +398,9 @@ class ReportHelper():
     assert num_reports == n, f"Expected {n} report(s) but found {num_reports}"
 
   def find_reports(self):
-    """Finds and returns the paths to generated report files."""
+    """Finds and returns the paths to generated report files in order of
+    creation time (oldest first).
+    """
     paths = []
     for d in self._find_report_subdirectories():
       files_ = list(self._find_report_files_in_subdirectory(d))
@@ -396,6 +412,8 @@ class ReportHelper():
       # Add report file absolute path to result.
       paths.append(str(files_[0]))
 
+    # Sort by oldest first
+    paths.sort(key=lambda p: os.stat(p).st_ctime)
     return paths
 
   def find_report(self):

@@ -100,8 +100,7 @@ using OutfeedQueueType = SPSCOutfeedQueue<2048>;
 
 class ModuleFilenames {
  public:
-  ModuleFilenames(const HloModule& module, int64 device_hash,
-                  const std::string& serialization_folder);
+  ModuleFilenames(uint64 hash, const std::string& serialization_folder);
   std::string CachedExecutableFilename() const;
   std::string CompilationLockFilename() const;
   std::string SerializedExecutableFilename() const;
@@ -568,6 +567,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.selection_order();
   }
 
+  int64 GetPoplarDeviceHash() const { return poplar_device_hash_; }
+
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
@@ -621,7 +622,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool HaveCachedExecutable(const ModuleFilenames& filenames) const;
 
-  ModuleFilenames GetModuleFilenames(const HloModule& module) const;
+  ModuleFilenames GetModuleFilenames(uint64 hash) const;
 
   // Cleanup function called before the IPU device configurations are
   // reset.
@@ -971,16 +972,16 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // replica subset feature.
   int64 current_replication_factor_;
 
-  bool device_attached_;
-
   class IPUConfig {
    public:
     bool DeviceConfigured() const;
+    bool DeviceAttached() const;
     bool TargetConfigured() const;
     const poplar::Target& Target();
     const poplar::Target& TargetOrDie() const;
     const poplar::Device& Device() const;
     void SetDevice(poplar::Device&& device);
+    void SetDeviceAttached();
     void SetDeviceAndTarget(poplar::Device&& device);
     void SetTarget(const poplar::Target& target);
     void ClearDevice();
@@ -988,9 +989,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::recursive_mutex& Mutex();
 
    private:
+    bool device_attached_ = false;
     absl::optional<poplar::Device> device_;
     absl::optional<poplar::Target> target_;
-    std::recursive_mutex mutex_;
+    mutable std::recursive_mutex mutex_;
   };
   IPUConfig ipu_;
 
@@ -1051,8 +1053,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Allocator that should be used for infeeds.
   InfeedAllocator infeed_allocator;
 
+  mutable std::mutex infeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
-      infeed_iterators_;
+      infeed_iterators_ GUARDED_BY(infeeds_mutex_);
 
   mutable std::mutex outfeeds_mutex_;
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>

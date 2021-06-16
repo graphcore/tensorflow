@@ -444,7 +444,6 @@ bool PoplarExecutor::OutfeedContext::Matches(
 PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
       current_engine_(nullptr),
-      device_attached_(false),
       poplar_device_hash_(0),
       configured_(false),
       seed_generator_(CreateDefaultSeedGenerator()),
@@ -916,6 +915,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     return;
   }
 
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (const auto& infeed_info : infeed_infos) {
     auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
     if (itr == infeed_iterators_.end()) {
@@ -952,6 +952,7 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 }
 
 Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (auto& infeed_info : infeed_infos) {
     const int64 replication_factor = current_replication_factor_;
     const std::string& feed_id = infeed_info.config.feed_id();
@@ -1024,6 +1025,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
     const FeedInfo& infeed_info) {
   TENSORFLOW_TRACEPOINT();
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   // Find the iterator.
   auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
   if (itr == infeed_iterators_.end()) {
@@ -1419,28 +1421,39 @@ PoplarExecutor::CreateDeviceDescription() const {
 }
 
 bool PoplarExecutor::IPUConfig::DeviceConfigured() const {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   return device_.has_value();
 }
 
+bool PoplarExecutor::IPUConfig::DeviceAttached() const {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
+  return device_attached_;
+}
+
 bool PoplarExecutor::IPUConfig::TargetConfigured() const {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   return target_.has_value();
 }
 
-void PoplarExecutor::IPUConfig::ClearDevice() { device_.reset(); }
+void PoplarExecutor::IPUConfig::ClearDevice() {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
+  device_attached_ = false;
+  device_.reset();
+}
 
 void PoplarExecutor::IPUConfig::Clear() {
-  device_.reset();
+  std::lock_guard<std::recursive_mutex> g(mutex_);
+  ClearDevice();
   target_.reset();
 }
 
 std::recursive_mutex& PoplarExecutor::IPUConfig::Mutex() { return mutex_; }
 
 const poplar::Target& PoplarExecutor::IPUConfig::Target() {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   if (!target_ && PoplarXlaFlags::Get().use_ipu_model) {
     // If the device has not been configured via configure_ipu_system, but we
     // have requested an IPU model, then we create a CPU device.
-    std::lock_guard<std::recursive_mutex> g(mutex_);
-    // Poplar CPU device
     device_ = poplar::Device::createCPUDevice();
     target_ = device_->getTarget();
   }
@@ -1448,25 +1461,35 @@ const poplar::Target& PoplarExecutor::IPUConfig::Target() {
 }
 
 const poplar::Target& PoplarExecutor::IPUConfig::TargetOrDie() const {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   CHECK(target_);
   return *target_;
 }
 
 const poplar::Device& PoplarExecutor::IPUConfig::Device() const {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   CHECK(device_);
   return *device_;
 }
 
 void PoplarExecutor::IPUConfig::SetDevice(poplar::Device&& device) {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   device_ = std::move(device);
 }
 
+void PoplarExecutor::IPUConfig::SetDeviceAttached() {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
+  device_attached_ = true;
+}
+
 void PoplarExecutor::IPUConfig::SetDeviceAndTarget(poplar::Device&& device) {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   device_ = std::move(device);
   target_ = device_->getTarget();
 }
 
 void PoplarExecutor::IPUConfig::SetTarget(const poplar::Target& target) {
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   target_ = target;
 }
 
@@ -1517,7 +1540,9 @@ const IpuOptions& PoplarExecutor::GetIpuOptions() const {
 
 const bool PoplarExecutor::IpuOptionsConfigured() const { return configured_; }
 
-bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
+bool PoplarExecutor::PoplarDeviceIsAttached() const {
+  return ipu_.DeviceAttached();
+}
 
 StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
     absl::Span<const poplar::Device> device_list, int32 ordinal,
@@ -1579,8 +1604,9 @@ StatusOr<std::size_t> PoplarExecutor::AttachToPoplarDevice(
 
 Status PoplarExecutor::AttachToPoplarDevice() {
   TENSORFLOW_TRACEPOINT();
-  if (device_attached_) {
-    return InternalError("Already attached to device");
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
+  if (ipu_.DeviceAttached()) {
+    return Status::OK();
   }
 
   const bool wait_for_device =
@@ -1637,7 +1663,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     }
 
     VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
-    device_attached_ = true;
+    ipu_.SetDeviceAttached();
   } catch (poplar::poplar_error e) {
     return xla::InternalError("Unable to open Poplar device for ordinal %d: %s",
                               ordinal_, e.what());
@@ -1654,7 +1680,6 @@ void PoplarExecutor::DetachFromPoplarDevice() {
 
     ipu_.Device().detach();
     ipu_.ClearDevice();
-    device_attached_ = false;
   }
 }
 
@@ -1816,7 +1841,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
         "but it should have been reset automatically by the call to "
         "'tensorflow.python.ipu.config.configure_ipu_system'.");
   }
-  if (device_attached_) {
+  if (ipu_.DeviceAttached()) {
     if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
       // If there is no config associated to the open device then it is a CPU
       // device: dettach from it and initialize a Poplar device instead.
@@ -1829,7 +1854,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   current_config_ = cfg;
   configured_ = true;
 
-  if (!device_attached_) {
+  if (!ipu_.DeviceAttached()) {
     TF_RETURN_IF_ERROR(CreatePoplarTarget());
     if (cfg.device_connection_type() == IpuDeviceConnectionType::ALWAYS) {
       TF_RETURN_IF_ERROR(AttachToPoplarDevice());
@@ -2024,11 +2049,9 @@ Status PoplarExecutor::CreateSerializedExecutableDirIfMissing() const {
   return CreateDirIfMissing(SerializationFolder());
 }
 
-ModuleFilenames::ModuleFilenames(const HloModule& module, int64 device_hash,
+ModuleFilenames::ModuleFilenames(uint64 hash,
                                  const std::string& serialization_folder)
-    : basename_(tensorflow::strings::Printf(
-          "%0llx",
-          tensorflow::Hash64Combine(HloHash(&module).GetHash(), device_hash))),
+    : basename_(tensorflow::strings::Printf("%0llx", hash)),
       serialization_folder_(serialization_folder) {}
 
 std::string ModuleFilenames::CachedExecutableFilename() const {
@@ -2041,9 +2064,8 @@ std::string ModuleFilenames::CompilationLockFilename() const {
                                   basename_ + ".compile_lock");
 }
 
-ModuleFilenames PoplarExecutor::GetModuleFilenames(
-    const HloModule& module) const {
-  return ModuleFilenames(module, poplar_device_hash_, SerializationFolder());
+ModuleFilenames PoplarExecutor::GetModuleFilenames(uint64 hash) const {
+  return ModuleFilenames(hash, SerializationFolder());
 }
 
 bool PoplarExecutor::HaveCachedExecutable(
@@ -3168,6 +3190,7 @@ void PoplarExecutor::CreateInfeedIterator(
     tensorflow::data::DatasetBase* dataset) {
   TENSORFLOW_TRACEPOINT();
   auto& feed_id = config.feed_id();
+  std::unique_lock<std::mutex> l(infeeds_mutex_);
   if (infeed_iterators_.contains(feed_id)) {
     LOG(FATAL) << "Infeed with id='" << feed_id
                << "' already exists. Consider changing the `feed_name` in "
@@ -3182,7 +3205,7 @@ void PoplarExecutor::CreateInfeedIterator(
 Status PoplarExecutor::DeleteInfeedIterator(const std::string& feed_id) {
   TENSORFLOW_TRACEPOINT();
   std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
-
+  std::unique_lock<std::mutex> il(infeeds_mutex_);
   if (io_threads_.size()) {
     return xla::FailedPrecondition(
         "Cannot delete infeed with id='%s' while in use", feed_id.c_str());

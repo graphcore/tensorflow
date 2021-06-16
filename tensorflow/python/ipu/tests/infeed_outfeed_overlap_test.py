@@ -44,6 +44,12 @@ next_feed_id.feed_count = 0
 class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -63,13 +69,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10,
                                                   shape=[4, 4],
                                                   repeat=False)
@@ -91,13 +102,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(46, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -122,13 +138,19 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTupleMerge(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.optimizations.merge_infeed_io_copies = True
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -153,13 +175,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, merge_infeed_io_copies=True, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNamed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -187,7 +214,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(4, [4, 4]))
@@ -195,6 +221,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRepeats(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -213,13 +245,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(5, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -243,13 +280,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
     def dataset_parser(value):
@@ -280,13 +322,18 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(129.5, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRuns(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -305,7 +352,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
         return ipu.ipu_compiler.compile(my_net)
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(program(0))
       self.assertAllClose(result[0], np.broadcast_to(0, [4, 4]))
@@ -321,6 +367,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoInfeedsDifferentPrograms(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -343,7 +395,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
         return ipu.ipu_compiler.compile(my_net)
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue1.initializer)
       sess.run(infeed_queue2.initializer)
       result = sess.run(program(5, infeed_queue1))
@@ -357,6 +408,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
@@ -394,6 +451,11 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleOutfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -414,7 +476,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
       self.assertAllClose(result[0], np.broadcast_to(21, [4, 4]))
@@ -425,6 +486,11 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMultipleOutfeedsInSameGraph(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
     outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -453,7 +519,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     dequeued2 = outfeed_queue2.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(res, {v: 0.0})
       out1, out2 = sess.run([dequeued1, dequeued2])
       self.assertAllEqual(np.arange(0, 100, step=10), out1)
@@ -461,6 +526,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -482,7 +553,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
@@ -494,6 +564,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -523,7 +599,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -549,6 +624,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTupleLast(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -579,7 +660,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -591,6 +671,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -620,7 +706,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -656,6 +741,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamedLast(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
 
@@ -686,7 +777,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfed = outfeed_queue.dequeue()
 
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -698,6 +788,11 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentPrograms(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
@@ -733,7 +828,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       outfed1 = sess.run(outfeed1)
@@ -748,6 +842,12 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedNonTensorOutputs(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
@@ -770,7 +870,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
@@ -783,6 +882,11 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
@@ -818,7 +922,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
@@ -833,6 +936,11 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsSameFeedName(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
     outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
@@ -866,7 +974,6 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
     outfeed_queue1.dequeue()
     outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      tu.ReportJSON(self, sess, num_io_tiles=32)
       sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       with self.assertRaisesRegex(errors.FailedPreconditionError,
                                   'Outfeed with id=\'a\' already exists'):

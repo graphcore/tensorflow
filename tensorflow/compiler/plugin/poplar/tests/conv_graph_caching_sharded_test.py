@@ -18,7 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-from test_utils import ReportJSON
+import pva
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -33,6 +34,13 @@ from tensorflow.python.ops import variables
 
 class ConvGraphCachingTest(xla_test.XLATestCase):
   def testConvolutionsDontMatchDifferentDevices(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.auto_select_ipus = 2
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -51,23 +59,19 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                 use_bias=False,
                 kernel_initializer=init_ops.ones_initializer())(y)
 
-      report = ReportJSON(self, sess, sharded=True)
-
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
-
-      # Note how there are two convolutions
-      ok = [
-          '__seed*', '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
-          'Copy_vs/conv2d/Conv2D/convolution.*',
-          'vs/conv2d_1/Conv2D/convolution.*'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    report = pva.openReport(report_helper.find_report())
+    # Note how there are two convolutions
+    ok = [
+        '__seed*', '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
+        'Copy_vs/conv2d/Conv2D/convolution.*',
+        'vs/conv2d_1/Conv2D/convolution.*'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

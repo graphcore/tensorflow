@@ -258,7 +258,10 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
 
   @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
   def testLSTMLayerInferenceAllZeroWeight(self, h_init, c_init):
-    tu.ReportJSON(self, eager_mode=True)
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(0)
     # Run with all-0 weights
     weight0 = 1.
@@ -271,7 +274,10 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
 
   @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
   def testLSTMLayerInferenceAllOneWeight(self, h_init, c_init):
-    tu.ReportJSON(self, eager_mode=True)
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(0)
     # Run with all-1 weights
     weight1 = 1.
@@ -284,7 +290,10 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
 
   @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
   def testLSTMLayerInferenceRandomWeight(self, h_init, c_init):
-    tu.ReportJSON(self, eager_mode=True)
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(0)
 
     # Run with random weights
@@ -400,7 +409,10 @@ class LSTMTest(xla_test.XLATestCase, parameterized.TestCase):  #pylint: disable=
 
   @parameterized.named_parameters(*LAYER_WEIGHT_CASES)
   def testLSTMLayerTraining(self, h_init, c_init):
-    tu.ReportJSON(self, eager_mode=True)
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(42)
 
     # Run with random weights
