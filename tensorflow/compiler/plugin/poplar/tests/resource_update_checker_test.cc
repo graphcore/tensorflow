@@ -37,7 +37,7 @@ resource_update {
 loop {
   param0 = f32[] parameter(0)
   param1 = f32[] parameter(1)
-  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[] get-tuple-element(call_ru), index=0
   gte1 = f32[] get-tuple-element(call_ru), index=1
   ROOT root = (f32[], f32[]) tuple(gte1, gte0)
@@ -71,7 +71,7 @@ resource_update {
 loop {
   param0 = f32[] parameter(0)
   param1 = f32[] parameter(1)
-  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   ROOT t_ru = ((f32[],f32[])) tuple(call_ru)
 }
 
@@ -102,7 +102,7 @@ resource_update {
 loop {
   param0 = f32[] parameter(0)
   param1 = f32[] parameter(1)
-  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[] get-tuple-element(call_ru), index=0
   gte1 = f32[] get-tuple-element(call_ru), index=1
   gte2 = f32[] get-tuple-element(call_ru), index=1
@@ -136,7 +136,7 @@ resource_update {
 loop {
   param0 = f32[] parameter(0)
   param1 = f32[] parameter(1)
-  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[] get-tuple-element(call_ru), index=0
   gte1 = f32[] get-tuple-element(call_ru), index=1
   add1 = f32[] add(gte0, gte1)
@@ -170,7 +170,7 @@ resource_update {
 loop {
   param0 = f32[] parameter(0)
   param1 = f32[] parameter(1)
-  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(param0, param1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[] get-tuple-element(call_ru), index=0
   gte1 = f32[] get-tuple-element(call_ru), index=1
   ROOT root = (f32[], f32[], f32[]) tuple(gte1, gte1, gte0)

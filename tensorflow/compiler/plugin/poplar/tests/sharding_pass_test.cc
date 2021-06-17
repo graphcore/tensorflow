@@ -1792,7 +1792,7 @@ loop {
   param1 = f32[] parameter(1)
   add2 = f32[] add(param0, param0), sharding={maximal device=1}
   add3 = f32[] add(param1, param1), sharding={maximal device=1}
-  call_ru = (f32[],f32[]) call(add2, add3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[],f32[]) call(add2, add3), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[] get-tuple-element(call_ru), index=0
   gte1 = f32[] get-tuple-element(call_ru), index=1
   ROOT root = (f32[], f32[]) tuple(gte1, gte0), sharding={{maximal device=0}, {maximal device=0}}

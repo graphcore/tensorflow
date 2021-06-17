@@ -20,7 +20,7 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python import ops
+from tensorflow.python.framework import ops
 from tensorflow.python.client import session
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
