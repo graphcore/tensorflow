@@ -175,103 +175,9 @@ class ResourceUpdateOp : public XlaOpKernel {
 REGISTER_IPU_OP("ResourceUpdate", ResourceUpdateOp);
 
 class PipelineOp : public XlaOpKernel {
- public:
-  explicit PipelineOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
-    DataTypeVector output_types;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types));
-    OP_REQUIRES(ctx, output_types.size() == 0,
-                errors::InvalidArgument(
-                    "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
-                                     &gradient_accumulation_count_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
-                                     &batch_serialization_iterations_));
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("offload_activations", &offload_activations_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_gradient_accumulation_buffers",
-                                     &offload_gradient_accumulation_buffers_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_weight_sharding",
-                                     &replicated_weight_sharding_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("recomputation_mode", &recomputation_mode_));
-    OP_REQUIRES_OK(
-        ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
-  }
-
-  void Compile(XlaOpKernelContext* ctx) override {
-    auto builder = ctx->builder();
-    // First get all the arguments and compile the computation.
-    int num_resource_args = 0;
-    auto arguments_or =
-        poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
-    OP_REQUIRES_OK(ctx, arguments_or.status());
-    std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
-
-    VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
-            << ") function with " << input_types_.size() << " inputs including "
-            << num_resource_args << " resources.";
-
-    XlaCompiler::CompileOptions compile_options =
-        poplarplugin::GetDefaultCompileOptions();
-    compile_options.return_updated_values_for_all_resources = true;
-
-    // Compile the computation.
-    XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(
-        ctx, poplarplugin::CompileFunction(ctx, compile_options, *to_apply_,
-                                           arguments, &result));
-
-    // Get the non constant XLA arguments.
-    auto inputs_or =
-        poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
-    OP_REQUIRES_OK(ctx, inputs_or.status());
-    std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
-
-    // For pipelines we make sure that the inputs and outputs have the same
-    // shape and that the values for every output at index `i` are:
-    // 1. the input value `i` if the input is not a resource variable
-    // 2. the input value `i` if the input is a resource variable which has not
-    //   been modified
-    // 3. the modified resource variable corresponding to the value at input `i`
-    // To do so we wrap the pipeline in another call, and set up the tuple
-    // accordingly.
-    xla::XlaComputation wrapped_pipeline;
-    {
-      std::unique_ptr<xla::XlaBuilder> cb =
-          ctx->builder()->CreateSubBuilder("pipeline_wrapper");
-      std::vector<xla::XlaOp> inner_inputs(inputs.size());
-      std::vector<xla::XlaOp> inner_outputs(inputs.size());
-      // First handle cases 1 and 2.
-      for (size_t input_idx = 0; input_idx != inputs.size(); ++input_idx) {
-        auto param = xla::Parameter(cb.get(), input_idx,
-                                    result.xla_input_shapes[input_idx],
-                                    absl::StrCat("input/", input_idx));
-        inner_inputs[input_idx] = param;
-        inner_outputs[input_idx] = param;
-      }
-      // Call the computation which is wrapped.
-      auto inner_call = xla::Call(cb.get(), *result.computation, inner_inputs);
-      // Now go through any resource updates and add necessary GTEs and handle
-      // case 3.
-      for (size_t i = 0; i < result.resource_updates.size(); ++i) {
-        const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
-        if (update.modified) {
-          inner_outputs[update.input_index] =
-              xla::GetTupleElement(inner_call, i);
-        }
-      }
-      xla::Tuple(cb.get(), inner_outputs);
-      auto comp_or = cb->Build();
-      OP_REQUIRES_OK(ctx, comp_or.status());
-      wrapped_pipeline = std::move(comp_or.ValueOrDie());
-    }
-    // Create the actual call.
-    auto outputs = xla::Call(builder, wrapped_pipeline, inputs);
+  void SetInstructionFrontEndAttributes(XlaOpKernelContext* ctx,
+                                        xla::XlaBuilder* builder,
+                                        const xla::XlaOp& outputs) const {
     // Set the config type of the call.
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
@@ -331,8 +237,51 @@ class PipelineOp : public XlaOpKernel {
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(RECOMPUTATION_MODE),
                        recomputation_mode_));
+  }
 
-    // A pipeline has no explicit outputs, only updates of resource variables.
+  xla::StatusOr<xla::XlaComputation> CreateInnerPipeline(
+      XlaOpKernelContext* ctx, const std::vector<xla::XlaOp>& inputs,
+      const XlaCompiler::CompilationResult& result) const {
+    // For pipelines we make sure that the inputs and outputs have the same
+    // shape and that the values for every output at index `i` are:
+    // 1. the input value `i` if the input is not a resource variable
+    // 2. the input value `i` if the input is a resource variable which has not
+    //   been modified
+    // 3. the modified resource variable corresponding to the value at input `i`
+    // To do so we wrap the pipeline in another call, and set up the tuple
+    // accordingly.
+    std::unique_ptr<xla::XlaBuilder> cb =
+        ctx->builder()->CreateSubBuilder("pipeline_wrapper");
+    std::vector<xla::XlaOp> inner_inputs(inputs.size());
+    std::vector<xla::XlaOp> inner_outputs(inputs.size());
+    // First handle cases 1 and 2.
+    for (size_t input_idx = 0; input_idx != inputs.size(); ++input_idx) {
+      auto param = xla::Parameter(cb.get(), input_idx,
+                                  result.xla_input_shapes[input_idx],
+                                  absl::StrCat("input/", input_idx));
+      inner_inputs[input_idx] = param;
+      inner_outputs[input_idx] = param;
+    }
+    // Call the computation which is wrapped.
+    auto inner_call = xla::Call(cb.get(), *result.computation, inner_inputs);
+    // Now go through any resource updates and add necessary GTEs and handle
+    // case 3.
+    for (size_t i = 0; i < result.resource_updates.size(); ++i) {
+      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
+      if (update.modified) {
+        inner_outputs[update.input_index] = xla::GetTupleElement(inner_call, i);
+      }
+    }
+    xla::Tuple(cb.get(), inner_outputs);
+    auto comp_or = cb->Build();
+    return comp_or;
+  }
+
+  static void UpdateResources(
+      const XlaCompiler::CompilationResult& result, XlaOpKernelContext* ctx,
+      const xla::XlaOp& outputs,
+      const std::vector<XlaCompiler::Argument>& arguments,
+      xla::XlaBuilder* builder) {
     // We can use the input index to index into the outputs because we have
     // ensured that the inputs and outputs are aligned.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
@@ -352,6 +301,75 @@ class PipelineOp : public XlaOpKernel {
               << " type: " << DataTypeString(update.type)
               << " shape: " << update.shape.DebugString();
     }
+  }
+
+ public:
+  explicit PipelineOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
+    DataTypeVector output_types;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types));
+    OP_REQUIRES(ctx, output_types.size() == 0,
+                errors::InvalidArgument(
+                    "Expected PipelineStage to have no explicit outputs."));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
+                                     &gradient_accumulation_count_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
+                                     &batch_serialization_iterations_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("offload_activations", &offload_activations_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_gradient_accumulation_buffers",
+                                     &offload_gradient_accumulation_buffers_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replicated_weight_sharding",
+                                     &replicated_weight_sharding_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weights", &offload_weights_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("recomputation_mode", &recomputation_mode_));
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    auto builder = ctx->builder();
+    // First get all the arguments and compile the computation.
+    int num_resource_args = 0;
+    auto arguments_or =
+        poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
+    OP_REQUIRES_OK(ctx, arguments_or.status());
+    std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
+
+    VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
+            << ") function with " << input_types_.size() << " inputs including "
+            << num_resource_args << " resources.";
+
+    XlaCompiler::CompileOptions compile_options =
+        poplarplugin::GetDefaultCompileOptions();
+    compile_options.return_updated_values_for_all_resources = true;
+
+    // Compile the computation.
+    XlaCompiler::CompilationResult result;
+    OP_REQUIRES_OK(
+        ctx, poplarplugin::CompileFunction(ctx, compile_options, *to_apply_,
+                                           arguments, &result));
+
+    // Get the non constant XLA arguments.
+    auto inputs_or =
+        poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
+    OP_REQUIRES_OK(ctx, inputs_or.status());
+    std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
+
+    auto wrapped_pipeline = CreateInnerPipeline(ctx, inputs, result);
+    OP_REQUIRES_OK(ctx, wrapped_pipeline.status());
+
+    // Create the actual call.
+    auto outputs = xla::Call(builder, wrapped_pipeline.ValueOrDie(), inputs);
+
+    SetInstructionFrontEndAttributes(ctx, builder, outputs);
+
+    // A pipeline has no explicit outputs, only updates of resource variables.
+    UpdateResources(result, ctx, outputs, arguments, builder);
   }
 
  private:
