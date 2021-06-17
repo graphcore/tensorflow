@@ -50,15 +50,6 @@ from tensorflow.python.client import session
 from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
-feed_counter = 0
-
-
-def generate_feed_name():
-  global feed_counter
-  feed_counter += 1
-
-  return "feed" + str(feed_counter)
-
 
 def run_graph(worker, *args, **kwargs):
   # FIXME: We need to use the multiprocessing module to run the tests
@@ -118,10 +109,8 @@ def hostembedding_test_graph(flags):
       ds = ds.repeat()
 
       # The host side queues
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-          ds, feed_name=generate_feed_name())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          feed_name=generate_feed_name())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     with scopes.ipu_scope('/device:IPU:0'):
       run_loop = ipu_compiler.compile(my_net, inputs=[])
@@ -198,9 +187,8 @@ def memory_test_graph(flags=""):
       dataset = dataset_fn()
       inputs = inputs_fn()
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset,
-                                                     generate_feed_name())
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(generate_feed_name())
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       with variable_scope.variable_scope("ipu", use_resource=True,
                                          reuse=False):

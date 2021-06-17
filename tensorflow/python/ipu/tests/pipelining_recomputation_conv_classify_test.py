@@ -35,17 +35,7 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
 # Various graph constructor helpers
-
-
 def fc(x, num_units_out):
   return layers.Dense(num_units_out,
                       kernel_initializer=init_ops.constant_initializer(0.1),
@@ -84,7 +74,7 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):
@@ -147,7 +137,7 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     # Run the pipeline twice.
     def model_pipeline(x, lr):

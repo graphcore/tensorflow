@@ -43,15 +43,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
 class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTuple(self):
@@ -61,7 +52,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -92,7 +83,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
                                                   shape=[4, 4],
                                                   repeat=False)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -128,7 +119,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -163,7 +154,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -197,7 +188,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     # Note how the parameters are swapped around.
     def body(v1, v2, b, a):
@@ -228,7 +219,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + x
@@ -256,7 +247,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def cond(i, v):
       return i < 20
@@ -296,7 +287,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def cond(i, v):
       return i < 20
@@ -329,7 +320,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def program(iters):
       def body(v, x):
@@ -367,10 +358,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
-    infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset1, feed_name=next_feed_id())
-    infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset2, feed_name=next_feed_id())
+    infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset1)
+    infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset2)
 
     def program(iters, infeed_queue):
       def body(v, x):
@@ -406,7 +395,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
     with self.assertRaisesRegex(ValueError, r'Output shape \((\?|None),'):
-      ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+      ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
   @test_util.deprecated_graph_mode_only
   def testMultipleInitializations(self):
@@ -415,7 +404,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     _ = infeed_queue.initializer
     with self.assertRaisesRegex(
         ValueError,
@@ -435,8 +424,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       dataset = readers.FixedLengthRecordDataset([BAD_PATH], 100)
       dataset = dataset.map(
           lambda f: parsing_ops.decode_raw(f, dtypes.float32)[0])
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(infeed_queue._dequeue, [])  # pylint: disable=protected-access
@@ -469,7 +457,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net(iters):
       def body(loss, x):
@@ -507,7 +495,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
@@ -532,7 +520,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
@@ -572,7 +560,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
@@ -605,8 +593,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def inner_body(v):
       outfeed = outfeed_queue2.enqueue(v)
@@ -645,8 +633,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, x):
       v = v + x
@@ -689,8 +677,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -747,9 +735,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -792,8 +780,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -860,9 +848,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -898,8 +886,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net(iters):
       def body(loss, x):
@@ -946,9 +934,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def my_net(iters):
       def body(loss, x):
@@ -995,10 +983,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1(v):
       outfeed = outfeed_queue1.enqueue(v)
@@ -1047,8 +1033,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1():
       with variable_scope.variable_scope("", use_resource=True):
@@ -1085,10 +1070,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
 
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body1(v):
       outfeed = outfeed_queue1.enqueue(v)
@@ -1132,49 +1115,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
   @test_util.deprecated_graph_mode_only
-  def testTwoOutfeedsDifferentProgramsSameFeedName(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
-    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
-
-    def body1(v):
-      outfeed = outfeed_queue1.enqueue(v)
-      v = v + 1
-      return (v, outfeed)
-
-    def my_net1(v):
-      r = ipu.loops.repeat(5, body1, (v))
-      return r
-
-    def body2(v):
-      outfeed = outfeed_queue2.enqueue(v)
-      v = v + 1
-      return (v, outfeed)
-
-    def my_net2(v):
-      r = ipu.loops.repeat(7, body2, (v))
-      return r
-
-    with ops.device('cpu'):
-      v1 = array_ops.placeholder(np.float32, [4, 4])
-      v2 = array_ops.placeholder(np.float32, [5, 5])
-
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
-      res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
-
-    outfeed_queue1.dequeue()
-    outfeed_queue2.dequeue()
-    with session_lib.Session() as sess:
-      sess.run(res1, {v1: np.ones([4, 4], np.float32)})
-      with self.assertRaisesRegex(errors.FailedPreconditionError,
-                                  'Outfeed with id=\'a\' already exists'):
-        sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
-
-  @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithNestedDictNotUnpacked(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
@@ -1186,8 +1126,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     }
     y = np.ones(shape=[2], dtype=np.float32)
     ds = dataset_ops.Dataset.from_tensor_slices((x, y))
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        ds, feed_name=next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds)
 
     def body(total, x, y):
       total += x["x0"] + x["x1"] + y
@@ -1217,8 +1156,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         "x1": np.ones(shape=[2], dtype=np.float32)
     }
     ds = dataset_ops.Dataset.from_tensor_slices((x,))
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        ds, feed_name=next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds)
 
     def body(total, x0, x1):
       total += x0 + x1
@@ -1244,25 +1182,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg.configure_ipu_system()
 
     dataset = tu.create_single_increasing_dataset(10)
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "delete_name")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     delete_op = infeed_queue.deleter
     with session_lib.Session() as sess:
       with self.assertRaisesRegex(errors_impl.NotFoundError,
-                                  "Infeed with id='delete_name'"):
+                                  "Infeed with id="):
         sess.run(delete_op)
-
-  @test_util.deprecated_graph_mode_only
-  def testInfeedNameCanBeReusedAfterDeletion(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    for _ in range(2):
-      dataset = tu.create_single_increasing_dataset(10)
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "reuse_name")
-      with session_lib.Session() as sess:
-        sess.run(infeed_queue.initializer)
-        sess.run(infeed_queue.deleter)
 
   @test_util.deprecated_graph_mode_only
   def testInfeedRestart(self):
@@ -1280,7 +1205,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         yield i
 
     dataset = dataset_ops.Dataset.from_generator(data_gen, np.float32, ())
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "reuse_name")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     init_op = infeed_queue.initializer
     delete_op = infeed_queue.deleter
 
@@ -1310,8 +1235,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     num_iterations = 1000
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(x):
       return outfeed_queue.enqueue(x)
@@ -1349,9 +1274,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     num_iterations = 1000
     dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(x):
       return outfeed_queue.enqueue(x)
@@ -1372,113 +1297,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(res)
 
   @test_util.deprecated_graph_mode_only
-  def testOutfeedNameCanBeReusedAfterDeletion(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    for _ in range(2):
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue = ipu.ipu_compiler.compile(outfeed_queue.enqueue, inputs=[1.0])
-      dequeue = outfeed_queue.dequeue()
-
-      with session_lib.Session() as sess:
-        sess.run(enqueue)
-        self.assertEqual(1.0, sess.run(dequeue))
-        sess.run(outfeed_queue.deleter)
-
-  @test_util.deprecated_graph_mode_only
-  def testOutfeedNameCanBeReusedWithSameShape(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    with session_lib.Session() as sess:
-      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
-                                            inputs=[1.0])
-      dequeue1 = outfeed_queue1.dequeue()
-
-      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
-                                            inputs=[2.0])
-      dequeue2 = outfeed_queue2.dequeue()
-
-      sess.run(enqueue1)
-      self.assertEqual(1.0, sess.run(dequeue1))
-
-      sess.run(enqueue2)
-      self.assertEqual(2.0, sess.run(dequeue2))
-
-      sess.run(outfeed_queue1.deleter)
-
-  @test_util.deprecated_graph_mode_only
-  def testOutfeedNameCannotBeReusedWithDifferentShape(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    with session_lib.Session() as sess:
-      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
-                                            inputs=[1.0])
-      dequeue1 = outfeed_queue1.dequeue()
-
-      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
-                                            inputs=[[1.0, 1.0]])
-
-      sess.run(enqueue1)
-      self.assertEqual(1.0, sess.run(dequeue1))
-
-      with self.assertRaisesRegex(
-          errors.FailedPreconditionError,
-          "Outfeed with id='reuse_name' already exists but with a different"):
-        sess.run(enqueue2)
-
-      sess.run(outfeed_queue1.deleter)
-
-  @test_util.deprecated_graph_mode_only
-  def testOutfeedNameCannotBeReusedWithDifferentType(self):
-    cfg = ipu.config.IPUConfig()
-    cfg.ipu_model.compile_ipu_code = False
-    cfg.configure_ipu_system()
-
-    with session_lib.Session() as sess:
-      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
-                                            inputs=[1.0])
-      dequeue1 = outfeed_queue1.dequeue()
-
-      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
-                                            inputs=[[1]])
-
-      sess.run(enqueue1)
-      self.assertEqual(1.0, sess.run(dequeue1))
-
-      with self.assertRaisesRegex(
-          errors.FailedPreconditionError,
-          "Outfeed with id='reuse_name' already exists but with a different"):
-        sess.run(enqueue2)
-
-      sess.run(outfeed_queue1.deleter)
-
-  @test_util.deprecated_graph_mode_only
   def testCannotFeedInt64(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
@@ -1486,7 +1304,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset_ops.Dataset.range(5)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def body(v, x):
       v = v + math_ops.cast(x, np.int32)
@@ -1516,8 +1334,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = dataset_ops.Dataset.from_tensor_slices((left, right))
     dataset = dataset.batch(2, drop_remainder=True)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(l, r):
       return outfeed_queue.enqueue(math_ops.logical_and(l, r))
@@ -1551,7 +1369,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         ["brain brain tank salad surgery".split()])
     dataset = dataset.map(table.lookup)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     def my_net():
       return infeed_queue._dequeue()  # pylint: disable=protected-access
@@ -1578,8 +1396,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(m)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(x1, x2):
       x1 = math_ops.cast(x1, np.float16)

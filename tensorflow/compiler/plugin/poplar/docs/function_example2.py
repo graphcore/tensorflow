@@ -27,8 +27,8 @@ ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[20000, 64]))
 ds = ds.repeat()
 
 # The host side queues
-infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
-outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
 
 # The device side main

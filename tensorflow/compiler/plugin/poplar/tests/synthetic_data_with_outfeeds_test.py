@@ -61,8 +61,8 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         ds = ds.repeat()
 
         # The host side queues
-        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
+        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       with scopes.ipu_scope('/device:IPU:0'):
         run_loop = ipu_compiler.compile(my_net, inputs=[])
@@ -107,8 +107,8 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         ds = ds.repeat()
 
         # The host side queues
-        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed2")
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed2")
+        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
       with scopes.ipu_scope('/device:IPU:0'):
         run_loop = ipu_compiler.compile(my_net, inputs=[])
@@ -152,9 +152,8 @@ class SyntheticDataWithOutfeeds(xla_test.XLATestCase):
         ds = ds.repeat()
 
         # The host side queues
-        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed3")
+        infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
         outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-            feed_name="outfeed3",
             outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
       with scopes.ipu_scope('/device:IPU:0'):

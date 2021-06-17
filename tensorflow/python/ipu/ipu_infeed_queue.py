@@ -16,6 +16,7 @@
 Infeed queue
 ~~~~~~~~~~~~
 """
+import threading
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.eager import context
@@ -24,6 +25,17 @@ from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import loops
 from tensorflow.python.util import deprecation
+
+_uid_counter = 0
+_uid_lock = threading.Lock()
+
+
+def _generate_unique_name():
+  with _uid_lock:
+    global _uid_counter
+    uid = _uid_counter
+    _uid_counter += 1
+  return str(uid)
 
 
 class IPUInfeedQueue:
@@ -37,9 +49,6 @@ class IPUInfeedQueue:
   You should pass the infeed queue as an argument to a loop from
   `tensorflow.python.ipu.loops`. These loops will then handle the dequeuing of
   the data to the device automatically.
-
-  The feed_name allows individual feeds to be named.  When including more than
-  one feed in the same graph, each should be independently named.
 
   The following skeleton shows how to use this method when building a training
   loop. Note how the body signature contains variables which correspond to the
@@ -58,7 +67,7 @@ class IPUInfeedQueue:
     # The resulting dataset has a nested structure of: {features, labels}.
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="training_infeed")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
 
     # dataset can no longer be used beyond this point.
 
@@ -90,27 +99,30 @@ class IPUInfeedQueue:
   """
   _replication_factor_deprecated_instructions = """No change needed.
   replication_factor is now set automatically based on the model."""
+  _feed_name_deprecated_instructions = """No change needed.
+  feed_name is now automatically generated."""
 
   @deprecation.deprecated_args(None,
                                _replication_factor_deprecated_instructions,
                                "replication_factor")
   @deprecation.deprecated_args(None, "Use prefetch_depth instead.",
                                "data_to_prefetch")
-  def __init__(self,
-               dataset,
-               feed_name,
-               device_ordinal=0,
-               replication_factor=1,
-               data_to_prefetch=1,
-               prefetch_depth=None):
+  @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
+                               "feed_name")
+  def __init__(
+      self,
+      dataset,
+      feed_name=None,  # pylint: disable=unused-argument
+      device_ordinal=0,
+      replication_factor=1,  # pylint: disable=unused-argument
+      data_to_prefetch=1,  # pylint: disable=unused-argument
+      prefetch_depth=None):
     """Creates an IPUInfeedQueue object.
 
     Args:
       dataset: a `tf.data.Dataset` object, all transformations e.g. `shuffle`,
         `repeat`, `batch` must be applied prior to passing in to this function.
         This dataset can no longer be used after creating this queue.
-      feed_name: the name of the infeed queue.  This must be unique between
-        all IPUInfeedQueues and IPUOutfeedQueues.
       device_ordinal: ordinal of the IPU device on which this queue will be
         used. By default the queue will be used on "/device/IPU:0".
       data_to_prefetch: Deprecated.
@@ -162,7 +174,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       except TypeError:
         ds_variant = self._dataset._as_variant_tensor
       # ID used for differentiating between datasets.
-      self._id = str(feed_name)
+      self._id = _generate_unique_name()
 
       with ops.colocate_with(ds_variant):
         self._initializer = gen_pop_datastream_ops.ipu_create_dataset_iterator(

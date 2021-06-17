@@ -8,9 +8,8 @@ import "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.proto";
 
 // Configuration for one of the infeed/outfeed streams
 message FeedConfig {
-  string stream_prefix = 1;
-  PoplarFeedConfig config = 2;
-  ShapeProto shape = 3;
+  PoplarFeedConfig config = 1;
+  ShapeProto shape = 2;
 }
 
 message SendRecvConfig {

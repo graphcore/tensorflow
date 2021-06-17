@@ -397,19 +397,19 @@ PoplarExecutor::TensorControl::~TensorControl() {
   tensorflow::port::AlignedFree(data);
 }
 
-PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info,
+PoplarExecutor::OutfeedContext::OutfeedContext(const PoplarFeedConfig& config,
+                                               const Shape& shape,
                                                int64 replication_factor)
-    : config(outfeed_info.config),
+    : config(config),
       replication_factor(replication_factor),
-      shapes(GetOutfeedShapes(FlattenedXlaShape(outfeed_info.shape),
-                              replication_factor)),
-      tf_data_types(outfeed_info.config.tf_data_types().size()),
+      shapes(GetOutfeedShapes(FlattenedXlaShape(shape), replication_factor)),
+      tf_data_types(config.tf_data_types().size()),
       tf_shapes(shapes.size()),
       callback_to_io_thread_queues(shapes.size()) {
   CHECK_EQ(shapes.size(), tf_data_types.size());
   for (uint64 i = 0; i < shapes.size(); i++) {
-    tf_data_types[i] = static_cast<tensorflow::DataType>(
-        outfeed_info.config.tf_data_types()[i]);
+    tf_data_types[i] =
+        static_cast<tensorflow::DataType>(config.tf_data_types()[i]);
     tensorflow::XLAShapeToTensorShape(shapes[i], &tf_shapes[i]);
 
     // Set up the queue per tensor per replica.
@@ -426,19 +426,14 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info,
 }
 
 bool PoplarExecutor::OutfeedContext::Matches(
-    const FeedInfo& other_outfeed_info, int64 other_replication_factor) const {
-  const auto s = GetOutfeedShapes(FlattenedXlaShape(other_outfeed_info.shape),
+    const TranslatedFeedInfo& other, int64 other_replication_factor) const {
+  const auto s = GetOutfeedShapes(FlattenedXlaShape(other.canonical_info.shape),
                                   other_replication_factor);
-  if (s.size() != shapes.size()) {
+  if (s != shapes) {
     return false;
   }
-  for (auto i = 0; i < s.size(); i++) {
-    if (s[i] != shapes[i]) {
-      return false;
-    }
-  }
   return google::protobuf::util::MessageDifferencer::Equivalent(
-      config, other_outfeed_info.config);
+      config, other.canonical_info.config);
 }
 
 PoplarExecutor::PoplarExecutor()
@@ -908,7 +903,7 @@ class NullPrefetchCallback : public poplar::StreamCallback {
 }  // namespace
 
 void PoplarExecutor::ConnectInfeedsToStreamCallback(
-    const InfeedInfos& infeed_infos) {
+    const TranslatedInfeedInfos& infeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticDataFor(SyntheticDataCategory::Infeed)) {
@@ -917,12 +912,12 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 
   std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (const auto& infeed_info : infeed_infos) {
-    auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
+    auto itr = infeed_iterators_.find(infeed_info.stream_prefix);
     if (itr == infeed_iterators_.end()) {
       LOG(FATAL) << "Trying to access an infeed dataset iterator which has not "
                     "been created."
                  << " Did you initialize the infeed_queue '"
-                 << infeed_info.config.feed_id() << "'?";
+                 << infeed_info.stream_prefix << "'?";
     }
     auto* infeed_dataset_iterator = itr->second.get();
     auto& shapes = infeed_dataset_iterator->GetShapes();
@@ -944,18 +939,19 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
               replica_queues[j], bytes);
         }
         current_engine_->connectStreamToCallback(
-            GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
-            std::move(infeed_callback));
+            GetInfeedCopyHandle(infeed_info.canonical_info.config.feed_id(), j),
+            replica_id, std::move(infeed_callback));
       }
     }
   }
 }
 
-Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
+Status PoplarExecutor::SetupInfeedReplication(
+    const TranslatedInfeedInfos& infeed_infos) {
   std::unique_lock<std::mutex> l(infeeds_mutex_);
   for (auto& infeed_info : infeed_infos) {
     const int64 replication_factor = current_replication_factor_;
-    const std::string& feed_id = infeed_info.config.feed_id();
+    const std::string& feed_id = infeed_info.stream_prefix;
 
     auto iter = infeed_iterators_.find(feed_id);
     if (iter == infeed_iterators_.end()) {
@@ -982,7 +978,7 @@ Status PoplarExecutor::SetupInfeedReplication(const InfeedInfos& infeed_infos) {
 }
 
 void PoplarExecutor::ConnectOutfeedToStreamCallback(
-    const OutfeedInfos& outfeed_infos) {
+    const TranslatedOutfeedInfos& outfeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Don't connect any streams if using synthetic data
   if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {
@@ -991,7 +987,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 
   std::unique_lock<std::mutex> l(outfeeds_mutex_);
   for (const auto& outfeed_info : outfeed_infos) {
-    const auto& outfeed_id = outfeed_info.config.feed_id();
+    const auto& outfeed_id = outfeed_info.stream_prefix;
     auto itr = outfeed_contexts_.find(outfeed_id);
     if (itr == outfeed_contexts_.end()) {
       LOG(FATAL) << "Outfeed with id='" << outfeed_id
@@ -1008,8 +1004,9 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
         auto& queue =
             outfeed_context->callback_to_io_thread_queues[j][replica_id];
         current_engine_->connectStreamToCallback(
-            GetOutfeedCopyHandle(outfeed_info.stream_prefix, j), replica_id,
-            [&queue, bytes_per_replica](void* src) {
+            GetOutfeedCopyHandle(outfeed_info.canonical_info.config.feed_id(),
+                                 j),
+            replica_id, [&queue, bytes_per_replica](void* src) {
               // The outfeed callback gets the buffer at the back of the
               // queue, writes to it, and then moves the write position of the
               // queue.
@@ -1023,16 +1020,16 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 }
 
 IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
-    const FeedInfo& infeed_info) {
+    const TranslatedFeedInfo& infeed_info) {
   TENSORFLOW_TRACEPOINT();
   std::unique_lock<std::mutex> l(infeeds_mutex_);
   // Find the iterator.
-  auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
+  auto itr = infeed_iterators_.find(infeed_info.stream_prefix);
   if (itr == infeed_iterators_.end()) {
     LOG(FATAL)
         << "Trying to access an infeed context which has not been created."
-        << " Did you initialize the infeed_queue '"
-        << infeed_info.config.feed_id() << "'?";
+        << " Did you initialize the infeed_queue '" << infeed_info.stream_prefix
+        << "'?";
   }
   InfeedIterator* infeed_dataset_iterator = itr->second.get();
 
@@ -1131,10 +1128,10 @@ inline void AllocateTensorsWithDefaults(
 }  // namespace
 
 IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
-    const FeedInfo& outfeed_info) {
+    const TranslatedFeedInfo& outfeed_info) {
   TENSORFLOW_TRACEPOINT();
   std::unique_lock<std::mutex> l(outfeeds_mutex_);
-  auto itr = outfeed_contexts_.find(outfeed_info.config.feed_id());
+  auto itr = outfeed_contexts_.find(outfeed_info.stream_prefix);
   if (itr == outfeed_contexts_.end()) {
     LOG(FATAL)
         << "Trying to access an outfeed context which has not been created.";
@@ -1240,23 +1237,25 @@ IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
   };
 }
 
-void PoplarExecutor::LaunchInfeedThreads(const InfeedInfos& infeed_infos) {
+void PoplarExecutor::LaunchInfeedThreads(
+    const TranslatedInfeedInfos& infeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Start all the infeeds.
-  for (const FeedInfo& info : infeed_infos) {
+  for (const TranslatedFeedInfo& info : infeed_infos) {
     IOFunction fn = CreateInfeedIOThreadFunction(info);
     io_threads_.emplace_back(
-        absl::make_unique<IOThread>(info.config.feed_id(), std::move(fn)));
+        absl::make_unique<IOThread>(info.stream_prefix, std::move(fn)));
   }
 }
 
-void PoplarExecutor::LaunchOutfeedThreads(const OutfeedInfos& outfeed_infos) {
+void PoplarExecutor::LaunchOutfeedThreads(
+    const TranslatedOutfeedInfos& outfeed_infos) {
   TENSORFLOW_TRACEPOINT();
   // Start all the outfeeds.
-  for (const FeedInfo& info : outfeed_infos) {
+  for (const TranslatedFeedInfo& info : outfeed_infos) {
     IOFunction fn = CreateOutfeedIOThreadFunction(info);
     io_threads_.emplace_back(
-        absl::make_unique<IOThread>(info.config.feed_id(), std::move(fn)));
+        absl::make_unique<IOThread>(info.stream_prefix, std::move(fn)));
   }
 }
 
@@ -3296,10 +3295,11 @@ int64 PoplarExecutor::GetReplicationFactorForOutfeed(
   return outfeed_context->replication_factor;
 }
 
-Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
+Status PoplarExecutor::RegisterOutfeeds(
+    const TranslatedOutfeedInfos& outfeed_infos) {
   std::unique_lock<std::mutex> l(outfeeds_mutex_);
   for (auto& outfeed_info : outfeed_infos) {
-    auto outfeed_id = outfeed_info.config.feed_id();
+    auto outfeed_id = outfeed_info.stream_prefix;
     const auto existing_feed = outfeed_contexts_.find(outfeed_id);
     if (existing_feed != outfeed_contexts_.end()) {
       if (!existing_feed->second->Matches(outfeed_info,
@@ -3313,7 +3313,7 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
       }
     } else {
       if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed) &&
-          outfeed_info.config.mode() ==
+          outfeed_info.canonical_info.config.mode() ==
               xla::poplarplugin::PoplarFeedConfig::GetLast) {
         LOG(WARNING) << "Outfeed with id=" << outfeed_id
                      << " has mode `GetLast` which is not supported when "
@@ -3323,7 +3323,8 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
                         "IPUOutfeedQueue.";
       }
       outfeed_contexts_[outfeed_id] = absl::make_unique<OutfeedContext>(
-          outfeed_info, current_replication_factor_);
+          outfeed_info.canonical_info.config, outfeed_info.canonical_info.shape,
+          current_replication_factor_);
     }
   }
   return Status::OK();

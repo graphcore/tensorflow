@@ -43,11 +43,10 @@ Status CreatePoplarH2DFIFO(
     poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      infeed_config.feed_id(), tuple_index, handle, seq, inst,
-      debug_name_and_id));
+      infeed_config.feed_id(), tuple_index, seq, inst, debug_name_and_id));
 
   poplar::OptionFlags fifo_options =
-      res.streams_indices.GraphFeedOptions(handle);
+      res.streams_indices.GraphFeedOptions(infeed_config.feed_id());
   fifo_options.set("bufferingDepth",
                    std::to_string(infeed_config.prefetch_depth()));
 
@@ -55,8 +54,9 @@ Status CreatePoplarH2DFIFO(
       handle, tensor_to_update.elementType(), tensor_to_update.numElements(),
       poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
   if (res.use_verified_transfers) {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
-                        res.streams_indices.IndexTensor(handle, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor index,
+        res.streams_indices.IndexTensor(infeed_config.feed_id(), inst, seq));
     seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
                                   res.streams_indices.CopyOptions(),
                                   {debug_name_and_id}));
@@ -111,14 +111,14 @@ Status CreatePoplarD2HFIFO(
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
   TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      outfeed_config.feed_id(), tuple_index, handle, seq, inst,
-      debug_name_and_id));
-  auto fifo =
-      graph.addDeviceToHostFIFO(handle, in.elementType(), in.numElements(),
-                                res.streams_indices.GraphFeedOptions(handle));
+      outfeed_config.feed_id(), tuple_index, seq, inst, debug_name_and_id));
+  auto fifo = graph.addDeviceToHostFIFO(
+      handle, in.elementType(), in.numElements(),
+      res.streams_indices.GraphFeedOptions(outfeed_config.feed_id()));
   if (res.use_verified_transfers) {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
-                        res.streams_indices.IndexTensor(handle, inst, seq));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor index,
+        res.streams_indices.IndexTensor(outfeed_config.feed_id(), inst, seq));
 
     seq.add(poplar::program::Copy(in, fifo, index, false,
                                   res.streams_indices.CopyOptions(),
@@ -140,10 +140,6 @@ Status CreateReusablePoplarD2HFIFO(
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      outfeed_config.feed_id(), tuple_index, handle, seq, inst,
-      debug_name_and_id));
-
   // Is the stream registered in the cache?
   auto itr = res.outfeed_cache.find(handle);
   if (itr != res.outfeed_cache.end()) {
@@ -218,8 +214,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(
   xla::poplarplugin::PoplarFeedConfig outfeed_config;
   outfeed_config.ParseFromString(outfeed->outfeed_config());
 
-  FeedInfo info(outfeed_config.feed_id(), outfeed_config,
-                outfeed->operands()[0]->shape());
+  CanonicalFeedInfo info(outfeed_config, outfeed->operands()[0]->shape());
   TF_RETURN_IF_ERROR(AddOutfeedInfo(res.annotations, info));
 
   if (UseSyntheticDataFor(SyntheticDataCategory::Outfeed)) {

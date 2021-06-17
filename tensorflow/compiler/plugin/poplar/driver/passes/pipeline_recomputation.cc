@@ -95,41 +95,35 @@ StatusOr<OutputToInputInfo> GetForwardOutputsUsed(
   return info;
 }
 
-// Helper function to deal with recomputation in a last stage with checkpoints.
-// When we are recomputing the last stage because it contains checkpoints, we
-// do not want to recompute anything past the checkpoints closest to the end of
-// the stage, since their values are going to be used immediately by the bwd
-// stage anyway. This function finds those instructions that are "behind"
-// these terminal checkpoints (relative to 'initial') by looking back through
-// the operands - when a parent is marked as "behind", it propagates that to its
-// children and so on.
-absl::flat_hash_set<const HloInstruction*> GetInstructionsBehindLastCkpt(
-    const std::vector<HloInstruction*> initial) {
-  // Breadth first search with a queue for pre-order traversal.
-  std::queue<const HloInstruction*> worklist;
-  absl::flat_hash_set<const HloInstruction*> behind;
-  for (const HloInstruction* init : initial) {
-    worklist.push(init);
-  }
-
-  while (!worklist.empty()) {
-    const HloInstruction* inst = worklist.front();
-    worklist.pop();
-
-    // Recomputation checkpoints are "behind" a checkpoint.
+// Get the final checkpoints in the stage. These are the last checkpoints that
+// can reach the root. If a checkpoint can reach another checkpoint, then it
+// is not final.
+std::vector<const HloInstruction*> GetFinalCheckpoints(
+    const HloComputation* stage, HloReachabilityMap* reachability_map) {
+  // Find all checkpoints in the stage
+  std::vector<const HloInstruction*> checkpoints;
+  for (const HloInstruction* inst : stage->instructions()) {
     if (IsRecomputationCheckpoint(inst)) {
-      behind.insert(inst);
-    }
-
-    for (const HloInstruction* operand : inst->operands()) {
-      // "behind" instructions propagate it to their operands.
-      if (behind.contains(inst)) {
-        behind.insert(operand);
-      }
-      worklist.push(operand);
+      checkpoints.push_back(inst);
     }
   }
-  return behind;
+  // Exclude any checkpoints that can reach another checkpoint
+  std::vector<const HloInstruction*> final_checkpoints;
+  for (const HloInstruction* ckpt : checkpoints) {
+    bool is_final = true;
+    for (const HloInstruction* other_ckpt : checkpoints) {
+      if (ckpt != other_ckpt) {
+        if (reachability_map->IsReachable(ckpt, other_ckpt)) {
+          is_final = false;
+          break;
+        }
+      }
+    }
+    if (is_final) {
+      final_checkpoints.push_back(ckpt);
+    }
+  }
+  return final_checkpoints;
 }
 
 // Helper struct for storing the information about the cluster for
@@ -158,16 +152,32 @@ StatusOr<ClusterInfo> GetRecomputationCluster(HloInstruction* stage,
   std::vector<HloInstruction*> instructions;
 
   // In the last stage, we don't want to recompute anything that's going to be
-  // immediately used by the backward pass anyway.
-  absl::flat_hash_set<const HloInstruction*> behind_last_ckpt;
+  // immediately used by the backward pass (a.k.a. is after the final
+  // checkpoints in the stage).
+  std::vector<const HloInstruction*> final_checkpoints;
+  std::unique_ptr<HloReachabilityMap> reachability_map =
+      HloReachabilityMap::Build(comp);
   if (last_stage) {
-    behind_last_ckpt = GetInstructionsBehindLastCkpt(oi_info.fwd_outputs);
-    // Exit early if nothing was behind a checkpoint (this may also mean that
-    // there was no checkpoint.
-    if (behind_last_ckpt.empty()) {
-      return ClusterInfo{};
-    }
+    final_checkpoints = GetFinalCheckpoints(comp, reachability_map.get());
   }
+
+  // For non-final stages, everything visited is added to the cluster. In the
+  // final stage, we only add an inst to the cluster if it's after all the last
+  // checkpoints in the stage.
+  auto should_be_recomputed = [&final_checkpoints, &reachability_map,
+                               last_stage](const HloInstruction* inst) -> bool {
+    if (!last_stage) {
+      return true;
+    }
+    // If the inst can reach any of the terminal checkpoints, it's behind one
+    // and should be recomputed.
+    for (const HloInstruction* ckpt : final_checkpoints) {
+      if (reachability_map->IsReachable(inst, ckpt)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   // Walk through the cluster to create a post order.
   std::stack<HloInstruction*> worklist;
@@ -205,9 +215,7 @@ StatusOr<ClusterInfo> GetRecomputationCluster(HloInstruction* stage,
     if (itr != visited.end()) {
       worklist.pop();
       if (itr->second == kVisiting) {
-        // If we're in the last stage ignore anything that isn't behind the last
-        // checkpoint since we don't want to recompute it.
-        if (!last_stage || behind_last_ckpt.contains(inst)) {
+        if (should_be_recomputed(inst)) {
           if (is_cluster_input(inst)) {
             inputs.push_back(inst);
           } else {

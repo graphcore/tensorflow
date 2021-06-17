@@ -34,17 +34,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import ipu_compiler
 
 
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
 # Various graph constructor helpers
-
-
 def _get_variable(name, shape, init):
   return variable_scope.get_variable(name,
                                      shape,

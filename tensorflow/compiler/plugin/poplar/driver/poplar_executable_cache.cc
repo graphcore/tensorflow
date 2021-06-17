@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/feed_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -56,6 +57,11 @@ PoplarExecutableCache::GetOrCompileExecutable(
     std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
     std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
     PoplarExecutor* executor, CompileFunction compile_fn) {
+  // Canonicalize the feed names to allow for PoplarExecutableCore to be shared
+  // between different runtime resources.
+  TF_ASSIGN_OR_RETURN(FeedNameMappings name_mappings,
+                      CanonicalizeFeedsInModule(hlo_module.get()));
+
   const uint64 executable_hash = tensorflow::Hash64Combine(
       tensorflow::Hash64Combine(HloHash(hlo_module.get()).GetHash(),
                                 executor->GetPoplarDeviceHash()),
@@ -96,10 +102,33 @@ PoplarExecutableCache::GetOrCompileExecutable(
   }
   CHECK(executable_core);
 
+  // Create the infeed translation (currently trivial).
+  TranslatedInfeedInfos translated_infeed_infos;
+  for (auto& canonical_info : executable_core->GetInfeedInfos()) {
+    auto itr = name_mappings.infeeds.find(canonical_info.config.feed_id());
+    if (itr == name_mappings.infeeds.end()) {
+      return InternalErrorStrCat(
+          "Could not find the infeed translation for infeed",
+          canonical_info.config.feed_id(), ".");
+    }
+    translated_infeed_infos.insert({itr->second, canonical_info});
+  }
+
+  TranslatedOutfeedInfos translated_outfeed_infos;
+  for (auto& canonical_info : executable_core->GetOutfeedInfos()) {
+    auto itr = name_mappings.outfeeds.find(canonical_info.config.feed_id());
+    if (itr == name_mappings.outfeeds.end()) {
+      return InternalErrorStrCat(
+          "Could not find the outfeed translation for outfeed",
+          canonical_info.config.feed_id(), ".");
+    }
+    translated_outfeed_infos.insert({itr->second, canonical_info});
+  }
+
   return absl::make_unique<PoplarExecutable>(
       std::move(hlo_module), std::move(hlo_profile_printer),
-      std::move(hlo_profile_index_map), std::move(executable_core));
+      std::move(hlo_profile_index_map), translated_infeed_infos,
+      translated_outfeed_infos, std::move(executable_core));
 }
-
 }  // namespace poplarplugin
 }  // namespace xla

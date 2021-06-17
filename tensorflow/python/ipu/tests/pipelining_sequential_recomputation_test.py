@@ -411,10 +411,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
     def opt_fn(loss):
       return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-        dataset_fn(), "infeed_test_distributed_batch_norm")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        "outfeed_test_distributed_batch_norm")
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset_fn())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     def my_net():
       return pipelining_ops.pipeline(

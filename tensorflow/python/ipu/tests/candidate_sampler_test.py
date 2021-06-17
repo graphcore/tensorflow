@@ -51,8 +51,8 @@ def softmax_cifar(sampled=True, k=25, iters=1000):
     y_train = np.reshape(y_train.astype(np.int32), [-1, 1])
     dataset = dataset_ops.Dataset.from_tensor_slices((x_train, y_train))
     dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
-    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    infeed = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
 
     def body(X, Y):
       # Y is [BATCH_SIZE, 1]

@@ -33,6 +33,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import rnn
+from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
@@ -44,6 +46,63 @@ batch_size = 1
 seq_len = 3
 input_size = 5
 num_channels = 8
+
+
+class AUGRUCell(rnn_cell.RNNCell):
+  def __init__(self, num_units, kernel_init, recurrent_init, bias_init):
+    super().__init__()
+    self._num_units = num_units
+    self.kernel_init = kernel_init
+    self.recurrent_init = recurrent_init
+    self.bias_init = bias_init
+
+  @property
+  def state_size(self):
+    return self._num_units
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  def __call__(self, inputs, state, scope=None):
+    # Unpack inputs and attention scores
+    x = inputs[:, :-1]
+    a = inputs[:, -1]
+
+    # Get weights
+    n = self._num_units
+    h = state
+    input_dim = x.shape[1]
+    with variable_scope.variable_scope("",
+                                       use_resource=True,
+                                       reuse=variable_scope.AUTO_REUSE):
+      kernel = _get_variable('kernel', [input_dim, n * 3], self.kernel_init)
+      rec_kernel = _get_variable('recurrent_kernel', [n, n * 3],
+                                 self.recurrent_init)
+      bias = _get_variable('bias', [n * 3], self.bias_init)
+
+    # Reset gate
+    rx = math_ops.matmul(x, kernel[:, :n])
+    rh = math_ops.matmul(h, rec_kernel[:, :n])
+    r = math_ops.sigmoid(rx + rh + bias[:n])
+
+    # Update gate
+    zx = math_ops.matmul(x, kernel[:, n:n * 2])
+    zh = math_ops.matmul(h, rec_kernel[:, n:n * 2])
+    z = math_ops.sigmoid(zx + zh + bias[n:n * 2])
+
+    # Candidate state
+    cx = math_ops.matmul(x, kernel[:, n * 2:])
+    ch = math_ops.matmul(r * h, rec_kernel[:, n * 2:])
+    c = math_ops.tanh(cx + ch + bias[n * 2:])
+
+    # Attention score influences the mixing of the old + candidate states.
+    # This is the only difference between the GRU and AUGRU cells.
+    z = z * (1 - a)
+
+    # Mix old state and candidate state
+    h = z * h + (1 - z) * c
+    return h, h
 
 
 def _get_variable(name, shape, initializer):
@@ -68,6 +127,7 @@ class GRUTest(xla_test.XLATestCase):
                    seq_length,
                    seq_val,
                    initial_state,
+                   att_scores,
                    training,
                    name,
                    activation='tanh',
@@ -75,19 +135,34 @@ class GRUTest(xla_test.XLATestCase):
     #pylint: disable=unused-argument
     del name
     with ops.device("/device:CPU:0"):
-      gru = GRU(num_channels,
-                activation=activation,
-                recurrent_activation=recurrent_activation,
-                kernel_initializer=init_ops.constant_initializer(
-                    weights_value, dataType),
-                recurrent_initializer=init_ops.constant_initializer(
-                    weights_value, dataType),
-                bias_initializer=init_ops.constant_initializer(0.0, dataType),
-                time_major=True,
-                return_sequences=True,
-                stateful=True,
-                reset_after=False)
-      outputs = gru(inputs, initial_state=initial_state, training=training)
+      kernel_init = init_ops.constant_initializer(weights_value, dataType)
+      recurrent_init = init_ops.constant_initializer(weights_value, dataType)
+      bias_init = init_ops.constant_initializer(0.0, dataType)
+      if att_scores is None:
+        gru = GRU(num_channels,
+                  activation=activation,
+                  recurrent_activation=recurrent_activation,
+                  kernel_initializer=kernel_init,
+                  recurrent_initializer=recurrent_init,
+                  bias_initializer=bias_init,
+                  time_major=True,
+                  return_sequences=True,
+                  stateful=True,
+                  reset_after=False)
+        outputs = gru(inputs, initial_state=initial_state, training=training)
+      else:
+        # There is no native AUGRU implementation
+        inputs = array_ops.concat(
+            [inputs, array_ops.expand_dims(att_scores, -1)], axis=2)
+        outputs, _ = rnn.dynamic_rnn(AUGRUCell(num_channels, kernel_init,
+                                               recurrent_init, bias_init),
+                                     inputs=inputs,
+                                     sequence_length=seq_length,
+                                     initial_state=initial_state,
+                                     dtype=dataType,
+                                     scope="augru",
+                                     time_major=True)
+
       outputs = outputs if seq_val is None else outputs[0:min(
           seq_len, seq_val[0])]
       return outputs
@@ -98,6 +173,7 @@ class GRUTest(xla_test.XLATestCase):
                 seq_length,
                 seq_val,
                 initial_state,
+                att_scores,
                 training,
                 name,
                 activation='tanh',
@@ -112,6 +188,7 @@ class GRUTest(xla_test.XLATestCase):
                                shape=[3, num_channels],
                                initializer=init_ops.constant_initializer(
                                    0.0, dataType))
+
       if seq_length is None:
         outputs, _, _ = gen_popnn_ops.popnn_gru_layer(
             activation=activation,
@@ -123,24 +200,38 @@ class GRUTest(xla_test.XLATestCase):
             initial_state=initial_state,
             is_training=training,
             name=name)
-      else:
-        outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
+      elif att_scores is not None:
+        outputs, _, _ = gen_popnn_ops.popnn_augru_layer(
             activation=activation,
             recurrent_activation=recurrent_activation,
             inputs=inputs,
-            seq_len=seq_length,
             num_channels=num_channels,
             kernel=kernel,
             biases=biases,
             initial_state=initial_state,
             is_training=training,
+            seq_len=seq_length,
+            att_score=att_scores,
+            name=name)
+      else:
+        outputs, _, _ = gen_popnn_ops.popnn_dynamic_gru_layer(
+            activation=activation,
+            recurrent_activation=recurrent_activation,
+            inputs=inputs,
+            num_channels=num_channels,
+            kernel=kernel,
+            biases=biases,
+            initial_state=initial_state,
+            is_training=training,
+            seq_len=seq_length,
             name=name)
       outputs = outputs if seq_val is None else outputs[0:min(
           seq_len, seq_val[0])]
       return outputs
 
   def _RunGRULayerInference(self, name, input_value, weights_value, seq_val,
-                            init_state_value, gru_layer_function):
+                            init_state_value, att_score_val,
+                            gru_layer_function):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -152,9 +243,14 @@ class GRUTest(xla_test.XLATestCase):
           np.int32, [batch_size],
           name="seq_len") if seq_val is not None else None
 
+      patt_scores = array_ops.placeholder(
+          dataType, [seq_len, batch_size],
+          name="att_score") if att_score_val is not None else None
+
       gru_output_seq = gru_layer_function(inputs=pinputs,
                                           weights_value=weights_value,
                                           seq_length=pseq_len,
+                                          att_scores=patt_scores,
                                           seq_val=seq_val,
                                           initial_state=pinitial_state,
                                           training=False,
@@ -163,12 +259,11 @@ class GRUTest(xla_test.XLATestCase):
       inputs = _createGRUInput(input_value, pinputs.shape)
       initial_state = _createGRUInitialState(init_state_value,
                                              pinitial_state.shape)
-      fd = {
-          pinputs: inputs,
-          pinitial_state: initial_state,
-      }
+      fd = {pinputs: inputs, pinitial_state: initial_state}
       if pseq_len is not None:
         fd[pseq_len] = seq_val
+      if patt_scores is not None:
+        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, dataType)
 
       sess.run(variables.global_variables_initializer())
       return sess.run(gru_output_seq, fd)
@@ -178,40 +273,49 @@ class GRUTest(xla_test.XLATestCase):
                               input_value,
                               weights_value,
                               init_state_value,
-                              seq_val=None):
+                              seq_val=None,
+                              att_score_val=None):
     ops.reset_default_graph()
     popnn_out = self._RunGRULayerInference(name=name,
                                            input_value=input_value,
                                            weights_value=weights_value,
                                            seq_val=seq_val,
+                                           att_score_val=att_score_val,
                                            init_state_value=init_state_value,
                                            gru_layer_function=self._GRULayer)
     ref_out = self._RunGRULayerInference(name=name,
                                          input_value=input_value,
                                          weights_value=weights_value,
                                          seq_val=seq_val,
+                                         att_score_val=att_score_val,
                                          init_state_value=init_state_value,
                                          gru_layer_function=self._GRULayerCPU)
-    # Check that the whole outupt sequence matches
+    # Check that the whole output sequence matches
     self.assertAllClose(popnn_out, ref_out)
 
   def testGRULayerInference(self):
-    ReportJSON(self)
     np.random.seed(0)
+    # Run with attention scores (augru):
+    for init_state_value in [0., 1.]:
+      self._RunInferenceComparison('augru',
+                                   input_value=0.01,
+                                   weights_value=0.1,
+                                   init_state_value=init_state_value,
+                                   seq_val=[1],
+                                   att_score_val=0.5)
+
     # Run with all-0 weights
-    weight0 = 0.
     for init_state_value in [0., 1.]:
       self._RunInferenceComparison('ones',
                                    input_value=0.,
-                                   weights_value=weight0,
+                                   weights_value=0.,
                                    init_state_value=init_state_value)
 
     # Run with all-1 weights
-    weight1 = 1.
     for init_state_value in [0., 1.]:
       self._RunInferenceComparison('ones',
                                    input_value=0.,
-                                   weights_value=weight1,
+                                   weights_value=1.,
                                    init_state_value=init_state_value)
 
     # Run with random weights
@@ -224,26 +328,24 @@ class GRUTest(xla_test.XLATestCase):
 
     # Run with '1'' seq_len
     assert batch_size == 1
-    weight0 = 0.
     for init_state_value in [0., 1.]:
       self._RunInferenceComparison('ones',
                                    input_value=0.,
-                                   weights_value=weight0,
+                                   weights_value=0.,
                                    init_state_value=init_state_value,
                                    seq_val=[1])
 
     # Run with zero seq_len
-    weight0 = 0.
     for init_state_value in [0., 1.]:
       self._RunInferenceComparison('ones',
                                    input_value=0.,
-                                   weights_value=weight0,
+                                   weights_value=0.,
                                    init_state_value=init_state_value,
                                    seq_val=[0])
 
   def _RunGRULayerTraining(self, name, input_value, weights_value, seq_val,
                            init_state_value, training_steps, labels_array,
-                           gru_layer_function, device_string):
+                           att_score_val, gru_layer_function, device_string):
     with self.session() as sess:
       pinputs = array_ops.placeholder(dataType,
                                       [seq_len, batch_size, input_size],
@@ -253,6 +355,10 @@ class GRUTest(xla_test.XLATestCase):
       pseq_len = array_ops.placeholder(
           np.int32, [batch_size],
           name="seq_len") if seq_val is not None else None
+
+      patt_scores = array_ops.placeholder(
+          dataType, [seq_len, batch_size],
+          name="att_score") if att_score_val is not None else None
 
       with ops.device(device_string):
         with variable_scope.variable_scope("gru_layer", use_resource=True):
@@ -266,6 +372,7 @@ class GRUTest(xla_test.XLATestCase):
                                     seq_length=pseq_len,
                                     seq_val=seq_val,
                                     initial_state=initial_state,
+                                    att_scores=patt_scores,
                                     training=True,
                                     name=name)
         logits = math_ops.reduce_mean(logits, axis=0)
@@ -283,6 +390,8 @@ class GRUTest(xla_test.XLATestCase):
       }
       if seq_val is not None:
         fd[pseq_len] = seq_val
+      if patt_scores is not None:
+        fd[patt_scores] = np.full(patt_scores.shape, att_score_val, dataType)
 
       for _ in range(0, training_steps):
         l, _ = sess.run([loss, train], fd)
@@ -295,7 +404,8 @@ class GRUTest(xla_test.XLATestCase):
                              weights_value,
                              init_state_value,
                              training_steps,
-                             seq_val=None):
+                             seq_val=None,
+                             att_score_val=None):
     labels_array = np.ones(shape=[batch_size], dtype=np.int32)
     ops.reset_default_graph()
     popnn_losses = self._RunGRULayerTraining(name=name,
@@ -303,6 +413,7 @@ class GRUTest(xla_test.XLATestCase):
                                              weights_value=weights_value,
                                              seq_val=seq_val,
                                              init_state_value=init_state_value,
+                                             att_score_val=att_score_val,
                                              training_steps=training_steps,
                                              labels_array=labels_array,
                                              gru_layer_function=self._GRULayer,
@@ -314,6 +425,7 @@ class GRUTest(xla_test.XLATestCase):
         weights_value=weights_value,
         seq_val=seq_val,
         init_state_value=init_state_value,
+        att_score_val=att_score_val,
         training_steps=training_steps,
         labels_array=labels_array,
         gru_layer_function=self._GRULayerCPU,
@@ -321,7 +433,6 @@ class GRUTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_losses, ref_losses)
 
   def testGRULayerTraining(self):
-    ReportJSON(self)
     np.random.seed(42)
 
     # Run with random weights
@@ -343,6 +454,17 @@ class GRUTest(xla_test.XLATestCase):
                                     init_state_value=init_state_value,
                                     training_steps=3,
                                     seq_val=[1])
+
+    # Run with attention scores
+    for weight in np.random.rand(3):
+      for init_state_value in [0., 1.]:
+        self._RunTrainingComparison('augru',
+                                    input_value=0.,
+                                    weights_value=weight,
+                                    init_state_value=init_state_value,
+                                    training_steps=3,
+                                    seq_val=[1],
+                                    att_score_val=0.5)
 
   def testGRUActivations(self):
     input_value = 0.7
@@ -371,6 +493,7 @@ class GRUTest(xla_test.XLATestCase):
                                             weights_value=weights_value,
                                             seq_length=pseq_len,
                                             seq_val=seq_val,
+                                            att_scores=None,
                                             initial_state=pinitial_state,
                                             training=False,
                                             name=None,
@@ -417,6 +540,7 @@ class GRUTest(xla_test.XLATestCase):
                                 weights_value=1.,
                                 seq_length=None,
                                 seq_val=None,
+                                att_scores=None,
                                 initial_state=initial_state,
                                 training=True,
                                 name=name)
@@ -478,6 +602,7 @@ class GRUTest(xla_test.XLATestCase):
                                 weights_value=1.,
                                 seq_length=None,
                                 seq_val=None,
+                                att_scores=None,
                                 initial_state=initial_state,
                                 training=True,
                                 name=name)

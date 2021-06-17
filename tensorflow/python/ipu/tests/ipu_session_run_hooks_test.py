@@ -233,11 +233,9 @@ class IPULoggingTensorHookTest(test_util.TensorFlowTestCase):
         self.assertRegex(str(self.logged_message), "log = 0")
 
   def test_two_hooks(self):
-    hook1 = IPULoggingTensorHook(every_n_iter=1, feed_name="feed1")
+    hook1 = IPULoggingTensorHook(every_n_iter=1)
     hook2 = IPULoggingTensorHook(
-        every_n_iter=2,
-        feed_name="feed2",
-        logging_mode=IPULoggingTensorHook.LoggingMode.ALL)
+        every_n_iter=2, logging_mode=IPULoggingTensorHook.LoggingMode.ALL)
 
     def model():
       step = variables.Variable(0)

@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module_config.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/feed_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 
@@ -47,8 +48,8 @@ class PoplarExecutableCore {
       std::vector<std::vector<Literal>> constant_literal_output,
       bool is_remap_graph, bool is_scalar_elementwise_graph,
       bool loaded_from_cache, std::vector<uint64> remaped_output,
-      uint32 replication_factor, const InfeedInfos& infeed_infos,
-      const OutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
+      uint32 replication_factor, const CanonicalInfeedInfos& infeed_infos,
+      const CanonicalOutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
       StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
       SendRecvInfos&& recv_infos,
       HostEmbeddingInfos&& host_embedding_lookup_infos,
@@ -70,9 +71,11 @@ class PoplarExecutableCore {
     return constant_literal_output_;
   }
 
-  const InfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
+  const CanonicalInfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
 
-  const OutfeedInfos& GetOutfeedInfos() const { return outfeed_infos_; }
+  const CanonicalOutfeedInfos& GetOutfeedInfos() const {
+    return outfeed_infos_;
+  }
 
   const HostEmbeddingInfos& GetHostEmbeddingLookupInfos() const {
     return host_embedding_lookup_infos_;
@@ -169,8 +172,8 @@ class PoplarExecutableCore {
   const bool is_scalar_elementwise_graph_;
   const bool loaded_from_cache_;
   uint32 replication_factor_;
-  InfeedInfos infeed_infos_;
-  OutfeedInfos outfeed_infos_;
+  CanonicalInfeedInfos infeed_infos_;
+  CanonicalOutfeedInfos outfeed_infos_;
   StreamInfos stream_infos_;
   StreamMetaInfos stream_meta_infos_;
   SendRecvInfos send_infos_;
@@ -191,6 +194,8 @@ class PoplarExecutable : public Executable {
   PoplarExecutable(std::unique_ptr<HloModule> hlo_module,
                    std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
                    std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
+                   const TranslatedInfeedInfos& infeed_infos,
+                   const TranslatedOutfeedInfos& outfeed_infos,
                    std::shared_ptr<PoplarExecutableCore> executable_core);
 
   StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
@@ -222,12 +227,10 @@ class PoplarExecutable : public Executable {
     return literal_output_;
   }
 
-  const InfeedInfos& GetInfeedInfos() const {
-    return executable_core_->GetInfeedInfos();
-  }
+  const TranslatedInfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
 
-  const OutfeedInfos& GetOutfeedInfos() const {
-    return executable_core_->GetOutfeedInfos();
+  const TranslatedOutfeedInfos& GetOutfeedInfos() const {
+    return outfeed_infos_;
   }
 
   const HostEmbeddingInfos& GetHostEmbeddingLookupInfos() const {
@@ -305,6 +308,8 @@ class PoplarExecutable : public Executable {
 
   friend class GraphCompileIoMapTest;
 
+  const TranslatedInfeedInfos infeed_infos_;
+  const TranslatedOutfeedInfos outfeed_infos_;
   std::shared_ptr<PoplarExecutableCore> executable_core_;
   std::vector<std::vector<Literal>> literal_output_;
   int64 execution_count_;

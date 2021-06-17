@@ -1,5 +1,32 @@
 API changes
 -----------
+Release 2.2
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.2.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+
+Non-breaking changes
+____________________
+
+These changes are recommended.
+
+
+IPUInfeedQueue/IPUOutfeedQueue/IPULoggingTensorHook feed_name deprecated
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The ``feed_name`` argument of ``IPUInfeedQueue``, ``IPUOutfeedQueue`` and
+``IPULoggingTensorHook`` has been deprecated and will be removed in release 2.3.
+The ``feed_name`` is now generated automatically internally.
+
 
 Release 2.1
 ~~~~~~~~~~~
