@@ -110,6 +110,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_buffer_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_batch_serialization_loop_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_communication_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_control_dependency_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_feed_hoisting.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
@@ -1463,6 +1464,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<ShardingPass>();
       pipeline.AddPass<HostComputeScheduleOptimizer>();
       pipeline.AddPass<InterIpuCopyInserter>();
+      pipeline.AddPass<PipelineControlDependencyInserter>();
       pipeline.AddPass<IoTilesPlacer>(
           poplar_executor->ShouldPlaceOpsOnIoTiles(), num_io_tiles,
           target.getBytesPerTile(),

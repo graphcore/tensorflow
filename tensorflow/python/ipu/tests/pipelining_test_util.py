@@ -38,6 +38,7 @@ from tensorflow.compat.v1 import data as compat_v1_data
 
 
 def get_num_ipus(device_mapping):
+  device_mapping = pipelining_ops._to_flat_list(device_mapping)  # pylint: disable=W0212
   min_ipus = max(device_mapping) + 1
   return int(math.pow(2, math.ceil(math.log2(min_ipus))))
 
@@ -163,8 +164,17 @@ class PipelineTester(object):
       def pipeline(*args):
         outputs = args
         for i, stage in zip(device_mapping, stages):
-          with scopes.ipu_shard(i):
-            outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
+          if isinstance(i, list):
+            intermediates = []
+
+            for k, s in zip(i, stage):
+              with scopes.ipu_shard(k):
+                intermediates.append(
+                    s(*functional_ops._convert_to_list(outputs)))  # pylint: disable=W0212
+            outputs = pipelining_ops._to_flat_list(intermediates)  # pylint: disable=W0212
+          else:
+            with scopes.ipu_shard(i):
+              outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
         enqueue_op = outfeed_queue.enqueue(outputs)
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)

@@ -45,7 +45,8 @@ Status HasCompatiblePipelineSharding(const HloSharding& expected,
     return InternalErrorStrCat("Expected the sharding for ", inst->ToString(),
                                " to be singular.");
   }
-  if (expected != *optional_sharding) {
+  if (expected != *optional_sharding &&
+      expected.GetUniqueDevice() != Devices::All) {
     return InternalErrorStrCat("Expected all the sharding in ",
                                inst->ToString(), " to be compatible with ",
                                expected.ToString(), ".");

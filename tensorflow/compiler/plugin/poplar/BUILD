@@ -232,6 +232,7 @@ cc_library(
         "driver/passes/pipeline_batch_serialization_buffer_inserter.cc",
         "driver/passes/pipeline_batch_serialization_loop_inserter.cc",
         "driver/passes/pipeline_communication_optimizer.cc",
+        "driver/passes/pipeline_control_dependency_inserter.cc",
         "driver/passes/pipeline_copy_inserter.cc",
         "driver/passes/pipeline_feed_hoisting.cc",
         "driver/passes/pipeline_fifo_inserter.cc",
@@ -429,6 +430,7 @@ cc_library(
         "driver/passes/pipeline_batch_serialization_buffer_inserter.h",
         "driver/passes/pipeline_batch_serialization_loop_inserter.h",
         "driver/passes/pipeline_communication_optimizer.h",
+        "driver/passes/pipeline_control_dependency_inserter.h",
         "driver/passes/pipeline_copy_inserter.h",
         "driver/passes/pipeline_feed_hoisting.h",
         "driver/passes/pipeline_fifo_inserter.h",
@@ -5325,6 +5327,19 @@ tf_xla_py_test(
     ],
 )
 
+xla_test(
+    name = "pipeline_control_dep_test",
+    size = "small",
+    srcs = ["tests/pipeline_control_dep_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -5447,6 +5462,7 @@ test_suite(
         "pipeline_batch_serialization_buffer_inserter_test",
         "pipeline_batch_serialization_loop_inserter_test",
         "pipeline_communication_optimizer_test",
+        "pipeline_control_dep_test",
         "pipeline_copy_inserter_test",
         "pipeline_feed_hoisting_test",
         "pipeline_fifo_inserter_test",

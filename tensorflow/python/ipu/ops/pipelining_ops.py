@@ -19,7 +19,6 @@ Pipelining operators
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
 from enum import Enum, IntEnum
-
 from google.protobuf import json_format
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
@@ -979,6 +978,16 @@ def pipeline(computational_stages,
     return output
 
 
+def _to_flat_list(xs):
+  if isinstance(xs, list):
+    return sum(list(map(_to_flat_list, xs)), [])
+  if isinstance(xs, tuple):
+    return _to_flat_list(list(xs))
+  if isinstance(xs, range):
+    return _to_flat_list(list(xs))
+  return [xs]
+
+
 def _pipeline_stage(func,
                     stage_id,
                     device_id,
@@ -986,6 +995,7 @@ def _pipeline_stage(func,
                     training,
                     infeed_queue=None,
                     outfeed_queue=None,
+                    parallel_stage=False,
                     name=None):
   """Internal function for compiling a pipeline stage. This should not be called
   directly and doing so will result in undefined behaviour.
@@ -1009,6 +1019,45 @@ def _pipeline_stage(func,
 
   """
   name = name if name else "pipeline_stage"
+
+  if isinstance(func, list):
+    if not isinstance(device_id, list):
+      return ValueError(
+          "When the pipeline stage is a list of functions, the device mapping"
+          " must also be a list of device IDs.")
+
+    if len(func) != len(device_id):
+      return ValueError(
+          "Pipeline stage list and device_id list must be the same length.")
+
+    if parallel_stage:
+      return NotImplementedError(
+          "Multiple nested levels of pipeline stages is not supported.")
+
+    def par_stages_f(*args):
+      funcs = enumerate(zip(func, device_id))
+
+      def lower_par_stage(fd):
+        i, (f, d) = fd
+        return _pipeline_stage(f,
+                               i,
+                               d,
+                               args,
+                               training,
+                               parallel_stage=True,
+                               name=name + str(i))
+
+      return _to_flat_list(list(map(lower_par_stage, funcs)))
+
+    return _pipeline_stage(par_stages_f,
+                           stage_id,
+                           _ALL_DEVICES,
+                           args,
+                           training,
+                           infeed_queue=infeed_queue,
+                           outfeed_queue=outfeed_queue,
+                           name=name)
+
   args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
 
   func_to_compile = func

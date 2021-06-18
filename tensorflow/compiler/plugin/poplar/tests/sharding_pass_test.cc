@@ -1648,6 +1648,110 @@ ENTRY e {
   }
 }
 
+TEST_F(ShardingPassTest, TestPipeliningShardingWithSubStage) {
+  std::string hlo_string = R"(
+HloModule top
+
+add_float {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT a = f32[] add(f32[] x, f32[] y)
+}
+
+stage_0_0_fwd {
+  stage_0_0_fwd_input0 = f32[1,4,4,2] parameter(0)
+  ROOT stage_0_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_0_fwd_input0)
+}
+
+stage_0_1_fwd {
+  stage_0_1_fwd_input0 = f32[1,4,4,2] parameter(0)
+  ROOT stage_0_1_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_1_fwd_input0)
+}
+
+stage_0_fwd {
+  stage_0_fwd_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0_0 = (f32[1,4,4,2]) call(stage_0_fwd_input0), to_apply=stage_0_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0_1 = (f32[1,4,4,2]) call(stage_0_fwd_input0), to_apply=stage_0_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_0_0_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_0), index=0
+  pipeline_stage_0_1_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_1), index=0
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_0_0_0, pipeline_stage_0_1_0)
+}
+
+comp0 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+comp1 {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT r = f32[1,4,4,2] call(x), to_apply=comp0
+}
+
+comp2 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_input1 = f32[1,4,4,2] parameter(0)
+  c1_result = f32[1,4,4,2] call(stage_1_fwd_input1), to_apply=comp1
+  c2_result = f32[1,4,4,2] call(c1_result), to_apply=comp2
+  stage_1_fwd_zero = f32[] constant(0)
+  stage_1_fwd_reduce = f32[] reduce(c2_result, stage_1_fwd_zero), dimensions={0,1,2,3}, to_apply=add_float
+  ROOT stage_1_fwd_tuple = (f32[]) tuple(stage_1_fwd_reduce)
+  after-all = token[] after-all()
+  outfeed = token[] outfeed(stage_1_fwd_tuple, after-all), outfeed_config="\010\001\022\005feed3\"\001\001(\001"
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=-1}
+  pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_i1 = f32[] get-tuple-element(pipeline_stage_1), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[]) tuple(pipeline_stage_0_i0, pipeline_stage_1_i1)
+}
+
+ENTRY e {
+  e.input0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.input1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[]) call(e.input0, e.input1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  auto stage_0 = module->GetComputationWithName("stage_0_fwd");
+
+  // Parameters should be sharded on -1.
+  auto stage_0_fwd_input0 = stage_0->parameter_instruction(0);
+  EXPECT_THAT(stage_0_fwd_input0->sharding().GetUniqueDevice(), -1);
+
+  // Root should be sharded on -1.
+  auto stage_0_root = stage_0->root_instruction();
+  EXPECT_THAT(stage_0_root->sharding().GetUniqueDevice(), -1);
+
+  // Each substage should be sharded appropriate, and not recieve the parent
+  // shard -1.
+  auto stage_0_0 = module->GetComputationWithName("stage_0_0_fwd");
+  for (auto inst : stage_0_0->instructions()) {
+    EXPECT_THAT(inst->sharding().GetUniqueDevice(), 0);
+  }
+
+  auto stage_0_1 = module->GetComputationWithName("stage_0_1_fwd");
+  for (auto inst : stage_0_1->instructions()) {
+    EXPECT_THAT(inst->sharding().GetUniqueDevice(), 1);
+  }
+}
+
 TEST_F(ShardingPassTest, TestCondWithZeroArgs) {
   std::string hlo_string = R"(
 HloModule root

@@ -246,6 +246,61 @@ override this order, then you can use the ``device_mapping`` parameter.
 
 .. _gradient-accumulation:
 
+Concurrent pipeline stages
+__________________________
+
+When pipelining a model, it's possible to have stages that have no data
+dependencies and don't share weights. These stages can benefit from being
+operating on the same mini-batch concurrently.
+
+.. figure:: figures/concurrent-pipeline-stages.png
+    :width: 95%
+    :alt: Example pipeline with concurrent stages.
+    :align: center
+
+    An example pipeline with stages (lettered boxes) processing multiple
+    mini-batches (colours of the stages). The flow of a single mini-batch is
+    highlighted at the bottom.
+
+These concurrent pipeline stages are defined by providing a list a of stages.
+The corresponding element of the device-mapping should also be a list. The
+argument list to each concurrent stage must be the same, including any
+arguments coming from an infeed. The input to the next stage, or outfeed,
+is the concatenation of concurrent stage outputs.
+
+.. code-block:: python
+  def stage1a(args...):
+    # ... do stuff on IPU 1
+    return a0, a1, ...
+  def stage1b(args...):
+    # ... do stuff on IPU 2
+    return b0, b1, ...
+
+  # stage 2 arguments are a concatenation of the results of the previous
+  # concurrent stages.
+  def stage2(a0, a1, ..., b0, b1, ...):
+    # ... do stuff on IPU 2
+
+  pipeline_op = pipelining_ops.pipeline(
+    # Second element of the list is also a list of functions.
+    computational_stages=[stage0, [stage1a, stage1b], stage2, stage3],
+    # ...
+    # Second element of the list is also a list of device IDs.
+    device_mapping=[0, [1, 2], 2, 3])
+
+Comparing this to a pipeline not using this feature where the activations are
+passed through stages, the pipeline is shorter. This means that
+fewer activations are stored over the whole execution of the pipeline and the
+expected latency is lower than the serialised pipeline.
+
+.. figure:: figures/concurrent-pipeline-comp.png
+    :width: 95%
+    :alt: Comparison of concurrent pipeline stages
+    :align: center
+
+    Comparison of the same logical pipelines with concurrent stages (top) and
+    without (bottom).
+
 Gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~
 
