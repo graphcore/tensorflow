@@ -118,7 +118,7 @@ StatusOr<ExpressionInput> GetElementwiseInput(
                             GetTensorInput(res, inst, tensor_map, operand_idx,
                                            input_idx, seq, debug_name_and_id));
 
-        // Allow passing scalars to the underlying op and let poplar broadcast.
+        // Allow passing scalars to the underlying op and let poplibs broadcast.
         if (expr_input.tensor->numElements() > 1) {
           // Broadcast the tensor internally to the right shape.
           TF_ASSIGN_OR_RETURN(

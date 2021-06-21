@@ -64,7 +64,6 @@ class UnaryElementwiseOp : public PoplarOpDef {
     return seq;
   }
 };
-
 REGISTER_HLO_OP(kAbs, UnaryElementwiseOp);
 REGISTER_HLO_OP(kRoundNearestAfz, UnaryElementwiseOp);
 REGISTER_HLO_OP(kCeil, UnaryElementwiseOp);
@@ -94,16 +93,22 @@ REGISTER_POPLAR_OP(Inverse, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Square, UnaryElementwiseOp);
 REGISTER_POPLAR_OP(Erf, UnaryElementwiseOp);
 
+struct NaryOutput {
+  poplar::program::Program sequence;
+  poplar::Tensor result;
+};
+
 class BinaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+ protected:
+  static StatusOr<NaryOutput> Compute(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "BinaryElementwiseOp");
-    poplar::program::Sequence seq({}, debug_info);
-    TF_ASSIGN_OR_RETURN(auto expression_inputs,
-                        helper::GetElementwiseInputs(
-                            res, inst, {0, 1}, tensor_map, seq, {debug_info}));
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    poplar::program::Sequence seq({}, debug_name_and_id);
+    TF_ASSIGN_OR_RETURN(
+        auto expression_inputs,
+        helper::GetElementwiseInputs(res, inst, {0, 1}, tensor_map, seq,
+                                     {debug_name_and_id}));
     auto input_tensors =
         helper::GetTensorsFromExpressionInputs(expression_inputs);
 
@@ -117,14 +122,24 @@ class BinaryElementwiseOp : public PoplarOpDef {
     const bool is_inplace =
         AreInplaceOutputTensorsWritable(tensor_map, res, inst);
     if (is_inplace) {
-      popops::mapInPlace(graph, expr, input_tensors, seq, {debug_info});
+      popops::mapInPlace(graph, expr, input_tensors, seq, {debug_name_and_id});
       out = input_tensors[0];
     } else {
-      out = popops::map(graph, expr, input_tensors, seq, {debug_info});
+      out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
+    return NaryOutput{seq, out};
+  }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-    return seq;
+ public:
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "BinaryElementwiseOp");
+    TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
+                                             tensor_map, debug_info));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output.result));
+    return output.sequence;
   }
 };
 REGISTER_HLO_OP(kAdd, BinaryElementwiseOp);
@@ -144,6 +159,25 @@ REGISTER_HLO_OP(kXor, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftLeft, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftRightArithmetic, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftRightLogical, BinaryElementwiseOp);
+
+StatusOr<poplar::Tensor> BroadcastImplicitNaryOutputTensor(
+    const poplar::Tensor& in, const HloInstruction* inst,
+    const Shape& output_shape) {
+  poplar::Tensor output = in;
+  // Handle special case where all the inputs to the operation were broadcasts
+  // of a scalar.
+  if (!PoplarShapeMatchesXLAShape(output, output_shape)) {
+    const HloInstruction* root = inst->fused_expression_root();
+    CHECK(absl::c_all_of(root->operands(), [](const HloInstruction* operand) {
+      return operand->opcode() == HloOpcode::kBroadcast &&
+             ShapeUtil::ElementsIn(operand->operand(0)->shape()) == 1;
+    })) << "Cannot broadcast elementwise output.";
+    TF_ASSIGN_OR_RETURN(
+        output,
+        BroadcastTensor(output.reshape({}), output_shape, /*dimensions=*/{}));
+  }
+  return output;
+}
 
 class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
   StatusOr<poplar::Tensor> Allocator(
@@ -209,19 +243,34 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     // Reshape back for all the non-broadcasted dimensions.
     output = output.reshape(PoplarShapeFromXlaShape(allocation_shape));
     return output;
-  };
+  }
+
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "ImplicitBinaryElementwiseOp");
+    TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
+                                             tensor_map, debug_info));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor result,
+        BroadcastImplicitNaryOutputTensor(output.result, inst, output_shape));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
+    return output.sequence;
+  }
 };
 
 REGISTER_POPLAR_OP(Implicit_binary_inplace, ImplicitBinaryElementwiseOp);
 REGISTER_POPLAR_OP(Implicit_binary, ImplicitBinaryElementwiseOp);
 
 class TernaryElementwiseOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(
+ protected:
+  static StatusOr<NaryOutput> Compute(
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
-      const poplar::DebugContext& debug_context) override {
-    PoplarOpDefDebugInfo debug_info(debug_context, "TernaryElementwiseOp");
-    poplar::program::Sequence seq({}, debug_info);
+      const poplar::DebugNameAndId& debug_name_and_id) {
+    poplar::program::Sequence seq({}, debug_name_and_id);
 
     // Get the ternary operation.
     auto operation = helper::GetElementwiseOp(inst);
@@ -246,7 +295,7 @@ class TernaryElementwiseOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
         helper::GetElementwiseInputs(res, inst, permutation, tensor_map, seq,
-                                     {debug_info}));
+                                     {debug_name_and_id}));
     auto input_tensors =
         helper::GetTensorsFromExpressionInputs(expression_inputs);
 
@@ -261,20 +310,47 @@ class TernaryElementwiseOp : public PoplarOpDef {
         AreInplaceOutputTensorsWritable(tensor_map, res, inst);
 
     if (is_inplace) {
-      popops::mapInPlace(graph, expr, input_tensors, seq, {debug_info});
+      popops::mapInPlace(graph, expr, input_tensors, seq, {debug_name_and_id});
       out = input_tensors[0];
     } else {
-      out = popops::map(graph, expr, input_tensors, seq, {debug_info});
+      out = popops::map(graph, expr, input_tensors, seq, {debug_name_and_id});
     }
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-    return seq;
+    return NaryOutput{seq, out};
+  }
+
+ public:
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context, "TernaryElementwiseOp");
+    TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
+                                             tensor_map, debug_info));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output.result));
+    return output.sequence;
   }
 };
-
-REGISTER_POPLAR_OP(Implicit_ternary_inplace, TernaryElementwiseOp);
-REGISTER_POPLAR_OP(Implicit_ternary, TernaryElementwiseOp);
 REGISTER_HLO_OP(kClamp, TernaryElementwiseOp);
 REGISTER_HLO_OP(kSelect, TernaryElementwiseOp);
+
+class ImplicitTernaryElementwiseOp : public TernaryElementwiseOp {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    PoplarOpDefDebugInfo debug_info(debug_context,
+                                    "ImplicitTernaryElementwiseOp");
+    TF_ASSIGN_OR_RETURN(auto output, Compute(graph, res, inst, output_shape,
+                                             tensor_map, debug_info));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor result,
+        BroadcastImplicitNaryOutputTensor(output.result, inst, output_shape));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, result));
+    return output.sequence;
+  }
+};
+REGISTER_POPLAR_OP(Implicit_ternary_inplace, ImplicitTernaryElementwiseOp);
+REGISTER_POPLAR_OP(Implicit_ternary, ImplicitTernaryElementwiseOp);
 
 }  // namespace
 }  // namespace poplarplugin
