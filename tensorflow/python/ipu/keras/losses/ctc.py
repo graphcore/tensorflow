@@ -54,9 +54,9 @@ class CTCLoss(layers.Layer):
   Args:
     blank_index: The class index to use for the blank label.
     from_logits: Whether to expect the input data in the form of logits
-        (`True`) or log probibilities (`False`).
+        (`True`) or log probabilities (`False`).
         Default value is `False`.
-    name: A name for this op. Defaults to "ctc_loss" or "ctc_loss_with_logits.
+    name: A name for this op. Defaults to "ctc_loss" or "ctc_loss_with_logits".
   """
   def __init__(self, blank_index=0, from_logits=False, name=None):
     super().__init__(name=name)
@@ -75,6 +75,8 @@ class CTCLoss(layers.Layer):
           labels in each `labels` batch entry.
       data_length: A tensor of shape [batch_size] containing the number of
           timesteps in each `data` batch entry.
+    Returns:
+      The calculated loss.
     """
     loss = self.loss_function(labels, data, label_length, data_length,
                               self.blank_index)

@@ -62,9 +62,6 @@ def ipu_compile_summary(name, op_list, collections=None):
 def get_ipu_reports():
   """Extracts all reports and converts them from EagerTensor to array of events.
 
-  Args:
-    None
-
   Returns:
     A two dimensional numpy.ndarray of IPUTraceEvents protobufs.
   """

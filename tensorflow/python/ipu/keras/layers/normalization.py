@@ -139,6 +139,13 @@ class GroupNormalization(ipu_layer.IPULayer):
 
   # pylint: disable=arguments-differ
   def call(self, inputs, training=None):
+    """
+    Args:
+      inputs: The tensor to apply normalization to.
+
+    Returns:
+      The tensor resulting from applying normalization.
+    """
     if training is None:
       training = K.learning_phase()
 

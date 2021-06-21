@@ -34,6 +34,7 @@ class RecomputationCheckpoint(Layer):
   This operation should be used with the
   `RecomputationMode.RecomputeAndBackpropagateInterleaved` pipelining
   recomputation mode.
+
   Note that this operation has no effect when used with the
   `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.

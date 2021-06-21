@@ -34,7 +34,7 @@ class CTCInferenceLayer(layers.Layer):
         (`True`) or log probabilities (`False`).
         Default value is `False`.
     name: A name for this op. Defaults to "ctc_beam_search" or
-    "ctc_beam_search_with_logits.
+        "ctc_beam_search_with_logits".
   """
   def __init__(self,
                blank_index=0,
@@ -57,9 +57,12 @@ class CTCInferenceLayer(layers.Layer):
           timesteps in each `data` batch entry.
 
     Returns:
-      Label probabilities: Negative log probabilities that each path is correct.
-      Label lengths: Length of each path of predictions.
-      Decoded labels: The predictions made by the beam search.
+      A tuple of values:
+
+      * Label probabilities: Negative log probabilities that each path is
+        correct.
+      * Label lengths: Length of each path of predictions.
+      * Decoded labels: The predictions made by the beam search.
     """
     return self.infer_function(data,
                                data_length,
@@ -91,7 +94,7 @@ class CTCPredictionsLayer(layers.Layer):
         (`True`) or log probabilities (`False`).
         Default value is `False`.
     name: A name for this op. Defaults to "ctc_beam_search" or
-    "ctc_beam_search_with_logits.
+        "ctc_beam_search_with_logits".
 
   """
   def __init__(self,
@@ -127,7 +130,7 @@ class CTCPredictionsLayer(layers.Layer):
     indices = array_ops.concat([batch_range, indices], 1)
 
     # Feel like there must be a better way to slice the batch without having
-    # to create a constant tensor whos values are just the batch dimension
+    # to create a constant tensor whose values are just the batch dimension
     # in order, but my gather_nd skills aren't good enough to find it for now
 
     # Alternatively instead of using dynamic slice, we could try do a sort
@@ -175,5 +178,11 @@ class CTCPredictionsLayer(layers.Layer):
       data_length: A tensor of shape [batch_size] containing the number of
           timesteps in each `data` batch entry. If not provided can only
           perform inference.
+
+    Returns:
+      The most probable predictions from the CTC decoder. This selects the most
+      probable of all predictions returned. It fills the values off the end with
+      the blank index.
+
     """
     return self._perform_inference(data, data_length, **kwargs)
