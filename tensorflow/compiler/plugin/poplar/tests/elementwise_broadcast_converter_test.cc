@@ -16,9 +16,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -27,6 +29,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
+
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
+#include <popops/codelets.hpp>
+#include <poprand/codelets.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -43,6 +50,19 @@ std::vector<HloPoplarUseDescription> GetInplaceDescriptions(
     output.push_back(HloPoplarUseDescription::FromProto(inplace_description));
   }
   return output;
+}
+
+std::unique_ptr<CompilerResources> GetMockResources(HloModule* module) {
+  auto resources = CompilerResources::CreateTestDefault(module);
+  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
+  resources->module_call_graph = CallGraph::Build(module);
+  resources->main_graph = absl::make_unique<poplar::Graph>(
+      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
+  poplin::addCodelets(*resources->main_graph);
+  popnn::addCodelets(*resources->main_graph);
+  popops::addCodelets(*resources->main_graph);
+  poprand::addCodelets(*resources->main_graph);
+  return std::move(resources);
 }
 
 TEST_F(ElementwiseBroadcastConvert, BinaryRHS) {
@@ -453,6 +473,54 @@ ENTRY c1 {
   ElementwiseBroadcastConverter ebc;
   EXPECT_FALSE(ebc.Run(module0).ValueOrDie());
 }
+
+class ElementwiseBroadcastConvertImplicit
+    : public HloTestBase,
+      public ::testing::WithParamInterface<std::string> {};
+
+const char* binary_all_inputs_broadcasts = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[1] parameter(0)
+  bcast1 = f16[1,16,16,4] broadcast(p0), dimensions={0}
+  p1 = f16[] parameter(1)
+  bcast2 = f16[1,16,16,4] broadcast(p1), dimensions={}
+  ROOT %add = f16[1,16,16,4] add(bcast1, bcast2)
+}
+)";
+
+const char* ternary_all_inputs_broadcasts = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[] parameter(0)
+  bcast1 = f16[1,16,16,4] broadcast(p0), dimensions={}
+  p1 = f16[] parameter(1)
+  bcast2 = f16[1,16,16,4] broadcast(p1), dimensions={}
+  p2 = f16[] parameter(2)
+  bcast3 = f16[1,16,16,4] broadcast(p2), dimensions={}
+  ROOT %clamp = f16[1,16,16,4] clamp(bcast1, bcast2, bcast3)
+}
+)";
+
+TEST_P(ElementwiseBroadcastConvertImplicit, DoTest) {
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(GetParam()));
+  EXPECT_TRUE(ElementwiseBroadcastConverter().Run(module.get()).ValueOrDie());
+
+  // Make sure the module compiles correctly.
+  auto resources = GetMockResources(module.get());
+  auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
+  TF_ASSERT_OK(entry_computation->Accept(&visitor));
+}
+
+INSTANTIATE_TEST_SUITE_P(ElementwiseBroadcastConvertImplicitCases,
+                         ElementwiseBroadcastConvertImplicit,
+                         ::testing::ValuesIn(std::vector<std::string>{
+                             binary_all_inputs_broadcasts,
+                             ternary_all_inputs_broadcasts}));
 
 }  // namespace
 }  // namespace poplarplugin
