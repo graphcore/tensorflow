@@ -739,6 +739,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // allocation type
   class OutputAllocation {
    public:
+    virtual ~OutputAllocation() = default;
+
     // Function called to allocate a buffer for a particular output position.
     virtual StatusOr<se::DeviceMemoryBase> AllocateBuffer(
         const Shape& shape, int64 output_index,
