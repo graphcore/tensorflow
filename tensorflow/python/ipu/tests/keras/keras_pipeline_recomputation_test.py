@@ -83,7 +83,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
       recomp_always_live = sum(tile.memory.alwaysLiveBytes
                                for tile in report.compilation.tiles)
       recomp_peak_liveness = recomp_always_live + max(
-          step.notAlwaysLiveBytes
+          step.notAlwaysLiveMemory.bytes
           for step in report.compilation.livenessProgramSteps)
 
       report_helper.clear_reports()
@@ -95,7 +95,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
       ckpt_always_live = sum(tile.memory.alwaysLiveBytes
                              for tile in report.compilation.tiles)
       ckpt_peak_liveness = ckpt_always_live + max(
-          step.notAlwaysLiveBytes
+          step.notAlwaysLiveMemory.bytes
           for step in report.compilation.livenessProgramSteps)
       self.assertGreater(recomp_peak_liveness, ckpt_peak_liveness)
 
