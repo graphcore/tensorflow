@@ -43,6 +43,8 @@ class RangeSampler {
         tile_(tile),
         seed_(seed) {}
 
+  virtual ~RangeSampler() = default;
+
   virtual Status Sample(poplar::Graph& graph, poplar::Tensor& samples,
                         poplar::program::Sequence& seq);
 
