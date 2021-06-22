@@ -250,8 +250,8 @@ Concurrent pipeline stages
 __________________________
 
 When pipelining a model, it's possible to have stages that have no data
-dependencies and don't share weights. These stages can benefit from being
-operating on the same mini-batch concurrently.
+dependencies and don't share weights. These stages can benefit from operating
+on the same mini-batch concurrently.
 
 .. figure:: figures/concurrent-pipeline-stages.png
     :width: 95%
