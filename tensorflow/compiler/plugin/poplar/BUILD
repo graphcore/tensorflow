@@ -1,6 +1,6 @@
 licenses(["restricted"])
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
@@ -145,6 +145,7 @@ tf_proto_library_py(
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/core:protos_all_py",
     ],
+    visibility = ["//visibility:public"],
 )
 
 tf_proto_library(
@@ -1090,6 +1091,7 @@ cc_library(
 cc_library(
     name = "dataset_ops",
     srcs = ["ops/dataset/dataset_ops.cc"],
+    visibility = ["//visibility:public"],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
 )
@@ -1105,6 +1107,7 @@ tf_custom_op_py_library(
     name = "dataset_ops_py",
     kernels = [":dataset_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":dataset_ops_wrapper_py"],
 )
 
@@ -1124,6 +1127,7 @@ tf_gen_op_wrapper_py(
 tf_custom_op_py_library(
     name = "ipu_ops_py",
     kernels = [":ipu_ops"],
+    visibility = ["//visibility:public"],
     deps = [":ipu_ops_wrapper_py"],
 )
 
@@ -1153,6 +1157,7 @@ tf_custom_op_py_library(
     name = "popnn_ops_py",
     kernels = [":popnn_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":popnn_ops_wrapper_py"],
 )
 
@@ -1182,6 +1187,7 @@ tf_custom_op_py_library(
     name = "popops_ops_py",
     kernels = [":popops_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":popops_ops_wrapper_py"],
 )
 
@@ -1205,6 +1211,7 @@ tf_custom_op_py_library(
     name = "popfloat_ops_py",
     kernels = [":popfloat_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":popfloat_ops_wrapper_py"],
 )
 
@@ -1227,6 +1234,7 @@ tf_gen_op_wrapper_py(
 tf_custom_op_py_library(
     name = "poprand_ops_py",
     kernels = [":poprand_ops"],
+    visibility = ["//visibility:public"],
     deps = [":poprand_ops_wrapper_py"],
 )
 
@@ -1263,6 +1271,7 @@ tf_gen_op_wrapper_py(
 tf_custom_op_py_library(
     name = "poputil_ops_py",
     kernels = [":poputil_ops"],
+    visibility = ["//visibility:public"],
     deps = [":poputil_ops_wrapper_py"],
 )
 
@@ -1290,6 +1299,7 @@ tf_custom_op_py_library(
     name = "pop_datastream_ops_py",
     kernels = [":pop_datastream_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":pop_datastream_ops_wrapper_py"],
 )
 
@@ -1318,6 +1328,7 @@ tf_custom_op_py_library(
     name = "sendrecv_ops_py",
     kernels = [":sendrecv_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":sendrecv_ops_wrapper_py"],
 )
 
@@ -1345,6 +1356,7 @@ tf_custom_op_py_library(
     name = "functional_ops_py",
     kernels = [":functional_ops"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":functional_ops_wrapper_py"],
 )
 
@@ -1366,6 +1378,7 @@ tf_custom_op_py_library(
     name = "dataset_benchmark_py",
     kernels = [":dataset_benchmark"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":dataset_benchmark_wrapper_py"],
 )
 
@@ -1390,6 +1403,7 @@ tf_custom_op_py_library(
     name = "dataset_exporters_py",
     kernels = [":dataset_exporters"],
     srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
     deps = [":dataset_exporters_wrapper_py"],
 )
 
@@ -1403,6 +1417,7 @@ cc_library(
         ":config_protos_py",
     ],
     linkstatic = 1,
+    visibility = ["//visibility:public"],
     deps = [
         ":dataset_benchmark",
         ":dataset_exporters",
@@ -1450,6 +1465,7 @@ cc_library(
     ],
     hdrs = [],
     linkstatic = 1,
+    visibility = ["//visibility:public"],
     deps = [
         ":common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -3492,6 +3508,7 @@ xla_test(
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
+    visibility = ["//visibility:public"],
     deps = [
         ":ipu_ops_py",
         "//tensorflow/compiler/tf2xla/python:xla",
@@ -5504,10 +5521,13 @@ test_suite(
     ],
 )
 
-exports_files([
-    "disabled_manifest.txt",
-    "disables_xla_tests_manifest.txt",
-])
+exports_files(
+    [
+        "disabled_manifest.txt",
+        "disabled_xla_tests_manifest.txt",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 filegroup(
     name = "all_files",

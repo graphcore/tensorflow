@@ -13,6 +13,17 @@ ________________
 
   These will require changes to any code that uses them.
 
+C++ Poplar TensorFlow libraries are private by default
+''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Users interested in targeting the IPU from C++ are required to use the new ipu_config library.
+We've made most C++ libraries produced as part of the Poplar backend private, so dependencies
+on ``poplar:driver`` and other libraries will no longer be valid and should be replaced with a dependency
+to ``//tensorflow/compiler/plugin/poplar:ipu_config``. This library provides a public interface for configuring
+IPUs in C++, all other operations should use the standard TensorFlow C++ API. No other Poplar TensorFlow libraries should be
+directly depended on.
+
+
 
 Non-breaking changes
 ____________________
