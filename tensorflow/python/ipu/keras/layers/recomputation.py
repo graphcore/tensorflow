@@ -27,15 +27,15 @@ class RecomputationCheckpoint(Layer):
   When recomputation is enabled, these values will not be recomputed and they
   will be stored in memory instead.
 
-  This operation can reduce memory liveness peaks when using recomputation if
+  This layer can reduce memory liveness peaks when using recomputation if
   there are too many activations which need to be recomputed before the
   backpropagation operations can be executed.
 
-  This operation should be used with the
+  This layer should be used with the
   `RecomputationMode.RecomputeAndBackpropagateInterleaved` pipelining
   recomputation mode.
 
-  Note that this operation has no effect when used with the
+  Note that this layer has no effect when used with the
   `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.
   """
@@ -45,7 +45,7 @@ class RecomputationCheckpoint(Layer):
 
   def call(self, inputs, **kwargs):
     """
-    Checkpoint the 'inputs'.
+    Checkpoint the input tensors.
 
     Args:
       inputs: A tensor or a structure of tensors which should be checkpointed.
