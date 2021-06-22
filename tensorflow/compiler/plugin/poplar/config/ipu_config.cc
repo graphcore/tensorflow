@@ -117,7 +117,7 @@ Status GetIpuConfig(std::vector<IpuConfig>& configs) {
   // Convert string tensor to IpuOptions
   CHECK_EQ(outputs.size(), 1);
   const tensorflow::Tensor& output = outputs.front();
-  const auto output_data = output.flat<std::string>();
+  const auto output_data = output.flat<tstring>();
 
   for (auto i = 0; i < output.NumElements(); ++i) {
     configs.emplace_back();
