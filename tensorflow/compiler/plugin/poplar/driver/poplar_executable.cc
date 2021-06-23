@@ -123,14 +123,14 @@ class PoplarExecutableBinaryFile {
   static StatusOr<poplar::Executable> Read(
       const std::string& file_name,
       ::tensorflow::protobuf::MessageLite* proto) {
-    auto file = std::ifstream(file_name, std::ios::binary);
+    auto file = absl::make_unique<std::ifstream>(file_name, std::ios::binary);
     const std::string error_prefix =
         absl::StrCat("[Deserialize][File: ", file_name, "] ");
 
     // Read the protobuf metadata length.
     std::array<uint8, 8> proto_length_bytes;
-    if (!file.read(reinterpret_cast<char*>(proto_length_bytes.data()),
-                   proto_length_bytes.size())) {
+    if (!file->read(reinterpret_cast<char*>(proto_length_bytes.data()),
+                    proto_length_bytes.size())) {
       return InternalErrorStrCat(
           error_prefix, "Corrupted - Cannot read the metadata length.");
     }
@@ -141,7 +141,7 @@ class PoplarExecutableBinaryFile {
 
     // Read the protobuf metadata.
     std::vector<char> serialized(metadata_length);
-    if (!file.read(serialized.data(), metadata_length)) {
+    if (!file->read(serialized.data(), metadata_length)) {
       return InternalErrorStrCat(error_prefix,
                                  "Corrupted - Cannot read the metadata.");
     }
@@ -153,7 +153,7 @@ class PoplarExecutableBinaryFile {
 
     // Read the executable.
     try {
-      return poplar::Executable::deserialize(file);
+      return poplar::Executable::deserialize(std::move(file));
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus(error_prefix, e);
     }

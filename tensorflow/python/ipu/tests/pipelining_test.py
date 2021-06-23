@@ -124,8 +124,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed1")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed1")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -185,8 +185,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -253,8 +253,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed4")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed4")
     device_mapping = [2, 0, 1]
 
     def stage1(c, **kwargs):
@@ -323,8 +323,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed5")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed5")
     device_mapping = [2, 2, 2]
 
     def stage1(c, **kwargs):
@@ -393,8 +393,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed6")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed6")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -453,7 +453,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
 
     with ops.device('cpu'):
       y = array_ops.placeholder(np.float32, shape=[])
@@ -502,7 +502,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testDuplicateInputsOutputs(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed9")
 
     def stage1(x, y):
       return x, y, y, x
@@ -564,8 +564,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b, "idx": idx}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed10")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed10")
 
     def stage1(c, **kwargs):
       y = layers.Conv2D(2,
@@ -650,8 +650,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineWithStagesNoVariables(self):
     dataset = tu.create_single_increasing_dataset(5, shape=[1])
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed11")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed11")
 
     def stage1(features):
       partial = features * features
@@ -1020,7 +1020,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
 
     with ops.device('cpu'):
       y = array_ops.placeholder(np.float32, shape=[])
@@ -1065,8 +1065,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b, "idx": idx}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed10")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed10")
 
     def stage1(c, **kwargs):
       y = layers.Conv2D(2,
@@ -1131,7 +1131,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
     with ops.device("/device:IPU:0"):
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed11")
       with self.assertRaisesRegex(ValueError,
                                   "An optimizer_function must be provided"):
         pipelining_ops.pipeline([identity, identity, identity, identity],
@@ -1166,7 +1166,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         loss = x + 1.0
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed12")
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1220,7 +1220,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         loss = x + 1.0
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1276,7 +1276,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         loss = x + 1.0
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1310,8 +1310,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     to avoid overflow.
     """
     with tu.ipu_session() as sess:
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
-      outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+      outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue("__feed14")
 
       def my_net(dtype, x):
         w_name = 'w1' if not dtype else 'w'
@@ -1394,7 +1394,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         loss = x + y + 1.0
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x, y):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1440,7 +1440,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def identity(x):
         return x
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x):
         return pipelining_ops.pipeline(
@@ -1483,7 +1483,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def identity(x, y):
         return x, y
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x, y):
         return pipelining_ops.pipeline(
@@ -1521,7 +1521,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def dictstage(x):
         return {"x": x}
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
 
       def my_net(x):
         return pipelining_ops.pipeline(
@@ -1570,7 +1570,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+        "__feed13", outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def my_net(x):
       return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1611,7 +1611,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def optimizer_function(loss):
         return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed14")
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, stage2],
@@ -1655,7 +1655,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         opt = MockOptimizer(0.5)
         return pipelining_ops.OptimizerFunctionOutput(opt, x)
 
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed15")
 
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
@@ -1709,8 +1709,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
   def testPipelineInferenceWithConditional(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[1])
     dataset = dataset.batch(batch_size=1, drop_remainder=True)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed16")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed16")
 
     def stage1(x):
       return x
@@ -1991,9 +1991,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     labels = np.repeat(y, gradient_accumulation_count)
     dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
-    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+    grad_outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("grad_outfeed")
 
     def stage1(features, labels):
       w = variable_scope.get_variable(name="w", initializer=initial_w)
@@ -2080,7 +2080,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   @tu.test_uses_ipus(num_ipus=4)
   def testGradientAccumulationDtypeTiedEmbedding(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
 
     with ops.device('cpu'):
       indices = array_ops.placeholder(np.int32, [8])
@@ -2169,7 +2169,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipeliningArgsAndKwargs(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("args_kwargs_outfeed")
 
     def stage1(x):
       return x + 1
@@ -2312,6 +2312,233 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         self,
         53362,
         device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1])  # pylint: disable=W0212
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareParStages(self):
+    # Resnet like network.
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(100, shape=[4])
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value
+        label = math_ops.reduce_mean(img, axis=[1, 2, 3])
+        return img, math_ops.cast(label, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 18
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def fixed_padding(inputs, kernel_size):
+      pad_total = kernel_size - 1
+      pad_beg = pad_total // 2
+      pad_end = pad_total - pad_beg
+      padded_inputs = array_ops.pad(
+          inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+      return padded_inputs
+
+    def block(name, first_stride, out_filters, count, x):
+
+      for i in range(count):
+        shape_in = x.shape
+        stride = first_stride if (i == 0) else 1
+        if stride > 1:
+          x = fixed_padding(x, 3)
+        sc = x
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/1"):
+          x = conv(x, 3, stride, out_filters)
+          x = nn.relu(x)
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/2"):
+          x = conv(x, 3, 1, out_filters)
+
+          # shortcut
+          if stride != 1:
+            sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                         sc.shape,
+                                         strides=[1, stride, stride, 1])
+          pad = int(x.shape[3] - shape_in[3])
+          if pad != 0:
+            sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
+
+          x = nn.relu(x + sc)
+
+      return x
+
+    def fc(x, num_units_out):
+      return layers.Dense(
+          num_units_out,
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def max_pool(x, ksize=3, stride=2):
+      return layers.MaxPooling2D(ksize, stride, padding='SAME')(x)
+
+    def conv(x, ksize, stride, filters_out):
+      return layers.Conv2D(
+          filters_out,
+          ksize,
+          stride,
+          'SAME',
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def stage1(img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        x = conv(img, 7, 2, 16)
+        x = nn.relu(x)
+        x = max_pool(x, ksize=3, stride=2)
+        return x, label
+
+    def stage2a(x, _):
+      with variable_scope.variable_scope("stage2a", use_resource=True):
+        x = block("b", 2, 64, 1, x)
+        return x
+
+    def stage2b(x, label):
+      with variable_scope.variable_scope("stage2b", use_resource=True):
+        x = block("b", 2, 64, 1, x)
+        return x, label
+
+    def stage3(xa, xb, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        x = xa + xb
+        x = math_ops.reduce_mean(x, axis=[1, 2])
+        x = fc(x, 100)
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
+        return loss
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, [stage2a, stage2b], stage3],
+        lambda: [], [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        53362,
+        device_mapping=[0, [0, 1], 1])
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareParStagesInfeed(self):
+    # Resnet like network.
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(100, shape=[4])
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=32, drop_remainder=True)
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value
+        label = math_ops.reduce_mean(img, axis=[1, 2, 3])
+        return img, math_ops.cast(label, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    gradient_accumulation_count = 18
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def fixed_padding(inputs, kernel_size):
+      pad_total = kernel_size - 1
+      pad_beg = pad_total // 2
+      pad_end = pad_total - pad_beg
+      padded_inputs = array_ops.pad(
+          inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+      return padded_inputs
+
+    def block(name, first_stride, out_filters, count, x):
+
+      for i in range(count):
+        shape_in = x.shape
+        stride = first_stride if (i == 0) else 1
+        if stride > 1:
+          x = fixed_padding(x, 3)
+        sc = x
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/1"):
+          x = conv(x, 3, stride, out_filters)
+          x = nn.relu(x)
+
+        with variable_scope.variable_scope(name + "/" + str(i) + "/2"):
+          x = conv(x, 3, 1, out_filters)
+
+          # shortcut
+          if stride != 1:
+            sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                         sc.shape,
+                                         strides=[1, stride, stride, 1])
+          pad = int(x.shape[3] - shape_in[3])
+          if pad != 0:
+            sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
+
+          x = nn.relu(x + sc)
+
+      return x
+
+    def fc(x, num_units_out):
+      return layers.Dense(
+          num_units_out,
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def max_pool(x, ksize=3, stride=2):
+      return layers.MaxPooling2D(ksize, stride, padding='SAME')(x)
+
+    def conv(x, ksize, stride, filters_out):
+      return layers.Conv2D(
+          filters_out,
+          ksize,
+          stride,
+          'SAME',
+          kernel_initializer=init_ops.constant_initializer(0.1),
+          bias_initializer=init_ops.constant_initializer(0.0))(x)
+
+    def stage1a(img, _):
+      with variable_scope.variable_scope("stage1a", use_resource=True):
+        x = conv(img, 7, 2, 16)
+        x = nn.relu(x)
+        x = max_pool(x, ksize=3, stride=2)
+        return x
+
+    def stage1b(img, label):
+      with variable_scope.variable_scope("stage1b", use_resource=True):
+        x = conv(img, 7, 2, 16)
+        x = nn.softmax(x)
+        x = max_pool(x, ksize=3, stride=2)
+        return x, label
+
+    def stage2(a, b, label):
+      with variable_scope.variable_scope("stage2a", use_resource=True):
+        x = block("b", 2, 64, 1, a + b)
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        x = math_ops.reduce_mean(x, axis=[1, 2])
+        x = fc(x, 100)
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
+        return loss
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [[stage1a, stage1b], stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        gradient_accumulation_count,
+        dataset_fn,
+        optimizer,
+        self,
+        61059,
+        device_mapping=[[0, 1], 0, 1])
 
 
 if __name__ == "__main__":

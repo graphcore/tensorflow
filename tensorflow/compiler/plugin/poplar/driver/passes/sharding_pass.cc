@@ -452,6 +452,118 @@ Status PropagateShardingDeviceToInstruction(int64 sharding_device,
   return Status::OK();
 }
 
+StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipelineStage(
+    HloInstruction* stage, HloInstruction* pipeline_op, CallGraph* call_graph) {
+  absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+  const int64 sharding_device = stage->sharding().GetUniqueDevice();
+
+  CHECK_NE(sharding_device, -1);
+
+  // First propagate sharding inside.
+  // Get all the computations called.
+  TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,
+                      GetAllComputationsCalledBy(stage, call_graph));
+
+  for (HloComputation* comp : called_in_stage) {
+    for (HloInstruction* inst : comp->instructions()) {
+      // Set sharding for each instruction.
+      TF_RETURN_IF_ERROR(
+          PropagateShardingDeviceToInstruction(sharding_device, inst));
+    }
+    computations_in_pipeline.insert(comp);
+  }
+
+  return computations_in_pipeline;
+}
+
+StatusOr<absl::flat_hash_set<const HloComputation*>>
+ProcessParallelPipelineStage(HloInstruction* stage, HloInstruction* pipeline_op,
+                             CallGraph* call_graph) {
+  absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+  const int64 sharding_device = stage->sharding().GetUniqueDevice();
+
+  auto stage_insts = stage->to_apply()->MakeInstructionPostOrder();
+  auto insts_itr =
+      absl::c_stable_partition(stage_insts, IsPipelineStageOrBackwardOp);
+  stage_insts.erase(insts_itr, stage_insts.end());
+
+  for (auto sub_stage : stage_insts) {
+    const int64 sub_sharding_device = sub_stage->sharding().GetUniqueDevice();
+
+    // Process each substage.
+    TF_ASSIGN_OR_RETURN(
+        auto stage_called_computations,
+        ProcessPipelineStage(sub_stage, pipeline_op, call_graph));
+
+    // Add the substage computations to the computation set.
+    computations_in_pipeline.insert(stage_called_computations.begin(),
+                                    stage_called_computations.end());
+
+    // Then propagate sharding to users.
+    for (HloInstruction* user : sub_stage->users()) {
+      CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+      TF_RETURN_IF_ERROR(
+          PropagateShardingDeviceToInstruction(sub_sharding_device, user));
+    }
+  }
+
+  // The parameter instructions must belong to the same shard as the stage.
+  for (auto param : stage->to_apply()->parameter_instructions()) {
+    TF_RETURN_IF_ERROR(
+        PropagateShardingDeviceToInstruction(sharding_device, param));
+  }
+
+  // The root instruction must belong to the same shard as the stage.
+  TF_RETURN_IF_ERROR(PropagateShardingDeviceToInstruction(
+      sharding_device, stage->to_apply()->root_instruction()));
+
+  // Give any instructions that haven't been assigned a shard, the same sharding
+  // as the stage.
+  for (auto inst : stage->to_apply()->instructions()) {
+    if (!inst->has_sharding()) {
+      TF_RETURN_IF_ERROR(
+          PropagateShardingDeviceToInstruction(sharding_device, inst));
+    }
+  }
+
+  // Add the stage to the computation set.
+  computations_in_pipeline.insert(stage->to_apply());
+
+  return computations_in_pipeline;
+}
+
+namespace {
+Status TransferSubStageSharding(HloComputation* fwd_stage,
+                                HloComputation* bwd_stage) {
+  auto fwd_insts = fwd_stage->MakeInstructionPostOrder();
+  auto bwd_insts = bwd_stage->MakeInstructionPostOrder();
+
+  auto fwd_itr =
+      absl::c_stable_partition(fwd_insts, IsPipelineStageOrBackwardOp);
+  auto bwd_itr =
+      absl::c_stable_partition(bwd_insts, IsPipelineStageOrBackwardOp);
+
+  fwd_insts.erase(fwd_itr, fwd_insts.end());
+  bwd_insts.erase(bwd_itr, bwd_insts.end());
+
+  absl::flat_hash_map<int64, int64> fwd_inst_shard;
+  for (auto fwd_inst : fwd_insts) {
+    CHECK(fwd_inst->has_sharding());
+    const HloSharding& sharding = fwd_inst->sharding();
+    CHECK(sharding.HasUniqueDevice());
+
+    fwd_inst_shard[GetPipelineStageID(fwd_inst)] = sharding.GetUniqueDevice();
+  }
+
+  for (auto bwd_inst : bwd_insts) {
+    TF_RETURN_IF_ERROR(PropagateShardingDeviceToInstruction(
+        fwd_inst_shard[GetPipelineStageID(bwd_inst)], bwd_inst));
+  }
+
+  return Status::OK();
+}
+}  // namespace
+
 StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
     HloInstruction* pipeline_op, CallGraph* call_graph) {
   absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
@@ -477,6 +589,11 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
     const HloSharding& sharding = fwd_stage->sharding();
     TF_RETURN_IF_ERROR(PropagateShardingDeviceToInstruction(
         sharding.GetUniqueDevice(), bwd_stage));
+
+    if (sharding.GetUniqueDevice() == Devices::All) {
+      TF_RETURN_IF_ERROR(TransferSubStageSharding(fwd_stage->to_apply(),
+                                                  bwd_stage->to_apply()));
+    }
   }
   // For each stage propagate the sharding information to:
   // 1.  all the subcomputations called by the pipeline stage.
@@ -484,19 +601,21 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
       const int64 sharding_device = stage->sharding().GetUniqueDevice();
-      // First propagate sharding inside.
-      // Get all the computations called.
-      TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,
-                          GetAllComputationsCalledBy(stage, call_graph));
 
-      for (HloComputation* comp : called_in_stage) {
-        for (HloInstruction* inst : comp->instructions()) {
-          // Set sharding for each instruction.
-          TF_RETURN_IF_ERROR(
-              PropagateShardingDeviceToInstruction(sharding_device, inst));
-        }
-        computations_in_pipeline.insert(comp);
+      if (sharding_device != Devices::All) {
+        TF_ASSIGN_OR_RETURN(
+            auto stage_called_computations,
+            ProcessPipelineStage(stage, pipeline_op, call_graph));
+        computations_in_pipeline.insert(stage_called_computations.begin(),
+                                        stage_called_computations.end());
+      } else {
+        TF_ASSIGN_OR_RETURN(
+            auto stage_called_computations,
+            ProcessParallelPipelineStage(stage, pipeline_op, call_graph));
+        computations_in_pipeline.insert(stage_called_computations.begin(),
+                                        stage_called_computations.end());
       }
+
       // Then propagate sharding to users.
       for (HloInstruction* user : stage->users()) {
         CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
