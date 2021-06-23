@@ -95,6 +95,7 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/openmpi/include", "poplar/openmpi/include")
             repository_ctx.symlink(poplar_base + "/libpva/lib", "poplar/libpva/lib")
             repository_ctx.symlink(poplar_base + "/libpva/include", "poplar/libpva/include")
+            repository_ctx.symlink(poplar_base + "/libpva/python", "poplar/libpva/python")
             repository_ctx.symlink(poplar_base + "/popdist/lib", "poplar/popdist/lib")
             repository_ctx.symlink(poplar_base + "/popdist/python", "poplar/popdist/python")
             repository_ctx.symlink(poplar_base + "/poprun/bin", "poplar/poprun/bin")
