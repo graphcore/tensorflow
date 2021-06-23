@@ -70,7 +70,7 @@ class SPSCQueue {
     std::fill(buffer_.begin(), buffer_.end(), init);
   }
 
-  ~SPSCQueue() {
+  virtual ~SPSCQueue() {
     for (auto& elem : buffer_) {
       post_apply_(elem);
     }

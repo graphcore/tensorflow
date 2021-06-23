@@ -417,10 +417,14 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const PoplarFeedConfig& config,
     const int64 num_bytes_per_replica =
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
     for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
+      void* buffer =
+          tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
-          new (ptr) OutfeedQueueType(num_bytes_per_replica),
-          tensorflow::port::AlignedFree);
+          new (buffer) OutfeedQueueType(num_bytes_per_replica),
+          [](OutfeedQueueType* ptr) {
+            ptr->~OutfeedQueueType();
+            tensorflow::port::AlignedFree(ptr);
+          });
     }
   }
 }
