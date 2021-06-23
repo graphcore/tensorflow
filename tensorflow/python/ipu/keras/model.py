@@ -538,9 +538,9 @@ class _IpuModelBase(KerasModel):
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
       self.infeed = ipu_infeed_queue.IPUInfeedQueue(
-          ds,
-          prefetch_depth=prefetch_depth)
-      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue()
+          ds, prefetch_depth=prefetch_depth)
+      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
+          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL)
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -610,6 +610,7 @@ class _IpuModelBase(KerasModel):
         # Fetch the outfeed for the history
         if utils.use_synthetic_data_for(utils.SyntheticDataCategory.Outfeed):
           empty_results = self.outfeed.dequeue()
+          empty_results = nest.flatten(empty_results)
           results = []
           for empty_result in empty_results:
             shape = empty_result.shape.as_list()

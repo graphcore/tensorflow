@@ -48,7 +48,7 @@ def dataset():
   return ds_x
 
 
-def model_fn():
+def model_fn(nested_outputs=False):
   input_1 = keras.Input(8)
   input_2 = keras.Input(8)
   input_3 = keras.Input(8)
@@ -65,6 +65,9 @@ def model_fn():
                                kernel_initializer=init,
                                activation=keras.activations.relu,
                                name="output2")(cat)
+
+  if nested_outputs:
+    return ((input_1, input_2, input_3), ((dense_3,), (dense_4,)))
 
   return ((input_1, input_2, input_3), (dense_3, dense_4))
 
@@ -123,6 +126,26 @@ class KerasSyntheticDataTest(test.TestCase):
         cfg.configure_ipu_system()
 
         model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
+        model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
+
+        model.predict(dataset())
+
+  @tu.skip_on_hw
+  @test_util.run_v2_only
+  def testSyntheticDataPredictNestedOutput(self):
+    poplar_flags = os.environ.get("TF_POPLAR_FLAGS", "")
+    poplar_flags += " --use_synthetic_data"
+
+    with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
+      strategy = ipu.ipu_strategy.IPUStrategy()
+      with strategy.scope():
+        cfg = IPUConfig()
+        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg.auto_select_ipus = 1
+        cfg.configure_ipu_system()
+
+        model = ipu.keras.Model(*model_fn(nested_outputs=True),
+                                gradient_accumulation_count=4)
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
         model.predict(dataset())
