@@ -96,6 +96,7 @@ tf_proto_library(
         ":option_flag",
         ":threestate",
     ],
+    visibility = ["//visibility:public"],
 )
 
 tf_proto_library(
@@ -1031,6 +1032,7 @@ cc_library(
         "driver/tools/hlo_poplar_test_base.h",
         "driver/tools/hlo_poplar_test_util.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":driver",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -1431,6 +1433,23 @@ cc_library(
         "@com_google_protobuf//:protobuf_headers",
     ],
     alwayslink = True,
+)
+
+cc_library(
+    name = "ipu_config",
+    srcs = [
+        "config/ipu_config.cc",
+    ],
+    hdrs = [
+        "config/ipu_config.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":config_protos_cc_impl",
+        ":poplar_lib",
+        "//tensorflow/core:direct_session",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
 )
 
 tf_cc_binary(
@@ -5597,6 +5616,7 @@ test_suite(
     name = "poplar_test_suite",
     tests = [
         ":all_tests",
+        "//tensorflow/compiler/plugin/poplar/config/test:all_ipu_config_tests",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:dataset_tests",
         "//tensorflow/compiler/tests:poplar_tests",
         "//tensorflow/compiler/xla/client/lib:poplar_tests",
