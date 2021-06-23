@@ -664,30 +664,22 @@ StatusOr<poplar::program::Program> CreatePoplibsPooling(
       GetShuffleInputDimensionsForPoplar(window, reduction_dims);
   to_reduce = to_reduce.dimShuffle(shuffle_in);
 
-  // TODO(T7321) The default expected behaviour is to do any partial
-  // calculations in FP32, however popnn:pooling currently does not support
-  // having an FP16 input and FP32 partials. We therefore upcast the input if
-  // required and then downcast the result.
+  // The default expected behaviour is to do any partial calculations in FP32.
   auto input_type = to_reduce.elementType();
   auto reduction_type = GetReductionType(pooling_type, input_type);
-  const bool cast_required = input_type != reduction_type;
-  // Do the cast to make sure partials are at higher precision.
-  if (cast_required) {
-    to_reduce = popops::cast(graph, to_reduce, reduction_type, prog,
-                             {debug_name_and_id, "PreCast"});
+  const bool float_partials = input_type != reduction_type;
+
+  poplar::OptionFlags pooling_options = res.default_pooling_options;
+  if (float_partials) {
+    pooling_options.set("useFloatPartialsWhereBeneficial", "true");
   }
+
   auto pool_params = GetPoplibsPoolParams(
-      pooling_type, window, to_reduce.shape(), reduction_dims, reduction_type);
+      pooling_type, window, to_reduce.shape(), reduction_dims, input_type);
 
   poplar::Tensor out =
       popnn::pooling::pool(graph, pool_params, to_reduce, prog,
-                           {debug_name_and_id}, res.default_pooling_options);
-
-  // Do the cast to to the original input type.
-  if (cast_required) {
-    out = popops::cast(graph, out, input_type, prog,
-                       {debug_name_and_id, "PostCast"});
-  }
+                           {debug_name_and_id}, pooling_options);
 
   if (optional_reduction_op) {
     // We apply the initial_value of the pooling in the non-default base
@@ -798,29 +790,22 @@ StatusOr<poplar::program::Program> CreatePoplibsPoolingGrad(
   }
   output_grad = output_grad.dimShuffle(shuffle_in);
 
-  // TODO(T7321) The default expected behaviour is to do any partial
-  // calculations in FP32, however popnn:pooling currently does not support
-  // having an FP16 input and FP32 partials. We therefore upcast the input if
-  // required and then downcast the result.
+  // The default expected behaviour is to do any partial calculations in FP32.
   auto output_grad_type = output_grad.elementType();
   auto reduction_type = GetReductionType(pooling_type, output_grad_type);
-  const bool cast_required = output_grad_type != reduction_type;
-  if (cast_required) {
-    output_grad = popops::cast(graph, output_grad, reduction_type, prog,
-                               {debug_name_and_id, "PreCast"});
+  const bool float_partials = output_grad_type != reduction_type;
+
+  poplar::OptionFlags pooling_options = res.default_pooling_options;
+  if (float_partials) {
+    pooling_options.set("useFloatPartialsWhereBeneficial", "true");
   }
 
   auto pool_params =
       GetPoplibsPoolParams(pooling_type, window, input_shape_shuffled,
-                           reduction_dims, reduction_type);
+                           reduction_dims, output_grad_type);
   poplar::Tensor out = popnn::pooling::poolInputGradient(
       graph, pool_params, 1, output_grad, prog, {debug_name_and_id},
-      res.default_pooling_options);
-
-  if (cast_required) {
-    out = popops::cast(graph, out, output_grad_type, prog,
-                       {debug_name_and_id, "PreCast"});
-  }
+      pooling_options);
 
   // Shuffle back
   const auto shuffle_out = GetShuffleOutputDimensionsForPoplar(shuffle_in);
