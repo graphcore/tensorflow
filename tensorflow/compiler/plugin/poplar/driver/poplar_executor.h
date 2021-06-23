@@ -96,7 +96,7 @@ using Args = tensorflow::gtl::ArraySlice<se::DeviceMemoryBase>;
 
 using ConversionList = std::vector<ConversionFn>;
 
-using OutfeedQueueType = SPSCOutfeedQueue<2048>;
+using OutfeedQueueType = SPSCOutfeedQueue<32>;
 
 class ModuleFilenames {
  public:
@@ -1049,7 +1049,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
     using OutfeedQueueStorage =
-        std::unique_ptr<OutfeedQueueType, void (*)(void*)>;
+        std::unique_ptr<OutfeedQueueType, void (*)(OutfeedQueueType*)>;
     std::vector<std::vector<OutfeedQueueStorage>> callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are

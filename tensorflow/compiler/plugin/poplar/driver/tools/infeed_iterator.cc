@@ -310,9 +310,12 @@ void InfeedIterator::SetReplicationFactor(int64 replication_factor) {
     infeed_queues_[replica_id].clear();
 
     for (uint64 i = 0; i < shapes_.size(); i++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
-      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue(),
-                                              tensorflow::port::AlignedFree);
+      void* buffer = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
+      infeed_queues_[replica_id].emplace_back(
+          new (buffer) InfeedQueue(), [](InfeedQueue* ptr) {
+            ptr->~InfeedQueue();
+            tensorflow::port::AlignedFree(ptr);
+          });
       infeed_queues_ptrs_[replica_id].emplace_back(
           infeed_queues_[replica_id].back().get());
     }
