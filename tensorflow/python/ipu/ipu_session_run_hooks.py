@@ -42,9 +42,14 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
 
   _feed_name_deprecated_instructions = """No change needed.
   feed_name is now automatically generated."""
+  _replication_factor_deprecated_instructions = """No change needed.
+  replication_factor is now set automatically based on the model."""
 
   @deprecation.deprecated_args(None, _feed_name_deprecated_instructions,
                                "feed_name")
+  @deprecation.deprecated_args(None,
+                               _replication_factor_deprecated_instructions,
+                               "replication_factor")
   def __init__(
       self,
       every_n_iter=None,
@@ -53,7 +58,7 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
       formatter=None,
       logging_mode=LoggingMode.LAST,
       feed_name=None,  # pylint: disable=unused-argument
-      replication_factor=1):  # pylint: disable=unused-argument
+      replication_factor=None):  # pylint: disable=unused-argument
     """Initializes the hook.
 
     Args:
@@ -68,8 +73,6 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
       logging_mode: `IPULoggingTensorHook.LoggingMode` that determines the
         behaviour when enqueuing multiple tensor values between dequeues
         (e.g. print all of them or only the last one).
-      replication_factor: `int`, the number of replicas from which logging
-        is performed.
     """
     if (every_n_iter is not None) and (every_n_secs is not None):
       raise ValueError("Cannot provide both every_n_iter and every_n_secs")
