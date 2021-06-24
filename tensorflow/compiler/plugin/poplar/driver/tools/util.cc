@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include <queue>
 #include <string>
 #include <utility>
 
@@ -864,6 +865,29 @@ std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation) {
   }
 
   return unreachable_roots;
+}
+
+StatusOr<HloInstruction*> CloneComputationSubtree(HloInstruction* root,
+                                                  HloComputation* to,
+                                                  const string& suffix,
+                                                  HloCloneContext* context) {
+  std::queue<HloInstruction*> to_clone;
+  HloInstruction* new_root = to->AddInstruction(root->Clone(suffix, context));
+  to_clone.push(new_root);
+  while (!to_clone.empty()) {
+    HloInstruction* next = to_clone.front();
+    to_clone.pop();
+    for (int64 op_idx = 0; op_idx < next->operand_count(); ++op_idx) {
+      const HloInstruction* op = next->operand(op_idx);
+      HloInstruction* clone = context ? context->FindInstruction(op) : nullptr;
+      if (!clone) {
+        clone = to->AddInstruction(op->Clone(suffix, context));
+        to_clone.push(clone);
+      }
+      TF_RETURN_IF_ERROR(next->ReplaceOperandWith(op_idx, clone));
+    }
+  }
+  return new_root;
 }
 
 }  // namespace poplarplugin
