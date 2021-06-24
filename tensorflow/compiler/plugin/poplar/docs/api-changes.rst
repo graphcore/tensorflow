@@ -20,6 +20,14 @@ ____________________
 These changes are recommended.
 
 
+IPULoggingTensorHook replication_factor deprecated
+''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The ``replication_factor`` argument of ``IPULoggingTensorHook`` will be removed
+in release 2.3. The replication factor is now automatically set based on the
+model being executed.
+
+
 IPUInfeedQueue/IPUOutfeedQueue/IPULoggingTensorHook feed_name deprecated
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
