@@ -84,6 +84,12 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
     _validate_run_function(fn)
     return super().run(fn, args, kwargs, options)
 
+  @property
+  def _device_ordinal(self):
+    device_string = self.extended.non_slot_devices(None)
+    current_device = tf_device.DeviceSpec.from_string(device_string)
+    return current_device.device_index
+
 
 def _get_variable_creator_initial_value(device, **kwargs):
   def initial_value_fn():

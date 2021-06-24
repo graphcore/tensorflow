@@ -24,6 +24,18 @@ IPUs in C++, all other operations should use the standard TensorFlow C++ API. No
 directly depended on.
 
 
+TensorFlow 2.1 to TensorFlow 2.4 Migration
+''''''''''''''''''''''''''''''''''''''''''
+
+The Graphcore TensorFlow backend has been migrated from TensorFlow 2.1 to
+TensorFlow 2.4 which might require changes to your application.
+
+See the following list for IPU specific breaking changes:
+
+  - ``experimental_run_v2`` function in ``IPUStrategy`` has been removed to
+    align with TensorFlow 2.4 strategies.
+
+    Use ``run`` instead.
 
 Non-breaking changes
 ____________________
@@ -89,19 +101,6 @@ release.
     Use the ``set_io_tile_options`` instead.
 
     Only removed for TensorFlow 1.15. Already removed in TensorFlow 2.4.
-
-TensorFlow 2.1 to TensorFlow 2.4 Migration
-''''''''''''''''''''''''''''''''''''''''''
-
-The Graphcore TensorFlow backend has been migrated from TensorFlow 2.1 to
-TensorFlow 2.4 which might require changes to your application.
-
-See the following list for IPU specific breaking changes:
-
-  - ``experimental_run_v2`` function in ``IPUStrategy`` has been removed to
-    align with TensorFlow 2.4 strategies.
-
-    Use ``run`` instead.
 
 IPUPipelineEstimator change
 '''''''''''''''''''''''''''

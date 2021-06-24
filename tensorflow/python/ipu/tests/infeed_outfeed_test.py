@@ -25,6 +25,7 @@ from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.ops import readers
 from tensorflow.python.eager import context
+from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
@@ -1421,6 +1422,38 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       out = sess.run(dequeued)
       self.assertAllEqual([-4, -3, -2, -1, 0, 1, 2, 3, 4, 5], out[0])
       self.assertAllEqual([250, 251, 252, 253, 254, 255, 0, 1, 2, 3], out[1])
+
+  @test_util.run_v2_only
+  def testDeduceDevice(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = [1, 1]
+    cfg.configure_ipu_system()
+
+    def fn(ordinal):
+      strategy = ipu.ipu_strategy.IPUStrategyV1(f"/device:IPU:{ordinal}")
+
+      with strategy.scope():
+        dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
+
+        infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+        outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+        infeed_queue.initializer  # pylint: disable=pointless-statement
+
+        def body(v, x):
+          v = v + x
+          outfeed = outfeed_queue.enqueue(v)
+          return (v, outfeed)
+
+        @def_function.function(experimental_compile=True)
+        def my_net(v):
+
+          r = ipu.loops.repeat(20, body, (v), infeed_queue)
+          return r
+
+      result = strategy.run(my_net, args=(np.ones([4, 4], np.float32),))
+      return result, outfeed_queue.dequeue()
+
+    self.assertAllClose(fn(0), fn(1))
 
 
 if __name__ == "__main__":

@@ -22,12 +22,12 @@ import threading
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_shape
+from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest, deprecation
 
 _uid_counter = 0
@@ -92,21 +92,18 @@ class IPUOutfeedQueue:
       self,
       feed_name=None,  # pylint: disable=unused-argument
       outfeed_mode=None,
-      device_ordinal=0,
+      device_ordinal=None,
       replication_factor=None,  # pylint: disable=unused-argument
       io_batch_size=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
-        feed_name: a user provided name for the outfeed operation. Must be
-          unique within all IPUOutfeedQueue and IPUInfeedQueue
-          operations.
-        outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
-          outfeed behaviour. If not specified then all elements will be
-          returned by the outfeed when the dequeue operation is run.
-        device_ordinal: ordinal of the IPU device on which this queue will be
-          used. By default the queue will be used on "/device/IPU:0".
-        io_batch_size: Deprecated.
+      outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
+        outfeed behaviour. If not specified then all elements will be
+        returned by the outfeed when the dequeue operation is run.
+      device_ordinal: Integer ordinal of the IPU device on which this queue will
+        be used. If not specified will try and deduce the IPU device from the
+        current strategy and if that fails will default to "/device:IPU:0".
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -119,6 +116,13 @@ class IPUOutfeedQueue:
       raise ValueError("Expected `outfeed_mode` value to be of "
                        "`ipu_outfeed_queue.IPUOutfeedMode` type, but is %s." %
                        (str(type(outfeed_mode))))
+
+    if device_ordinal is None:
+      strategy = ds_context.get_strategy()
+      if isinstance(strategy, ipu_strategy.IPUStrategyV1):
+        device_ordinal = strategy._device_ordinal  # pylint: disable=protected-access
+      else:
+        device_ordinal = 0
 
     if not isinstance(device_ordinal, int):
       raise ValueError('Device ordinal must be an integer')

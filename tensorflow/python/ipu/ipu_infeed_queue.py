@@ -19,10 +19,12 @@ Infeed queue
 import threading
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
-from tensorflow.python.eager import context
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
+from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import loops
 from tensorflow.python.util import deprecation
 
@@ -113,7 +115,7 @@ class IPUInfeedQueue:
       self,
       dataset,
       feed_name=None,  # pylint: disable=unused-argument
-      device_ordinal=0,
+      device_ordinal=None,
       replication_factor=1,  # pylint: disable=unused-argument
       data_to_prefetch=1,  # pylint: disable=unused-argument
       prefetch_depth=None):
@@ -123,9 +125,9 @@ class IPUInfeedQueue:
       dataset: a `tf.data.Dataset` object, all transformations e.g. `shuffle`,
         `repeat`, `batch` must be applied prior to passing in to this function.
         This dataset can no longer be used after creating this queue.
-      device_ordinal: ordinal of the IPU device on which this queue will be
-        used. By default the queue will be used on "/device/IPU:0".
-      data_to_prefetch: Deprecated.
+      device_ordinal: Integer ordinal of the IPU device on which this queue will
+        be used. If not specified will try and deduce the IPU device from the
+        current strategy and if that fails will default to "/device:IPU:0".
       prefetch_depth: the number of elements Poplar will prefetch.
         The depth of the Poplar datastream buffer size which may be prefetched
         before being read by the device. By default the prefetch_depth size is
@@ -157,6 +159,19 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       raise ValueError(
           "prefetch_depth must be less than 256, but it is {}".format(
               prefetch_depth))
+
+    if device_ordinal is None:
+      strategy = ds_context.get_strategy()
+      if isinstance(strategy, ipu_strategy.IPUStrategyV1):
+        device_ordinal = strategy._device_ordinal  # pylint: disable=protected-access
+      else:
+        device_ordinal = 0
+
+    if not isinstance(device_ordinal, int):
+      raise ValueError('Device ordinal must be an integer')
+
+    if device_ordinal < 0:
+      raise ValueError('Device ordinal must be >= 0')
 
     with ops.device('/device:CPU:0'):
       self._dataset = dataset
