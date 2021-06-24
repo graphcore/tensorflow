@@ -62,8 +62,10 @@ struct InstructionExtensionHelper {
     registry_[op_code] = std::forward<Func>(ext);
   }
 
-  Result Call(HloInstruction* instruction) {
-    return registry_[instruction->opcode()](instruction);
+  template <typename... TParams>
+  Result Call(const HloInstruction* instruction, TParams&&... params) {
+    return registry_[instruction->opcode()](instruction,
+                                            std::forward<TParams>(params)...);
   }
 
  private:
@@ -79,16 +81,18 @@ struct InstructionExtensions : private InstructionExtensionHelper<Exts>... {
     InstructionExtensionHelper<Ext>::Register(op_code, std::forward<Func>(ext));
   }
 
-  template <typename Ext>
+  template <typename Ext, typename... TParams>
   typename InstructionExtensionHelper<Ext>::Result Call(
-      HloInstruction* instruction) {
+      const HloInstruction* instruction, TParams&&... params) {
     CHECK(instruction != nullptr);
 
     if (auto* poplar_instruction = DynCast<HloPoplarInstruction>(instruction)) {
-      return (poplar_instruction->*Ext::poplar_handle)();
+      return (poplar_instruction->*Ext::poplar_handle)(
+          std::forward<TParams>(params)...);
     }
 
-    return InstructionExtensionHelper<Ext>::Call(instruction);
+    return InstructionExtensionHelper<Ext>::Call(
+        instruction, std::forward<TParams>(params)...);
   }
 };
 

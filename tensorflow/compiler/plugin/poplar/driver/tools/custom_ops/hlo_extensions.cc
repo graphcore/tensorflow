@@ -22,7 +22,7 @@ namespace poplarplugin {
 namespace {
 
 void RegisterSharedExtensions(HloOpcode opcode) {
-  auto allocating_output = [](HloInstruction*) { return true; };
+  auto allocating_output = [](const HloInstruction*) { return true; };
   RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
                                                              allocating_output);
 }
@@ -34,7 +34,7 @@ REGISTER_HLO_INST_EXTENSIONS(kReduceWindow, RegisterSharedExtensions);
 REGISTER_HLO_INST_EXTENSIONS(kRng, RegisterSharedExtensions);
 
 void RegisterFuseExtensions(HloOpcode opcode) {
-  auto allocating_output = [](HloInstruction* inst) {
+  auto allocating_output = [](const HloInstruction* inst) {
     return (IsWideConstant(inst) || IsReductionFusion(inst));
   };
   RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
@@ -43,7 +43,7 @@ void RegisterFuseExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kFusion, RegisterFuseExtensions);
 
 void RegisterDotExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction* inst) {
+  auto allocating_indices = [](const HloInstruction* inst) {
     absl::flat_hash_set<int64> indices;
     for (auto i = 0u; i < inst->operand_count(); ++i) {
       indices.insert(i);
@@ -58,20 +58,20 @@ void RegisterDotExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kDot, RegisterDotExtensions);
 
 void RegisterCholeskyExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction*) {
+  auto allocating_indices = [](const HloInstruction*) {
     return absl::flat_hash_set<int64>{0};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
 
-  auto allocating_output = [](HloInstruction*) { return true; };
+  auto allocating_output = [](const HloInstruction*) { return true; };
   RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
                                                              allocating_output);
 }
 REGISTER_HLO_INST_EXTENSIONS(kCholesky, RegisterCholeskyExtensions);
 
 void RegisterScatterExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction*) {
+  auto allocating_indices = [](const HloInstruction*) {
     return absl::flat_hash_set<int64>{0, 1, 2};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
@@ -80,7 +80,7 @@ void RegisterScatterExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kScatter, RegisterScatterExtensions);
 
 void RegisterGatherExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction*) {
+  auto allocating_indices = [](const HloInstruction*) {
     return absl::flat_hash_set<int64>{0, 1};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
@@ -89,13 +89,13 @@ void RegisterGatherExtensions(HloOpcode opcode) {
 REGISTER_HLO_INST_EXTENSIONS(kGather, RegisterGatherExtensions);
 
 void RegisterTriangularSolveExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction*) {
+  auto allocating_indices = [](const HloInstruction*) {
     return absl::flat_hash_set<int64>{0, 1};
   };
   RegisterHloInstructionExtension<AllocatingIndicesExtension>(
       opcode, allocating_indices);
 
-  auto allocating_output = [](HloInstruction*) { return true; };
+  auto allocating_output = [](const HloInstruction*) { return true; };
   RegisterHloInstructionExtension<AllocatingOutputExtension>(opcode,
                                                              allocating_output);
 }
@@ -103,7 +103,7 @@ REGISTER_HLO_INST_EXTENSIONS(kTriangularSolve,
                              RegisterTriangularSolveExtensions);
 
 void RegisterConvolutionExtensions(HloOpcode opcode) {
-  auto allocating_indices = [](HloInstruction* inst) {
+  auto allocating_indices = [](const HloInstruction* inst) {
     absl::flat_hash_set<int64> indices;
     for (auto i = 0u; i < inst->operand_count(); ++i) {
       indices.insert(i);
