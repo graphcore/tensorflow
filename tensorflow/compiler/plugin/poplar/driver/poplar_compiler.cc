@@ -1361,6 +1361,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         }
       }
       pipeline.AddPass<PipelineResourceUpdateInputOptimizer>();
+      AddPipelineOptimizerPass(pipeline);
       pipeline.AddPass<CommutativeInstructionReorderOperands>();
       pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                        resources.replication_factor);
