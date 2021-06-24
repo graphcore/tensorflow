@@ -30,6 +30,7 @@ from six.moves import queue as Queue  # pylint: disable=redefined-builtin
 
 from tensorflow.core.framework import graph_pb2
 from tensorflow.python import tf2
+from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.data.experimental.ops import distribute_options
 from tensorflow.python.data.experimental.ops import optimization_options
 from tensorflow.python.data.experimental.ops import stats_options
@@ -418,6 +419,10 @@ class DatasetV2(collections_abc.Iterable, tracking_base.Trackable,
       RuntimeError: If not inside of tf.function and not executing eagerly.
     """
     if context.executing_eagerly() or ops.inside_function():
+      strategy = ds_context.get_strategy()
+      if hasattr(strategy, "_enable_dataset_iterators"):
+        if strategy._enable_dataset_iterators():  # pylint: disable=protected-access
+          return strategy._create_dataset_iterator(self)  # pylint: disable=protected-access
       with ops.colocate_with(self._variant_tensor):
         return iterator_ops.OwnedIterator(self)
     else:

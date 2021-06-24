@@ -32,6 +32,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest
+from tensorflow.python.ipu import ipu_infeed_queue
 
 
 class IPUStrategyV1(distribute_lib.StrategyV1):
@@ -71,14 +72,21 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
 
   _enable_legacy_iterators = True
 
-  def __init__(self, ipu_device="/device:IPU:0", cpu_device="/device:CPU:0"):
+  def __init__(self,
+               ipu_device="/device:IPU:0",
+               cpu_device="/device:CPU:0",
+               enable_dataset_iterators=True):
     """Create a new IPUStrategyV1.
 
     Args:
       ipu_device: The TensorFlow device representing the IPUs.
       cpu_device: The TensorFlow device for the CPU.
+      enable_dataset_iterators: Whether to create IPUStrategy specific dataset
+        iterators inside of this strategy scope or whether to use standard
+        dataset iterators.
     """
     super().__init__(IPUExtendedV1(self, ipu_device, cpu_device))
+    self._enable_iterators = enable_dataset_iterators
 
   def run(self, fn, args=(), kwargs=None, options=None):
     _validate_run_function(fn)
@@ -89,6 +97,13 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
     device_string = self.extended.non_slot_devices(None)
     current_device = tf_device.DeviceSpec.from_string(device_string)
     return current_device.device_index
+
+  def _enable_dataset_iterators(self):
+    return context.executing_eagerly() and self._enable_iterators
+
+  def _create_dataset_iterator(self, dataset):
+    assert self._enable_dataset_iterators()
+    return ipu_infeed_queue.IPUOwnedIterator(dataset=dataset)  # pylint: disable=protected-access
 
 
 def _get_variable_creator_initial_value(device, **kwargs):

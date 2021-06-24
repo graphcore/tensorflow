@@ -1455,6 +1455,37 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     self.assertAllClose(fn(0), fn(1))
 
+  @test_util.run_v2_only
+  def testInfeedSpec(self):
+    dataset = tu.create_single_increasing_dataset(10, dtype=np.int8, shape=[])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+
+    with self.assertRaisesRegex(RuntimeError, "Spec for IPUInfeedQueue"):
+      spec = infeed_queue._type_spec  # pylint: disable=protected-access
+
+    infeed_queue.initializer  # pylint: disable=pointless-statement
+
+    # pylint: disable=protected-access
+    spec = infeed_queue._type_spec
+    self.assertEqual(spec._id, infeed_queue._id)
+    self.assertEqual(spec._structure, infeed_queue._structure)
+    self.assertEqual(spec._flat_structure, infeed_queue._flat_structure)
+    self.assertEqual(spec._device_ordinal, infeed_queue._device_ordinal)
+    self.assertEqual(spec._prefetch_depth, infeed_queue._prefetch_depth)
+    # pylint: enable=protected-access
+
+    ref_infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue._from_type_spec(  # pylint: disable=protected-access
+        spec)
+    self.assertIsInstance(ref_infeed_queue,
+                          ipu.ipu_infeed_queue.IPUInfeedQueue)
+
+    with self.assertRaisesRegex(RuntimeError, "IPUInfeedQueue created"):
+      ref_infeed_queue.initializer  # pylint: disable=pointless-statement
+
+    with self.assertRaisesRegex(RuntimeError, "IPUInfeedQueue created"):
+      ref_infeed_queue.deleter  # pylint: disable=pointless-statement
+
 
 if __name__ == "__main__":
   googletest.main()

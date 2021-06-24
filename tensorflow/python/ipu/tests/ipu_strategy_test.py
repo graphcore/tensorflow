@@ -22,6 +22,7 @@ from absl.testing import parameterized
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python import keras
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
@@ -30,6 +31,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import math_ops
@@ -538,9 +540,12 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
     @def_function.function
-    def training_step(x):
-      outfeed_queue.enqueue(x)
-      x = x + 1
+    def training_step(num_iteration, iterator):
+      x = constant_op.constant(0.0, np.float)
+      for _ in math_ops.range(num_iteration):
+        j = next(iterator)[0]
+        outfeed_queue.enqueue(j[0])
+        x = x + 1
       return x
 
     strategy = ipu_strategy.IPUStrategyV1()
@@ -560,13 +565,10 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
               dequeued_samples.append((counter, t))
               counter += 1
 
+      dequeue_thread = Thread(target=dequeue)
+      dequeue_thread.start()
       # Start the training loop
-      for i, x in zip(range(num_iterations), dataset):
-        strategy.run(training_step, args=[x[0]])
-        # Once the model is compiled, start the dequeuing thread
-        if i == 0:
-          dequeue_thread = Thread(target=dequeue)
-          dequeue_thread.start()
+      strategy.run(training_step, args=[num_iterations, iter(dataset)])
 
       # Wait for the dequeuing thread to finish
       dequeue_thread.join()
@@ -575,6 +577,46 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       for i, sample in enumerate(dequeued_samples):
         self.assertEqual(sample[0], i)
         self.assertEqual(sample[1], i)
+
+  @test_util.run_v2_only
+  def test_dataset_iterator(self):
+    cfg = IPUConfig()
+    cfg.configure_ipu_system()
+
+    dataset = dataset_ops.Dataset.from_tensors(1.)
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      iterator = iter(dataset)
+      self.assertIsInstance(iterator, ipu_infeed_queue.IPUOwnedIterator)  # pylint: disable=protected-access
+
+      with self.assertRaisesRegex(RuntimeError, "Accessing dataset elements"):
+        next(iterator)
+
+    strategy = ipu_strategy.IPUStrategyV1(enable_dataset_iterators=False)
+    with strategy.scope():
+      iterator = iter(dataset)
+      self.assertFalse(isinstance(iterator, ipu_infeed_queue.IPUOwnedIterator))  # pylint: disable=protected-access
+
+  @test_util.run_v2_only
+  def test_dataset_iterator_with_function(self):
+    cfg = IPUConfig()
+    cfg.configure_ipu_system()
+
+    dataset = dataset_ops.Dataset.from_tensors(1.).repeat()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      iterator = iter(dataset)
+
+      @def_function.function(experimental_compile=True)
+      def step_fn(iterator):
+        x = next(iterator)
+        for _ in math_ops.range(5):
+          x += next(iterator)
+        return x
+
+      self.assertAllClose(strategy.run(step_fn, args=(iterator,)), 6.)
 
 
 if __name__ == "__main__":
