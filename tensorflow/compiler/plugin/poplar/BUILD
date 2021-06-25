@@ -809,6 +809,7 @@ cc_library(
         "driver/poplar_platform_id.h",
         "driver/poplar_transfer_manager.h",
         "driver/tensor.h",
+        "driver/tools/attributes_utils.h",
         "driver/tools/conv_poplar_util.h",
         "driver/tools/conversions.h",
         "driver/tools/data_initializer.h",
