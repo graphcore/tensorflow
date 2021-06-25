@@ -71,6 +71,21 @@ TEST_F(ExtensionRegistryTest, UnimplementedDefaultThrows) {
   ASSERT_THROW(registry[HloOpcode::kAdd](), std::bad_function_call);
 }
 
+TEST_F(ExtensionRegistryTest, RegisterExtensionWithParams) {
+  struct TestExtension {
+    std::function<int(bool, bool)> impl = [](bool, bool) { return false; };
+  };
+
+  ExtensionRegistry<TestExtension> registry;
+
+  registry[HloOpcode::kAdd] = [](bool a, bool b) { return a || !b; };
+
+  ASSERT_EQ(registry[HloOpcode::kAdd](true, true), true);
+  ASSERT_EQ(registry[HloOpcode::kAdd](true, false), true);
+  ASSERT_EQ(registry[HloOpcode::kAdd](false, true), false);
+  ASSERT_EQ(registry[HloOpcode::kAdd](false, false), true);
+}
+
 struct InstructionExtensionTest : HloTestBase {
   std::unique_ptr<HloInstruction> hlo_instruction_ =
       HloInstruction::CreateConstant({});
@@ -82,7 +97,7 @@ TEST_F(InstructionExtensionTest, CanRegisterAllocatingIndicesExtension) {
 
   HloInstructionExtensions extensions;
   extensions.Register<AllocatingIndicesExtension>(
-      op_code_, [expected](HloInstruction*) { return expected; });
+      op_code_, [expected](const HloInstruction*) { return expected; });
   const auto result =
       extensions.Call<AllocatingIndicesExtension>(hlo_instruction_.get());
 
@@ -94,7 +109,7 @@ TEST_F(InstructionExtensionTest, CanRegisterAllocatingOutputExtension) {
 
   HloInstructionExtensions extensions;
   extensions.Register<AllocatingOutputExtension>(
-      op_code_, [expected](HloInstruction*) { return expected; });
+      op_code_, [expected](const HloInstruction*) { return expected; });
   const auto result =
       extensions.Call<AllocatingOutputExtension>(hlo_instruction_.get());
 
@@ -106,7 +121,7 @@ TEST_F(InstructionExtensionTest, CanRegisterLayoutDependenciesExtension) {
 
   HloInstructionExtensions extensions;
   extensions.Register<LayoutDependenciesExtension>(
-      op_code_, [expected](HloInstruction*) { return expected; });
+      op_code_, [expected](const HloInstruction*) { return expected; });
   const auto result =
       extensions.Call<LayoutDependenciesExtension>(hlo_instruction_.get());
 
@@ -166,7 +181,7 @@ struct HloInstructionRegistrationTest : HloTestBase {
         op_code, TestAllocatingOutput);
   }
 
-  static bool TestAllocatingOutput(HloInstruction*) { return true; }
+  static bool TestAllocatingOutput(const HloInstruction*) { return true; }
 
   std::unique_ptr<HloInstruction> hlo_instruction_ =
       HloInstruction::CreateConstant({});

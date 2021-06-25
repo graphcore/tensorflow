@@ -29,6 +29,10 @@ class HloModule;
 namespace poplarplugin {
 
 class HloPoplarTestBase : public HloTestBase {
+ public:
+  // Returns the number of IPUs a test is allowed to use.
+  static StatusOr<int32> GetMaxIpuCount();
+
  protected:
   using HloTestBase::HloTestBase;
 
@@ -42,9 +46,6 @@ class HloPoplarTestBase : public HloTestBase {
 
   StatusOr<poplar::Engine> Compile(CompilerResources& resources,
                                    HloModule* module);
-
-  // Returns number of IPU allowed test allowed to use.
-  static StatusOr<int32> GetMaxIpuCount();
 };
 
 }  // namespace poplarplugin

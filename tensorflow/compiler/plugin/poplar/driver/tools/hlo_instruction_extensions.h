@@ -16,6 +16,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_INSTRUCTION_EXTENSIONS_H_
 
 #include <functional>
+#include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/extension_registry.h"
@@ -28,10 +29,12 @@ struct PoplarExtension {};
 
 // Only providing a const member function specialisation since
 // the HloPoplarInstruction functions we care about are all const
-template <typename ReturnT>
-struct PoplarExtension<ReturnT (HloPoplarInstruction::*)() const> {
-  using FuncionDecl = std::function<ReturnT(HloInstruction*)>;
-  FuncionDecl impl = [](HloInstruction*) { return ReturnT(); };
+template <typename ReturnT, typename... TParams>
+struct PoplarExtension<ReturnT (HloPoplarInstruction::*)(TParams...) const> {
+  using FuncionDecl = std::function<ReturnT(const HloInstruction*, TParams...)>;
+  FuncionDecl impl = [](const HloInstruction*, TParams...) {
+    return ReturnT();
+  };
 };
 
 template <typename PoplarFn, PoplarFn fn>
@@ -62,12 +65,14 @@ void RegisterHloInstructionExtension(HloOpcode op_code, Callable&& callable) {
   GetHloInstructionExtensions().Register<Ext>(op_code, callable);
 }
 
-template <typename Ext>
+template <typename Ext, typename... TParams>
 typename std::result_of<
-    decltype (&HloInstructionExtensions::Call<Ext>)(  // NOLINT
-        HloInstructionExtensions, HloInstruction*)>::type
-CallHloInstructionExtension(HloInstruction* instruction) {
-  return GetHloInstructionExtensions().Call<Ext>(instruction);
+    decltype (&HloInstructionExtensions::Call<Ext, TParams&&...>)(  // NOLINT
+        HloInstructionExtensions, const HloInstruction*, TParams&&...)>::type
+CallHloInstructionExtension(const HloInstruction* instruction,
+                            TParams&&... params) {
+  return GetHloInstructionExtensions().Call<Ext>(
+      instruction, std::forward<TParams>(params)...);
 }
 
 // Utility function/macro to help statically register extensions
