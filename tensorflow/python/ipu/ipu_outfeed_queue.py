@@ -18,6 +18,7 @@ Outfeed queue
 """
 
 from enum import Enum
+import collections
 import threading
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
@@ -27,8 +28,10 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest, deprecation
+from tensorflow.python.util.compat import collections_abc
 
 _uid_counter = 0
 _uid_lock = threading.Lock()
@@ -57,7 +60,7 @@ class IPUOutfeedMode(Enum):
   LAST = "get_last"
 
 
-class IPUOutfeedQueue:
+class IPUOutfeedQueue(collections_abc.Iterable):
   """Generates and adds outfeed enqueue/dequeue operations to the graph.
 
   An outfeed is the counterpart to an infeed and manages the
@@ -414,9 +417,17 @@ class IPUOutfeedQueue:
     they were enqueued during execution for each of the replicated graphs.
 
     """
+    # Don't error/print the warning to the user if they try and dequeue from
+    # another thread and the outfeed queue has not been populated yet.
+    error_or_warn_when_unconnected = not (
+        context.executing_eagerly() and
+        (threading.get_ident() != self._enqueuing_thread))
+
     if not self.enqueued:
-      raise ValueError(
-          "Trying to dequeue an outfeed which has not been enqueued.")
+      if error_or_warn_when_unconnected:
+        raise ValueError(
+            "Trying to dequeue an outfeed which has not been enqueued.")
+      return []
 
     def get_ipu_sync():
       with ops.device(self._device_str):
@@ -443,7 +454,8 @@ class IPUOutfeedQueue:
               output_shapes=self._flat_shapes,
               outfeed_mode=self._outfeed_mode.value,
               feed_id=self._feed_name,
-              device_ordinal=self._device_ordinal)
+              device_ordinal=self._device_ordinal,
+              warn_when_unconnected=error_or_warn_when_unconnected)
     return nest.pack_sequence_as(self._structure, outfeed_dequeue)
 
   @property
@@ -458,3 +470,77 @@ class IPUOutfeedQueue:
     """
     return gen_pop_datastream_ops.ipu_delete_outfeed(
         feed_id=self._feed_name, device_ordinal=self._device_ordinal)
+
+  def __iter__(self):
+    """Creates an iterator for elements of this dataset.
+
+    The returned iterator implements the Python Iterator protocol.
+
+    Returns:
+      An `ipu.ipu_outfeed_queue.IPUOutfeedQueueIterator` for the elements
+      enqueued into this outfeed.
+
+    Raises:
+      RuntimeError: If not executing eagerly or when the `outfeed_mode` is not
+      `IPUOutfeedMode.ALL`.
+    """
+    if not context.executing_eagerly():
+      raise RuntimeError(
+          "IPUOutfeedQueue can only be iterated over in eager mode.")
+
+    if self._outfeed_mode != IPUOutfeedMode.ALL:
+      raise RuntimeError(
+          "IPUOutfeedQueue can only be iterated over if the `outfeed_mode` is "
+          "set to 'IPUOutfeedMode.ALL'.")
+
+    return IPUOutfeedQueueIterator(self)
+
+
+class IPUOutfeedQueueIterator(collections_abc.Iterator):
+  """An iterator producing tf.Tensor objects from a IPUOutfeedQueue.
+  """
+  def __init__(self, outfeed_queue):
+    """Creates a new iterator from the given outfeed queue.
+
+    Args:
+      outfeed_queue: A `ipu.ipu_outfeed_queue.IPUOutfeedQueue` object.
+    """
+    self._outfeed_queue = outfeed_queue
+    self._results_to_process = collections.deque()
+    self._num_elements = 0
+
+  def __iter__(self):
+    return self
+
+  def __next__(self):
+    if not self._num_elements:
+      # Only try and get more results once all the existing results have been
+      # processed.
+      with context.eager_mode():
+        results = self._outfeed_queue.dequeue()
+
+      flat_results = nest.flatten(results)
+
+      if not flat_results:
+        raise StopIteration
+
+      num_iterations = array_ops.shape(flat_results[0]).numpy()[0]
+      if not num_iterations:
+        raise StopIteration
+
+      with context.eager_mode():
+        # Populate the sliced results.
+        self._num_elements += num_iterations
+        for i in range(num_iterations):
+          if len(flat_results) == 1:
+            slice_results = [results[i]]
+          else:
+            slice_results = [result[i] for result in results]
+          slice_results = nest.pack_sequence_as(results, slice_results)
+          self._results_to_process.append(slice_results)
+
+    if self._num_elements:
+      self._num_elements -= 1
+      return self._results_to_process.popleft()
+
+    raise StopIteration

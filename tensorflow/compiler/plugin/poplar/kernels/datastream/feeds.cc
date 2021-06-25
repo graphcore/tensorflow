@@ -317,6 +317,9 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
                 errors::InvalidArgument(
                     "Outfeed num_outputs() != Attribute num outputs: ",
                     ctx->num_outputs(), " != ", xla_shapes_.size()));
+
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("warn_when_unconnected", &warn_when_unconnected_));
   }
 
   ~PopDatastreamOutfeedDequeueOp() override{};
@@ -331,13 +334,14 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
         stream_executor->implementation());
 
     const auto replication_factor =
-        poplar_executor->GetReplicationFactorForOutfeed(config_.feed_id());
+        poplar_executor->GetReplicationFactorForOutfeed(config_.feed_id(),
+                                                        warn_when_unconnected_);
 
     // Get all the tensors which were stored in the outfeed.
     // Note that this call will block until we can acquire a lock on the
     // outfeed.
     auto outfeed_tensors = poplar_executor->GetTensorsFromOutfeed(
-        config_.feed_id(), config_.mode());
+        config_.feed_id(), config_.mode(), warn_when_unconnected_);
     if (config_.mode() == xla::poplarplugin::PoplarFeedConfig::GetAll) {
       // Allocate all the output buffers with the extra dimension for the number
       // of executions.
@@ -400,6 +404,7 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
   std::vector<TensorShape> tensor_shapes_;
   size_t num_outputs_;
   xla::poplarplugin::PoplarFeedConfig config_;
+  bool warn_when_unconnected_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopDatastreamOutfeedDequeueOp);
 };
 

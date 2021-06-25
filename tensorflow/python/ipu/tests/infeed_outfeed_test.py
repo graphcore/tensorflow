@@ -16,6 +16,7 @@
 import signal
 import subprocess
 import sys
+from absl.testing import parameterized
 from threading import Thread
 import numpy as np
 
@@ -1485,6 +1486,113 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     with self.assertRaisesRegex(RuntimeError, "IPUInfeedQueue created"):
       ref_infeed_queue.deleter  # pylint: disable=pointless-statement
+
+
+class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
+                             parameterized.TestCase):
+  @test_util.run_v2_only
+  def testCreation(self):
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    self.assertIsInstance(iter(outfeed_queue),
+                          ipu.ipu_outfeed_queue.IPUOutfeedQueueIterator)
+
+    with self.assertRaisesRegex(RuntimeError,
+                                "IPUOutfeedQueue can only be iterated"):
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      iter(outfeed_queue)  # pylint: disable=pointless-statement
+
+  @parameterized.parameters([1, 2])
+  @test_util.run_v2_only
+  def testOutputs(self, replication_factor):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = replication_factor
+    cfg.ipu_model.tiles_per_ipu = 4
+    cfg.configure_ipu_system()
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+
+    with strategy.scope():
+
+      @def_function.function(experimental_compile=True)
+      def my_net(num_iterations):
+        x = constant_op.constant(1, dtype=np.int32, shape=[2])
+        y = constant_op.constant(2, dtype=np.int32, shape=[])
+        for _ in math_ops.range(num_iterations):
+          outfeed_queue.enqueue((x, y))
+          x += 1
+          y *= 2
+
+      def get_results():
+        results = []
+        x_ref = 1
+        y_ref = 2
+
+        x_shape = [2]
+        y_shape = []
+        if replication_factor > 1:
+          x_shape = [replication_factor] + x_shape
+          y_shape = [replication_factor] + y_shape
+
+        for x, y in outfeed_queue:
+          self.assertAllEqual(x, np.full(x_shape, x_ref))
+          self.assertAllEqual(y, np.full(y_shape, y_ref))
+          results.append((x, y))
+
+          x_ref += 1
+          y_ref *= 2
+
+        return results
+
+      with self.assertRaises(StopIteration):
+        next(iter(outfeed_queue))  # pylint: disable=pointless-statement
+
+      strategy.run(my_net, args=(10,))
+      self.assertEqual(len(get_results()), 10)
+      # Check that when there are no results, it still behaves correctly.
+      self.assertEqual(len(get_results()), 0)
+
+      strategy.run(my_net, args=(5,))
+      self.assertEqual(len(get_results()), 5)
+
+  @test_util.run_v2_only
+  def testParallelDequeue(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.tiles_per_ipu = 4
+    cfg.configure_ipu_system()
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+
+    with strategy.scope():
+
+      @def_function.function(experimental_compile=True)
+      def my_net(num_iterations):
+        x = constant_op.constant(1, dtype=np.int32, shape=[2])
+        for _ in math_ops.range(num_iterations):
+          outfeed_queue.enqueue(x)
+          x += 1
+
+      results = []
+
+      def get_results(num_iterations):
+        x_ref = 1
+
+        while len(results) != num_iterations:
+          for x in outfeed_queue:
+            self.assertAllEqual(x, np.full([2], x_ref))
+            x_ref += 1
+            results.append(x)
+
+      num_iterations = 100
+      dequeue_thread = Thread(target=get_results, args=[num_iterations])
+      dequeue_thread.start()
+      strategy.run(my_net, args=(num_iterations,))
+      dequeue_thread.join()
+
+      self.assertEqual(len(results), num_iterations)
 
 
 if __name__ == "__main__":

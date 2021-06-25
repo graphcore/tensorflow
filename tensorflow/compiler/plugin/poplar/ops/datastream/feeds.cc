@@ -90,6 +90,7 @@ REGISTER_OP("PopDatastreamOutfeedDequeue")
     .Attr("feed_id: string")
     .Attr("outfeed_mode: string='all'")
     .Attr("prefetch_depth: int = 1")
+    .Attr("warn_when_unconnected: bool = true")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(

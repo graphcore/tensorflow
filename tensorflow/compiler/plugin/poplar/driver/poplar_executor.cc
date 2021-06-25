@@ -3230,16 +3230,19 @@ InfeedAllocator* PoplarExecutor::GetInfeedAllocator() {
 
 std::vector<std::vector<tensorflow::Tensor>>
 PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
-                                      const PoplarFeedConfig_Mode& mode) {
+                                      const PoplarFeedConfig_Mode& mode,
+                                      bool warn_when_unconnected) {
   OutfeedContext* outfeed_context = nullptr;
   std::unique_lock<std::mutex> outfeed_lock(outfeeds_mutex_);
   auto itr = outfeed_contexts_.find(feed_id);
   if (itr == outfeed_contexts_.end()) {
-    LOG(INFO)
-        << "Trying to dequeue elements from the outfeed queue with id="
-        << feed_id
-        << " which has not executed yet. Make sure to execute the "
-           "program with the outfeed before trying to dequeue an outfeed.";
+    if (warn_when_unconnected) {
+      LOG(WARNING)
+          << "Trying to dequeue elements from the outfeed queue with id="
+          << feed_id
+          << " which has not executed yet. Make sure to execute the "
+             "program with the outfeed before trying to dequeue an outfeed.";
+    }
     return {};
   }
   outfeed_context = itr->second.get();
@@ -3280,17 +3283,19 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
 }
 
 int64 PoplarExecutor::GetReplicationFactorForOutfeed(
-    const std::string& feed_id) const {
+    const std::string& feed_id, bool warn_when_unconnected) const {
   OutfeedContext* outfeed_context = nullptr;
   std::lock_guard<std::mutex> outfeed_lock(outfeeds_mutex_);
 
   auto iter = outfeed_contexts_.find(feed_id);
   if (iter == outfeed_contexts_.end()) {
-    LOG(WARNING)
-        << "Trying to get replication factor for the outfeed queue with id="
-        << feed_id
-        << " which has not executed yet. Make sure to execute the "
-           "program with the outfeed before trying to dequeue an outfeed.";
+    if (warn_when_unconnected) {
+      LOG(WARNING)
+          << "Trying to get replication factor for the outfeed queue with id="
+          << feed_id
+          << " which has not executed yet. Make sure to execute the "
+             "program with the outfeed before trying to dequeue an outfeed.";
+    }
     return 1;
   }
 

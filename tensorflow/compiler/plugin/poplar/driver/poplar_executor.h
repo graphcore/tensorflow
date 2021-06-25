@@ -634,9 +634,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
-      const std::string& feed_id, const PoplarFeedConfig_Mode& mode);
+      const std::string& feed_id, const PoplarFeedConfig_Mode& mode,
+      bool warn_when_unconnected);
 
-  int64 GetReplicationFactorForOutfeed(const std::string& feed_id) const;
+  int64 GetReplicationFactorForOutfeed(const std::string& feed_id,
+                                       bool warn_when_unconnected) const;
 
   Status RegisterOutfeeds(const TranslatedOutfeedInfos& outfeed_infos);
 
