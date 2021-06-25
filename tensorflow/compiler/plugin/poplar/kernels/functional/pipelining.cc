@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/attributes_utils.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/functional/functional_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
@@ -178,65 +179,26 @@ class PipelineOp : public XlaOpKernel {
   void SetInstructionFrontEndAttributes(XlaOpKernelContext* ctx,
                                         xla::XlaBuilder* builder,
                                         const xla::XlaOp& outputs) const {
-    // Set the config type of the call.
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
-                            PoplarBackendConfig_CallConfig_Type_Name(
-                                PoplarBackendConfig::CallConfig::Pipeline)));
-    // Set the pipeline depth.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, FrontendAttributeId_Name(GRADIENT_ACCUMULATION_COUNT),
-                 std::to_string(gradient_accumulation_count_)));
-    // Set the batch serialization iterations.
-    OP_REQUIRES_OK(
-        ctx,
-        builder->SetInstructionFrontendAttribute(
-            outputs,
-            FrontendAttributeId_Name(PIPELINE_BATCH_SERIALIZATION_ITERATIONS),
-            std::to_string(batch_serialization_iterations_)));
-    // Set the repeat count.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
-                       std::to_string(repeat_count_)));
-    // Set the schedule.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PIPELINE_SCHEDULE),
-                       std::to_string(schedule_)));
-    // Set the config field.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
-                 pipeline_poplar_config_));
-    // Set the offload_activations flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(OFFLOAD_ACTIVATIONS),
-                       offload_activations_));
-    // Set the offload_gradient_accumulation_buffers flag.
-    OP_REQUIRES_OK(
-        ctx,
-        builder->SetInstructionFrontendAttribute(
-            outputs,
-            FrontendAttributeId_Name(OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS),
-            offload_gradient_accumulation_buffers_));
-    // Set the replicated_weight_sharding flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PARTITION_VARIABLES),
-                       replicated_weight_sharding_));
-    // Set the offload_weights flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
-                       offload_weights_));
-    // Set the recomputation_mode flag.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(RECOMPUTATION_MODE),
-                       recomputation_mode_));
+    using AttrMember = util::AttrMember;
+    util::AttrMembers attributes = {
+        AttrMember(CALL_CONFIG_TYPE,
+                   PoplarBackendConfig_CallConfig_Type_Name(
+                       PoplarBackendConfig::CallConfig::Pipeline)),
+        AttrMember(GRADIENT_ACCUMULATION_COUNT, gradient_accumulation_count_),
+        AttrMember(PIPELINE_BATCH_SERIALIZATION_ITERATIONS,
+                   batch_serialization_iterations_),
+        AttrMember(PIPELINE_REPEAT_COUNT, repeat_count_),
+        AttrMember(PIPELINE_SCHEDULE, schedule_),
+        AttrMember(PIPELINE_POPLAR_CONFIG, pipeline_poplar_config_),
+        AttrMember(OFFLOAD_ACTIVATIONS, offload_activations_),
+        AttrMember(OFFLOAD_GRADIENT_ACCUMULATION_BUFFERS,
+                   offload_gradient_accumulation_buffers_),
+        AttrMember(PARTITION_VARIABLES, replicated_weight_sharding_),
+        AttrMember(OFFLOAD_VARIABLES, offload_weights_),
+        AttrMember(RECOMPUTATION_MODE, recomputation_mode_)};
+
+    util::SetInstructionFrontEndAttributes(ctx, builder, outputs,
+                                           std::move(attributes));
   }
 
   xla::StatusOr<xla::XlaComputation> CreateInnerPipeline(
