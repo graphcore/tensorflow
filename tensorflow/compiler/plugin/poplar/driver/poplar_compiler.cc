@@ -1462,6 +1462,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       }
 
       pipeline.AddPass<HostComputeBarrierInserter>();
+      pipeline.AddPass<FlattenCallGraph>();
       pipeline.AddPass<ShardingPass>();
       pipeline.AddPass<HostComputeScheduleOptimizer>();
       pipeline.AddPass<InterIpuCopyInserter>();
