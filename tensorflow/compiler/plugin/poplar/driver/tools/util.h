@@ -34,12 +34,13 @@ limitations under the License.
 
 namespace xla {
 
-class Shape;
-class Literal;
-class HloSharding;
-class HloInstruction;
+class HloCloneContext;
 class HloComputation;
+class HloInstruction;
 class HloModule;
+class HloSharding;
+class Literal;
+class Shape;
 
 namespace poplarplugin {
 namespace {
@@ -299,6 +300,12 @@ T Permute(const T& in, const std::vector<int64>& permutation) {
 // Deterministically return the list of unreachable roots within the given
 // computation.
 std::vector<HloInstruction*> FindUnreachableRoots(HloComputation* computation);
+
+// Clone of the computation subtree starting at the 'root' to the given
+// computation.
+StatusOr<HloInstruction*> CloneComputationSubtree(
+    HloInstruction* root, HloComputation* to, const string& suffix = "clone",
+    HloCloneContext* context = nullptr);
 
 }  // namespace poplarplugin
 }  // namespace xla
