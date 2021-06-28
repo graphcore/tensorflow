@@ -646,6 +646,7 @@ class Functional(training_lib.Model):
 
     return tensor
 
+  @base_layer.extension_delegate
   def get_config(self):
     return copy.deepcopy(get_network_config(self))
 
@@ -670,6 +671,12 @@ class Functional(training_lib.Model):
     model = cls(inputs=input_tensors, outputs=output_tensors,
                 name=config.get('name'))
     connect_ancillary_layers(model, created_layers)
+
+    # Begin IPU specific changes.
+    base_layer.extension_delegate_if_exists(
+      "deserialize_from_config", model, config)
+    # End IPU specific changes.
+
     return model
 
   def _validate_graph_inputs_and_outputs(self):

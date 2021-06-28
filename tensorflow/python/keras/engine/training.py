@@ -819,6 +819,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     self.train_function = train_function
     return self.train_function
 
+  @base_layer.extension_delegate
   def fit(self,
           x=None,
           y=None,
@@ -1247,6 +1248,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     self.test_function = test_function
     return self.test_function
 
+  @base_layer.extension_delegate
   def evaluate(self,
                x=None,
                y=None,
@@ -1499,6 +1501,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     self.predict_function = predict_function
     return self.predict_function
 
+  @base_layer.extension_delegate
   def predict(self,
               x,
               batch_size=None,

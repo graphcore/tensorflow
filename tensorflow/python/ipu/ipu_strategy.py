@@ -17,21 +17,26 @@ Distribution strategy for a single system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from collections import OrderedDict
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import input_lib
 from tensorflow.python.distribute import reduce_util
-from tensorflow.python.distribute import values
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager import function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.keras.engine import base_layer
+from tensorflow.python.keras.engine import functional
+from tensorflow.python.keras.engine import sequential
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest
+from tensorflow.python.ipu.keras.extensions import functional_extensions
+from tensorflow.python.ipu.keras.extensions import sequential_extensions
 from tensorflow.python.ipu import ipu_infeed_queue
 
 
@@ -75,7 +80,8 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
   def __init__(self,
                ipu_device="/device:IPU:0",
                cpu_device="/device:CPU:0",
-               enable_dataset_iterators=True):
+               enable_dataset_iterators=True,
+               enable_keras_extensions=True):
     """Create a new IPUStrategyV1.
 
     Args:
@@ -84,9 +90,19 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
       enable_dataset_iterators: Whether to create IPUStrategy specific dataset
         iterators inside of this strategy scope or whether to use standard
         dataset iterators.
+      enable_keras_extensions: Whether to enable IPU specific Keras extensions
+        to improve Keras performance when using IPUs.
     """
     super().__init__(IPUExtendedV1(self, ipu_device, cpu_device))
     self._enable_iterators = enable_dataset_iterators
+    self._enable_keras_extensions = enable_keras_extensions
+    self._keras_extensions = OrderedDict()
+    # Insert Sequential before Functional as Sequential models inherit from
+    # Functional models.
+    self._register_keras_extension(sequential.Sequential,
+                                   sequential_extensions.SequentialExtension)
+    self._register_keras_extension(functional.Functional,
+                                   functional_extensions.FunctionalExtension)
 
   def run(self, fn, args=(), kwargs=None, options=None):
     _validate_run_function(fn)
@@ -104,6 +120,32 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
   def _create_dataset_iterator(self, dataset):
     assert self._enable_dataset_iterators()
     return ipu_infeed_queue.IPUOwnedIterator(dataset=dataset)  # pylint: disable=protected-access
+
+  def _register_keras_extension(self, class_type, extension):
+    self._keras_extensions[class_type] = extension
+
+  def _delete_keras_extension(self, class_type):
+    self._keras_extensions.pop(class_type, None)
+
+  def _patch_keras_extension(self, instance):
+    if not self._enable_keras_extensions:
+      return
+
+    for class_type, extension in self._keras_extensions.items():
+      if isinstance(instance, class_type):
+        if isinstance(instance, base_layer.KerasExtension):
+          if not isinstance(instance, extension):
+            raise RuntimeError(
+                "KerasExtension patching failed - already patched with a "
+                "different extension.")
+          break
+
+        # Patch in the extension.
+        # Note that we keep the name as Keras sometimes does __name__ checks.
+        cls = instance.__class__
+        instance.__class__ = cls.__class__(cls.__name__, (cls, extension), {})
+        extension.__init__(instance)
+        break
 
 
 def _get_variable_creator_initial_value(device, **kwargs):

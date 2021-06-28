@@ -445,6 +445,10 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     # a list with one element.
     self._preserve_input_structure_in_config = False
 
+    # Begin IPU specific changes.
+    _patch_keras_extension(self)
+    # End IPU specific changes.
+
   @trackable.no_automatic_dependency_tracking
   @generic_utils.default
   def build(self, input_shape):
@@ -3313,3 +3317,102 @@ def _convert_numpy_or_python_types(x):
 # Avoid breaking users who directly import this symbol from this file.
 # TODO(fchollet): remove this.
 InputSpec = input_spec.InputSpec  # pylint:disable=invalid-name
+
+# Begin IPU specific changes.
+class KerasExtension:
+  """Base class for Keras extensions which allow the Keras API to be
+  extended/overridden based on the strategy.
+  """
+  pass
+
+def _patch_keras_extension(instance):
+  strategy = ds_context.get_strategy()
+  if hasattr(strategy, "_patch_keras_extension"):
+    strategy._patch_keras_extension(instance)  # pylint: disable=protected-access
+
+def extension_delegate(func):
+  """Function annotation which allows a function to be delegated to a
+  KerasExtension implementation of that function.
+
+  An annotator which allows the function to be delegated at runtime to a
+  different extension function if the Keras `Layer` derives from a
+  `KerasExtension`. If a function with name `x` is annotated, then this tries to
+  find functions `_x_supported` and `_x_delegate`, and it will return
+  `_x_delegate` if `_x_supported` evaluates to `True`, otherwise it will return
+  `func`.
+
+  Note that this behavior can be disabled by passing `__extension_delegate`
+  when calling a function which has been wrapped in this annotation. This allows
+  for calling the base function.
+
+  Arguments:
+      func: The function to delegate if possible.
+
+  Returns:
+      A wrapped function which can delegate to an extension.
+  """
+
+  def wrapper(self, *args, **kwargs):
+    key_name = "__extension_delegate"
+    enable_extension_delegate = kwargs.get(key_name, True)
+    kwargs.pop(key_name, None)
+    if enable_extension_delegate and isinstance(self, KerasExtension):
+      supported_func_name = "_" + func.__name__ + "_supported"
+      delegate_func_name = "_" + func.__name__ + "_delegate"
+
+      if (hasattr(self, supported_func_name) and
+          hasattr(self, delegate_func_name)):
+          # Strip the boundness of the method.
+          supported_func = getattr(self, supported_func_name).__func__
+          delegate_func = getattr(self, delegate_func_name).__func__
+
+          # Make sure that the delegate function has the same signature/spec.
+          func_spec = tf_inspect.getfullargspec(func)
+          delegate_func_spec = tf_inspect.getfullargspec(delegate_func)
+
+          # Call the delegate function if the specs match and arguments are
+          # supported.
+          if (func_spec == delegate_func_spec and
+              supported_func(self, *args, **kwargs)):
+            return delegate_func(self, *args, **kwargs)
+
+    return func(self, *args, **kwargs)
+
+  return wrapper
+
+def extension_delegate_if_exists(func_name, instance, *args, **kwargs):
+  """Function wrapper which allows a function `func_name` to be delegated to a
+  KerasExtension implementation of that function if it exists.
+
+  An annotator which allows the function to be delegated at runtime to a
+  different extension function if the Keras `Layer` derives from a
+  `KerasExtension`. If a function with name `x` is annotated, then this tries to
+  find functions `_x_supported` and `_x_delegate`, and it will return
+  `_x_delegate` if `_x_supported` evaluates to `True`, otherwise it will return
+  `func`.
+
+  Arguments:
+    func_name: The function name to delegate if possible.
+    instance: An object instance which should be used to try and delegate to.
+    args: Positional arguments to pass to the function when delegating.
+    kwargs: Keyword arguments to pass to the function when delegating.
+
+  Returns:
+      A wrapped function which can delegate to an extension.
+  """
+  if isinstance(instance, KerasExtension):
+    supported_func_name = "_" + func_name + "_supported"
+    delegate_func_name = "_" + func_name + "_delegate"
+
+    if (hasattr(instance, supported_func_name) and
+        hasattr(instance, delegate_func_name)):
+
+        # Strip the boundness of the method.
+        supported_func = getattr(instance, supported_func_name).__func__
+        delegate_func = getattr(instance, delegate_func_name).__func__
+
+        if supported_func(instance, *args, **kwargs):
+          return delegate_func(instance, *args, **kwargs)
+
+  return None
+# End IPU specific changes.

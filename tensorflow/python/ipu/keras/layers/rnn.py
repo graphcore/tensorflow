@@ -20,7 +20,7 @@ Recurrent Keras layers
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import ops
-from tensorflow.python.ipu import rand_ops
+from tensorflow.python.ipu.ops import rand_ops
 from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras import backend as K

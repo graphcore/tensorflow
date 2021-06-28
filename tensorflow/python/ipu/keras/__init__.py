@@ -17,6 +17,7 @@ Keras API
 ~~~~~~~~~
 """
 
+from tensorflow.python.ipu.keras import extensions
 from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.keras.model import Model, Sequential
 from tensorflow.python.ipu.keras.pipeline import PipelineModel

@@ -17,7 +17,7 @@ Dropout Keras layer
 ~~~~~~~~~~~~~~~~~~~
 """
 
-from tensorflow.python.ipu import rand_ops
+from tensorflow.python.ipu.ops import rand_ops
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils

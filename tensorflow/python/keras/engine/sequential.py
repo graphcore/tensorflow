@@ -462,6 +462,7 @@ class Sequential(functional.Functional):
     else:
       return (proba > 0.5).astype('int32')
 
+  @base_layer.extension_delegate
   def get_config(self):
     layer_configs = []
     for layer in super(Sequential, self).layers:
@@ -495,6 +496,12 @@ class Sequential(functional.Functional):
     if (not model.inputs and build_input_shape and
         isinstance(build_input_shape, (tuple, list))):
       model.build(build_input_shape)
+
+    # Begin IPU specific changes.
+    base_layer.extension_delegate_if_exists(
+      "deserialize_from_config", model, config)
+    # End IPU specific changes.
+
     return model
 
   @property

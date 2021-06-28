@@ -115,6 +115,10 @@ py_library(
         "ipu_session_run_hooks.py",
         "ipu_strategy.py",
         "keras/__init__.py",
+        "keras/extensions/__init__.py",
+        "keras/extensions/functional_extensions.py",
+        "keras/extensions/model_extensions.py",
+        "keras/extensions/sequential_extensions.py",
         "keras/layer_replacement.py",
         "keras/layers/__init__.py",
         "keras/layers/ctc.py",
@@ -575,9 +579,9 @@ tf_py_test(
     deps = [
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework",
         "//tensorflow/python/keras",
     ],
 )
@@ -1957,6 +1961,7 @@ test_suite(
         "utils_test",
         "utils_test_v2",
         "utils_use_synthetic_data_for_test",
+        "//tensorflow/python/ipu/tests/keras/extensions:extensions_test_suite",
     ],
 )
 
