@@ -39,6 +39,29 @@ message KeyIdMapping {
   int64 start_id = 3;
 }
 
+message Input {
+  string name = 1;
+  string handle = 2;
+  int64 argument = 3;
+  int64 tuple_index = 4;
+  ShapeProto shape = 5;
+}
+
+message Output {
+  string name = 1;
+  string handle = 2;
+  int64 tuple_index = 3;
+  ShapeProto shape = 4;
+}
+
+message Signature {
+  repeated Input inputs = 1;
+  repeated Output outputs = 2;
+
+  repeated Input streamed_inputs = 3;
+  repeated Output streamed_outputs = 4;
+}
+
 message PoplarExecutableProto {
 
   // The number of replicas
@@ -67,4 +90,7 @@ message PoplarExecutableProto {
   repeated string checkpoint_feeds_order = 12;
 
   bool logging_cycle_count = 13;
+
+  // The functional signature of the poplar executable.
+  Signature signature = 14;
 };

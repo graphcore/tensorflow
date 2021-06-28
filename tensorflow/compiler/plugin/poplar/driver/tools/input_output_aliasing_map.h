@@ -68,10 +68,12 @@ class InputOutputAliasingMap {
     const bool IsResourceNotModified() const;
     const uint64 GetOutputIndex() const;
     const std::vector<std::string>& Handles() const;
+    const int64 GetParameterIndex() const;
 
    private:
     Type type_;
     uint64 output_index_;
+    int64 parameter_index_;
     std::string name_;
     xla::Shape shape_;
     std::vector<std::string> handles_;
