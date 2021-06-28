@@ -138,6 +138,7 @@ tf_proto_library_py(
         "driver/poplar_executable.proto",
         "driver/poplar_feed_config.proto",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":alias_info_py",
         ":option_flag_py",
@@ -145,7 +146,6 @@ tf_proto_library_py(
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/core:protos_all_py",
     ],
-    visibility = ["//visibility:public"],
 )
 
 tf_proto_library(
@@ -518,6 +518,7 @@ cc_library(
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/histogram.h",
+        "driver/tools/custom_ops/hlo_extensions.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
         "driver/tools/custom_ops/hlo_remote_buffer_info.h",
         "driver/tools/custom_ops/host_embedding.h",

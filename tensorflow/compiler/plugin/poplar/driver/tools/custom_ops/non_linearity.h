@@ -48,6 +48,11 @@ class HloNonLinearity : public HloPoplarInstruction {
     return BufferDescriptionsNoAllocations();
   }
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const {
+    return FindConsumersExtensionResults::DoNotFindConsumers();
+  }
+
   bool IsPopOpsElementwise() const override { return true; }
 
  protected:
@@ -102,6 +107,11 @@ class HloNonLinearityGrad : public HloPoplarInstruction {
   }
   HloPoplarBufferDescriptions GetBufferDescriptions() const {
     return BufferDescriptionsAllocatesAllOutputs(this);
+  }
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const {
+    return FindConsumersExtensionResults::DoNotFindConsumers();
   }
 
   bool IsPopOpsElementwise() const override { return true; }

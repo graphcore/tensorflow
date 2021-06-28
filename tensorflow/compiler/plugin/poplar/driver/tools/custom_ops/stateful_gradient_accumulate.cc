@@ -69,6 +69,12 @@ HloStatefulGradientAccumulate::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults
+HloStatefulGradientAccumulate::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloStatefulGradientAccumulate::IsPopOpsElementwise() const {
   return false;
 }
@@ -259,6 +265,11 @@ HloGradientAccumulatorCreate::GetBufferDescriptions() const {
                        : BufferLocality::kDeviceMemory);
 }
 
+const FindConsumersExtensionResults HloGradientAccumulatorCreate::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloGradientAccumulatorCreate::IsPopOpsElementwise() const { return false; }
 
 absl::optional<HloRemoteBufferInfo>
@@ -339,6 +350,11 @@ HloPoplarBufferDescriptions HloGradientAccumulatorAdd::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloGradientAccumulatorAdd::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloGradientAccumulatorAdd::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -392,6 +408,11 @@ HloPoplarUseDescriptions HloGradientAccumulatorSink::GetUseDescriptions()
 HloPoplarBufferDescriptions HloGradientAccumulatorSink::GetBufferDescriptions()
     const {
   return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults HloGradientAccumulatorSink::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloGradientAccumulatorSink::IsPopOpsElementwise() const { return false; }

@@ -101,6 +101,11 @@ HloPoplarBufferDescriptions HloUserOpInstruction::GetBufferDescriptions()
                                                         GetUseDescriptions());
 }
 
+const FindConsumersExtensionResults HloUserOpInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloUserOpInstruction::IsPopOpsElementwise() const {
   return metadata_.is_elementwise_;
 }

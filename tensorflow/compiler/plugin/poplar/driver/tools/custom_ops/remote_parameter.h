@@ -70,6 +70,9 @@ class HloRemoteParameterLoad : public HloAbstractRemoteLoadStore {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -98,6 +101,9 @@ class HloRemoteParameterStore : public HloAbstractRemoteLoadStore {
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -132,6 +138,9 @@ class HloCreateBuffer : public HloPoplarInstruction {
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -173,6 +182,8 @@ class HloBufferLoadSlice : public HloAbstractRemoteLoadStore {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
   absl::Span<HloInstruction* const> RemoteBuffers() const override;
@@ -209,6 +220,11 @@ class HloBufferStoreSlice : public HloAbstractRemoteLoadStore {
 
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override {
+    return FindConsumersExtensionResults::DoNotFindConsumers();
+  }
 
   bool IsPopOpsElementwise() const override { return false; }
 

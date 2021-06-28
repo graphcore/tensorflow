@@ -53,6 +53,11 @@ HloPoplarBufferDescriptions HloSliceApplyBase::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults HloSliceApplyBase::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSliceApplyBase::IsPopOpsElementwise() const { return false; }
 
 int64 HloSliceApplyBase::GetApplyDimension() const { return apply_dimension_; }

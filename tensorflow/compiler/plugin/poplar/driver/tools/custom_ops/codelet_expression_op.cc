@@ -56,6 +56,12 @@ HloCodeletExpressionOpInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloCodeletExpressionOpInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCodeletExpressionOpInstruction::IsPopOpsElementwise() const {
   return true;
 }

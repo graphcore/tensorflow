@@ -45,6 +45,11 @@ HloPoplarBufferDescriptions HloSeed::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloSeed::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSeed::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloSeed::ExtraPoplarAttributesToStringImpl(

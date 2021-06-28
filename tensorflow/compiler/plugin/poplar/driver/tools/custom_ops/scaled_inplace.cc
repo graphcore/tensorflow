@@ -52,6 +52,18 @@ HloPoplarBufferDescriptions HloScaledInplaceBase::GetBufferDescriptions()
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults HloScaledInplaceBase::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  auto allocating_indexes = AllocatingIndices();
+  auto op_index = params.op_index;
+
+  if (!allocating_indexes.count(op_index) && op_index < 2) {
+    return FindConsumersExtensionResults{true, this, params.index,
+                                         params.permutation};
+  }
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloScaledInplaceBase::IsPopOpsElementwise() const { return true; }
 
 HloOpcode HloScaledInplaceBase::GetOperation() const { return operation_; }

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -47,6 +48,11 @@ HloPoplarUseDescriptions HloMultiSliceInstruction::GetUseDescriptions() const {
 HloPoplarBufferDescriptions HloMultiSliceInstruction::GetBufferDescriptions()
     const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults HloMultiSliceInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloMultiSliceInstruction::IsPopOpsElementwise() const { return false; }
@@ -102,6 +108,27 @@ HloPoplarUseDescriptions HloMultiUpdateInstruction::GetUseDescriptions() const {
 HloPoplarBufferDescriptions HloMultiUpdateInstruction::GetBufferDescriptions()
     const {
   return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults HloMultiUpdateInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  auto allocating_indexes = AllocatingIndices();
+  auto op_index = params.op_index;
+
+  if (allocating_indexes.count(op_index)) {
+    if (op_index == 0) {
+      // In order to use slice plan for MultiSlice and MultiUpdate
+      // instructions, we have to ensure that tensor allocated for
+      // specific instruction has been allocated with equivalent slice
+      // plan. MultiUpdate/MultiUpdateAdd operand 0 is in-place, so
+      // it's possible to look through its consumers and find all
+      // instruction which may use this tensor later.
+      FindConsumersExtensionResults result{true, this, params.index,
+                                           params.permutation};
+      return result;
+    }
+  }
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloMultiUpdateInstruction::IsPopOpsElementwise() const { return false; }

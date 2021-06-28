@@ -50,6 +50,11 @@ HloPoplarBufferDescriptions HloRemapDeduceInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloRemapDeduceInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloRemapDeduceInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction>

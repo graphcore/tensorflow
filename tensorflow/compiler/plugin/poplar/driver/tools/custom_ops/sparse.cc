@@ -48,6 +48,12 @@ HloSelectScalarFromRowsInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloSelectScalarFromRowsInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSelectScalarFromRowsInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -97,6 +103,12 @@ HloPoplarUseDescriptions HloUpdateScalarInRowsInstruction::GetUseDescriptions()
 HloPoplarBufferDescriptions
 HloUpdateScalarInRowsInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults
+HloUpdateScalarInRowsInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloUpdateScalarInRowsInstruction::IsPopOpsElementwise() const {

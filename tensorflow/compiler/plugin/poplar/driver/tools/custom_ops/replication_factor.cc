@@ -49,6 +49,12 @@ HloReplicationFactorInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloReplicationFactorInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloReplicationFactorInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -101,6 +107,12 @@ HloReplicationNormaliseInstruction::GetUseDescriptions() const {
 HloPoplarBufferDescriptions
 HloReplicationNormaliseInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults
+HloReplicationNormaliseInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloReplicationNormaliseInstruction::IsPopOpsElementwise() const {

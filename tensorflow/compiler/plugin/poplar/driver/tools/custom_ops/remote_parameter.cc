@@ -131,6 +131,11 @@ HloPoplarBufferDescriptions HloRemoteParameterLoad::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloRemoteParameterLoad::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloRemoteParameterLoad::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -186,6 +191,11 @@ HloPoplarUseDescriptions HloRemoteParameterStore::GetUseDescriptions() const {
 HloPoplarBufferDescriptions HloRemoteParameterStore::GetBufferDescriptions()
     const {
   return BufferDescriptionsNoAllocations();
+}
+
+const FindConsumersExtensionResults HloRemoteParameterStore::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloRemoteParameterStore::IsPopOpsElementwise() const { return false; }
@@ -291,6 +301,11 @@ HloPoplarBufferDescriptions HloCreateBuffer::GetBufferDescriptions() const {
                        : BufferLocality::kDeviceMemory);
 }
 
+const FindConsumersExtensionResults HloCreateBuffer::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCreateBuffer::IsPopOpsElementwise() const { return false; }
 
 absl::optional<HloRemoteBufferInfo> HloCreateBuffer::RemoteBufferInfo() const {
@@ -377,6 +392,11 @@ HloPoplarUseDescriptions HloBufferLoadSlice::GetUseDescriptions() const {
 
 HloPoplarBufferDescriptions HloBufferLoadSlice::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults HloBufferLoadSlice::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloBufferLoadSlice::IsPopOpsElementwise() const { return false; }

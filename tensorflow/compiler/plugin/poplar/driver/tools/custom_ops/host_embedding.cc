@@ -62,6 +62,12 @@ HloHostEmbeddingLookupInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloHostEmbeddingLookupInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloHostEmbeddingLookupInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -132,6 +138,12 @@ HloHostEmbeddingUpdateInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloHostEmbeddingUpdateInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloHostEmbeddingUpdateInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -197,6 +209,12 @@ HloPoplarUseDescriptions HloHostEmbeddingNotifyInstruction::GetUseDescriptions()
 HloPoplarBufferDescriptions
 HloHostEmbeddingNotifyInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults
+HloHostEmbeddingNotifyInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloHostEmbeddingNotifyInstruction::IsPopOpsElementwise() const {

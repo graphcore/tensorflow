@@ -132,6 +132,12 @@ int64 CountShapes(const Shape& shape);
 int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
                       int64 original_index);
 
+// Find the index of a tensor after extracting it (or a tuple containing it)
+// from a tuple. tuple_index is the index of one of the elements of the tuple,
+// and original_index is the tensor position within the original tuple.
+int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
+                       int64 original_index);
+
 std::vector<Shape> FlattenedXlaShape(const Shape& shape);
 int64 GetByteSizeOfTotalShape(const Shape& shape);
 

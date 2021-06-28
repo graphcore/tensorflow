@@ -88,6 +88,8 @@ class HloGroupNormInstruction : public HloGroupNormBaseInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -122,6 +124,8 @@ class HloGroupNormTrainInstruction : public HloGroupNormBaseInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -155,6 +159,8 @@ class HloGroupNormGradInstruction : public HloGroupNormBaseInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -185,6 +191,8 @@ class HloGroupNormStatsInstruction : public HloGroupNormBaseInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  private:
@@ -208,6 +216,8 @@ class HloBatchNormStatsInstruction : public HloNormInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  private:

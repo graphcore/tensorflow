@@ -60,6 +60,11 @@ HloPoplarBufferDescriptions HloSendToHostInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloSendToHostInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSendToHostInstruction::IsPopOpsElementwise() const { return false; }
 
 const std::vector<std::string>& HloSendToHostInstruction::RendezvousKeys()

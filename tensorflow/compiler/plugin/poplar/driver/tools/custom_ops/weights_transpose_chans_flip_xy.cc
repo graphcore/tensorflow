@@ -90,6 +90,12 @@ HloWeightsTransposeChansFlipXYInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloWeightsTransposeChansFlipXYInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloWeightsTransposeChansFlipXYInstruction::IsPopOpsElementwise() const {
   return false;
 }

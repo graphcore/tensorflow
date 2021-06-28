@@ -54,6 +54,11 @@ HloPoplarBufferDescriptions HloInterTilesetCopy::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloInterTilesetCopy::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloInterTilesetCopy::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloInterTilesetCopy::CloneWithNewOperandsImpl(

@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "tensorflow/core/platform/str_util.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_extensions.h"
 namespace xla {
 namespace poplarplugin {
 
@@ -82,6 +83,12 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
 
   // Returns whether this is an elementwise instruction.
   virtual bool IsPopOpsElementwise() const = 0;
+
+  // Indicates whether consumers of this instruction should be traversed in the
+  // allocation finder pass. Also provides information based on the params
+  // given about how this instructions inputs relate to its outputs.
+  virtual const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const = 0;
 
  protected:
   virtual std::vector<string> ExtraPoplarAttributesToStringImpl(

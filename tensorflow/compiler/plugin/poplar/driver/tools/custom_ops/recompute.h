@@ -37,6 +37,9 @@ class HloSuggestRecomputeInstruction : public HloPoplarInstruction {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -62,6 +65,9 @@ class HloBlockRecomputeInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
 
   bool IsPopOpsElementwise() const override;
 
@@ -90,6 +96,8 @@ class HloRecomputationCheckpointInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -120,6 +128,8 @@ class HloRecomputationInputInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
  protected:

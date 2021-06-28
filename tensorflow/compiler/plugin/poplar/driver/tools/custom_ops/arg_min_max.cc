@@ -51,6 +51,11 @@ HloPoplarBufferDescriptions HloArgMinMaxBase::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloArgMinMaxBase::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloArgMinMaxBase::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloArgMinMaxBase::ExtraPoplarAttributesToStringImpl(

@@ -51,12 +51,14 @@ using AllocatingOutputExtension =
     MAKE_EXTENSION(HloPoplarInstruction::AllocatingOutput);
 using LayoutDependenciesExtension =
     MAKE_EXTENSION(HloPoplarInstruction::LayoutDependencies);
+using FindConsumersExtension =
+    MAKE_EXTENSION(HloPoplarInstruction::FindConsumers);
 
 #undef MAKE_EXTENSION
 
 using HloInstructionExtensions =
     InstructionExtensions<AllocatingIndicesExtension, AllocatingOutputExtension,
-                          LayoutDependenciesExtension>;
+                          LayoutDependenciesExtension, FindConsumersExtension>;
 
 HloInstructionExtensions& GetHloInstructionExtensions();
 

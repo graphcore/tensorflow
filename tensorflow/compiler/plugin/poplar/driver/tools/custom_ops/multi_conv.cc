@@ -72,6 +72,11 @@ HloPoplarBufferDescriptions HloMultiConvInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloMultiConvInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloMultiConvInstruction::IsPopOpsElementwise() const { return false; }
 
 bool HloMultiConvInstruction::IsWeightUpdate() const {

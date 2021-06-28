@@ -43,6 +43,11 @@ HloPoplarBufferDescriptions HloIpuInterCopy::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloIpuInterCopy::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloIpuInterCopy::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloIpuInterCopy::CloneWithNewOperandsImpl(

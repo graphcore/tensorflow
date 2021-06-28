@@ -43,6 +43,11 @@ HloPoplarBufferDescriptions HloCandidateSampler::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloCandidateSampler::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCandidateSampler::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> CreateHloCandidateSampler(

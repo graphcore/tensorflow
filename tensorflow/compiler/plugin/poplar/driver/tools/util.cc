@@ -214,6 +214,19 @@ int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
   return tensor_count + original_index;
 }
 
+int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
+                       int64 original_index) {
+  int64 index = original_index;
+  for (int64 i = 0; i < tuple_index; i++) {
+    index -= CountShapes(ShapeUtil::GetTupleElementShape(tuple, i));
+  }
+  int64 n = CountShapes(ShapeUtil::GetTupleElementShape(tuple, tuple_index));
+  if (index < 0 || index >= n) {
+    return -1;
+  }
+  return index;
+}
+
 template <typename F>
 static void WalkShape(const Shape& shape, const F& f) {
   if (shape.IsTuple()) {

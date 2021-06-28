@@ -69,6 +69,11 @@ HloPoplarBufferDescriptions HloRecvFromHostInstruction::GetBufferDescriptions()
                                                         GetUseDescriptions());
 }
 
+const FindConsumersExtensionResults HloRecvFromHostInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloRecvFromHostInstruction::IsPopOpsElementwise() const { return false; }
 
 const std::vector<std::string>& HloRecvFromHostInstruction::RendezvousKeys()
