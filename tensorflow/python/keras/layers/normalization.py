@@ -229,30 +229,6 @@ class BatchNormalizationBase(Layer):
       self.renorm_clipping = renorm_clipping
       self.renorm_momentum = renorm_momentum
 
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(axis=axis,
-                                  momentum=momentum,
-                                  epsilon=epsilon,
-                                  center=center,
-                                  scale=scale,
-                                  beta_initializer=beta_initializer,
-                                  gamma_initializer=gamma_initializer,
-                                  moving_mean_initializer=moving_mean_initializer,
-                                  moving_variance_initializer=moving_variance_initializer,
-                                  beta_regularizer=beta_regularizer,
-                                  gamma_regularizer=gamma_regularizer,
-                                  beta_constraint=beta_constraint,
-                                  gamma_constraint=gamma_constraint,
-                                  renorm=renorm,
-                                  renorm_clipping=renorm_clipping,
-                                  renorm_momentum=renorm_momentum,
-                                  fused=fused,
-                                  trainable=trainable,
-                                  virtual_batch_size=virtual_batch_size,
-                                  adjustment=adjustment,
-                                  name=name,
-                                  **kwargs)
-
   def _raise_if_fused_cannot_be_used(self):
     """Raises a ValueError if fused implementation cannot be used.
 
@@ -1172,21 +1148,6 @@ class LayerNormalization(Layer):
     # set to True or False in build()"
     self._fused = None
 
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(axis=axis,
-                                  epsilon=epsilon,
-                                  center=center,
-                                  scale=scale,
-                                  beta_initializer=beta_initializer,
-                                  gamma_initializer=gamma_initializer,
-                                  beta_regularizer=beta_regularizer,
-                                  gamma_regularizer=gamma_regularizer,
-                                  beta_constraint=beta_constraint,
-                                  gamma_constraint=gamma_constraint,
-                                  trainable=trainable,
-                                  name=name,
-                                  **kwargs)
-
   def _fused_can_be_used(self, ndims):
     """Return false if fused implementation cannot be used.
 
@@ -1257,9 +1218,6 @@ class LayerNormalization(Layer):
     self._fused = self._fused_can_be_used(ndims)
 
     self.built = True
-
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_input_shape(input_shape)
 
   def call(self, inputs):
     # Compute the axes along which to reduce the mean / variance

@@ -203,12 +203,6 @@ class Dropout(Layer):
     self.seed = seed
     self.supports_masking = True
 
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(rate, 
-                                  noise_shape=noise_shape, 
-                                  seed=seed, 
-                                  **kwargs)
-
   def _get_noise_shape(self, inputs):
     # Subclasses of `Dropout` may implement `_get_noise_shape(self, inputs)`,
     # which will override `self.noise_shape`, and allows for custom noise

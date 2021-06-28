@@ -23,7 +23,6 @@ import copy
 import json
 import numpy as np
 
-from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.keras import backend
@@ -114,13 +113,6 @@ class Node(object):
     # Cached for performance.
     self.flat_input_ids = [str(id(t)) for t in self._keras_inputs]
     self.flat_output_ids = [str(id(t)) for t in nest.flatten(self.outputs)]
-
-    # For pipelining of ipu.keras.IPUModel
-    if ds_context.has_strategy():
-      strategy = ds_context.get_strategy()
-      if hasattr(strategy, "_pipeline_stage"):
-        stage = strategy._pipeline_stage
-        self._pipeline_stage = stage
 
   @property
   def keras_inputs(self):

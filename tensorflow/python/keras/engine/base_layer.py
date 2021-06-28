@@ -445,32 +445,6 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     # a list with one element.
     self._preserve_input_structure_in_config = False
 
-    # For pipelining of ipu.keras.IPUModel
-    if ds_context.has_strategy():
-      strategy = ds_context.get_strategy()
-      if hasattr(strategy, "_pipeline_stage"):
-        stage = strategy._pipeline_stage
-        self._pipeline_stage = stage
-
-  def _maybe_store_args_kwargs(self, *args, **kwargs):
-    """
-    Stores initialization args for substitution of Keras layers with IPU
-    Keras layers.
-    """
-    strategy = ds_context.get_strategy()
-    if strategy:
-      self._stored_init_args = args
-      self._stored_init_kwargs = kwargs
-
-  def _maybe_store_input_shape(self, input_shape):
-    """
-    Stores input shape(s) for substitution of Keras layers with IPU
-    Keras layers. Used for weight copying.
-    """
-    strategy = ds_context.get_strategy()
-    if strategy:
-      self._stored_input_shape = input_shape
-
   @trackable.no_automatic_dependency_tracking
   @generic_utils.default
   def build(self, input_shape):
