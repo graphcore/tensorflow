@@ -98,7 +98,8 @@ class ElementwiseExpressionDependencyMap {
       if (next->opcode() == HloOpcode::kParameter) {
         VLOG(3) << "Adding " << next->ToString() << " to input set";
         inputs.insert(next);
-      } else if (!IsPoplarInstruction(PoplarOp::ExecutionCounter, next) &&
+      } else if (next->called_computations().empty() &&
+                 !IsPoplarInstruction(PoplarOp::ExecutionCounter, next) &&
                  !next->HasSideEffect()) {
         // TODO(T41424): Remove execution counter check if we consider adding
         // side effect flag to the execution counter instruction.
