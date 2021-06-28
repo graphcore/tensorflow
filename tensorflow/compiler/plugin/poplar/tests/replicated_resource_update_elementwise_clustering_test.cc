@@ -1552,6 +1552,33 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
               ::testing::ElementsAre(0));
 }
 
+TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
+  static constexpr int replication_factor = 2;
+  auto config = GetModuleConfigForTest();
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  const std::string hlo(tu::GetBroadcastHloString(100));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 0, replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool changed,
+      ReplicatedResourceUpdateElementwiseClustering(replication_factor)
+          .Run(module.get()));
+  EXPECT_FALSE(changed);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
