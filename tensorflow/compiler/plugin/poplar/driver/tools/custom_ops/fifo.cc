@@ -54,6 +54,11 @@ HloPoplarBufferDescriptions HloFifoInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloFifoInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloFifoInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction> HloFifoInstruction::CloneWithNewOperandsImpl(

@@ -45,6 +45,11 @@ HloPoplarBufferDescriptions HloStatefulNoop::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloStatefulNoop::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloStatefulNoop::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloStatefulNoop::ExtraPoplarAttributesToStringImpl(

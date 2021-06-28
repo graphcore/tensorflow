@@ -26,26 +26,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-namespace {
-
-// Find the index of a tensor after extracting it (or a tuple containing it)
-// from a tuple. tuple_index is the index of one of the elements of the tuple,
-// and original_index is the tensor position within the original tuple.
-int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
-                       int64 original_index) {
-  int64 index = original_index;
-  for (int64 i = 0; i < tuple_index; i++) {
-    index -= CountShapes(ShapeUtil::GetTupleElementShape(tuple, i));
-  }
-  int64 n = CountShapes(ShapeUtil::GetTupleElementShape(tuple, tuple_index));
-  if (index < 0 || index >= n) {
-    return -1;
-  }
-  return index;
-}
-
-}  // namespace
-
 void FindAllUsers::FindUsers(HloInstruction* tgt, const InstructionList& stack,
                              int64 index) {
   if (tgt->parent()->root_instruction() == tgt) {

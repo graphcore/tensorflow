@@ -38,6 +38,11 @@ absl::flat_hash_map<int64, int64> HloAssert::LayoutDependencies() const {
   return {};
 }
 
+const FindConsumersExtensionResults HloAssert::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloAssert::IsPopOpsElementwise() const { return false; }
 
 bool HloAssert::AllocatingOutput() const { return false; }

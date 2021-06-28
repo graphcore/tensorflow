@@ -497,6 +497,7 @@ cc_library(
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/histogram.h",
+        "driver/tools/custom_ops/hlo_extensions.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
         "driver/tools/custom_ops/hlo_remote_buffer_info.h",
         "driver/tools/custom_ops/host_embedding.h",

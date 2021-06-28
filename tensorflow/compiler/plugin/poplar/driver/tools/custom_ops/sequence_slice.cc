@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/sequence_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_buffer_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -67,6 +68,18 @@ HloPoplarBufferDescriptions HloSequenceSliceInstruction::GetBufferDescriptions()
 }
 
 bool HloSequenceSliceInstruction::AllocatingOutput() const { return false; }
+
+const FindConsumersExtensionResults HloSequenceSliceInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  auto op_index = params.op_index;
+
+  if ((op_index == 0) || (IsAnyScaledInplace(this) && op_index < 2)) {
+    FindConsumersExtensionResults result{true, this, params.index,
+                                         params.permutation};
+    return result;
+  }
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
 
 bool HloSequenceSliceInstruction::IsPopOpsElementwise() const { return false; }
 

@@ -53,6 +53,12 @@ HloSuggestRecomputeInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults
+HloSuggestRecomputeInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSuggestRecomputeInstruction::IsPopOpsElementwise() const {
   return true;
 }
@@ -107,6 +113,11 @@ HloBlockRecomputeInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults HloBlockRecomputeInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloBlockRecomputeInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction>
@@ -153,6 +164,12 @@ HloRecomputationCheckpointInstruction::GetUseDescriptions() const {
 HloPoplarBufferDescriptions
 HloRecomputationCheckpointInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults
+HloRecomputationCheckpointInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloRecomputationCheckpointInstruction::IsPopOpsElementwise() const {
@@ -207,6 +224,12 @@ HloPoplarUseDescriptions HloRecomputationInputInstruction::GetUseDescriptions()
 HloPoplarBufferDescriptions
 HloRecomputationInputInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults
+HloRecomputationInputInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloRecomputationInputInstruction::IsPopOpsElementwise() const {

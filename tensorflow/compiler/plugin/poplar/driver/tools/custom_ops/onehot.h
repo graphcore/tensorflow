@@ -40,6 +40,9 @@ class HloOneHotInstruction : public HloPoplarInstruction {
 
   int32 Axis() const { return axis_; }
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool IsPopOpsElementwise() const override;
 
  protected:

@@ -39,22 +39,6 @@ namespace poplarplugin {
 
 namespace {
 
-// Find the index of a tensor after extracting it (or a tuple containing it)
-// from a tuple. tuple_index is the index of one of the elements of the tuple,
-// and original_index is the tensor position within the original tuple.
-int64 ExtractFromTuple(const Shape& tuple, int64 tuple_index,
-                       int64 original_index) {
-  int64 index = original_index;
-  for (int64 i = 0; i < tuple_index; i++) {
-    index -= CountShapes(ShapeUtil::GetTupleElementShape(tuple, i));
-  }
-  int64 n = CountShapes(ShapeUtil::GetTupleElementShape(tuple, tuple_index));
-  if (index < 0 || index >= n) {
-    return -1;
-  }
-  return index;
-}
-
 struct AllocationLocation {
   TensorLocation location;
   Shape shape;
@@ -268,38 +252,6 @@ void AllocationFinder::FindConsumers(
           }
           break;
         }
-        case HloOpcode::kConditional: {
-          // Ignore the predicate/branch index.
-          if (op_index != 0) {
-            HloComputation* comp = user->branch_computation(op_index - 1);
-            HloInstruction* param = comp->parameter_instruction(0);
-            FindConsumers(src, param, index, permutation);
-          }
-          break;
-        }
-        case HloOpcode::kCall: {
-          // This also handles repeat loops which are represented as a Call
-          // operation.
-          HloComputation* comp = user->to_apply();
-          HloInstruction* param = comp->parameter_instruction(op_index);
-          FindConsumers(src, param, index, permutation);
-          break;
-        }
-        case HloOpcode::kFusion: {
-          HloComputation* comp = user->fused_instructions_computation();
-          if (IsPopOpsFusion(user)) {
-            if (IsPopOpsFusion(user, "zero_pad")) {
-              FindConsumers(src, user, index, permutation);
-            } else if (IsPopOpsFusion(user, "implicit")) {
-              // Look through implicit elementwise ops if the shape dimensions
-              // match.
-              if (user->shape() == user->operand(op_index)->shape()) {
-                FindConsumers(src, user, index, permutation);
-              }
-            }
-          }
-          break;
-        }
         case HloOpcode::kCustomCall: {
           if (IsPoplibsHloCustomOp(user)) {
             auto poplar_inst = Cast<HloPoplarInstruction>(user);
@@ -320,90 +272,19 @@ void AllocationFinder::FindConsumers(
                     (*tensor_target.permutation)[0];
               }
               AddTensorTarget(src, tensor_target);
-              if (op_index == 0 && is_multi_update) {
-                // In order to use slice plan for MultiSlice and MultiUpdate
-                // instructions, we have to ensure that tensor allocated for
-                // specific instruction has been allocated with equivalent slice
-                // plan. MultiUpdate/MultiUpdateAdd operand 0 is in-place, so
-                // it's possible to look through its consumers and find all
-                // instruction which may use this tensor later.
-                FindConsumers(src, user, index, permutation);
-              }
-            } else {
-              // Look through.
-              if ((IsPoplarInstruction(PoplarOp::SequenceSlice)(user) &&
-                   op_index == 0) ||
-                  (IsAnyScaledInplace(user) && op_index < 2)) {
-                FindConsumers(src, user, index, permutation);
-                break;
-              }
-            }
-          } else {
-            auto shapes = FlattenedXlaShape(src.instruction->shape());
-            if (shapes[src.flattened_output_tuple_index] == user->shape()) {
-              FindConsumers(src, user, index, permutation);
             }
           }
           break;
         }
-        case HloOpcode::kWhile: {
-          HloComputation* comp = user->while_body();
-          HloInstruction* param = comp->parameter_instruction(op_index);
-          FindConsumers(src, param, index, permutation);
-          break;
-        }
-        case HloOpcode::kTuple: {
-          int64 new_index = InsertIntoTuple(user->shape(), op_index, index);
-          FindConsumers(src, user, new_index, permutation);
-          break;
-        }
-        case HloOpcode::kGetTupleElement: {
-          int64 tuple_index = user->tuple_index();
-          int64 new_index = ExtractFromTuple(tgt->shape(), tuple_index, index);
-          if (new_index != -1) {
-            FindConsumers(src, user, new_index, permutation);
-          }
-          break;
-        }
-        case HloOpcode::kReshape: {
-          // Can look through reshapes, but cannot track dimension permutation.
-          FindConsumers(src, user, index, absl::nullopt);
-          break;
-        }
-        case HloOpcode::kTranspose: {
-          absl::optional<std::vector<int64>> new_permutation;
-          if (permutation) {
-            // Permute the dimensions according to the transpose.
-            new_permutation = std::vector<int64>(permutation->size());
-            const std::vector<int64> transpose_permutation = user->dimensions();
-            for (int64 d = 0; d != permutation->size(); ++d) {
-              (*new_permutation)[d] = (*permutation)[transpose_permutation[d]];
-            }
-          }
-          FindConsumers(src, user, index, new_permutation);
-          break;
-        }
-        case HloOpcode::kConvert: {
-          FindConsumers(src, user, index, permutation);
-          break;
-        }
-        case HloOpcode::kConcatenate: {
-          FindConsumers(src, user, index, permutation);
-          break;
-        }
-        case HloOpcode::kSlice: {
-          if (IsUniformSingleDimSlice(user)) {
-            FindConsumers(src, user, index, permutation);
-          }
-          break;
-        }
-        case HloOpcode::kPad: {
-          if (op_index == 0) {
-            FindConsumers(src, user, index, permutation);
-          }
-          break;
-        }
-        default: {
+      }
+
+      // FindConsumer look through.
+      auto result = CallHloInstructionExtension<FindConsumersExtension,
+                                                FindConsumersExtensionParams>(
+          user,
+          FindConsumersExtensionParams{src, tgt, index, op_index, permutation});
+      switch (result.do_find_consumers) {
+        case DoFindConsumers::UNSPECIFIED: {
           auto shapes = FlattenedXlaShape(src.instruction->shape());
           // Ignore the element type (paths can contain casts).
           if (shapes[src.flattened_output_tuple_index].dimensions() ==
@@ -412,6 +293,12 @@ void AllocationFinder::FindConsumers(
           }
           break;
         }
+        case DoFindConsumers::TRUE: {
+          FindConsumers(src, result.tgt, result.index, result.permutation);
+          break;
+        }
+        case DoFindConsumers::FALSE:
+        default: { break; }
       }
     }
   }

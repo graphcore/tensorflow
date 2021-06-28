@@ -50,6 +50,11 @@ HloPoplarBufferDescriptions HloPoolingInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloPoolingInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloPoolingInstruction::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string>

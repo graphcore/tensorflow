@@ -54,6 +54,11 @@ HloPoplarBufferDescriptions HloHistogramInstruction::GetBufferDescriptions()
 
 bool HloHistogramInstruction::AllocatingOutput() const { return false; }
 
+const FindConsumersExtensionResults HloHistogramInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloHistogramInstruction::IsPopOpsElementwise() const { return false; }
 
 bool HloHistogramInstruction::AbsoluteOfInput() const {
@@ -124,6 +129,12 @@ HloHistogramUpdateInstruction::GetBufferDescriptions() const {
 }
 
 bool HloHistogramUpdateInstruction::AllocatingOutput() const { return false; }
+
+const FindConsumersExtensionResults
+HloHistogramUpdateInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
 
 bool HloHistogramUpdateInstruction::IsPopOpsElementwise() const {
   return false;

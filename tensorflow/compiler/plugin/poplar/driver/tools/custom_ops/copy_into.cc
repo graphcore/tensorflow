@@ -46,6 +46,11 @@ HloPoplarBufferDescriptions HloCopyInto::GetBufferDescriptions() const {
   return BufferDescriptionsNoAllocations();
 }
 
+const FindConsumersExtensionResults HloCopyInto::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCopyInto::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloCopyInto::CloneWithNewOperandsImpl(

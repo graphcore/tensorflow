@@ -122,6 +122,11 @@ HloPoplarBufferDescriptions HloRNNFwdInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloRNNFwdInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
 
 absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {
@@ -142,6 +147,11 @@ HloPoplarUseDescriptions HloRNNBwdInstruction::GetUseDescriptions() const {
 HloPoplarBufferDescriptions HloRNNBwdInstruction::GetBufferDescriptions()
     const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults HloRNNBwdInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloRNNBwdInstruction::IsPopOpsElementwise() const { return false; }

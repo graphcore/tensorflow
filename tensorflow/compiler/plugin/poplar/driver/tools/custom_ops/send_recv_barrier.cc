@@ -54,6 +54,12 @@ HloSendRecvBarrierInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloSendRecvBarrierInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloSendRecvBarrierInstruction::IsPopOpsElementwise() const {
   return false;
 }

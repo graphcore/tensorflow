@@ -45,6 +45,11 @@ HloPoplarBufferDescriptions HloRemapInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloRemapInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloRemapInstruction::IsPopOpsElementwise() const { return true; }
 
 std::unique_ptr<HloInstruction> HloRemapInstruction::CloneWithNewOperandsImpl(

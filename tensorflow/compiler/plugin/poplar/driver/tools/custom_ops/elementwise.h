@@ -51,6 +51,11 @@ class HloElementwiseUnaryBase : public HloPoplarInstruction {
     return BufferDescriptionsNoAllocations();
   }
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override {
+    return FindConsumersExtensionResults::DoNotFindConsumers();
+  }
+
   bool IsPopOpsElementwise() const override { return true; }
 
  protected:

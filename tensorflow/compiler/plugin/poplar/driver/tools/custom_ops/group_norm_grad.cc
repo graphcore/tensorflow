@@ -75,6 +75,11 @@ HloPoplarBufferDescriptions HloGroupNormGradInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloGroupNormGradInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloGroupNormGradInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>

@@ -36,6 +36,8 @@ class HloScaledInplaceBase : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
   HloOpcode GetOperation() const;
 

@@ -46,7 +46,8 @@ class HloSequenceSliceInstruction : public HloPoplarInstruction {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
-
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
   bool ZeroUnused() const;

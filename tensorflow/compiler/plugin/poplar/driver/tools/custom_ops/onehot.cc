@@ -52,6 +52,11 @@ HloPoplarBufferDescriptions HloOneHotInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloOneHotInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloOneHotInstruction::IsPopOpsElementwise() const { return false; }
 
 // Creates an instance of a HloOneHotInstruction

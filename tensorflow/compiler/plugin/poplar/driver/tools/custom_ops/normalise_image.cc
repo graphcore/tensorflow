@@ -43,6 +43,11 @@ HloPoplarBufferDescriptions HloNormaliseImage::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloNormaliseImage::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloNormaliseImage::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> CreateHloNormaliseImage(

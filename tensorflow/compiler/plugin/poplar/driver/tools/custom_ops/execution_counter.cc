@@ -45,6 +45,11 @@ HloPoplarBufferDescriptions HloExecutionCounter::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloExecutionCounter::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloExecutionCounter::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloExecutionCounter::ExtraPoplarAttributesToStringImpl(
