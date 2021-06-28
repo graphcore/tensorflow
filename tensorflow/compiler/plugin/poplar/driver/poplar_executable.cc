@@ -377,6 +377,41 @@ PoplarExecutableCore::Deserialize(
 
   proto.set_logging_cycle_count(logging_cycle_count);
 
+  // Items that don't need deserialising.
+  for (const auto& input_info : annotations.entry_input_infos) {
+    auto input = proto.mutable_signature()->add_inputs();
+    input->set_name(input_info.name);
+    input->set_handle(input_info.handle);
+    input->set_argument(input_info.argument);
+    input->set_tuple_index(input_info.tuple_index);
+    (*input->mutable_shape()) = input_info.shape.ToProto();
+  }
+
+  for (const auto& streamed_input_info : annotations.feed_input_infos) {
+    auto input = proto.mutable_signature()->add_streamed_inputs();
+    input->set_name(streamed_input_info.name);
+    input->set_handle(streamed_input_info.handle);
+    input->set_argument(streamed_input_info.argument);
+    input->set_tuple_index(streamed_input_info.tuple_index);
+    (*input->mutable_shape()) = streamed_input_info.shape.ToProto();
+  }
+
+  for (const auto& output_info : annotations.entry_output_infos) {
+    auto output = proto.mutable_signature()->add_outputs();
+    output->set_name(output_info.name);
+    output->set_handle(output_info.handle);
+    output->set_tuple_index(output_info.tuple_index);
+    (*output->mutable_shape()) = output_info.shape.ToProto();
+  }
+
+  for (const auto& streamed_output_info : annotations.feed_output_infos) {
+    auto output = proto.mutable_signature()->add_streamed_outputs();
+    output->set_name(streamed_output_info.name);
+    output->set_handle(streamed_output_info.handle);
+    output->set_tuple_index(streamed_output_info.tuple_index);
+    (*output->mutable_shape()) = streamed_output_info.shape.ToProto();
+  }
+
   return PoplarExecutableBinaryFile::Write(filenames.CachedExecutableFilename(),
                                            proto, executable);
 }

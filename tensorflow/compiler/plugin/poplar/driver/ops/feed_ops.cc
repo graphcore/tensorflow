@@ -38,6 +38,7 @@ namespace poplarplugin {
 namespace {
 Status CreatePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
     poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
@@ -70,11 +71,15 @@ Status CreatePoplarH2DFIFO(
                                   debug_name_and_id));
   }
 
+  InputInfo info = {handle, handle, 0, tuple_index, inst->shape()};
+  TF_RETURN_IF_ERROR(AddFeedInputInfo(res.annotations, info));
+
   return Status::OK();
 }
 
 Status CreateReusablePoplarH2DFIFO(
     CompilerResources& res, const HloInstruction* inst, int64 tuple_index,
+    const Shape& shape,
     const xla::poplarplugin::PoplarFeedConfig& infeed_config,
     const std::string& handle, poplar::Graph& graph,
     poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
@@ -92,8 +97,8 @@ Status CreateReusablePoplarH2DFIFO(
 
   // Wasn't in the cache, so we'll create one.
   poplar::Tensor tmp = graph.clone(tensor_to_update, debug_name_and_id);
-  TF_RETURN_IF_ERROR(CreatePoplarH2DFIFO(res, inst, tuple_index, infeed_config,
-                                         handle, graph, tmp, seq,
+  TF_RETURN_IF_ERROR(CreatePoplarH2DFIFO(res, inst, tuple_index, shape,
+                                         infeed_config, handle, graph, tmp, seq,
                                          debug_name_and_id));
 
   // Add to the cache.
@@ -130,6 +135,9 @@ Status CreatePoplarD2HFIFO(
   } else {
     seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
   }
+
+  OutputInfo info = {handle, handle, tuple_index, {}};
+  TF_RETURN_IF_ERROR(AddFeedOutputInfo(res.annotations, info));
 
   return Status::OK();
 }
@@ -188,10 +196,10 @@ StatusOr<poplar::program::Program> CreateInfeed(
 
     if (infeed_config.reusable()) {
       TF_RETURN_IF_ERROR(CreateReusablePoplarH2DFIFO(
-          res, inst, tuple_index, infeed_config, handle, graph, tensor, seq,
-          debug_name_and_id));
+          res, inst, tuple_index, shape, infeed_config, handle, graph, tensor,
+          seq, debug_name_and_id));
     } else {
-      TF_RETURN_IF_ERROR(CreatePoplarH2DFIFO(res, inst, tuple_index,
+      TF_RETURN_IF_ERROR(CreatePoplarH2DFIFO(res, inst, tuple_index, shape,
                                              infeed_config, handle, graph,
                                              tensor, seq, debug_name_and_id));
     }
