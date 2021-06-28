@@ -30,6 +30,14 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
   const std::string hlo = R"(
   HloModule main
 
+  _pop_op_implicit_binary.add {
+    x = f32[] parameter(0)
+    y = f32[] parameter(1)
+    bx = f32[$N,$M] broadcast(x), dimensions={}
+    by = f32[$N,$M] broadcast(y), dimensions={}
+    ROOT add = f32[$N,$M] add(bx, by)
+  }
+
   sum {
     y = f32[] parameter(1)
     x = f32[] parameter(0), control-predecessors={y}
@@ -128,10 +136,16 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
   )";
   std::string hlo_string =
       tensorflow::str_util::StringReplace(hlo, "$WU", wu, true);
-  hlo_string =
-      absl::StrReplaceAll(hlo_string, {{"$N", std::to_string(n)},
-                                       {"$M", std::to_string(m)},
-                                       {"$B", std::to_string(minibatches)}});
+  if (m != 0) {
+    hlo_string =
+        absl::StrReplaceAll(hlo_string, {{"$N", std::to_string(n)},
+                                         {"$M", std::to_string(m)},
+                                         {"$B", std::to_string(minibatches)}});
+  } else {
+    hlo_string = absl::StrReplaceAll(
+        hlo_string,
+        {{"$N,$M", std::to_string(n)}, {"$B", std::to_string(minibatches)}});
+  }
   return hlo_string;
 }
 
@@ -256,6 +270,27 @@ std::string HloPoplarTestUtil::GetFullRemoteLoadHloString(int n, int m,
     ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(store.1, store.2, fusion.1, fusion.2)
   )";
   return GetTemplateHloString(wu, n, m, minibatches);
+}
+
+std::string HloPoplarTestUtil::GetBroadcastHloString(int n, int minibatches) {
+  const std::string wu = R"(
+    const.1 = f32[] constant(1.0)
+    const.2 = f32[] constant(-1.0)
+    fusion = f32[$N,$M] fusion(const.1, const.2), kind=kCustom, calls=_pop_op_implicit_binary.add
+
+    add.1 = f32[$N,$M] add(arg2, fusion)
+    add.2 = f32[$N,$M] add(arg3, fusion)
+
+    rate.1 = f32[] constant(0.1)
+    fusion.1 = f32[$N,$M] fusion(add.1, add.2, rate.1), kind=kCustom, calls=scale_xya.1
+    fusion.2 = f32[$N,$M] fusion(add.2, add.1, rate.1), kind=kCustom, calls=scale_xya.2
+
+    convert.1 = f16[$N,$M] convert(fusion.1)
+    convert.2 = f32[$N,$M] convert(convert.1)
+
+    ROOT r = (f32[$N,$M],f32[$N,$M],f32[$N,$M],f32[$N,$M]) tuple(arg0, arg1, convert.2, fusion.2)
+  )";
+  return GetTemplateHloString(wu, n, 0, minibatches);
 }
 
 }  // namespace poplarplugin
