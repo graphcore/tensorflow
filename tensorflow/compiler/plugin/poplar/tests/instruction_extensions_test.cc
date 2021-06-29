@@ -128,6 +128,22 @@ TEST_F(InstructionExtensionTest, CanRegisterLayoutDependenciesExtension) {
   ASSERT_EQ(result, expected);
 }
 
+TEST_F(InstructionExtensionTest, CanRegisterFindConsumersExtension) {
+  absl::optional<std::vector<int64>> perm = std::vector<int64>{1, 0};
+  const auto* inst = hlo_instruction_.get();
+  FindConsumersExtensionParams params{{inst, 0}, inst, 1, 2, perm};
+
+  auto func = [](const HloInstruction*, FindConsumersExtensionParams p) {
+    return FindConsumersExtensionResults{true, p.tgt, p.index, p.permutation};
+  };
+
+  HloInstructionExtensions extensions;
+  extensions.Register<FindConsumersExtension>(op_code_, func);
+  const auto result = extensions.Call<FindConsumersExtension>(inst, params);
+
+  ASSERT_EQ(result, func(inst, params));
+}
+
 struct PoplarInstructionExtensionTest : HloTestBase {
   // Using HloStatefulNoop as it supports default construction.
   using BaseInstruction = HloStatefulNoop;
@@ -173,6 +189,25 @@ TEST_F(PoplarInstructionExtensionTest, LayoutDependenciesExtCallPoplarImpl) {
   const auto result =
       extensions_.Call<LayoutDependenciesExtension>(&poplar_instruction);
   ASSERT_EQ(result, poplar_instruction.LayoutDependencies());
+}
+
+TEST_F(PoplarInstructionExtensionTest, FindConsumersExtCallPoplarImpl) {
+  class TestPoplarInstruction : public BaseInstruction {
+   public:
+    const FindConsumersExtensionResults FindConsumers(
+        FindConsumersExtensionParams params) const override {
+      return FindConsumersExtensionResults{true, params.tgt, params.index,
+                                           params.permutation};
+    }
+  };
+  TestPoplarInstruction poplar_instruction;
+  absl::optional<std::vector<int64>> perm = std::vector<int64>{1, 0};
+  const auto* inst = &poplar_instruction;
+  FindConsumersExtensionParams params{{inst, 0}, inst, 1, 2, perm};
+
+  const auto result =
+      extensions_.Call<FindConsumersExtension>(&poplar_instruction, params);
+  ASSERT_EQ(result, poplar_instruction.FindConsumers(params));
 }
 
 struct HloInstructionRegistrationTest : HloTestBase {

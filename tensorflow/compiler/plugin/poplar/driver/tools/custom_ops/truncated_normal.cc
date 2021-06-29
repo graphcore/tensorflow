@@ -48,6 +48,12 @@ HloTruncatedNormalInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloTruncatedNormalInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloTruncatedNormalInstruction::IsPopOpsElementwise() const {
   return false;
 }

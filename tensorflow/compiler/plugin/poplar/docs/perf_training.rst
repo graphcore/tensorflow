@@ -262,13 +262,14 @@ on the same mini-batch concurrently.
     mini-batches (colours of the stages). The flow of a single mini-batch is
     highlighted at the bottom.
 
-These concurrent pipeline stages are defined by providing a list a of stages.
+These concurrent pipeline stages are defined by providing a list of stages.
 The corresponding element of the device-mapping should also be a list. The
 argument list to each concurrent stage must be the same, including any
 arguments coming from an infeed. The input to the next stage, or outfeed,
 is the concatenation of concurrent stage outputs.
 
 .. code-block:: python
+
   def stage1a(args...):
     # ... do stuff on IPU 1
     return a0, a1, ...

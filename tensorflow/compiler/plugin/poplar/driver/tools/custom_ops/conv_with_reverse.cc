@@ -63,6 +63,11 @@ HloPoplarBufferDescriptions HloConvWithReverse::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloConvWithReverse::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloConvWithReverse::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloConvWithReverse::ExtraPoplarAttributesToStringImpl(

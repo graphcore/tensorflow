@@ -56,6 +56,11 @@ HloPoplarBufferDescriptions HloReduceScatterInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloReduceScatterInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloReduceScatterInstruction::IsPopOpsElementwise() const { return false; }
 
 PoplarReplicaGroups HloReduceScatterInstruction::GetPoplarReplicaGroups()

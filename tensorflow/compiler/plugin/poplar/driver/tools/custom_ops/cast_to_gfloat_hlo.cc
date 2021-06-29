@@ -90,6 +90,11 @@ HloPoplarBufferDescriptions HloGfloatParamsInstruction::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloGfloatParamsInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloGfloatParamsInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction>
@@ -219,6 +224,12 @@ HloCastNativeToGfloatInstruction::GetBufferDescriptions() const {
                                                         GetUseDescriptions());
 }
 
+const FindConsumersExtensionResults
+HloCastNativeToGfloatInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCastNativeToGfloatInstruction::IsPopOpsElementwise() const {
   return false;
 }
@@ -307,6 +318,12 @@ HloPoplarUseDescriptions HloCastGfloatToNativeInstruction::GetUseDescriptions()
 HloPoplarBufferDescriptions
 HloCastGfloatToNativeInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
+}
+
+const FindConsumersExtensionResults
+HloCastGfloatToNativeInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
 }
 
 bool HloCastGfloatToNativeInstruction::IsPopOpsElementwise() const {

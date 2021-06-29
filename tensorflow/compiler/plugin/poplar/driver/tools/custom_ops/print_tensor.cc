@@ -51,6 +51,11 @@ HloPoplarBufferDescriptions HloPrintTensor::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloPrintTensor::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloPrintTensor::IsPopOpsElementwise() const { return false; }
 
 const std::string& HloPrintTensor::TensorName() const { return tensor_name_; }

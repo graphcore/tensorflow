@@ -35,6 +35,10 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
       HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool AllocatingOutput() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -91,6 +95,9 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
     return splitting_strategy_;
   }
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool IsPopOpsElementwise() const override;
 
  protected:
@@ -126,6 +133,9 @@ class HloHostEmbeddingNotifyInstruction : public HloPoplarInstruction {
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
+
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
 
   bool IsPopOpsElementwise() const override;
 

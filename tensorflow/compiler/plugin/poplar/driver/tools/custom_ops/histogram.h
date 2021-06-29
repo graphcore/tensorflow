@@ -38,6 +38,8 @@ class HloHistogramInstruction : public HloPoplarInstruction {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
   bool AbsoluteOfInput() const;
@@ -69,6 +71,8 @@ class HloHistogramUpdateInstruction : public HloPoplarInstruction {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
   bool AllocatingOutput() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
   bool IsPopOpsElementwise() const override;
 
   bool AbsoluteOfInput() const;

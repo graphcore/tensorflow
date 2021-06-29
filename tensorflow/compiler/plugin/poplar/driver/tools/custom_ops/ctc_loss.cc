@@ -116,6 +116,11 @@ HloPoplarBufferDescriptions HloCTCInferenceAndLossBase::GetBufferDescriptions()
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloCTCInferenceAndLossBase::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloCTCInferenceAndLossBase::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string>

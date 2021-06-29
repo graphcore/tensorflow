@@ -95,9 +95,33 @@ struct RemoteParameterInfo {
   }
 };
 
+struct InputInfo {
+  std::string name;
+  std::string handle;
+  int64 argument;
+  int64 tuple_index;
+  Shape shape;
+
+  bool operator<(const InputInfo& rhs) const {
+    return std::tie(name, argument, tuple_index) <
+           std::tie(rhs.name, rhs.argument, rhs.tuple_index);
+  }
+};
+
+struct OutputInfo {
+  std::string name;
+  std::string handle;
+  int64 tuple_index;
+  Shape shape;
+
+  bool operator<(const OutputInfo& rhs) const { return handle < rhs.handle; }
+};
+
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
+using InputInfos = std::set<InputInfo>;
+using OutputInfos = std::set<OutputInfo>;
 
 // We use this structure to communicate data about the DataStreams between the
 // UserOp custom operation and the PoplarExecutable so it can link the streams
@@ -199,6 +223,19 @@ struct CompilerAnnotations {
 
   FlattenedInstMap flattened_inst_map_fwd;
   FlattenedInstMap flattened_inst_map_bwd;
+
+  // The functional signature of the graph.
+  // This is not used by TF, but is useful for external tools to be able to
+  // interpret the content of a TF Poplar binary. Entry computation inputs
+  // descriptions.
+  InputInfos entry_input_infos;
+  // Feed input descriptions.
+  InputInfos feed_input_infos;
+
+  // Entry computation output descriptions.
+  OutputInfos entry_output_infos;
+  // Feed output descriptions.
+  OutputInfos feed_output_infos;
 };
 
 inline Status AddInfeedInfo(CompilerAnnotations& compiler_annotations,
@@ -230,6 +267,83 @@ inline Status AddOutfeedInfo(CompilerAnnotations& compiler_annotations,
 
   if (other_info_itr == compiler_annotations.outfeed_infos.end()) {
     compiler_annotations.outfeed_infos.insert(feed_info);
+  }
+
+  return Status::OK();
+}
+
+inline Status AddEntryInputInfo(CompilerAnnotations& compiler_annotations,
+                                const InputInfo& input_info) {
+  auto other_info_itr = compiler_annotations.entry_input_infos.find(input_info);
+  if (other_info_itr != compiler_annotations.entry_input_infos.end() &&
+      input_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Input with matching name '%s' and tuple index %d have different "
+        "shapes (%s != %s).",
+        input_info.name, input_info.tuple_index, input_info.shape.ToString(),
+        other_info_itr->shape.ToString());
+  }
+
+  if (other_info_itr == compiler_annotations.entry_input_infos.end()) {
+    compiler_annotations.entry_input_infos.insert(input_info);
+  }
+
+  return Status::OK();
+}
+
+inline Status AddFeedInputInfo(CompilerAnnotations& compiler_annotations,
+                               const InputInfo& input_info) {
+  auto other_info_itr = compiler_annotations.feed_input_infos.find(input_info);
+  if (other_info_itr != compiler_annotations.feed_input_infos.end() &&
+      input_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Streamed input with matching name '%s' and tuple index %d have "
+        "different shapes (%s != %s).",
+        input_info.name, input_info.tuple_index, input_info.shape.ToString(),
+        other_info_itr->shape.ToString());
+  }
+
+  if (other_info_itr == compiler_annotations.feed_input_infos.end()) {
+    compiler_annotations.feed_input_infos.insert(input_info);
+  }
+
+  return Status::OK();
+}
+
+inline Status AddEntryOutputInfo(CompilerAnnotations& compiler_annotations,
+                                 const OutputInfo& output_info) {
+  auto other_info_itr =
+      compiler_annotations.entry_output_infos.find(output_info);
+  if (other_info_itr != compiler_annotations.entry_output_infos.end() &&
+      output_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Output with matching handle '%s' have different shapes (%s != %s).",
+        output_info.handle, output_info.shape.ToString(),
+        other_info_itr->shape.ToString());
+  }
+
+  if (other_info_itr == compiler_annotations.entry_output_infos.end()) {
+    compiler_annotations.entry_output_infos.insert(output_info);
+  }
+
+  return Status::OK();
+}
+
+inline Status AddFeedOutputInfo(CompilerAnnotations& compiler_annotations,
+                                const OutputInfo& output_info) {
+  auto other_info_itr =
+      compiler_annotations.feed_output_infos.find(output_info);
+  if (other_info_itr != compiler_annotations.feed_output_infos.end() &&
+      output_info.shape != other_info_itr->shape) {
+    return xla::FailedPrecondition(
+        "Streamed output with matching handle '%s' have different shapes (%s "
+        "!= %s).",
+        output_info.handle, output_info.shape.ToString(),
+        other_info_itr->shape.ToString());
+  }
+
+  if (other_info_itr == compiler_annotations.feed_output_infos.end()) {
+    compiler_annotations.feed_output_infos.insert(output_info);
   }
 
   return Status::OK();

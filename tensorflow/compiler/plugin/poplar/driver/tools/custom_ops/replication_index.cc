@@ -49,6 +49,12 @@ HloReplicationIndexInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloReplicationIndexInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloReplicationIndexInstruction::IsPopOpsElementwise() const {
   return false;
 }

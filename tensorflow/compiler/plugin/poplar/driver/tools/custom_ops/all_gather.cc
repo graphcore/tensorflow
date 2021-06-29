@@ -56,6 +56,12 @@ HloPoplarAllGatherInstruction::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults
+HloPoplarAllGatherInstruction::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloPoplarAllGatherInstruction::IsPopOpsElementwise() const {
   return false;
 }

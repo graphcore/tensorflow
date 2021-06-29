@@ -40,6 +40,9 @@ class HloPoplarAllGatherInstruction : public HloPoplarInstruction {
   HloPoplarUseDescriptions GetUseDescriptions() const override;
   HloPoplarBufferDescriptions GetBufferDescriptions() const override;
 
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+
   bool IsPopOpsElementwise() const override;
 
   PoplarReplicaGroups GetPoplarReplicaGroups() const;

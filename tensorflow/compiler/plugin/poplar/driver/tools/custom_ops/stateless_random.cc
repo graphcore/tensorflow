@@ -46,6 +46,11 @@ HloPoplarBufferDescriptions HloStatelessRandom::GetBufferDescriptions() const {
   return BufferDescriptionsAllocatesAllOutputs(this);
 }
 
+const FindConsumersExtensionResults HloStatelessRandom::FindConsumers(
+    FindConsumersExtensionParams params) const {
+  return FindConsumersExtensionResults::DoNotFindConsumers();
+}
+
 bool HloStatelessRandom::IsPopOpsElementwise() const { return false; }
 
 std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(
