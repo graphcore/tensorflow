@@ -23,8 +23,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/offloading_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -216,28 +216,21 @@ StatusOr<HloInstruction*> InsertReplicatedStoreInstructions(
           HloInstruction::CreatePad(pad_shape, flat, zero_f, padding_config));
     }
 
-    // Reshape to the storage shape.
     Shape store_shape = ShapeUtil::MakeShape(
-        element_type, {partition_replication_factor, element_count});
-    HloInstruction* reshaped = builder.AddInstruction(
-        HloInstruction::CreateReshape(store_shape, output));
-
-    HloInstruction* replica_id =
-        builder.AddInstruction(CreateReplicationIndex());
-    HloInstruction* zero_i =
-        builder.AddInstruction(HloInstruction::CreateConstant(
-            LiteralUtil::Zero(replica_id->shape().element_type())));
-
+        element_type, {partition_replication_factor * element_count});
+    if (!ShapeUtil::Compatible(output->shape(), store_shape)) {
+      output = builder.AddInstruction(
+          HloInstruction::CreateReshape(store_shape, output));
+    }
     // Slice off this replica's storage elements.
-    Shape slice_shape = ShapeUtil::MakeShape(element_type, {1, element_count});
-    HloInstruction* slice =
-        builder.AddInstruction(HloInstruction::CreateDynamicSlice(
-            slice_shape, reshaped, {replica_id, zero_i}, {1, element_count}));
 
-    // Squeeze off the outermost dimension.
-    Shape squeeze_shape = ShapeUtil::MakeShape(element_type, {element_count});
-    output = builder.AddInstruction(
-        HloInstruction::CreateReshape(squeeze_shape, slice));
+    // reduce-scatter(op=LOCAL) slices replica-specific shard of the collective
+    // input tensor and does nothing with the values. This is more memory/cycles
+    // efficient than doing dynamic-slice(replication-index() * shard_size).
+    Shape slice_shape = ShapeUtil::MakeShape(element_type, {element_count});
+    output = builder.AddInstruction(CreateReduceScatter(
+        slice_shape, {output}, CollectiveOperator::COLLECTIVE_OP_LOCAL,
+        PoplarReplicaGroups::Consecutive(partition_replication_factor)));
 
     // Build the fusion.
     HloComputation* fusion_comp =
