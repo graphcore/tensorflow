@@ -343,6 +343,52 @@ class DropoutTest(test_util.TensorFlowTestCase):
 
     assert output[-1] < output[0]
 
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def testDropoutTrainingInPipelineSameDevice(self):
+    def dataset_fn():
+      transform = np.roll(np.eye(100), 1, 1)
+      inputs = np.random.randn(1000, 100) / np.sqrt(100)
+      outputs = inputs @ transform
+      return Dataset.from_tensor_slices(
+          dict(
+              inputs=inputs.astype(np.float32),
+              outputs=outputs.astype(np.float32),
+          )).repeat().batch(32, drop_remainder=True)
+
+    repeat_count = 32
+    pipeline_depth = 32
+
+    def stage1(inputs, outputs):
+      N = int(inputs.shape[-1])
+      x = inputs @ variable_scope.get_variable(
+          "w0",
+          shape=(N, N),
+          dtype=np.float32,
+          initializer=init_ops.zeros_initializer())
+      x = ipu.rand_ops.dropout(x, rate=0.9)
+      return x, outputs
+
+    def stage2(inputs, outputs):
+      l = math_ops.reduce_mean(
+          math_ops.reduce_sum((outputs - inputs)**2, axis=-1))
+      return l
+
+    output = pipelining_test_util.PipelineTester.pipeline_on_ipu(
+        [stage1, stage2],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        gradient_descent.GradientDescentOptimizer(0.1),
+        self,
+        10000,
+        recomp=True,
+        device_mapping=[0, 0],
+        schedule=ipu.pipelining_ops.PipelineSchedule.Grouped)
+
+    assert output[-1] < output[0]
+
 
 if __name__ == "__main__":
   googletest.main()
