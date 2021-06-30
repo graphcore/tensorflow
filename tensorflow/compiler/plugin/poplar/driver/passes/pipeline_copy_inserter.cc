@@ -203,7 +203,9 @@ StatusOr<bool> InsertIntraIPUCopiesBetweenStages(HloInstruction* pipeline_op,
     auto consumer = stages_[consumer_idx];
 
     for (auto operand : consumer->operands()) {
-      if (operand->opcode() == HloOpcode::kGetTupleElement) {
+      // Skip opaque elements.
+      if (operand->opcode() == HloOpcode::kGetTupleElement &&
+          !operand->shape().IsOpaque()) {
         HloInstruction* copy =
             pipeline_op->to_apply()->AddInstruction(HloInstruction::CreateUnary(
                 operand->shape(), HloOpcode::kCopy, operand));
