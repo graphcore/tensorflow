@@ -168,27 +168,21 @@ bool MatchesReplicatedParameterStoreFusion(const HloInstruction* inst,
     return false;
   }
   if (padded) {
-    const HloInstruction* reshape_2 = inst->fused_expression_root();
-    EXPECT_TRUE(reshape_2->opcode() == HloOpcode::kReshape);
-    const HloInstruction* dynamic_slice = reshape_2->operand(0);
-    EXPECT_TRUE(dynamic_slice->opcode() == HloOpcode::kDynamicSlice);
-    const HloInstruction* reshape_1 = dynamic_slice->operand(0);
-    EXPECT_TRUE(reshape_1->opcode() == HloOpcode::kReshape);
-    const HloInstruction* pad = reshape_1->operand(0);
+    const HloInstruction* reduce_scatter = inst->fused_expression_root();
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter, reduce_scatter));
+    const HloInstruction* pad = reduce_scatter->operand(0);
     EXPECT_TRUE(pad->opcode() == HloOpcode::kPad);
-    const HloInstruction* flatten_2 = pad->operand(0);
-    EXPECT_TRUE(flatten_2->opcode() == HloOpcode::kReshape);
-    const HloInstruction* param = flatten_2->operand(0);
+    const HloInstruction* flatten = pad->operand(0);
+    EXPECT_TRUE(flatten->opcode() == HloOpcode::kReshape);
+    const HloInstruction* param = flatten->operand(0);
     EXPECT_EQ(param->parameter_number(), 0);
     return true;
   } else {
-    const HloInstruction* reshape_2 = inst->fused_expression_root();
-    EXPECT_TRUE(reshape_2->opcode() == HloOpcode::kReshape);
-    const HloInstruction* dynamic_slice = reshape_2->operand(0);
-    EXPECT_TRUE(dynamic_slice->opcode() == HloOpcode::kDynamicSlice);
-    const HloInstruction* reshape_1 = dynamic_slice->operand(0);
-    EXPECT_TRUE(reshape_1->opcode() == HloOpcode::kReshape);
-    const HloInstruction* param = reshape_1->operand(0);
+    const HloInstruction* reduce_scatter = inst->fused_expression_root();
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReduceScatter, reduce_scatter));
+    const HloInstruction* reshape = reduce_scatter->operand(0);
+    EXPECT_TRUE(reshape->opcode() == HloOpcode::kReshape);
+    const HloInstruction* param = reshape->operand(0);
     EXPECT_EQ(param->parameter_number(), 0);
     return true;
   }
