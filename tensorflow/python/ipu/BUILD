@@ -116,6 +116,7 @@ py_library(
         "ipu_strategy.py",
         "keras/__init__.py",
         "keras/extensions/__init__.py",
+        "keras/extensions/data_adapter.py",
         "keras/extensions/functional_extensions.py",
         "keras/extensions/model_extensions.py",
         "keras/extensions/sequential_extensions.py",
