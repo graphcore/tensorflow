@@ -199,7 +199,9 @@ bool RecursiveCompilabilityChecker::HasXLAKernel(
     // registered Const KernelDef says that it does, to support no-op Assert for
     // tfcompile.
     const AttrValue* attr = node.attrs().Find("dtype");
-    if (attr != nullptr && attr->type() == DT_STRING) {
+    // IPU specific change - allow string ttype const but treat it as a no-op.
+    if (attr != nullptr && attr->type() == DT_STRING &&
+        jit_device_type_.type_string() != "XLA_IPU_JIT") {
       *uncompilable_reason =
           "Const op with type DT_STRING is not supported by XLA.";
       return false;

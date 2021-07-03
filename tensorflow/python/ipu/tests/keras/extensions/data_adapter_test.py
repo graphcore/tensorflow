@@ -251,11 +251,12 @@ class DataHandlerTest(keras_parameterized.TestCase):
         ValueError,
         r"The inferred number of steps per epoch \(6\) is not divisible by the "
         r"steps per execution \(4\)"):
-      data_handler = data_adapter.IPUDataHandler(x,
-                                                 epochs=2,
-                                                 batch_size=2,
-                                                 steps_per_epoch=6,
-                                                 steps_per_execution=4)
+      data_handler = data_adapter.IPUDataHandler(
+          x,
+          epochs=2,
+          batch_size=2,
+          steps_per_epoch=6,
+          steps_per_execution=ops.convert_to_tensor(4))
       del data_handler
 
 

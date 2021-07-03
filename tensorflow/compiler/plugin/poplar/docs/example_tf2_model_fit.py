@@ -58,7 +58,7 @@ def create_model():
   x = keras.layers.Dense(10)(x)
 
   # Create a Keras model.
-  return ipu.keras.Model(inputs=inputs, outputs=x)
+  return keras.Model(inputs=inputs, outputs=x)
 
 
 # Create an IPU distribution strategy.
@@ -73,12 +73,13 @@ with strategy.scope():
   # Compile the model, configuring a loss, optimizer and metric.
   model.compile(loss=keras.losses.CategoricalCrossentropy(from_logits=True),
                 optimizer=keras.optimizers.RMSprop(1e-3),
-                metrics=["accuracy"])
+                metrics=["accuracy"],
+                steps_per_execution=32)
 
   # Train for two epochs.
   model.fit(x_train, y_train, batch_size=8, epochs=2, steps_per_epoch=128)
 
   # Evaluate trained model.
-  test_scores = model.evaluate(x_test, y_test, batch_size=8, verbose=2)
-  print("Test loss:", test_scores[0])
-  print("Test accuracy:", test_scores[1])
+  test_scores = model.evaluate(x_test, y_test, batch_size=8, steps=128)
+  print(f"Test loss: {test_scores[0]}")
+  print(f"Test accuracy: {test_scores[1]}")

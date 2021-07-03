@@ -21,7 +21,6 @@ from tensorflow.python.data.ops.dataset_ops import DatasetV2
 from tensorflow.python import keras
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
-from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import keras as ipu_keras
 
@@ -54,10 +53,9 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
-      m = ipu_keras.Sequential(stage1() + stage2(),
-                               gradient_accumulation_count=12)
+      m = keras.Sequential(stage1() + stage2())
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=4)
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
@@ -110,14 +108,15 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
     model = keras.Sequential(model_fn())
     model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'],
-                  optimizer=keras.optimizer_v2.gradient_descent.SGD())
+                  optimizer=keras.optimizer_v2.gradient_descent.SGD(),
+                  steps_per_execution=8)
     model.fit(dataset, epochs=2, steps_per_epoch=2000)
     tmpdir = TemporaryDirectory()
-    weights_file = tmpdir.name + "/weights.hd5"
-    model.save_weights(weights_file)
+    model_file = tmpdir.name + "/weights.hd5"
+    model.save(model_file)
 
     # Predict on CPU
-    cpu_predictions = model.predict(predict_ds, steps=12)
+    cpu_predictions = model.predict(predict_ds, steps=16)
 
     # Predict on IPU with replication
     cfg = IPUConfig()
@@ -127,25 +126,14 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      model = ipu_keras.Sequential(model_fn())
-      model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
-                    metrics=['accuracy'],
-                    optimizer=keras.optimizer_v2.gradient_descent.SGD())
-
-      # TODO (T32330) loading weights from keras.Sequential into ipu_keras.Sequential does not work
-      # Nor does loading weights from ipu_keras.Sequential into keras.Sequential
-      # Instead we train on the IPU too and expect > 95% of predictions to match
-
-      model.fit(dataset, epochs=2, steps_per_epoch=2000)
-      #model.load_weights(weights_file) #.expect_partial()
-      ipu_predictions = model.predict(predict_ds, steps=12)
+      model = keras.models.load_model(model_file)
+      self.assertIsInstance(
+          model, ipu_keras.extensions.model_extensions.ModelExtension)
+      model.compile(steps_per_execution=8)
+      ipu_predictions = model.predict(predict_ds, steps=16)
 
     # compare predictions
-    self.assertEqual(cpu_predictions.shape, ipu_predictions.shape)
-    num_different = np.sum(
-        np.argmax(cpu_predictions, axis=1) != np.argmax(ipu_predictions,
-                                                        axis=1))
-    self.assertLess(num_different / len(cpu_predictions), 0.05)
+    self.assertAllClose(cpu_predictions, ipu_predictions)
 
 
 if __name__ == "__main__":

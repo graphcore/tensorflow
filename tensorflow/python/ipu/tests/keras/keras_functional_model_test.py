@@ -14,19 +14,16 @@
 # ==============================================================================
 """Tests for IPU Keras Model"""
 
-import sys
-from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
 
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.eager import backprop
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras.engine import base_layer_utils
-from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
@@ -56,16 +53,18 @@ def test_inference_dataset(length=None, batch_size=1, x_val=1.0):
 def test_dataset_two_input_output(length=None,
                                   batch_size=1,
                                   x_val=1.0,
-                                  y_val=0.2):
+                                  y_val=0.2,
+                                  input_names=None,
+                                  target_names=None):
   ds = dataset_ops.Dataset.from_tensors(({
-      "input_a":
+      input_names[0]:
       constant_op.constant(x_val, shape=[32]),
-      "input_b":
+      input_names[1]:
       constant_op.constant(x_val, shape=[16])
   }, {
-      "target_a":
+      target_names[0]:
       constant_op.constant(y_val, shape=[2]),
-      "target_b":
+      target_names[1]:
       constant_op.constant(y_val, shape=[1])
   }))
   ds = ds.repeat(length)
@@ -74,32 +73,21 @@ def test_dataset_two_input_output(length=None,
   return ds
 
 
-def test_dataset_two_input_output_np(length=96, x_val=1.0, y_val=0.2):
+def test_dataset_two_input_output_np(length=96,
+                                     x_val=1.0,
+                                     y_val=0.2,
+                                     input_names=None,
+                                     target_names=None):
   inputs = {
-      'input_a': np.ones((length, 32), dtype=np.float32) * x_val,
-      'input_b': np.ones((length, 16), dtype=np.float32) * x_val
+      input_names[0]: np.ones((length, 32), dtype=np.float32) * x_val,
+      input_names[1]: np.ones((length, 16), dtype=np.float32) * x_val
   }
   targets = {
-      'target_a': np.ones((length, 2), dtype=np.float32) * y_val,
-      'target_b': np.ones((length, 1), dtype=np.float32) * y_val
+      target_names[0]: np.ones((length, 2), dtype=np.float32) * y_val,
+      target_names[1]: np.ones((length, 1), dtype=np.float32) * y_val
   }
 
   return (inputs, targets)
-
-
-def test_inference_dataset_two_input_output(length=None,
-                                            batch_size=1,
-                                            x_val=1.0):
-  constant_d = constant_op.constant(x_val, shape=[32])
-
-  ds = dataset_ops.Dataset.from_tensors(({
-      "input_a": constant_d,
-      "input_b": constant_d
-  }))
-  ds = ds.repeat(length)
-  ds = ds.batch(batch_size, drop_remainder=True)
-
-  return ds
 
 
 def simple_model(x, layer_sizes, w=None):
@@ -119,75 +107,6 @@ def simple_model(x, layer_sizes, w=None):
                            activation=keras.activations.relu,
                            kernel_initializer=init)(y)
   return y
-
-
-def simple_cpu_model(layer_sizes, w=None):
-  assert layer_sizes
-
-  init = 'glorot_uniform'
-  if w:
-    assert w > 0
-    init = keras.initializers.Constant(w)
-
-  layers = []
-  for n in layer_sizes:
-    layers.append(
-        keras.layers.Dense(n,
-                           activation=keras.activations.relu,
-                           kernel_initializer=init))
-  return layers
-
-
-def run_model_on_cpu(model, dataset, repeat_count, gradient_accumulation_count,
-                     loss, optimizer):
-  it = iter(dataset)
-  results = []
-
-  for _ in range(repeat_count):
-
-    accumulations = None
-
-    for _ in range(gradient_accumulation_count):
-      x, t = next(it)
-
-      with backprop.GradientTape() as tape:
-
-        for l in model:
-          x = l(x)
-
-        if loss:
-          l = loss(y_true=t, y_pred=x)
-          results.append(l)
-        else:
-          results.append(x)
-
-      if optimizer:
-        all_vars = [v for layer in model for v in layer.trainable_variables]
-        gradients = tape.gradient(l, all_vars)
-
-        if not accumulations:
-          accumulations = gradients
-        else:
-          accumulations = [a[0] + a[1] for a in zip(gradients, accumulations)]
-
-    if optimizer:
-      optimizer.apply_gradients(zip(accumulations, all_vars))
-
-  return results
-
-
-def aggregate_cpu_out(aggregator, results):
-  a = aggregator(use_steps=False, num_samples=len(results))
-  e = enumerate(iter(results))
-
-  i, r = next(e)
-  a.create(r)
-  a.aggregate(r, 0, 1)
-
-  for i, r in e:
-    a.aggregate(r, i, i + 1)
-  a.finalize()
-  return a.results
 
 
 class BatchCallbackCounter(keras.callbacks.Callback):
@@ -221,7 +140,7 @@ class IPUModelModelTest(test.TestCase):
     input_layer = keras.layers.Input(shape=(2))
     x = simple_model(input_layer, [2, 4])
     y = keras.layers.Activation(keras.activations.relu)(x)
-    m = ipu.keras.Model(inputs=input_layer, outputs=y)
+    m = keras.Model(inputs=input_layer, outputs=y)
 
     # Verify dims.
     self.assertEqual(
@@ -242,7 +161,7 @@ class IPUModelModelTest(test.TestCase):
     x_con = keras.layers.concatenate([x, xx])
     y = keras.layers.Activation(keras.activations.relu)(x_con)
 
-    m = ipu.keras.Model(inputs=[input_layer, input_layer_two], outputs=y)
+    m = keras.Model(inputs=[input_layer, input_layer_two], outputs=y)
 
     # Verify dims.
     self.assertEqual(len(m._input_layers), 2)  # pylint: disable=protected-access
@@ -260,7 +179,7 @@ class IPUModelModelTest(test.TestCase):
     y = keras.layers.Activation(keras.activations.tanh)(x)
     yy = keras.layers.Activation(keras.activations.sigmoid)(x)
 
-    m = ipu.keras.Model(inputs=input_layer, outputs=[y, yy])
+    m = keras.Model(inputs=input_layer, outputs=[y, yy])
 
     self.assertEqual(
         m._input_layers[0].get_output_at(0).get_shape().as_list(),  # pylint: disable=protected-access
@@ -270,23 +189,12 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(d.get_output_at(0).get_shape().as_list(), [None, 4])
 
   @test_util.run_v2_only
-  def testCannotUseKerasV1Optimizers(self):
-    input_layer = keras.layers.Input(shape=(2))
-    x = simple_model(input_layer, [2, 4])
-    m = ipu.keras.Model(inputs=input_layer, outputs=x)
-
-    with self.assertRaisesRegex(
-        ValueError, "Optimizer must be a native TensorFlow or Keras V2"):
-      opt = keras.optimizers.SGD(lr=0.001)
-      m.compile(opt, 'mse')
-
-  @test_util.run_v2_only
   def testMustCallCompileFit(self):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -298,7 +206,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -310,11 +218,11 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
       m.compile('sgd', loss='mse')
 
-      with self.assertRaisesRegex(
-          ValueError, r"requires a dataset with a structure containing "):
+      with self.assertRaisesRegex(ValueError,
+                                  r"When providing an infinite dataset"):
         m.fit(test_inference_dataset())
 
   @test_util.run_v2_only
@@ -323,42 +231,24 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
       m.compile('sgd', loss='mse')
 
-      with self.assertRaisesRegex(
-          ValueError, r"requires a dataset with a structure containing "):
+      with self.assertRaisesRegex(ValueError,
+                                  r"When providing an infinite dataset"):
         m.evaluate(test_inference_dataset())
 
-  @test_util.run_v2_only
+  # @test_util.run_v2_only
   def testNeedNonTupleDatasetPredict(self):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8])
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
-      with self.assertRaisesRegex(
-          ValueError, r"requires a dataset with a structure containing "):
+      with self.assertRaisesRegex(ValueError,
+                                  r"When providing an infinite dataset"):
         m.predict(test_dataset())
-
-  @test_util.run_v2_only
-  def testMismatchDatasetLengthToGradientAccumulationCount(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
-
-      m.compile('sgd', loss='mse')
-      with self.assertRaisesRegex(
-          ValueError,
-          r"Model requires the number of mini-batches in the dataset \(32\)"
-          r" to be evenly divisible by the gradient accumulation count \(24\)"
-      ):
-        m.fit(test_dataset(length=64, batch_size=2), epochs=2)
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
@@ -366,275 +256,12 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
       m.compile('sgd', loss='mse')
 
-      with self.assertRaisesRegex(
-          ValueError, "When using an infinitely repeating dataset, you"):
+      with self.assertRaisesRegex(ValueError,
+                                  r"When providing an infinite dataset"):
         m.fit(test_dataset(), epochs=2)
-
-  @test_util.run_v2_only
-  def testStepsPerEpochTooLargeForDatasetFit(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Fit the weights to the dataset
-      with self.assertRaisesRegex(
-          ValueError,
-          r"Steps per epoch times gradient accumulation count \(14 x 12\) is"
-          r" greater than"):
-        m.fit(test_dataset(length=144), steps_per_epoch=14)
-
-  @test_util.run_v2_only
-  def testStepsPerEpochTooLargeForDatasetPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Generate predictions
-      with self.assertRaisesRegex(
-          ValueError, r"Steps times gradient accumulation count \(14 x 12\) is"
-          r" greater than"):
-        m.predict(test_inference_dataset(length=144), steps=14)
-
-  @test_util.run_v2_only
-  def testStepsPerEpochTooLargeForNumpyArrayPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([144, 32], 1.0, dtype=np.single)
-
-      # Generate predictions
-      with self.assertRaisesRegex(
-          ValueError, r"Steps times gradient accumulation count \(14 x 12\) is"
-          r" greater than"):
-        m.predict(input_x, batch_size=2, steps=14)
-
-  @test_util.run_v2_only
-  def testStepsPerRunTooLargeForNumpyArrayPredict(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([144, 32], 1.0, dtype=np.single)
-
-      # Generate predictions
-      with self.assertRaisesRegex(
-          ValueError,
-          r"The number of mini-batches in the dataset \(72\) must be"
-          r" at least the gradient accumulation count \(12\) multiplied by the"
-          r" replication factor \(1\) multiplied by steps_per_run \(14\)."):
-        m.predict(input_x, batch_size=2, steps_per_run=14)
-
-  @test_util.run_v2_only
-  def testStepsPerRunNumpyArrayFitDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([144, 32], 1.0, dtype=np.single)
-      input_y = np.full([144, 1], 1.0, dtype=np.single)
-
-      # Call fit
-      with self.captureWritesToStream(sys.stderr) as printed:
-        m.fit(input_x, input_y, batch_size=2, epochs=1, steps_per_run=4)
-        expected = (
-            r"The number of mini-batches in the dataset \(72\) must be a"
-            r" multiple of the gradient accumulation count \(12\)"
-            r" multiplied by the replication factor \(1\) multiplied by"
-            r" steps_per_run \(4\). Samples have"
-            r" been dropped to give a dataset of 48 mini-batches.")
-        self.assertRegex(printed.contents(), expected)
-
-  @test_util.run_v2_only
-  def testPredictWithNumpyDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([54, 32], 1.0, dtype=np.single)
-
-      # Generate predictions
-      with self.captureWritesToStream(sys.stderr) as printed:
-        result = m.predict(input_x, batch_size=2)
-        expected = (
-            r"The number of mini-batches in the dataset \(27\) must be a"
-            r" multiple of the gradient accumulation count \(12\)"
-            r" multiplied by the replication factor \(1\). Samples have"
-            r" been dropped to give a dataset of 24 mini-batches.")
-        self.assertRegex(printed.contents(), expected)
-        self.assertEqual(result.shape[0], 48)
-
-  @test_util.run_v2_only
-  def testPredictWithNumpyStepsPerRunDroppedSamples(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=4)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([54, 32], 1.0, dtype=np.single)
-
-      # Generate predictions
-      with self.captureWritesToStream(sys.stderr) as printed:
-        result = m.predict(input_x, batch_size=2, steps_per_run=3)
-        expected = (
-            r"The number of mini-batches in the dataset \(27\) must be a"
-            r" multiple of the gradient accumulation count \(4\)"
-            r" multiplied by the replication factor \(1\) multiplied by"
-            r" steps_per_run \(3\). Samples have been dropped to give a dataset"
-            r" of 24 mini-batches.")
-        self.assertRegex(printed.contents(), expected)
-        self.assertEqual(result.shape[0], 48)
-
-  @test_util.run_v2_only
-  def testNumpyArrayTooSmallForGradientAccumulationCount(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([22, 32], 1.0, dtype=np.single)
-
-      # Fit the weights to the dataset
-      with self.assertRaisesRegex(
-          ValueError,
-          r"The number of mini-batches in the dataset \(11\) must be at least"
-          r" the gradient accumulation count \(12\) multiplied by the"
-          r" replication factor \(1\)."):
-        m.predict(input_x, batch_size=2)
-
-  @test_util.run_v2_only
-  def testNumpyArrayTooSmallForGradientAccumulationCountStepsPerRun(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=6)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = np.full([22, 32], 1.0, dtype=np.single)
-
-      # Fit the weights to the dataset
-      with self.assertRaisesRegex(
-          ValueError,
-          r"The number of mini-batches in the dataset \(11\) must be at least"
-          r" the gradient accumulation count \(6\) multiplied by the"
-          r" replication factor \(1\) multiplied by steps_per_run \(2\)."):
-        m.predict(input_x, batch_size=2, steps_per_run=2)
 
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizerNoAccumulation_CpuMatch(self):
@@ -642,7 +269,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -660,96 +287,21 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
 
-    # Run the sequential CPU equivelant.
-    m_cpu = simple_cpu_model([8, 8, 2], w=0.4)
-
+    # Run the CPU equivalent.
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [8, 8, 2], w=0.4)
+    m_cpu = keras.Model(inputs=input_layer, outputs=x)
     opt_cpu = gradient_descent.GradientDescentOptimizer(0.001)
-    loss_cpu = keras.losses.mean_squared_error
+    m_cpu.compile(opt_cpu, loss='mse')
 
-    cpu_loss = run_model_on_cpu(m_cpu, test_dataset(length=96), 96, 1,
-                                loss_cpu, opt_cpu)
-    cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
-    cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
-    cpu_loss = cpu_loss[0]
+    # Fit the weights to the dataset
+    cpu_loss = m_cpu.fit(test_dataset(length=96)).history['loss'][0]
 
     # history['loss'] is one loss value per epoch (of which there is 1)
     ipu_loss = history.history['loss'][0]
 
     self.assertAllClose(ipu_loss, cpu_loss)
-
-  @test_util.run_v2_only
-  def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=8)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = gradient_descent.GradientDescentOptimizer(0.001)
-
-      m.compile(opt, loss='mse')
-
-      # Fit the weights to the dataset
-      history = m.fit(test_dataset(length=96))
-
-      # Should be only a loss stored in the history, and it should contain
-      # only the single epochs value
-      self.assertEqual(list(history.history.keys()), ['loss'])
-      self.assertEqual(type(history.history['loss']), list)
-      self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
-
-    # Run the sequential CPU equivelant.
-    m_cpu = simple_cpu_model([8, 8, 2], w=0.4)
-
-    opt_cpu = gradient_descent.GradientDescentOptimizer(0.001)
-    loss_cpu = keras.losses.mean_squared_error
-    cpu_loss = run_model_on_cpu(m_cpu, test_dataset(length=96), 12, 8,
-                                loss_cpu, opt_cpu)
-    cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
-    cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
-    cpu_loss = cpu_loss[0]
-
-    # history['loss'] is one loss value per epoch (of which there is 1)
-    ipu_loss = history.history['loss'][0]
-
-    self.assertAllClose(ipu_loss, cpu_loss)
-
-  @test_util.run_v2_only
-  def testFitWithTensorDataNoBatchSize(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Input data
-      input_x = constant_op.constant(1.0, shape=[72, 32])
-      input_y = constant_op.constant(0.2, shape=[72, 2])
-
-      # Fit the weights to the dataset
-      with self.assertRaisesRegex(ValueError,
-                                  "`batch_size` or `steps` is required for "):
-        m.fit(input_x, input_y)
 
   @test_util.run_v2_only
   def testFitWithTensorData(self):
@@ -757,9 +309,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -781,7 +331,7 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][0]), float)
 
   @test_util.run_v2_only
   def testFitWithNumpyData(self):
@@ -789,9 +339,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -813,7 +361,7 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][0]), float)
 
   @test_util.run_v2_only
   def testEvalWithNumpyData(self):
@@ -821,9 +369,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -839,9 +385,7 @@ class IPUModelModelTest(test.TestCase):
 
       # Fit the weights to the dataset
       result = m.evaluate(input_x, input_y, batch_size=1)
-
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result), list)
+      self.assertEqual(type(result), float)
 
   @test_util.run_v2_only
   def testPredictWithNumpyDataBs1(self):
@@ -849,9 +393,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=12)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -859,7 +401,7 @@ class IPUModelModelTest(test.TestCase):
       cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=8)
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
@@ -884,9 +426,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -904,7 +444,7 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][0]), float)
 
   @test_util.run_v2_only
   def testFitHistoryTwoEpochs(self):
@@ -912,9 +452,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -932,18 +470,16 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
-      self.assertEqual(type(history.history['loss'][1]), np.float64)
+      self.assertEqual(type(history.history['loss'][0]), float)
+      self.assertEqual(type(history.history['loss'][1]), float)
 
   @test_util.run_v2_only
-  def testFitHistoryStepsPerRun(self):
+  def testFitHistoryStepsPerExecution(self):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -951,46 +487,12 @@ class IPUModelModelTest(test.TestCase):
       cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=2)
 
-      # With a strategy saying 2 steps per run, and a step having a
-      # gradient_accumulation_count=24 mini-batches, we should consume a 96
-      # sample epoch in 2 runs.  So we expect 2 'per-batch' callbacks.
+      # Check that the callback is called for each step.
       cb = BatchCallbackCounter()
-
-      # Fit the weights to the dataset
-      m.fit(test_dataset(length=96), callbacks=[cb], steps_per_run=2)
-
-      # Should have been called back twice due to end of batch
-      self.assertEqual(cb.count(), 2)
-
-  @test_util.run_v2_only
-  def testFitHistoryStepsPerEpochOneEpoch(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Fit the weights to the dataset
-      history = m.fit(test_dataset(), steps_per_epoch=144)
-
-      # Should be only a loss stored in the history, and it should contain
-      # only the single epochs value
-      self.assertEqual(list(history.history.keys()), ['loss'])
-      self.assertEqual(type(history.history['loss']), list)
-      self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      m.fit(test_dataset(length=96), callbacks=[cb])
+      self.assertEqual(cb.count(), 96)
 
   @test_util.run_v2_only
   def testFitTwice(self):
@@ -999,9 +501,7 @@ class IPUModelModelTest(test.TestCase):
       ds = test_dataset()
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [16, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1061,9 +561,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1081,37 +579,8 @@ class IPUModelModelTest(test.TestCase):
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
-      self.assertEqual(type(history.history['loss'][1]), np.float64)
-
-  @test_util.run_v2_only
-  def testFitHistoryWithKerasOptimizerBatchSize2(self):
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      input_layer = keras.layers.Input(shape=(32))
-      x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
-
-      # Fit the weights to the dataset
-      cb = BatchCallbackCounter()
-      m.fit(test_dataset(length=144, batch_size=2), callbacks=[cb])
-
-      # 144 samples, batch size 2 = 72 mini-batches
-      # 72 mini-batches, pipeline depth 24 = 3 steps
-      logs = cb.logs()
-      self.assertEqual(len(logs), 1)
-      self.assertTrue("num_steps" in logs[0].keys())
-      self.assertEqual(logs[0]['num_steps'], 3)
+      self.assertEqual(type(history.history['loss'][0]), float)
+      self.assertEqual(type(history.history['loss'][1]), float)
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
@@ -1122,9 +591,7 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1133,15 +600,15 @@ class IPUModelModelTest(test.TestCase):
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=8)
 
       # Fit the weights to the dataset
-      m.fit(test_dataset(length=72), epochs=2)
+      m.fit(test_dataset(length=72), epochs=4)
 
-      # Ensure that we are not downloading the weights each time even though
-      # the 'learning rate' hyper is being updated
+      # Ensure that we are only downloading the weights at the end of each
+      # epoch.
       evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(1, _count_host_to_device_events(evts))
+      self.assertEqual(4, _count_host_to_device_events(evts))
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
@@ -1152,9 +619,7 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1167,12 +632,12 @@ class IPUModelModelTest(test.TestCase):
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      m.fit(test_dataset(length=72), epochs=2)
+      m.fit(test_dataset(length=72), epochs=4)
 
-      # Ensure that we are not downloading the weights each time even though
-      # the 'learning rate' hyper is being updated
+      # Ensure that we are only downloading the weights at the end of each
+      # epoch.
       evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(1, _count_host_to_device_events(evts))
+      self.assertEqual(4, _count_host_to_device_events(evts))
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
@@ -1183,9 +648,7 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1198,12 +661,12 @@ class IPUModelModelTest(test.TestCase):
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      m.fit(test_dataset(length=72), epochs=2)
+      m.fit(test_dataset(length=72), epochs=4)
 
-      # Ensure that we are not downloading the weights each time even though
-      # the 'learning rate' hyper is being updated
+      # Ensure that we are only downloading the weights at the end of each
+      # epoch.
       evts = ipu.ops.summary_ops.get_ipu_reports()
-      self.assertEqual(1, _count_host_to_device_events(evts))
+      self.assertEqual(4, _count_host_to_device_events(evts))
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):
@@ -1211,9 +674,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=24)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1221,22 +682,20 @@ class IPUModelModelTest(test.TestCase):
       cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
-      m.compile(opt, loss='mse', metrics=['accuracy'])
+      m.compile(opt, loss='mse', metrics=['accuracy'], steps_per_execution=2)
 
       # Fit the weights to the dataset
       history = m.fit(test_dataset(), steps_per_epoch=2, epochs=2)
 
-      # Should be only a loss stored in the history, and it should contain
-      # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss', 'accuracy'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(type(history.history['accuracy']), list)
       self.assertEqual(len(history.history['loss']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][0]), float)
       self.assertEqual(len(history.history['accuracy']), 2)
-      self.assertEqual(type(history.history['loss'][1]), np.float64)
-      self.assertEqual(type(history.history['accuracy'][0]), np.float32)
-      self.assertEqual(type(history.history['accuracy'][1]), np.float32)
+      self.assertEqual(type(history.history['loss'][1]), float)
+      self.assertEqual(type(history.history['accuracy'][0]), float)
+      self.assertEqual(type(history.history['accuracy'][1]), float)
 
   @test_util.run_v2_only
   def testEval_CpuMatch(self):
@@ -1244,9 +703,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=8)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1258,29 +715,22 @@ class IPUModelModelTest(test.TestCase):
       # Fit the weights to the dataset
       result = m.evaluate(test_dataset(length=96))
 
-      # The result is an aggregate of the loss
-      self.assertEqual(len(result), 1)
-      self.assertEqual(type(result), list)
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [8, 8, 2], w=0.4)
+    m_cpu = keras.Model(inputs=input_layer, outputs=x)
+    m_cpu.compile("sgd", loss='mse')
+    cpu_result = m.evaluate(test_dataset(length=96))
 
-    m_cpu = simple_cpu_model([8, 8, 2], w=0.4)
-    loss_cpu = keras.losses.mean_squared_error
-    cpu_loss = run_model_on_cpu(m_cpu, test_dataset(length=96), 12, 8,
-                                loss_cpu, None)
-    cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
-    cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
-
-    self.assertAllClose(result, cpu_loss)
+    self.assertAllClose(result, cpu_result)
 
   @test_util.run_v2_only
   def testCallOrder(self):
-    # Test which verifies that we can call evaluate/predict before run.
+    # Test which verifies that we can call evaluate/predict before fit.
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=8)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1301,9 +751,7 @@ class IPUModelModelTest(test.TestCase):
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2], w=0.4)
-      m = ipu.keras.Model(inputs=input_layer,
-                          outputs=x,
-                          gradient_accumulation_count=8)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1313,13 +761,11 @@ class IPUModelModelTest(test.TestCase):
       # Generate predictions
       ipu_out = m.predict(test_inference_dataset(length=96))
 
-    m_cpu = simple_cpu_model([8, 8, 2], w=0.4)
-    cpu_out = run_model_on_cpu(m_cpu, test_dataset(length=96), 12, 8, None,
-                               None)
-    cpu_out = list(map(lambda x: x.numpy(), cpu_out))
-    cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
+    input_layer = keras.layers.Input(shape=(32))
+    x = simple_model(input_layer, [8, 8, 2], w=0.4)
+    m_cpu = keras.Model(inputs=input_layer, outputs=x)
+    cpu_out = m_cpu.predict(test_inference_dataset(length=96))
 
-    self.assertEqual(cpu_out.shape, ipu_out.shape)
     self.assertAllClose(cpu_out, ipu_out)
 
   @test_util.run_v2_only
@@ -1337,18 +783,23 @@ class IPUModelModelTest(test.TestCase):
       block_c = simple_model(concat_ab, [32, 2])
       block_d = simple_model(concat_ab, [32, 1])
 
-      m = ipu.keras.Model(inputs=[input_a, input_b],
-                          outputs=[block_c, block_d],
-                          gradient_accumulation_count=8)
+      m = keras.Model(inputs=[input_a, input_b], outputs=[block_c, block_d])
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
-      m.compile("sgd", loss=['mse', 'mse'])
+      m.compile("sgd", loss=['mse', 'mse'], steps_per_execution=2)
 
-      ds = test_dataset_two_input_output(length=96, batch_size=4)
+      ds = test_dataset_two_input_output(
+          length=96,
+          batch_size=4,
+          input_names=[input_a.name, input_b.name],
+          target_names=[
+              block_c.name.partition("/")[0],
+              block_d.name.partition("/")[0]
+          ])
 
       m.fit(ds)
 
@@ -1367,9 +818,7 @@ class IPUModelModelTest(test.TestCase):
       block_c = simple_model(concat_ab, [32, 2])
       block_d = simple_model(concat_ab, [32, 1])
 
-      m = ipu.keras.Model(inputs=[input_a, input_b],
-                          outputs=[block_c, block_d],
-                          gradient_accumulation_count=8)
+      m = keras.Model(inputs=[input_a, input_b], outputs=[block_c, block_d])
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1378,28 +827,31 @@ class IPUModelModelTest(test.TestCase):
 
       m.compile("sgd", loss=['mse', 'mse'], metrics=['accuracy'])
 
-      ds = test_dataset_two_input_output_np(length=96)
+      ds = test_dataset_two_input_output_np(
+          length=96,
+          input_names=[input_a.name, input_b.name],
+          target_names=[
+              block_c.name.partition("/")[0],
+              block_d.name.partition("/")[0]
+          ])
       m.fit(*ds, batch_size=4)
 
   @test_util.run_v2_only
   def testPredictNumpyData(self):
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
-
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
-
       ipu_out = m.predict(xs, batch_size=2)
 
     # CPU
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
     input_layer = keras.layers.Input(shape=(32))
     x = simple_model(input_layer, [32, 32, 1], w=1)
     m = keras.Model(inputs=input_layer, outputs=x)
@@ -1410,13 +862,13 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictNumpyDataTwoOutput(self):
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
-      m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
+      m = keras.Model(inputs=input_layer, outputs=[x, x])
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1426,7 +878,6 @@ class IPUModelModelTest(test.TestCase):
       ipu_out = m.predict(xs, batch_size=2)
 
     # CPU
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
     input_layer = keras.layers.Input(shape=(32))
     x = simple_model(input_layer, [32, 32, 1], w=1)
     m = keras.Model(inputs=input_layer, outputs=[x, x])
@@ -1437,14 +888,14 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictNumpyData3D(self):
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 48], w=1)
       x = keras.layers.Reshape((4, 4, 3))(x)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1454,7 +905,6 @@ class IPUModelModelTest(test.TestCase):
       ipu_out = m.predict(xs, batch_size=2)
 
     # CPU
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
     input_layer = keras.layers.Input(shape=(32))
     x = simple_model(input_layer, [32, 32, 48], w=1)
     x = keras.layers.Reshape((4, 4, 3))(x)
@@ -1466,14 +916,14 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testPredictNumpyDataTwoOutput3D(self):
-    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(49)])
+    xs = np.stack([np.ones(32, dtype=np.float32) * i for i in range(48)])
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 48], w=1)
       x = keras.layers.Reshape((4, 4, 3))(x)
-      m = ipu.keras.Model(inputs=input_layer, outputs=[x, x])
+      m = keras.Model(inputs=input_layer, outputs=[x, x])
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
@@ -1506,7 +956,7 @@ class IPUModelModelTest(test.TestCase):
 
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [32, 32, 1], w=1)
-      m = ipu.keras.Model(inputs=input_layer, outputs=x)
+      m = keras.Model(inputs=input_layer, outputs=x)
 
       m.compile('sgd', 'mse')
       ipu_out = m.fit(test_dataset(length=96), epochs=2)
@@ -1573,7 +1023,7 @@ class IPUModelModelTest(test.TestCase):
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
-      model = ipu.keras.Model(*model_fn())
+      model = keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
       out = model.fit(data_fn(), steps_per_epoch=1, epochs=2)
@@ -1611,6 +1061,7 @@ class IPUModelModelTest(test.TestCase):
 
       return (x1, x2, x3), (y1, y2)
 
+    # pylint: disable=abstract-method
     class MyDenseModel(keras.Model):
       def __init__(self, units):
         super().__init__()
@@ -1660,7 +1111,7 @@ class IPUModelModelTest(test.TestCase):
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
-      model = ipu.keras.Model(*model_fn())
+      model = keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'])
 
       out = model.fit(*data_fn(), batch_size=4)
@@ -1718,7 +1169,7 @@ class IPUModelModelTest(test.TestCase):
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
-      model = ipu.keras.Model(*model_fn())
+      model = keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse'])
 
       ipu_predict_out = model.predict(predict_input_fn(), batch_size=4)
@@ -1784,67 +1235,12 @@ class IPUModelModelTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      model = ipu.keras.Model(*model_fn())
+      model = keras.Model(*model_fn())
       model.compile('sgd', ['mse', 'mse', 'mse'])
 
       ipu_predict_out = model.predict(predict_input_fn(), batch_size=4)
 
     self.assertAllClose(cpu_predict_out, ipu_predict_out)
-
-  @test_util.run_v2_only
-  def testPredictReplaceableLayers(self):
-    def f():
-      C = keras.initializers.Constant(0.1)
-
-      input_layer = keras.layers.Input(10)
-      # Test Embedding.
-      x = keras.layers.Embedding(10, 2, embeddings_initializer=C)(input_layer)
-      x = keras.layers.Dense(2, kernel_initializer=C)(x)
-
-      # Test Dropout.
-      x = keras.layers.Dropout(0.5)(x)
-      x = keras.layers.Flatten()(x)
-      x = keras.layers.Dense(20, kernel_initializer=C)(x)
-      x = keras.layers.Reshape((10, 2))(x)
-
-      # Test LSTM.
-      x = keras.layers.LSTM(5, kernel_initializer=C)(x)
-
-      # Test Layer Norm.
-      x = keras.layers.LayerNormalization()(x)
-      x = keras.layers.Flatten()(x)
-      x = keras.layers.Dense(20, kernel_initializer=C)(x)
-      x = keras.layers.Reshape((10, 2))(x)
-
-      # Test GRU.
-      x = keras.layers.GRU(5, kernel_initializer=C)(x)
-
-      return input_layer, x
-
-    # Create some test data.
-    data = np.ones((96, 10), dtype=np.int32)
-
-    # Compute IPU model output, uses layer replacement.
-    strategy = ipu.ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = ipu.keras.Model(*f(),
-                          gradient_accumulation_count=8,
-                          layer_replacement=True)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
-      # Generate predictions
-      ipu_out = m.predict(data, batch_size=4)
-
-    # Compute output with vanilla keras model.
-    m_cpu = keras.Model(*f())
-    cpu_out = m_cpu.predict(data, batch_size=4)
-
-    self.assertEqual(cpu_out.shape, ipu_out.shape)
-    self.assertAllClose(cpu_out, ipu_out)
 
   @test_util.run_v2_only
   def testAutocast_ComplexDatasetStructure(self):
@@ -1882,9 +1278,7 @@ class IPUModelModelTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = ipu.keras.Model(*f(),
-                          gradient_accumulation_count=8,
-                          layer_replacement=True)
+      m = keras.Model(*f())
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
@@ -1901,11 +1295,9 @@ class IPUModelModelTest(test.TestCase):
           (ds_x, ds_y)).repeat(32).batch(4, drop_remainder=True)
       ds_x_tuple = dataset_ops.Dataset.zip(
           (ds_x,)).repeat(32).batch(4, drop_remainder=True)
-      ds_x_no_tuple = ds_x.repeat(32).batch(4, drop_remainder=True)
 
       m.fit(ds_xy)
       m.predict(ds_x_tuple)
-      m.predict(ds_x_no_tuple)
       m.evaluate(ds_xy)
 
       # No exceptions thrown
@@ -1921,14 +1313,15 @@ class IPUModelModelTest(test.TestCase):
       i = keras.layers.Input(shape=[1])
       ci = keras.layers.Lambda(lambda x: math_ops.cast(x, dtype=np.float16))(i)
       o = keras.layers.Dense(1, kernel_initializer='ones')(ci)
-      m = ipu.keras.Model(i, o)
+      m = keras.Model(i, o)
 
       cfg = IPUConfig()
       cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
-      output = m.predict(dataset, steps_per_run=1)
+      m.compile(steps_per_execution=10)
+      output = m.predict(dataset)
       self.assertAllClose(output.flatten(), range(30))
 
 

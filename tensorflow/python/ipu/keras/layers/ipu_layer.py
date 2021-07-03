@@ -29,5 +29,5 @@ class IPULayer(Layer):
       raise NotImplementedError(
           "ipu.keras.%s does not support %s"
           " argument %s. It is included for API consistency"
-          "with keras.Embedding." %
-          (self.__class__.__name__, method, arg_name))
+          "with keras.%s." %
+          (self.__class__.__name__, method, arg_name, self.__class__.__name__))

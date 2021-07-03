@@ -39,13 +39,11 @@ def dataset_with_labels():
   return ds_xy
 
 
-def dataset():
-  x1 = np.ones((8), dtype=np.float64)
-  x2 = np.ones((8), dtype=np.float64)
-  x3 = np.ones((8), dtype=np.float64)
-  ds_x = dataset_ops.Dataset.from_tensors(
-      (x1, x2, x3)).repeat(16).batch(2, drop_remainder=True)
-  return ds_x
+def numpy_data():
+  x1 = np.ones((2, 8), dtype=np.float64)
+  x2 = np.ones((2, 8), dtype=np.float64)
+  x3 = np.ones((2, 8), dtype=np.float64)
+  return (x1, x2, x3)
 
 
 def model_fn(nested_outputs=False):
@@ -87,7 +85,7 @@ class KerasSyntheticDataTest(test.TestCase):
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
-        model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
+        model = keras.Model(*model_fn())
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
         model.fit(dataset_with_labels(), epochs=4)
@@ -106,7 +104,7 @@ class KerasSyntheticDataTest(test.TestCase):
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
-        model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
+        model = keras.Model(*model_fn())
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
         model.evaluate(dataset_with_labels())
@@ -125,10 +123,10 @@ class KerasSyntheticDataTest(test.TestCase):
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
-        model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
+        model = keras.Model(*model_fn())
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
-        model.predict(dataset())
+        model.predict(numpy_data(), batch_size=2)
 
   @tu.skip_on_hw
   @test_util.run_v2_only
@@ -144,11 +142,10 @@ class KerasSyntheticDataTest(test.TestCase):
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
-        model = ipu.keras.Model(*model_fn(nested_outputs=True),
-                                gradient_accumulation_count=4)
+        model = keras.Model(*model_fn(nested_outputs=True))
         model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
 
-        model.predict(dataset())
+        model.predict(numpy_data(), batch_size=2)
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
@@ -165,8 +162,10 @@ class KerasSyntheticDataTest(test.TestCase):
         tu.add_hw_ci_connection_options(cfg)
         cfg.configure_ipu_system()
 
-        model = ipu.keras.Model(*model_fn(), gradient_accumulation_count=4)
-        model.compile('sgd', ['mse', 'mse'], metrics=['accuracy'])
+        model = keras.Model(*model_fn())
+        model.compile('sgd', ['mse', 'mse'],
+                      metrics=['accuracy'],
+                      steps_per_execution=8)
 
         model.fit(dataset_with_labels(), epochs=4)
 

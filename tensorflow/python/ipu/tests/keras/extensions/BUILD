@@ -67,5 +67,6 @@ test_suite(
     name = "extensions_test_suite",
     tests = [
         ":tests",
+        "//tensorflow/python/ipu/tests/keras/extensions/single_ipu:all_tests",
     ],
 )

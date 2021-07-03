@@ -3356,9 +3356,10 @@ def extension_delegate(func):
     key_name = "__extension_delegate"
     enable_extension_delegate = kwargs.get(key_name, True)
     kwargs.pop(key_name, None)
+    prefix = "" if func.__name__.startswith("_") else "_"
     if enable_extension_delegate and isinstance(self, KerasExtension):
-      supported_func_name = "_" + func.__name__ + "_supported"
-      delegate_func_name = "_" + func.__name__ + "_delegate"
+      supported_func_name = prefix + func.__name__ + "_supported"
+      delegate_func_name = prefix + func.__name__ + "_delegate"
 
       if (hasattr(self, supported_func_name) and
           hasattr(self, delegate_func_name)):
@@ -3400,9 +3401,10 @@ def extension_delegate_if_exists(func_name, instance, *args, **kwargs):
   Returns:
       A wrapped function which can delegate to an extension.
   """
+  prefix = "" if func_name.startswith("_") else "_"
   if isinstance(instance, KerasExtension):
-    supported_func_name = "_" + func_name + "_supported"
-    delegate_func_name = "_" + func_name + "_delegate"
+    supported_func_name = prefix + func_name + "_supported"
+    delegate_func_name = prefix + func_name + "_delegate"
 
     if (hasattr(instance, supported_func_name) and
         hasattr(instance, delegate_func_name)):

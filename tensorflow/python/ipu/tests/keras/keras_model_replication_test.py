@@ -19,9 +19,7 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
-from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu import ipu_strategy
-from tensorflow.python.ipu import keras as ipu_keras
 
 
 class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
@@ -43,9 +41,8 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
       x = keras.layers.Dense(4, name="layer0",
                              kernel_initializer=init)(input_layer)
       x = keras.layers.Dense(2, name="layer1", kernel_initializer=init)(x)
-      m = ipu_keras.Model(input_layer, x, gradient_accumulation_count=12)
-
-      m.compile('sgd', loss='mse')
+      m = keras.Model(input_layer, x)
+      m.compile('sgd', loss='mse', steps_per_execution=24)
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
@@ -77,25 +74,14 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
       x = keras.layers.Dense(4, name="layer0",
                              kernel_initializer=init)(input_layer)
       x = keras.layers.Dense(2, name="layer1", kernel_initializer=init)(x)
-      m = ipu_keras.Model(input_layer, x, gradient_accumulation_count=3)
+      m = keras.Model(input_layer, x)
 
-      m.compile('sgd', loss='mse')
+      m.compile('sgd', loss='mse', steps_per_execution=6)
 
       # Input data
-      input_x = np.full([33, 32], 1.0, dtype=np.single)
-
-      # with batch_size=2 this will give a dataset containing
-      # 16 mini-batches
-      # 16 // (3 * 2) = 2 steps per epoch per replica
-      # dropping some samples
-
-      # Generate predictions.
-      # Ideally we would check the warning message here.
-      # We just check that the output shape corresponds to the
-      # expected value of 24 = (2 * 3 * 2 * 2)
-      # (steps per epoch per replica * GA * RF * BS)
+      input_x = np.full([60, 32], 1.0, dtype=np.single)
       result = m.predict(input_x, batch_size=2)
-      self.assertEqual(result.shape[0], 24)
+      self.assertEqual(result.shape[0], 60)
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
@@ -115,10 +101,10 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
       x = keras.layers.Dense(4, name="layer0",
                              kernel_initializer=init)(input_layer)
       x = keras.layers.Dense(2, name="layer1", kernel_initializer=init)(x)
-      m = ipu_keras.Model(input_layer, x, gradient_accumulation_count=1)
+      m = keras.Model(input_layer, x)
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=2)
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)
@@ -176,14 +162,14 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      model = ipu_keras.Model(*model_fn())
-      model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+      model = keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'], steps_per_execution=2)
 
       predict_out = model.predict(predict_input_fn(), batch_size=4)
 
     # CPU Test.
     cpu_model = keras.Model(*model_fn())
-    cpu_model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+    cpu_model.compile('sgd', ['mse', 'mse'])
 
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
@@ -233,7 +219,7 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
 
     # CPU Test.
     cpu_model = keras.Model(*model_fn())
-    cpu_model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+    cpu_model.compile('sgd', ['mse', 'mse'])
 
     cpu_predict_out = cpu_model.predict(predict_input_fn(), batch_size=4)
 
@@ -245,8 +231,8 @@ class IPUModelReplicatedTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      model = ipu_keras.Model(*model_fn())
-      model.compile('sgd', ['mse', 'mse'])  #, loss_weights=[1.0, 0.2])
+      model = keras.Model(*model_fn())
+      model.compile('sgd', ['mse', 'mse'], steps_per_execution=2)
 
       predict_out = model.predict(predict_input_fn(), batch_size=4)
 

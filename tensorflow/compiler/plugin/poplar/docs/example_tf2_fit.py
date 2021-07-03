@@ -1,4 +1,3 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
 from tensorflow.python.ipu.config import IPUConfig
 
 import tensorflow as tf
@@ -35,7 +34,7 @@ def create_dataset():
 # Create the model using the IPU-specific Sequential class
 #
 def create_model():
-  m = ipu.keras.Sequential([
+  m = keras.Sequential([
       keras.layers.Flatten(),
       keras.layers.Dense(128, activation='relu'),
       keras.layers.Dense(10, activation='softmax')
@@ -55,5 +54,6 @@ with strategy.scope():
 
   # Train the model
   model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-                optimizer=tf.keras.optimizers.SGD())
+                optimizer=tf.keras.optimizers.SGD(),
+                steps_per_execution=100)
   model.fit(ds, steps_per_epoch=2000, epochs=4)

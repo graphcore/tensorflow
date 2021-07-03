@@ -21,4 +21,8 @@ from tensorflow.python.ipu.keras.extensions import model_extensions
 
 
 class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=abstract-method
-  pass
+  def _get_shard_count(self):
+    return 1
+
+  def _is_pipelined(self):
+    return False

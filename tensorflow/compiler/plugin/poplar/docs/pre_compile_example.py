@@ -1,12 +1,10 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import tensorflow as tf
 
 from tensorflow import keras
 from tensorflow.python import ipu
 
 #
-# Configure the IPU system
+# Configure the IPU system.
 #
 cfg = ipu.utils.IPUConfig()
 cfg.auto_select_ipus = 1
@@ -20,7 +18,7 @@ cfg.configure_ipu_system()
 
 
 #
-# Create the input data and labels
+# Create the input data and labels.
 #
 def create_dataset():
   mnist = tf.keras.datasets.mnist
@@ -37,10 +35,10 @@ def create_dataset():
 
 
 #
-# Create the model using the IPU-specific Sequential class
+# Create the model using the IPU-specific Sequential class.
 #
 def create_model():
-  m = ipu.keras.Sequential([
+  m = keras.Sequential([
       keras.layers.Flatten(),
       keras.layers.Dense(128, activation='relu'),
       keras.layers.Dense(10, activation='softmax')
@@ -48,17 +46,18 @@ def create_model():
   return m
 
 
-# Create an IPU distribution strategy
+# Create an IPU distribution strategy.
 strategy = ipu.ipu_strategy.IPUStrategyV1()
 
 with strategy.scope():
-  # Create an instance of the model
+  # Create an instance of the model.
   model = create_model()
 
-  # Get the training dataset
+  # Get the training dataset.
   ds = create_dataset()
 
   # Train the model
   model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-                optimizer=tf.keras.optimizers.SGD())
+                optimizer=tf.keras.optimizers.SGD(),
+                steps_per_execution=10)
   model.fit(ds, steps_per_epoch=200)

@@ -58,17 +58,6 @@ class Embedding(ipu_layer.IPULayer):
                mask_zero=False,
                input_length=None,
                **kwargs):
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(
-        input_dim,
-        output_dim,
-        embeddings_initializer=embeddings_initializer,
-        embeddings_regularizer=embeddings_regularizer,
-        activity_regularizer=activity_regularizer,
-        embeddings_constraint=embeddings_constraint,
-        mask_zero=mask_zero,
-        input_length=input_length,
-        **kwargs)
 
     kwargs['autocast'] = False
     super(Embedding, self).__init__(**kwargs)

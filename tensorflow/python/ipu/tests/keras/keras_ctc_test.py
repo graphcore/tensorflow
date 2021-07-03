@@ -132,7 +132,6 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
   @staticmethod
   def create_predictions_model(predictions_layer,
-                               model,
                                ctc_params,
                                log_softmax=False):
     batch_size = ctc_params["batch_size"]
@@ -165,12 +164,12 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
       x = log_softmax_layer(x)
 
     predictions = predictions_layer(x, logit_length)
-    m = model(inputs=[logits, logit_length], outputs=predictions)
+    m = keras.Model(inputs=[logits, logit_length], outputs=predictions)
     # No need to compile as we don't need any metrics, only the output.
     return m
 
   @staticmethod
-  def create_loss_model(loss_layer, model, ctc_params, log_softmax=False):
+  def create_loss_model(loss_layer, ctc_params, log_softmax=False):
     batch_size = ctc_params["batch_size"]
     num_classes = ctc_params["num_classes"]
     max_label_length = ctc_params["max_label_length"]
@@ -210,8 +209,8 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     loss = loss_layer(labels, x, label_length, logit_length)
 
-    m = model(inputs=[labels, logits, label_length, logit_length],
-              outputs=loss)
+    m = keras.Model(inputs=[labels, logits, label_length, logit_length],
+                    outputs=loss)
 
     def get_loss_output(_, y_pred):
       return y_pred
@@ -220,9 +219,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     return m
 
   @staticmethod
-  def create_loss_endpoint_model(endpoint_layer,
-                                 model,
-                                 ctc_params,
+  def create_loss_endpoint_model(endpoint_layer, ctc_params,
                                  log_softmax=False):
     batch_size = ctc_params["batch_size"]
     num_classes = ctc_params["num_classes"]
@@ -266,7 +263,8 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
                        labels=labels,
                        label_length=label_length)
 
-    m = model(inputs=[labels, logits, label_length, logit_length], outputs=x)
+    m = keras.Model(inputs=[labels, logits, label_length, logit_length],
+                    outputs=x)
     m.compile('sgd')
     return m
 
@@ -280,6 +278,8 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     blank_index = ctc_params["blank_index"]
 
     def data_generator():
+      np.random.seed(9)
+
       while True:
         labels = (np.random.randint(1, num_classes, size=[max_label_length]) \
                      + blank_index) % num_classes
@@ -306,8 +306,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
-                                                ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
@@ -320,10 +319,9 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
       model_ipu = self.create_loss_model(loss_layer_ipu,
-                                         ipu.keras.Model,
                                          ctc_params,
                                          log_softmax=True)
-      loss_ipu = model_ipu.evaluate(dataset, steps=1)[0]
+      loss_ipu = model_ipu.evaluate(dataset, steps=1)
 
     self.assertEqual(np.size(loss_ipu), 1)
     self.assertAllClose(loss_cpu, loss_ipu)
@@ -335,8 +333,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
-                                                ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, ctc_params)
     loss_cpu = model_cpu.evaluate(dataset, steps=1)
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
@@ -349,9 +346,8 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],
                                          from_logits=True)
-      model_ipu = self.create_loss_model(loss_layer_ipu, ipu.keras.Model,
-                                         ctc_params)
-      loss_ipu = model_ipu.evaluate(dataset, steps=1)[0]
+      model_ipu = self.create_loss_model(loss_layer_ipu, ctc_params)
+      loss_ipu = model_ipu.evaluate(dataset, steps=1)
 
     self.assertEqual(np.size(loss_ipu), 1)
     self.assertAllClose(loss_cpu, loss_ipu)
@@ -363,8 +359,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
-                                                ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, ctc_params)
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
@@ -378,12 +373,10 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"])
       model_ipu = self.create_loss_model(loss_layer_ipu,
-                                         ipu.keras.Model,
                                          ctc_params,
                                          log_softmax=True)
       history_ipu = model_ipu.fit(dataset, steps_per_epoch=1)
       loss_ipu = history_ipu.history["loss"]
-      print(history_ipu)
 
     self.assertEqual(np.size(loss_ipu), 1)
     self.assertAllClose(loss_cpu, loss_ipu)
@@ -396,8 +389,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     # CPU model
     loss_layer_cpu = CTCLossEndpointCpu(blank_index=ctc_params["blank_index"])
-    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, keras.Model,
-                                                ctc_params)
+    model_cpu = self.create_loss_endpoint_model(loss_layer_cpu, ctc_params)
     history_cpu = model_cpu.fit(dataset, steps_per_epoch=1)
     loss_cpu = history_cpu.history["loss"]
 
@@ -411,11 +403,9 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
       # IPU model
       loss_layer_ipu = ipu.keras.CTCLoss(blank_index=ctc_params["blank_index"],
                                          from_logits=True)
-      model_ipu = self.create_loss_model(loss_layer_ipu, ipu.keras.Model,
-                                         ctc_params)
+      model_ipu = self.create_loss_model(loss_layer_ipu, ctc_params)
       history_ipu = model_ipu.fit(dataset, steps_per_epoch=1)
       loss_ipu = history_ipu.history["loss"]
-      print(history_ipu)
 
     self.assertEqual(np.size(loss_ipu), 1)
     self.assertAllClose(loss_cpu, loss_ipu)
@@ -442,7 +432,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
                                               beam_width=beam_width,
                                               top_paths=top_paths)
     model_cpu = self.create_predictions_model(predictions_layer_cpu,
-                                              keras.Model, ctc_params)
+                                              ctc_params)
 
     cpu_predictions = model_cpu.predict(x=[inputs, input_lengths],
                                         batch_size=ctc_params["batch_size"])
@@ -460,7 +450,7 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
           beam_width=beam_width,
           top_paths=top_paths)
       model_ipu = self.create_predictions_model(predictions_layer_ipu,
-                                                ipu.keras.Model, ctc_params)
+                                                ctc_params)
 
       ipu_predictions = model_ipu.predict(x=[inputs, input_lengths],
                                           batch_size=ctc_params["batch_size"])

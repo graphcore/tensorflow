@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+import unittest
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
 
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import test_util
@@ -60,6 +61,7 @@ def run_collective_ops(inputs, generate_collective_ops, num_replicas):
       sess.run(infeed_queue.deleter)
 
 
+@unittest.skip("T42121 - currently not supported.")
 class TestReplicationGroupedCollectives(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only

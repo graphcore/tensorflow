@@ -17,7 +17,6 @@ from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import data_adapter
@@ -54,10 +53,7 @@ class IPUDataHandler(data_adapter.DataHandler):
       self._steps_per_execution_value = 1
     else:
       self._steps_per_execution = steps_per_execution
-      if isinstance(steps_per_execution, ops.Tensor):
-        self._steps_per_execution_value = steps_per_execution.numpy().item()
-      else:
-        self._steps_per_execution_value = steps_per_execution
+      self._steps_per_execution_value = steps_per_execution.numpy().item()
 
     strategy = ds_context.get_strategy()
     adapter_cls = data_adapter.select_data_adapter(x, y)
@@ -155,6 +151,10 @@ class IPUDataHandler(data_adapter.DataHandler):
             "defined. Executing on IPU requires all dataset elements to have "
             "fully defined shapes. If using batch() make sure to set "
             "`drop_remainder=True`.".format(spec.shape))
+
+  @property
+  def steps_per_execution_value(self):
+    return self._steps_per_execution_value
 
   def _validate_data_handler(self):
     super()._validate_data_handler()

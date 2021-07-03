@@ -23,7 +23,6 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu import ipu_strategy
-from tensorflow.python.ipu import keras as ipu_keras
 
 
 class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
@@ -68,7 +67,8 @@ class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
     model = keras.Model(*model_fn())
     model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'],
-                  optimizer=keras.optimizer_v2.gradient_descent.SGD())
+                  optimizer=keras.optimizer_v2.gradient_descent.SGD(),
+                  steps_per_execution=4)
     model.fit(dataset, epochs=2, steps_per_epoch=2000)
     tmpdir = TemporaryDirectory()
     weights_file = tmpdir.name + "/weights.hd5"
@@ -85,10 +85,11 @@ class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      model = ipu_keras.Model(*model_fn())
+      model = keras.Model(*model_fn())
       model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
                     metrics=['accuracy'],
-                    optimizer=keras.optimizer_v2.gradient_descent.SGD())
+                    optimizer=keras.optimizer_v2.gradient_descent.SGD(),
+                    steps_per_execution=4)
       model.load_weights(weights_file).expect_partial()
       ipu_predictions = model.predict(predict_ds, steps=12)
 

@@ -52,12 +52,6 @@ class Dropout(Layer):
     self.ref = kwargs.pop("ref", True)
     super(Dropout, self).__init__(**kwargs)
 
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(rate,
-                                  noise_shape=noise_shape,
-                                  seed=seed,
-                                  **kwargs)
-
   # pylint: disable=useless-super-delegation
   def build(self, input_shape):
     super(Dropout, self).build(input_shape)

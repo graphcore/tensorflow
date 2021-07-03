@@ -420,9 +420,9 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_model_test",
+    name = "keras_sequential_test",
     size = "large",
-    srcs = ["tests/keras/keras_model_test.py"],
+    srcs = ["tests/keras/keras_sequential_test.py"],
     shard_count = 12,
     deps = [
         ":pipelining_test_util",
@@ -1917,7 +1917,6 @@ test_suite(
         "keras_functional_model_test",
         "keras_model_replication_mnist_test",
         "keras_model_replication_test",
-        "keras_model_test",
         "keras_models_comparison_test",
         "keras_normalization_test",
         "keras_pipeline_model_replication_test",
@@ -1930,6 +1929,7 @@ test_suite(
         "keras_sequential_pipeline_save_restore_test",
         "keras_sequential_pipeline_test",
         "keras_sequential_replication_test",
+        "keras_sequential_test",
         "keras_synthetic_data_test",
         "keras_v2_optimizers",
         "map_gradient_optimizer_test",

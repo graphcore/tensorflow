@@ -574,6 +574,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     return nest.map_structure(_get_single_optimizer, optimizer)
 
   @trackable.no_automatic_dependency_tracking
+  @base_layer.extension_delegate
   def _reset_compile_cache(self):
     self.train_function = None
     self.test_function = None
@@ -2450,6 +2451,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
       self._build_input_shape = nest.map_structure(
           lambda x: None if x is None else x.shape, specs)
 
+  @base_layer.extension_delegate
   def _assert_weights_created(self):
     """Asserts that all the weights for the model have been created.
 

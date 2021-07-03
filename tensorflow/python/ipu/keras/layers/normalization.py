@@ -320,20 +320,6 @@ class LayerNormalization(GroupNormalization):
                      trainable=trainable,
                      name=name)
 
-    # For Keras -> IPU Keras layer substitution.
-    self._maybe_store_args_kwargs(axis=axis,
-                                  epsilon=epsilon,
-                                  center=center,
-                                  scale=scale,
-                                  beta_initializer=beta_initializer,
-                                  gamma_initializer=gamma_initializer,
-                                  beta_regularizer=beta_regularizer,
-                                  gamma_regularizer=gamma_regularizer,
-                                  beta_constraint=beta_constraint,
-                                  gamma_constraint=gamma_constraint,
-                                  trainable=trainable,
-                                  name=name)
-
     self._check_unsupported(beta_regularizer, "beta_regularizer")
     self._check_unsupported(gamma_regularizer, "gamma_regularizer")
     self._check_unsupported(beta_constraint, "beta_constraint")

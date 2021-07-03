@@ -491,8 +491,8 @@ class IpuGruTest(test.TestCase):
       outputs_ipu = layer_ipu(inputs_ipu, initial_state=initial_state_ipu)
 
       # Create, fit, and make prediction with IPU model
-      model_ipu = ipu.keras.Model(inputs=(inputs_ipu, initial_state_ipu),
-                                  outputs=outputs_ipu)
+      model_ipu = keras.Model(inputs=(inputs_ipu, initial_state_ipu),
+                              outputs=outputs_ipu)
       model_ipu.compile(loss='categorical_crossentropy', optimizer='adam')
       model_ipu.fit((x_fit, init), y, batch_size=batch_size)
       results_ipu = model_ipu.predict((x_predict, init), batch_size=batch_size)
