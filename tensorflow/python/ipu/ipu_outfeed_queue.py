@@ -541,3 +541,37 @@ class IPUOutfeedQueueIterator(collections_abc.Iterator):
       return self._results_to_process.popleft()
 
     raise StopIteration
+
+
+class ScopedIPUOutfeedQueue(IPUOutfeedQueue):
+  """A version of IPUOutfeedQueue which automatically calls delete when it goes
+  out of scope.
+
+  Can only be created in eager mode.
+  """
+  def __init__(self, outfeed_mode=None, device_ordinal=None):
+    """Creates an IPUOutfeedQueue object.
+
+    Args:
+      outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
+        outfeed behaviour. If not specified then all elements will be
+        returned by the outfeed when the dequeue operation is run.
+      device_ordinal: Integer ordinal of the IPU device on which this queue will
+        be used. If not specified will try and deduce the IPU device from the
+        current strategy and if that fails will default to "/device:IPU:0".
+
+    Raises:
+      RuntimeError: if not running in eager mode.
+    """
+    if not context.executing_eagerly():
+      raise RuntimeError(
+          "ScopedIPUOutfeedQueue can only be created in eager mode")
+
+    super().__init__(outfeed_mode=outfeed_mode, device_ordinal=device_ordinal)
+
+  def __del__(self):
+    with context.eager_mode():
+      gen_pop_datastream_ops.ipu_delete_outfeed(
+          feed_id=self._feed_name,
+          device_ordinal=self._device_ordinal,
+          asynchronous=True)

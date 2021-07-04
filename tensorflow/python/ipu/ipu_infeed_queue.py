@@ -620,7 +620,9 @@ class _IPUOwnedIteratorDeleter(object):
     if self._eager_mode:
       with context.eager_mode():
         gen_pop_datastream_ops.ipu_delete_dataset_iterator(
-            feed_id=self._handle, device_ordinal=self._device_ordinal)
+            feed_id=self._handle,
+            device_ordinal=self._device_ordinal,
+            asynchronous=True)
     else:
       with context.graph_mode():
         gen_pop_datastream_ops.ipu_delete_dataset_iterator(

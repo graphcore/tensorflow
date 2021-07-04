@@ -59,6 +59,7 @@ REGISTER_OP("IPUCreateDatasetIterator")
 REGISTER_OP("IPUDeleteDatasetIterator")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
+    .Attr("asynchronous: bool = false")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
 
@@ -109,6 +110,7 @@ device_ordinal: The IPU device to use.
 REGISTER_OP("IPUDeleteOutfeed")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
+    .Attr("asynchronous: bool = false")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
 

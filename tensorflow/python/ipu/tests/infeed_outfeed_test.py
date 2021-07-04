@@ -1487,6 +1487,29 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with self.assertRaisesRegex(RuntimeError, "IPUInfeedQueue created"):
       ref_infeed_queue.deleter  # pylint: disable=pointless-statement
 
+  @test_util.run_v2_only
+  def testScopedOuteed(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.ipu_model.tiles_per_ipu = 4
+    cfg.configure_ipu_system()
+
+    outfeed_queue = ipu.ipu_outfeed_queue.ScopedIPUOutfeedQueue()
+    strategy = ipu.ipu_strategy.IPUStrategyV1()
+
+    with strategy.scope():
+
+      @def_function.function(experimental_compile=True)
+      def my_net(num_iterations):
+        x = constant_op.constant(1, dtype=np.int32, shape=[2])
+        for _ in math_ops.range(num_iterations):
+          outfeed_queue.enqueue(x)
+          x += 1
+
+      strategy.run(my_net, args=(10,))
+      results = outfeed_queue.dequeue()
+      self.assertEqual(len(results), 10)
+
 
 class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):

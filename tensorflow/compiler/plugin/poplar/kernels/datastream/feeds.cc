@@ -32,6 +32,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.h"
+#include "tensorflow/core/kernels/data/iterator_ops.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/util/batch_util.h"
 #include "tensorflow/core/util/stream_executor_util.h"
@@ -207,34 +208,37 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("IPUCreateDatasetIterator").Device(DEVICE_CPU),
                         IPUCreateDatasetIteratorOp);
 
-class IPUDeleteDatasetIteratorOp : public OpKernel {
+class IPUDeleteDatasetIteratorOp : public data::HybridAsyncOpKernel {
  public:
   explicit IPUDeleteDatasetIteratorOp(OpKernelConstruction* ctx)
-      : OpKernel(ctx), device_ordinal_(0) {
+      : data::HybridAsyncOpKernel(ctx, "ipu_delete_dataset_iterator"),
+        device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("asynchronous", &asynchronous_));
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
   }
 
-  ~IPUDeleteDatasetIteratorOp() override {}
+  AsyncOpKernel* AsAsync() override { return asynchronous_ ? this : nullptr; }
 
-  void Compute(OpKernelContext* ctx) override {
-    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-    OP_REQUIRES(ctx, platform.ok(), platform.status());
-    auto* p =
-        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
-    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+  Status DoCompute(OpKernelContext* ctx) override {
+    TF_ASSIGN_OR_RETURN(auto platform,
+                        se::MultiPlatformManager::PlatformWithName("Poplar"));
+    auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(platform);
+    TF_ASSIGN_OR_RETURN(auto stream_executor,
+                        p->ExecutorForDevice(device_ordinal_));
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
-
-    OP_REQUIRES_OK(ctx, poplar_executor->DeleteInfeedIterator(feed_id_));
+    TF_RETURN_IF_ERROR(poplar_executor->DeleteInfeedIterator(feed_id_));
+    return Status::OK();
   }
 
  private:
   int device_ordinal_;
   std::string feed_id_;
+  bool asynchronous_;
   TF_DISALLOW_COPY_AND_ASSIGN(IPUDeleteDatasetIteratorOp);
 };
 
@@ -411,39 +415,43 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("PopDatastreamOutfeedDequeue").Device(DEVICE_CPU),
                         PopDatastreamOutfeedDequeueOp);
 
-class IPUDeleteOutfeedOp : public OpKernel {
+class IPUDeleteOutfeedOp : public data::HybridAsyncOpKernel {
  public:
   explicit IPUDeleteOutfeedOp(OpKernelConstruction* ctx)
-      : OpKernel(ctx), device_ordinal_(0) {
+      : data::HybridAsyncOpKernel(ctx, "ipu_delete_outfeed"),
+        device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("asynchronous", &asynchronous_));
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
   }
 
-  ~IPUDeleteOutfeedOp() override {}
+  AsyncOpKernel* AsAsync() override { return asynchronous_ ? this : nullptr; }
 
-  void Compute(OpKernelContext* ctx) override {
-    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-    OP_REQUIRES(ctx, platform.ok(), platform.status());
-    auto* p =
-        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
-    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+  Status DoCompute(OpKernelContext* ctx) override {
+    TF_ASSIGN_OR_RETURN(auto platform,
+                        se::MultiPlatformManager::PlatformWithName("Poplar"));
+    auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(platform);
+    TF_ASSIGN_OR_RETURN(auto stream_executor,
+                        p->ExecutorForDevice(device_ordinal_));
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
 
     if (poplar_executor->HasOutfeed(feed_id_)) {
-      OP_REQUIRES_OK(ctx, poplar_executor->DeleteOutfeed(feed_id_));
+      TF_RETURN_IF_ERROR(poplar_executor->DeleteOutfeed(feed_id_));
     } else {
       VLOG(2) << "Can't delete Outfeed '" << feed_id_
               << "' as it doesn't exist.";
     }
+    return Status::OK();
   }
 
  private:
   int device_ordinal_;
   std::string feed_id_;
+  bool asynchronous_;
   TF_DISALLOW_COPY_AND_ASSIGN(IPUDeleteOutfeedOp);
 };
 
