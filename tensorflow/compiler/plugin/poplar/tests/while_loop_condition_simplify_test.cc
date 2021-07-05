@@ -126,6 +126,112 @@ TEST_F(WhileLoopConditionSimplifyTest, SimplifyDoubleConditionalTie) {
   }
 }
 
+TEST_F(WhileLoopConditionSimplifyTest,
+       SimplifyDoubleConditionalDiffernyTypesTie) {
+  auto hlo_module = CreateNewVerifiedModule();
+
+  Shape s32_scalar_shape = ShapeUtil::MakeShape(S32, {});
+  Shape s64_scalar_shape = ShapeUtil::MakeShape(S64, {});
+  Shape tuple_shape =
+      ShapeUtil::MakeTupleShape({s32_scalar_shape, s64_scalar_shape});
+  int32 loop_bound = 10;
+  /* Create while condition */
+  auto builder_cond = HloComputation::Builder(TestName());
+  auto tuple_cond = builder_cond.AddInstruction(
+      HloInstruction::CreateParameter(0, tuple_shape, "cond_tuple"));
+  auto limit0_cond = builder_cond.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(loop_bound)));
+  auto limit1_cond = builder_cond.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(loop_bound)));
+  auto c0_cond =
+      builder_cond.AddInstruction(HloInstruction::CreateGetTupleElement(
+          ShapeUtil::MakeShape(S32, {}), tuple_cond, 0));
+  auto c1_cond =
+      builder_cond.AddInstruction(HloInstruction::CreateGetTupleElement(
+          ShapeUtil::MakeShape(S64, {}), tuple_cond, 1));
+  auto lt0_cond = builder_cond.AddInstruction(
+      HloInstruction::CreateCompare(ShapeUtil::MakeShape(PRED, {}), c0_cond,
+                                    limit0_cond, ComparisonDirection::kLt));
+  auto lt1_cond = builder_cond.AddInstruction(
+      HloInstruction::CreateCompare(ShapeUtil::MakeShape(PRED, {}), c1_cond,
+                                    limit1_cond, ComparisonDirection::kLt));
+  auto and_cond = builder_cond.AddInstruction(HloInstruction::CreateBinary(
+      ShapeUtil::MakeShape(PRED, {}), HloOpcode::kAnd, lt0_cond, lt1_cond));
+  HloComputation* comp_cond =
+      hlo_module->AddEmbeddedComputation(builder_cond.Build());
+
+  /* Create while body */
+  auto builder_body = HloComputation::Builder(TestName());
+  auto tuple_body = builder_body.AddInstruction(
+      HloInstruction::CreateParameter(0, tuple_shape, "body_tuple"));
+  auto c0_body = builder_body.AddInstruction(
+      HloInstruction::CreateGetTupleElement(s32_scalar_shape, tuple_body, 0));
+  auto c1_body = builder_body.AddInstruction(
+      HloInstruction::CreateGetTupleElement(s64_scalar_shape, tuple_body, 1));
+  auto s32_one = builder_body.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(1)));
+  auto new_c0_body = builder_body.AddInstruction(HloInstruction::CreateBinary(
+      c0_body->shape(), HloOpcode::kAdd, c0_body, s32_one));
+  auto s64_one = builder_body.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(1)));
+  auto new_c1_body = builder_body.AddInstruction(HloInstruction::CreateBinary(
+      c1_body->shape(), HloOpcode::kAdd, c1_body, s64_one));
+
+  auto new_tuple_body = builder_body.AddInstruction(
+      HloInstruction::CreateTuple({new_c0_body, new_c1_body}));
+
+  HloComputation* comp_body =
+      hlo_module->AddEmbeddedComputation(builder_body.Build());
+
+  /* Create main computation */
+  auto builder_main = HloComputation::Builder(TestName());
+  auto c0_init = builder_main.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(0)));
+  auto c1_init = builder_main.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int64>(0)));
+
+  auto init = builder_main.AddInstruction(
+      HloInstruction::CreateTuple({c0_init, c1_init}));
+
+  auto main = builder_main.AddInstruction(
+      HloInstruction::CreateWhile(tuple_shape, comp_cond, comp_body, init));
+
+  builder_main.AddInstruction(HloInstruction::CreateTuple({main}));
+
+  hlo_module->AddEntryComputation(builder_main.Build());
+  WhileLoopConditionSimplify wlcs;
+  EXPECT_TRUE(wlcs.Run(hlo_module.get()).ValueOrDie());
+
+  const absl::flat_hash_set<HloInstruction*> cond_instructions(
+      comp_cond->instructions().begin(), comp_cond->instructions().end());
+
+  EXPECT_TRUE(limit0_cond->parent() == comp_cond ||
+              limit1_cond->parent() == comp_cond);
+  if (limit0_cond->parent() == comp_cond) {
+    EXPECT_TRUE(cond_instructions.contains(limit0_cond));
+    EXPECT_FALSE(cond_instructions.contains(limit1_cond));
+    EXPECT_TRUE(cond_instructions.contains(c0_cond));
+    EXPECT_FALSE(cond_instructions.contains(c1_cond));
+    EXPECT_TRUE(cond_instructions.contains(lt0_cond));
+    EXPECT_FALSE(cond_instructions.contains(lt1_cond));
+    EXPECT_FALSE(cond_instructions.contains(and_cond));
+    EXPECT_TRUE(c0_body->parent() == comp_body);
+    EXPECT_TRUE(new_c0_body->parent() == comp_body);
+    EXPECT_EQ(new_tuple_body->operand(0), new_c0_body);
+  } else {
+    EXPECT_FALSE(cond_instructions.contains(limit0_cond));
+    EXPECT_TRUE(cond_instructions.contains(limit1_cond));
+    EXPECT_FALSE(cond_instructions.contains(c0_cond));
+    EXPECT_TRUE(cond_instructions.contains(c1_cond));
+    EXPECT_FALSE(cond_instructions.contains(lt0_cond));
+    EXPECT_TRUE(cond_instructions.contains(lt1_cond));
+    EXPECT_FALSE(cond_instructions.contains(and_cond));
+    EXPECT_TRUE(c1_body->parent() == comp_body);
+    EXPECT_TRUE(new_c1_body->parent() == comp_body);
+    EXPECT_EQ(new_tuple_body->operand(1), new_c1_body);
+  }
+}
+
 TEST_F(WhileLoopConditionSimplifyTest, SimplifyDoubleConditionalUneven) {
   auto hlo_module = CreateNewVerifiedModule();
 

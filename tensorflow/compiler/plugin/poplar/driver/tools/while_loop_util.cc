@@ -31,7 +31,7 @@ namespace {
 
 StatusOr<int64> GetLoopDelta(const HloInstruction* delta) {
   if (delta->opcode() == HloOpcode::kConstant) {
-    if (WhileLoopUtil::Is32BitsOrLessIntegerConstant(delta)) {
+    if (WhileLoopUtil::CanRepresentInstructionAsInt64Constant(delta)) {
       TF_ASSIGN_OR_RETURN(int64 delta_value,
                           LiteralScalarToNativeType<int64>(delta->literal()));
       if (std::llabs(delta_value) == 1) {
@@ -42,7 +42,7 @@ StatusOr<int64> GetLoopDelta(const HloInstruction* delta) {
   } else if (delta->opcode() == HloOpcode::kNegate &&
              delta->operand(0)->opcode() == HloOpcode::kConstant) {
     const HloInstruction* constant = delta->operand(0);
-    if (WhileLoopUtil::Is32BitsOrLessIntegerConstant(constant)) {
+    if (WhileLoopUtil::CanRepresentInstructionAsInt64Constant(constant)) {
       TF_ASSIGN_OR_RETURN(int64 delta_value, LiteralScalarToNativeType<int64>(
                                                  constant->literal()));
       if (std::llabs(delta_value) == 1) {
@@ -85,11 +85,13 @@ bool WhileLoopUtil::IsGTEFromParamIndex(const HloInstruction* inst,
          inst->operand(0)->opcode() == HloOpcode::kParameter &&
          inst->operand(0)->parameter_number() == param_index;
 }
-bool WhileLoopUtil::Is32BitsOrLessIntegerConstant(const HloInstruction* inst) {
+bool WhileLoopUtil::CanRepresentInstructionAsInt64Constant(
+    const HloInstruction* inst) {
   return IsScalarConstant(inst) &&
          (ShapeUtil::ElementIsIntegralWithBits(inst->shape(), 8) ||
           ShapeUtil::ElementIsIntegralWithBits(inst->shape(), 16) ||
-          ShapeUtil::ElementIsIntegralWithBits(inst->shape(), 32));
+          ShapeUtil::ElementIsIntegralWithBits(inst->shape(), 32) ||
+          inst->shape().element_type() == S64);
 }
 
 std::vector<std::pair<HloInstruction*, int64>>

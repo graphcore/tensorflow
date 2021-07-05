@@ -81,7 +81,8 @@ StatusOr<int64> ConvertWhileToRepeat(HloInstruction* while_inst) {
     }
 
     const bool rhs_is_integer_const =
-        WhileLoopUtil::Is32BitsOrLessIntegerConstant(c_inst->operand(1));
+        WhileLoopUtil::CanRepresentInstructionAsInt64Constant(
+            c_inst->operand(1));
     if (!rhs_is_integer_const) {
       return FailedPrecondition("%s", err_msg);
     }
@@ -234,7 +235,7 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
        tuple_index++) {
     HloInstruction* operand = input_tuple->mutable_operand(tuple_index);
     // Skip if it is not a integer scalar constant
-    if (!WhileLoopUtil::Is32BitsOrLessIntegerConstant(operand)) {
+    if (!WhileLoopUtil::CanRepresentInstructionAsInt64Constant(operand)) {
       continue;
     }
 

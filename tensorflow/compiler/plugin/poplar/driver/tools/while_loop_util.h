@@ -36,7 +36,8 @@ class WhileLoopUtil {
  public:
   static bool IsGTEFromParamIndex(const HloInstruction* inst,
                                   int64 param_index);
-  static bool Is32BitsOrLessIntegerConstant(const HloInstruction* inst);
+  static bool CanRepresentInstructionAsInt64Constant(
+      const HloInstruction* inst);
 
   // Find instructions which are incremented/decremented by a (-)1 and for
   // which the resulting increment is *only* used in the output tuple of the
