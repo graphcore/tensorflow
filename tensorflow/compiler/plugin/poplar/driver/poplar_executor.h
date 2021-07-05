@@ -154,11 +154,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     TensorControl* tc;
     ConversionFn fn;
     bool streamed;
-    absl::optional<RemoteParameterInfo> remote_parameter_info;
+    const RemoteParameterInfo* remote_parameter_info;
 
     InputDef() {}
     InputDef(TensorControl* tc, ConversionFn fn, bool streamed,
-             absl::optional<RemoteParameterInfo> remote_parameter_info)
+             const RemoteParameterInfo* remote_parameter_info)
         : tc(tc),
           fn(fn),
           streamed(streamed),
@@ -177,9 +177,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   };
 
  public:
-  using InputPairList = std::vector<InputDef>;
+  using InputPairList = absl::InlinedVector<InputDef, 1>;
   using ArgsHandleMap = std::map<ArgHandle, InputDef>;
-  using OutputPairList = std::vector<OutputDef>;
+  using OutputPairList = absl::InlinedVector<OutputDef, 1>;
   using OutputsHandleMap = std::map<ArgHandle, OutputDef>;
 
   explicit PoplarExecutor();
@@ -732,8 +732,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static void FlattenedDeviceMemoryList(
       InputPairList&, const xla::Shape&, void*,
-      const InputOutputAliasingMap::InputInfo&,
-      absl::optional<RemoteParameterInfo>);
+      const InputOutputAliasingMap::InputInfo&, const RemoteParameterInfo*);
 
   static void FlattenedOutputDeviceMemoryList(
       OutputPairList&, const xla::Shape&, void*,
