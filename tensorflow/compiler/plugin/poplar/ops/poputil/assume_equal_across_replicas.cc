@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_OP("IpuRemapDeduce")
-    .Input("input: dtype")
+REGISTER_OP("IpuAssumeEqualAcrossReplicas")
+    .Input("inputs: dtype")
     .Output("output: dtype")
-    .Attr("dtype: {float16, float32, int32, bool}")
+    .Attr("dtype: type")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 }  // namespace tensorflow
