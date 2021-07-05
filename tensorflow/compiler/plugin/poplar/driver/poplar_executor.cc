@@ -2312,7 +2312,7 @@ std::string PoplarExecutor::GetModuleReportDirectory(const std::string& name) {
 void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList& list, const xla::Shape& shape, void* base,
     const InputOutputAliasingMap::InputInfo& input_info,
-    absl::optional<RemoteParameterInfo> remote_parameter_info) {
+    const RemoteParameterInfo* remote_parameter_info) {
   TensorControl* tc = static_cast<TensorControl*>(base);
   if (shape.IsTuple()) {
     void** ptrs = reinterpret_cast<void**>(tc->data);
