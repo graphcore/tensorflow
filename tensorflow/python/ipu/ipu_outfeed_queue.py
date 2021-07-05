@@ -532,10 +532,7 @@ class IPUOutfeedQueueIterator(collections_abc.Iterator):
         # Populate the sliced results.
         self._num_elements += num_iterations
         for i in range(num_iterations):
-          if len(flat_results) == 1:
-            slice_results = [results[i]]
-          else:
-            slice_results = [result[i] for result in results]
+          slice_results = [result[i] for result in flat_results]
           slice_results = nest.pack_sequence_as(results, slice_results)
           self._results_to_process.append(slice_results)
 

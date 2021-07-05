@@ -1572,7 +1572,7 @@ class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
       def my_net(num_iterations):
         x = constant_op.constant(1, dtype=np.int32, shape=[2])
         for _ in math_ops.range(num_iterations):
-          outfeed_queue.enqueue(x)
+          outfeed_queue.enqueue({"key": x})
           x += 1
 
       results = []
@@ -1581,10 +1581,11 @@ class IPUOutfeedIteratorTest(test_util.TensorFlowTestCase,
         x_ref = 1
 
         while len(results) != num_iterations:
-          for x in outfeed_queue:
-            self.assertAllEqual(x, np.full([2], x_ref))
+          for z in outfeed_queue:
+            self.assertIsInstance(z, dict)
+            self.assertAllEqual(z["key"], np.full([2], x_ref))
             x_ref += 1
-            results.append(x)
+            results.append(x_ref)
 
       num_iterations = 100
       dequeue_thread = Thread(target=get_results, args=[num_iterations])
