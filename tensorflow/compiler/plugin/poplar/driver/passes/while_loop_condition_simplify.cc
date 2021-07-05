@@ -91,7 +91,8 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
         const bool lhs_is_GTE_from_param =
             WhileLoopUtil::IsGTEFromParamIndex(inst->operand(0), 0);
         const bool rhs_is_integral_const =
-            WhileLoopUtil::Is32BitsOrLessIntegerConstant(inst->operand(1));
+            WhileLoopUtil::CanRepresentInstructionAsInt64Constant(
+                inst->operand(1));
         if (lhs_is_GTE_from_param && rhs_is_integral_const) {
           lt_instructions.insert(inst);
 
@@ -142,7 +143,7 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
   // integer 0
   for (auto it : while_condition_GTEs) {
     const HloInstruction* init_val = while_inst->operand(0)->operand(it.first);
-    if (!WhileLoopUtil::Is32BitsOrLessIntegerConstant(init_val)) {
+    if (!WhileLoopUtil::CanRepresentInstructionAsInt64Constant(init_val)) {
       return false;
     }
     TF_ASSIGN_OR_RETURN(int64 initial_value,
