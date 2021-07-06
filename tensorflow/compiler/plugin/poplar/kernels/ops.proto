@@ -113,6 +113,7 @@ enum PoplarOp {
   ConvWithReverse = 109;
   DynamicLstmLayerBwd = 110;
   DynamicLstmLayerFwd = 111;
+  AssumeEqualAcrossReplicas = 112;
   
   // Supported Fusions.
   Conv_biasadd = 200;
