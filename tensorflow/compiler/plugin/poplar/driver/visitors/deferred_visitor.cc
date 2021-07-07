@@ -357,7 +357,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
     const auto info =
         FindRemoteParameterInfo(inst->parameter_number(),
                                 resources_.annotations.remote_parameter_infos);
-    CHECK(info.has_value());
+    CHECK_NE(info, nullptr);
 
     TF_ASSIGN_OR_RETURN(
         auto output,

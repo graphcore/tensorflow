@@ -146,7 +146,7 @@ StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
 
-absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
+const RemoteParameterInfo* FindRemoteParameterInfo(
     int64 parameter_number, const RemoteParameterInfos& remote_parameter_infos);
 bool IsRemoteParameter(int64 parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos);

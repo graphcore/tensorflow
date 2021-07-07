@@ -425,20 +425,17 @@ void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                {debug_name_and_id, "ZeroVar"});
 }
 
-absl::optional<RemoteParameterInfo> FindRemoteParameterInfo(
+const RemoteParameterInfo* FindRemoteParameterInfo(
     int64 parameter_number,
     const RemoteParameterInfos& remote_parameter_infos) {
   auto itr = remote_parameter_infos.find(RemoteParameterInfo{parameter_number});
-  if (itr != remote_parameter_infos.end()) {
-    return *itr;
-  }
-  return absl::nullopt;
+  return itr != remote_parameter_infos.end() ? &*itr : nullptr;
 }
 
 bool IsRemoteParameter(int64 parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos) {
-  return FindRemoteParameterInfo(parameter_number, remote_parameter_infos)
-      .has_value();
+  return FindRemoteParameterInfo(parameter_number, remote_parameter_infos) !=
+         nullptr;
 }
 
 bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res) {
