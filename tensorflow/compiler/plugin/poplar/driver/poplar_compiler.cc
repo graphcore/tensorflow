@@ -845,7 +845,9 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
 StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
     CompilerResources& res) {
   std::vector<NamedIpuSchedulerAlgorithm> schedulers;
-  bool all = res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
+
+  const bool all =
+      res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.push_back(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
@@ -856,22 +858,25 @@ StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
          CreateClusteringMemoryScheduler(res.information)});
   }
-  if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
-         CreateLivenessLookAheadMemoryScheduler(res.information)});
-  }
-  if (res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
     schedulers.push_back(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
          CreateShortestPathScheduler(res.information)});
   }
 
-  if (!schedulers.size()) {
+  // Not enabled with CHOOSE_BEST because of its time complexity.
+  if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
+         CreateLivenessLookAheadMemoryScheduler(res.information)});
+  }
+
+  if (schedulers.empty()) {
     return xla::InvalidArgument(
         "Invalid scheduler specified. Options are 'LOOK_AHEAD',"
         " 'POST_ORDER', 'CLUSTERING' and 'SHORTEST_PATH'.");
   }
+
   return schedulers;
 }
 

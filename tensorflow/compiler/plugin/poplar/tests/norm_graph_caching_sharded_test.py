@@ -25,6 +25,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import SchedulingAlgorithm
 from tensorflow.python.layers import convolutional
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -42,6 +43,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 2
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
     with self.session() as sess:
