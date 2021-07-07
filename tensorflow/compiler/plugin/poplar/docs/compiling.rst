@@ -65,9 +65,17 @@ for a single IPU device (IPU version 2) and with remote buffers enabled, with
 the rest of the program unchanged.
 
 .. note::
-  It is important to check whether the system you are pre-compiling for
-  supports remote buffers as this is required for features such as optimizer state
-  offloading.
+  It is important to check whether your target system supports remote buffers as
+  this is required for features such as optimizer state offloading. To check,
+  run the command:
+
+  .. code-block:: console
+
+    $ gc-info -d 0 -I
+
+  If you see ``remote buffers supported: 1`` in the output, that means that remote
+  buffers are supported on your system. For more information, see the
+  `gc-info documentation <https://docs.graphcore.ai/projects/command-line-tools/en/latest/gc-info_main.html>`__.
 
 During the execution of the program, messages will appear with the information
 about what executables have been compiled and where they have been saved to.
