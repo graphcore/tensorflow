@@ -18,11 +18,13 @@ IPU specific Keras Model extensions
 """
 import copy
 
-from tensorflow.python.ipu.keras.extensions import data_adapter as ipu_data_adapter
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.keras.extensions import data_adapter as ipu_data_adapter
+from tensorflow.python.ipu.keras import optimizers as ipu_optimizers
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as callbacks_module
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import training as training_module
@@ -33,27 +35,54 @@ from tensorflow.python.keras.utils import version_utils
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.profiler import trace
+from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
 from tensorflow.python.util.compat import collections_abc
 
+logged_steps_per_execution_warning = False
+
 
 class ModelExtension(base_layer.KerasExtension):
+  @trackable.no_automatic_dependency_tracking
   def __init__(self):
+    # Following values need to be serializable.
+    self._gradient_accumulation_steps = None
+    self._gradient_accumulation_optimizer_kwargs = dict()
+    self._experimental_gradient_accumulation_normalize_gradients = None
+
+    # Following values are runtime only.
     self._ipu_train_function = None
     self._ipu_test_function = None
     self._ipu_predict_function = None
     self._replication_factor = None
     self._use_synthetic_data = utils.use_synthetic_data_for(
         utils.SyntheticDataCategory.Outfeed)
+    self._compiled_gradient_accumulation_steps = None
+
+  def _log_steps_per_execution_warning(self, steps_per_execution,
+                                       steps_per_execution_per_replica):
+    global logged_steps_per_execution_warning
+    if steps_per_execution_per_replica == 1:
+      replica_message = ""
+      if steps_per_execution != steps_per_execution_per_replica:
+        replica_message = " ({} steps per execution per replica)".format(
+            steps_per_execution_per_replica)
+      logging.info("The model `{}` has been configured with only {} steps per "
+                   "execution{}. Consider increasing the value for the "
+                   "`steps_per_execution` argument passed to the `compile()` "
+                   "method to improve performance.".format(
+                       self.name, steps_per_execution, replica_message))
+      logged_steps_per_execution_warning = True
 
   def _get_shard_count(self):
     """Returns how many shards/IPUs the model is parallelized over."""
     raise NotImplementedError
 
-  def _is_pipeline(self):
+  def _is_pipelined(self):
     """Returns whether the model is pipelined."""
-    raise self._get_shard_count() > 1
+    return self._get_shard_count() > 1
 
   def _check_mode(self):
     if self.run_eagerly:
@@ -109,13 +138,54 @@ class ModelExtension(base_layer.KerasExtension):
 
     return data_steps_per_execution_value // replication_factor
 
-  def _reset_ipu_options(self):
+  def _gradient_accumulation_steps_per_replica(
+      self, inferred_steps, original_steps_per_execution_value,
+      data_steps_per_execution_value):
+    if self._gradient_accumulation_steps is None:
+      return 1
+
+    if data_steps_per_execution_value % self._gradient_accumulation_steps != 0:
+      if data_steps_per_execution_value != original_steps_per_execution_value:
+        truncation_message = \
+            " - truncated from {} due to {} steps per epoch".format(
+                original_steps_per_execution_value, inferred_steps)
+      else:
+        truncation_message = ""
+      raise RuntimeError(
+          "The model has been configured to use gradient accumulation for "
+          "training, however the current `steps_per_execution` value (set to "
+          "{}{}) is not divisible by `gradient_accumulation_steps` (set to "
+          "{}). You need to adjust either `steps_per_execution` or"
+          "`gradient_accumulation_steps` to make sure that "
+          "`steps_per_execution` is divisible by "
+          "`gradient_accumulation_steps`.".format(
+              data_steps_per_execution_value, truncation_message,
+              self._gradient_accumulation_steps))
+
+    replication_factor = self._get_replication_factor()
+
+    if self._gradient_accumulation_steps % replication_factor != 0:
+      raise RuntimeError(
+          "Currently `gradient_accumulation_steps` is set to {} and the "
+          "current IPU system configuration and model configuration means that "
+          "your Keras model will automatically execute in a data-parallel "
+          "fashion across {} replicas. However the number of replicas needs to "
+          "divide `gradient_accumulation_steps`. Either make sure that "
+          "`gradient_accumulation_steps` is a multiple of {} or adjust your "
+          "IPU system configuration to reduce the number of IPUs used for "
+          "this IPUStrategy.".format(self._gradient_accumulation_steps,
+                                     replication_factor, replication_factor))
+
+    return self._gradient_accumulation_steps // replication_factor
+
+  def _reset_ipu_extension(self):
     """Function which resets any internal state of the extension when
     configuration changes."""
-    self._ipu_train_function = None
-    self._ipu_test_function = None
-    self._ipu_predict_function = None
-    self._replication_factor = None
+    with trackable.no_automatic_dependency_tracking_scope(self):
+      self._ipu_train_function = None
+      self._ipu_test_function = None
+      self._ipu_predict_function = None
+      self._replication_factor = None
 
   def _assert_weights_created_supported(self):
     return True
@@ -131,8 +201,26 @@ class ModelExtension(base_layer.KerasExtension):
     return True
 
   def _reset_compile_cache_delegate(self):
-    self._reset_ipu_options()
+    self._reset_ipu_extension()
     return self._reset_compile_cache(__extension_delegate=False)
+
+  def _list_functions_for_serialization_supported(self, _):
+    return True
+
+  def _list_functions_for_serialization_delegate(self, serialization_cache):
+    # SavedModel needs to ignore the execution functions.
+    ipu_train_function = self._ipu_train_function
+    ipu_test_function = self._ipu_test_function
+    ipu_predict_function = self._ipu_predict_function
+    self._ipu_train_function = None
+    self._ipu_test_function = None
+    self._ipu_predict_function = None
+    functions = self._list_functions_for_serialization(
+        serialization_cache, __extension_delegate=False)
+    self._ipu_train_function = ipu_train_function
+    self._ipu_test_function = ipu_test_function
+    self._ipu_predict_function = ipu_predict_function
+    return functions
 
   def _get_output_iterator(self, outfeed_queue, replication_factor,
                            num_steps_per_replica):
@@ -156,6 +244,49 @@ class ModelExtension(base_layer.KerasExtension):
 
     return train_function
 
+  def _make_single_ipu_train_function_with_gradient_accumulation(
+      self, gradient_accumulation_steps):
+    optimizer = ipu_optimizers._KerasOptimizerWrapper(self, self.optimizer)  # pylint: disable=protected-access
+    optimizer = \
+      gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
+          optimizer,
+          gradient_accumulation_steps,
+          **self._gradient_accumulation_optimizer_kwargs)
+
+    def train_step(data):
+      # Implementation of `Model.train_step` with gradient accumulation support.
+      data = data_adapter.expand_1d(data)
+      x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+      y_pred = self(x, training=True)  # pylint: disable=not-callable
+      loss = self.compiled_loss(y,
+                                y_pred,
+                                sample_weight,
+                                regularization_losses=self.losses)
+      self.compiled_metrics.update_state(y, y_pred, sample_weight)
+      grads_and_vars = optimizer.compute_gradients(loss,
+                                                   self.trainable_variables)
+
+      # Scale the gradients as necessary.
+      if self._experimental_gradient_accumulation_normalize_gradients:
+        normalised_grads_and_vars = []
+        for grad, var in grads_and_vars:
+          if grad is not None:
+            grad = grad * array_ops.constant(
+                1.0 / self._gradient_accumulation_steps, dtype=grad.dtype)
+          normalised_grads_and_vars.append((grad, var))
+      else:
+        normalised_grads_and_vars = grads_and_vars
+
+      optimizer.apply_gradients(normalised_grads_and_vars)
+      return {m.name: m.result() for m in self.metrics}
+
+    @def_function.function(experimental_compile=True)
+    def train_function(steps_per_execution, iterator, outfeed):
+      for _ in math_ops.range(steps_per_execution):
+        outfeed.enqueue(train_step(next(iterator)))
+
+    return train_function
+
   def _make_single_ipu_test_function(self):
     @def_function.function(experimental_compile=True)
     def test_function(steps_per_execution, iterator, outfeed):
@@ -172,15 +303,31 @@ class ModelExtension(base_layer.KerasExtension):
 
     return predict_function
 
-  def _make_ipu_train_function(self):
-    if self._ipu_train_function is None:
-      if self._is_pipelined():
-        raise NotImplementedError
-      else:
-        self._ipu_train_function = self._make_single_ipu_train_function()
+  def _make_ipu_train_function_wrapper(self):
+    def wrapper(gradient_accumulation_steps):
+      with trackable.no_automatic_dependency_tracking_scope(self):
+        # Wrapper which re-creates the function when gradient accumulation
+        # changes.
+        if (self._ipu_train_function is None
+            or self._compiled_gradient_accumulation_steps !=
+            gradient_accumulation_steps):
+          if self._is_pipelined():
+            raise NotImplementedError
+          else:
+            if gradient_accumulation_steps > 1:
+              self._ipu_train_function = \
+                self._make_single_ipu_train_function_with_gradient_accumulation(
+                    gradient_accumulation_steps)
+            else:
+              self._ipu_train_function = self._make_single_ipu_train_function()
+          self._compiled_gradient_accumulation_steps = \
+            gradient_accumulation_steps
 
-    return self._ipu_train_function
+      return self._ipu_train_function
 
+    return wrapper
+
+  @trackable.no_automatic_dependency_tracking
   def _make_ipu_test_function(self):
     if self._ipu_test_function is None:
       if self._is_pipelined():
@@ -190,6 +337,7 @@ class ModelExtension(base_layer.KerasExtension):
 
     return self._ipu_test_function
 
+  @trackable.no_automatic_dependency_tracking
   def _make_ipu_predict_function(self):
     if self._ipu_predict_function is None:
       if self._is_pipelined():
@@ -198,6 +346,75 @@ class ModelExtension(base_layer.KerasExtension):
         self._ipu_predict_function = self._make_single_ipu_predict_function()
 
     return self._ipu_predict_function
+
+  def _set_gradient_accumulation_options_impl(
+      self, gradient_accumulation_steps,
+      gradient_accumulation_optimizer_kwargs,
+      experimental_normalize_gradients):
+    # The extension might need to be reset if any of the values are set.
+    reset_extension = False
+
+    if gradient_accumulation_steps is not None:
+      if not isinstance(gradient_accumulation_steps,
+                        int) or gradient_accumulation_steps < 1:
+        raise TypeError(
+            "Expected `gradient_accumulation_steps` to be a positive integer, "
+            "but got {gradient_accumulation_steps} instead.")
+      self._gradient_accumulation_steps = gradient_accumulation_steps
+      reset_extension = True
+
+    if gradient_accumulation_optimizer_kwargs is not None:
+      if not isinstance(gradient_accumulation_optimizer_kwargs,
+                        (dict, collections_abc.Mapping)):
+        raise TypeError(
+            "`gradient_accumulation_optimizer_kwargs` must be a dictionary.")
+
+      if "opt" in gradient_accumulation_optimizer_kwargs:
+        raise ValueError("Found `opt` key in "
+                         "`gradient_accumulation_optimizer_kwargs`. This is "
+                         "not supported as the optimizer which the model has "
+                         "been compiled with is automatically wrapped.")
+
+      if "num_mini_batches" in gradient_accumulation_optimizer_kwargs:
+        raise ValueError("Found `num_mini_batches` key in "
+                         "`gradient_accumulation_optimizer_kwargs`. Set the "
+                         "`gradient_accumulation_steps` argument to "
+                         "`set_gradient_accumulation_options` instead.")
+
+      self._gradient_accumulation_optimizer_kwargs = \
+        gradient_accumulation_optimizer_kwargs
+      reset_extension = True
+
+    if experimental_normalize_gradients:
+      self._experimental_gradient_accumulation_normalize_gradients = \
+        experimental_normalize_gradients
+      reset_extension = True
+
+    if reset_extension:
+      self._reset_ipu_extension()
+
+  def _get_base_config(self):
+    """Returns any configuration required to serialize this base class."""
+    config = dict()
+
+    config["gradient_accumulation_steps"] = self._gradient_accumulation_steps
+    config["experimental_gradient_accumulation_normalize_gradients"] = \
+      self._experimental_gradient_accumulation_normalize_gradients
+
+    if self._gradient_accumulation_optimizer_kwargs:
+      logging.info(
+          "Calling get_config() on {} - "
+          "`gradient_accumulation_optimizer_kwargs` cannot be serialized and "
+          "you will need to call `set_gradient_accumulation_options` again if "
+          "the model is restored.".format(self.name))
+
+    return config
+
+  def _from_base_config(self, config):
+    self._gradient_accumulation_steps = config.get(
+        "gradient_accumulation_steps", None)
+    self._experimental_gradient_accumulation_normalize_gradients = config.get(
+        "experimental_gradient_accumulation_normalize_gradients", None)
 
   def _fit_supported(self, *args, **kwargs):  # pylint:disable=unused-argument
     return True
@@ -276,7 +493,7 @@ class ModelExtension(base_layer.KerasExtension):
       self.stop_training = False
       self._train_counter.assign(0)
       callbacks.on_train_begin()
-      train_function = self._make_ipu_train_function()
+      train_function_wrapper = self._make_ipu_train_function_wrapper()
       training_logs = None
 
       data_handler._initial_epoch = (  # pylint: disable=protected-access
@@ -293,6 +510,16 @@ class ModelExtension(base_layer.KerasExtension):
           self._get_steps_per_execution_per_replica(
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
+        gradient_accumulation_steps_per_replica = \
+          self._gradient_accumulation_steps_per_replica(
+              inferred_steps, original_steps_per_execution_value,
+              steps_per_execution_value)
+
+        train_function = train_function_wrapper(
+            gradient_accumulation_steps_per_replica)
+
+        self._log_steps_per_execution_warning(steps_per_execution_value,
+                                              steps_per_execution_per_replica)
 
         self.reset_metrics()
         callbacks.on_epoch_begin(epoch)
@@ -322,7 +549,7 @@ class ModelExtension(base_layer.KerasExtension):
                 callbacks.on_train_batch_end(current_step, logs)
                 current_step += 1
 
-              if current_step == end_step:
+              if current_step == (end_step + 1):
                 break
 
           if self.stop_training:
@@ -451,6 +678,9 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 
+        self._log_steps_per_execution_warning(inferred_steps,
+                                              steps_per_execution_per_replica)
+
         self.reset_metrics()
 
         for step in data_handler.steps():
@@ -472,7 +702,7 @@ class ModelExtension(base_layer.KerasExtension):
                 callbacks.on_test_batch_end(current_step, logs)
                 current_step += 1
 
-              if current_step == end_step:
+              if current_step == (end_step + 1):
                 break
 
       logs = tf_utils.to_numpy_or_python_type(logs)
@@ -554,6 +784,9 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 
+        self._log_steps_per_execution_warning(inferred_steps,
+                                              steps_per_execution_per_replica)
+
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           self.distribute_strategy.run(predict_function,
@@ -583,7 +816,7 @@ class ModelExtension(base_layer.KerasExtension):
                                              {'outputs': batch_outputs})
               current_step += 1
 
-            if current_step == end_step:
+            if current_step == (end_step + 1):
               break
 
       if batch_outputs is None:

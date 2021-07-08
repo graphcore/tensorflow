@@ -2606,6 +2606,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
   def _trackable_saved_model_saver(self):
     return model_serialization.ModelSavedModelSaver(self)
 
+  @base_layer.extension_delegate
   def _list_functions_for_serialization(self, serialization_cache):
     # SavedModel needs to ignore the execution functions.
     train_function = self.train_function

@@ -1876,6 +1876,25 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "keras_gradient_accumulation_test",
+    size = "large",
+    srcs = ["tests/keras/keras_gradient_accumulation_test.py"],
+    shard_count = 2,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1915,6 +1934,7 @@ test_suite(
         "keras_embedding_lookup_test",
         "keras_execution_parameters_test",
         "keras_functional_model_test",
+        "keras_gradient_accumulation_test",
         "keras_model_replication_mnist_test",
         "keras_model_replication_test",
         "keras_models_comparison_test",

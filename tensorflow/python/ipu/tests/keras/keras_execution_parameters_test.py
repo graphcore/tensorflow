@@ -13,8 +13,9 @@
 # limitations under the License.
 # =============================================================================
 import numpy as np
-from tensorflow.python.ipu.config import IPUConfig
+from absl.testing import parameterized
 
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
@@ -35,14 +36,24 @@ def test_dataset(length=None, batch_size=1, x_val=1.0, y_val=0.2):
   return ds
 
 
-def simple_model():
-  return [
+def simple_sequential_model():
+  return keras.Sequential([
+      keras.layers.Flatten(),
       keras.layers.Dense(4),
       keras.layers.Dense(8),
-  ]
+  ])
 
 
-class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
+def simple_functional_model():
+  d = keras.layers.Input(32)
+  x = keras.layers.Flatten()(d)
+  x = keras.layers.Dense(4)(x)
+  x = keras.layers.Dense(8)(x)
+  return keras.Model(d, x)
+
+
+class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
+                                        parameterized.TestCase):
   @tu.test_uses_ipus(num_ipus=8)
   @test_util.run_v2_only
   def testMismatchStepsPerExecutionAndReplicationFactor(self):
@@ -53,7 +64,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = keras.Sequential(simple_model())
+      m = simple_sequential_model()
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -74,7 +85,7 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
 
     strategy = ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = keras.Sequential(simple_model())
+      m = simple_sequential_model()
       m.compile('sgd', loss='mse', steps_per_execution=8)
 
       with self.assertRaisesRegex(
@@ -82,6 +93,63 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase):
           r"Currently `steps_per_execution` is set to 7 \(truncated from 8 due "
           r"to 7 steps per epoch\) and the current IPU."):
         m.fit(test_dataset(length=7))
+
+  @parameterized.parameters([simple_sequential_model, simple_functional_model])
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.run_v2_only
+  def testGradientAccumulation(self, model_fn):
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 1
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      m = model_fn()
+      m.compile('sgd', loss='mse', steps_per_execution=8)
+
+      with self.assertRaisesRegex(
+          RuntimeError,
+          r"The model has been configured to use gradient accumulation for "
+          r"training, however the current `steps_per_execution` value \(set to "
+          r"8\) is not divisible by `gradient_accumulation_steps` \(set to "
+          r"3\)"):
+        m.set_gradient_accumulation_options(gradient_accumulation_steps=3)
+        m.fit(test_dataset(length=8))
+
+      with self.assertRaisesRegex(
+          RuntimeError,
+          r"The model has been configured to use gradient accumulation for "
+          r"training, however the current `steps_per_execution` value \(set to "
+          r"7 - truncated from 8 due to 7 steps per epoch\) is not divisible "
+          r"by `gradient_accumulation_steps` \(set to 3\)"):
+        m.set_gradient_accumulation_options(gradient_accumulation_steps=3)
+        m.fit(test_dataset(length=7))
+
+  @parameterized.parameters([simple_sequential_model, simple_functional_model])
+  @tu.test_uses_ipus(num_ipus=8)
+  @test_util.run_v2_only
+  def testGradientAccumulationReplicated(self, model_fn):
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 8
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      m = model_fn()
+      m.compile('sgd', loss='mse', steps_per_execution=64)
+
+      with self.assertRaisesRegex(
+          RuntimeError,
+          "Currently `gradient_accumulation_steps` is set to 4 and the "
+          "current IPU system configuration and model configuration means "
+          "that your Keras model will automatically execute in a "
+          "data-parallel fashion across 8 replicas. However the number of "
+          "replicas needs to divide `gradient_accumulation_steps`. Either "
+          "make sure that `gradient_accumulation_steps` is a multiple of 8"):
+        m.set_gradient_accumulation_options(gradient_accumulation_steps=4)
+        m.fit(test_dataset(length=64))
 
 
 if __name__ == "__main__":
