@@ -14,9 +14,9 @@ limitations under the License.
 ==============================================================================*/
 #include <google/protobuf/util/message_differencer.h>
 
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/conv_with_reverse.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -31,45 +31,7 @@ MATCHER_P(EqualsProto, expected, "") {
   return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
 }
 
-struct HloTestCase {
-  std::string name;
-  std::string hlo;
-};
-
-std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
-  stream << test_case.name;
-  return stream;
-}
-
-struct EarlyFuseTest : HloTestBase, ::testing::WithParamInterface<HloTestCase> {
-  void SetUp() override { ASSERT_TRUE(SetUpHloModule(GetParam())); }
-
-  ::testing::AssertionResult SetUpHloModule(const HloTestCase& test_case) {
-    const auto& hlo = test_case.hlo;
-    auto module = ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest());
-    if (module.ok()) {
-      hlo_module_owner_ = std::move(module.ValueOrDie());
-      hlo_module_ = hlo_module_owner_.get();
-
-      annotations_ = absl::make_unique<CompilerAnnotations>(hlo_module_);
-
-      return ::testing::AssertionSuccess();
-    }
-
-    return ::testing::AssertionFailure()
-           << "Parsing hlo failed: " << module.status().error_message();
-  }
-
-  HloInstruction* FindRootInstruction() {
-    auto* entry_comp = hlo_module_->entry_computation();
-    return entry_comp->root_instruction();
-  }
-
-  VerifiedHloModule* hlo_module_ = nullptr;
-  std::unique_ptr<CompilerAnnotations> annotations_;
-
-  std::unique_ptr<VerifiedHloModule> hlo_module_owner_;
-};
+using EarlyFuseTest = ParameterizedHloTestFixture;
 
 // Fixture for tests that apply to both convolution with reverse and sliced
 // convolution with reverse instructions
@@ -280,19 +242,13 @@ TEST_P(NonFusableSliceConvWithReverseEarlyFuseTest, SliceDoesntGetFused) {
   ASSERT_TRUE(conv_with_reverse);
 }
 
-template <class Fixture>
-std::string TestName(
-    const ::testing::TestParamInfo<typename Fixture::ParamType>& info) {
-  return info.param.name;
-}
-
 std::vector<HloTestCase> ConvolutionWithReverseTestCases() {
   return {convolution_with_reverse_nhwc_format_test_case,
           convolution_with_reverse_nchw_format_test_case};
 }
 INSTANTIATE_TEST_SUITE_P(EarlyFuseHLO, ConvWithReverseEarlyFuseTest,
                          ::testing::ValuesIn(ConvolutionWithReverseTestCases()),
-                         TestName<ConvWithReverseEarlyFuseTest>);
+                         HloTestCaseName);
 
 std::vector<HloTestCase> SlicedConvolutionWithReverseTestCases() {
   return {sliced_convolution_with_reverse_nhwc_format_test_case,
@@ -301,7 +257,7 @@ std::vector<HloTestCase> SlicedConvolutionWithReverseTestCases() {
 INSTANTIATE_TEST_SUITE_P(
     EarlyFuseHLO, SlicedConvWithReverseEarlyFuseTest,
     ::testing::ValuesIn(SlicedConvolutionWithReverseTestCases()),
-    TestName<SlicedConvWithReverseEarlyFuseTest>);
+    HloTestCaseName);
 
 std::vector<HloTestCase> GeneralConvolutionWithReverseTestCases() {
   const auto slice_test_cases = SlicedConvolutionWithReverseTestCases();
@@ -314,13 +270,13 @@ std::vector<HloTestCase> GeneralConvolutionWithReverseTestCases() {
 INSTANTIATE_TEST_SUITE_P(
     EarlyFuseHLO, GeneralConvWithReverseEarlyFuseTest,
     ::testing::ValuesIn(GeneralConvolutionWithReverseTestCases()),
-    TestName<GeneralConvWithReverseEarlyFuseTest>);
+    HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(
     EarlyFuseHLO, NonFusableSliceConvWithReverseEarlyFuseTest,
     ::testing::Values(non2d_sliced_convolution_test_case,
                       sliced_convolution_exceeding_padding_test_case),
-    TestName<NonFusableSliceConvWithReverseEarlyFuseTest>);
+    HloTestCaseName);
 
 }  // namespace
 }  // namespace poplarplugin

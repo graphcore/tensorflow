@@ -16,8 +16,16 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_TESTS_TEST_UTILS_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_TESTS_TEST_UTILS_H
 
+#include <gtest/gtest.h>
+
+#include <string>
+#include <utility>
+
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+
 #include "tensorflow/compiler/xla/array3d.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -26,6 +34,67 @@ namespace poplarplugin {
 #else
 #define POPLAR_TEST_P(X, Y)
 #endif
+
+// Common types/utilities for writing HLO based tests
+struct HloTestFixture : HloTestBase {
+  ::testing::AssertionResult SetUpHloModule(const std::string& hlo,
+                                            int64 replica_count = 1) {
+    auto config = GetModuleConfigForTest();
+    config.set_replica_count(replica_count);
+    auto module = ParseAndReturnVerifiedModule(hlo, config);
+    if (module.ok()) {
+      hlo_module_owner_ = std::move(module.ValueOrDie());
+      hlo_module_ = hlo_module_owner_.get();
+
+      annotations_ = absl::make_unique<CompilerAnnotations>(hlo_module_);
+
+      return ::testing::AssertionSuccess();
+    }
+
+    return ::testing::AssertionFailure()
+           << "Parsing hlo failed: " << module.status().error_message();
+  }
+
+  HloInstruction* FindRootInstruction() {
+    auto* entry_comp = hlo_module_->entry_computation();
+    return entry_comp->root_instruction();
+  }
+
+  VerifiedHloModule* hlo_module_ = nullptr;
+  std::unique_ptr<CompilerAnnotations> annotations_;
+
+  std::unique_ptr<VerifiedHloModule> hlo_module_owner_;
+};
+
+struct HloTestCase {
+  HloTestCase(const std::string& name, const std::string& hlo)
+      : name(name), hlo(hlo), replica_count(1) {}
+  HloTestCase(const std::string& name, const std::string& hlo,
+              int64 replica_count)
+      : name(name), hlo(hlo), replica_count(replica_count) {}
+  std::string name;
+  std::string hlo;
+  int64 replica_count;
+};
+
+std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
+  stream << test_case.name;
+  return stream;
+}
+
+struct ParameterizedHloTestFixture
+    : HloTestFixture,
+      ::testing::WithParamInterface<HloTestCase> {
+  void SetUp() override {
+    ASSERT_TRUE(SetUpHloModule(GetParam().hlo, GetParam().replica_count));
+  }
+};
+
+// Utility for setting the name of parameterized tests from the
+// HloTestCase.
+std::string HloTestCaseName(const ::testing::TestParamInfo<HloTestCase>& info) {
+  return info.param.name;
+}
 
 bool HasOperand(const HloInstruction* parent, const HloInstruction* arg) {
   for (const auto* inst : parent->operands()) {
