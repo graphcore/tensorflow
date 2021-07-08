@@ -123,6 +123,7 @@ py_library(
         "keras/extensions/sequential_extensions.py",
         "keras/layer_replacement.py",
         "keras/layers/__init__.py",
+        "keras/layers/assume_equal_across_replicas.py",
         "keras/layers/ctc.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
@@ -1918,6 +1919,7 @@ tf_py_test(
 test_suite(
     name = "all_tests",
     tests = [
+        "assume_equal_test",
         "candidate_sampler_test",
         "config_test",
         "dataset_benchmark_test",

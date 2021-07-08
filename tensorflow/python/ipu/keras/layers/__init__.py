@@ -17,6 +17,7 @@ Keras layer specializations for the Graphcore IPU
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.ipu.keras.layers.assume_equal_across_replicas import AssumeEqualAcrossReplicas
 from tensorflow.python.ipu.keras.layers.ctc import CTCInferenceLayer
 from tensorflow.python.ipu.keras.layers.ctc import CTCPredictionsLayer
 from tensorflow.python.ipu.keras.layers.dropout import Dropout
