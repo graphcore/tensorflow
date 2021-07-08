@@ -463,7 +463,8 @@ class ReportJSON(object):
                triangular_solve_expander_block_size=0,
                minimum_remote_tensor_size=128,
                use_hw=False,
-               num_io_tiles=0):
+               num_io_tiles=0,
+               scheduling_algorithm=None):
     self.report = None
     self.test = test
     self.sess = sess
@@ -515,6 +516,9 @@ class ReportJSON(object):
         opts.io_tiles.place_ops_on_io_tiles = True
 
       opts.norms.use_stable_statistics = use_stable_norm_statistics
+
+      if scheduling_algorithm is not None:
+        opts.scheduling.algorithm = scheduling_algorithm
 
       if use_hw:
         add_hw_ci_connection_options(opts)

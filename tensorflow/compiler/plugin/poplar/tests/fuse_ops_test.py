@@ -26,7 +26,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import dtypes
-from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.config import IPUConfig, SchedulingAlgorithm
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
@@ -455,6 +455,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
     with self.session() as sess:

@@ -34,6 +34,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
     cfg.ipu_model.compile_ipu_code = False
     cfg.auto_select_ipus = 2
     cfg.allow_recompute = True
+    cfg.scheduling.algorithm = ipu.config.SchedulingAlgorithm.POST_ORDER
     cfg.configure_ipu_system()
 
     IM_SIZE = [64, 64, 3]
