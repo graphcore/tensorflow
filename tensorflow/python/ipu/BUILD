@@ -1519,14 +1519,14 @@ tf_py_test(
     name = "assume_equal_test",
     size = "large",
     srcs = ["tests/assume_equal_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+    tags = ["hw_poplar_test"],
+    deps = [
         "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
-    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
