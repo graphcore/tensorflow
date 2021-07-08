@@ -378,6 +378,7 @@ cc_library(
         "driver/tools/offloading_util.cc",
         "driver/tools/pipeline_util.cc",
         "driver/tools/poplar_replica_groups.cc",
+        "driver/tools/replica_identical_dataflow_analysis.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
@@ -579,6 +580,7 @@ cc_library(
         "driver/tools/offloading_util.h",
         "driver/tools/pipeline_util.h",
         "driver/tools/poplar_replica_groups.h",
+        "driver/tools/replica_identical_dataflow_analysis.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/tensor_location.h",
         "driver/tools/tracepoint.h",
@@ -1544,6 +1546,22 @@ cc_library(
     ],
     deps = [
         "//tensorflow/compiler/xla:array3d",
+    ],
+)
+
+xla_test(
+    name = "replica_identical_dataflow_analysis_test",
+    srcs = ["tests/replica_identical_dataflow_analysis_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 
@@ -4033,6 +4051,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
@@ -5441,6 +5460,7 @@ test_suite(
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
         "repeat_loop_copy_inserter_test",
+        "replica_identical_dataflow_analysis_test",
         "replicated_resource_update_elementwise_clustering_hw_test",
         "replicated_resource_update_elementwise_clustering_test",
         "resource_update_checker_test",

@@ -27,6 +27,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -125,6 +126,9 @@ void CopyShardingIfPresent(HloInstruction* const from,
 
 // Count the number of leaf shapes in a shape tuple
 int64 CountShapes(const Shape& shape);
+
+// Create a ShapeIndex for querying the root element of a ShapeTree.
+ShapeIndex RootShapeIndex();
 
 // Find the index when embedding a shape into a tuple. The tuple_index is the
 // index of the shape in the new tuple, and the original_index is the index
