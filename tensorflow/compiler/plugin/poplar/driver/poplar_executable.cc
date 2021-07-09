@@ -41,16 +41,8 @@ PoplarExecutableCore::PoplarExecutableCore(
     std::vector<std::vector<Literal>> constant_literal_output,
     bool is_remap_graph, bool is_scalar_elementwise_graph,
     bool loaded_from_cache, std::vector<uint64> remaped_output,
-    uint32 replication_factor, const CanonicalInfeedInfos& infeed_infos,
-    const CanonicalOutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
-    StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
-    SendRecvInfos&& recv_infos,
-    HostEmbeddingInfos&& host_embedding_lookup_infos,
-    HostEmbeddingInfos&& host_embedding_update_infos,
-    HostEmbeddingInfos&& host_embedding_notify_infos,
-    RemoteParameterInfos&& remote_parameter_infos, bool logging_cycle_count,
-    const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
-    const std::vector<string>& checkpoint_feeds_order)
+    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
+    PoplarExecutableInfo&& info)
     : poplar_engine_(std::move(engine)),
       input_output_aliasing_map_(std::move(input_output_aliasing_map)),
       constant_literal_output_(std::move(constant_literal_output)),
@@ -59,20 +51,9 @@ PoplarExecutableCore::PoplarExecutableCore(
       is_scalar_elementwise_graph_(is_scalar_elementwise_graph),
       loaded_from_cache_(loaded_from_cache),
       remaped_output_(std::move(remaped_output)),
-      replication_factor_(replication_factor),
-      infeed_infos_(std::move(infeed_infos)),
-      outfeed_infos_(std::move(outfeed_infos)),
       stream_infos_(std::move(stream_infos)),
       stream_meta_infos_(std::move(stream_meta_info)),
-      send_infos_(std::move(send_infos)),
-      recv_infos_(std::move(recv_infos)),
-      host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
-      host_embedding_update_infos_(std::move(host_embedding_update_infos)),
-      host_embedding_notify_infos_(std::move(host_embedding_notify_infos)),
-      remote_parameter_infos_(std::move(remote_parameter_infos)),
-      logging_cycle_count_(logging_cycle_count),
-      key_id_mappings_(key_id_mappings),
-      checkpoint_feeds_order_(checkpoint_feeds_order) {
+      info_(std::move(info)) {
   TENSORFLOW_TRACEPOINT();
 }
 
@@ -86,6 +67,211 @@ PoplarExecutableCore::~PoplarExecutableCore() {
     }
   }
 }
+
+namespace {
+
+PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
+                               poplar::OptionFlags* engine_options) {
+  PoplarExecutableInfo info;
+
+  info.replication_factor = proto.replication_factor();
+
+  for (const auto& infeed : proto.infeeds()) {
+    info.infeed_infos.emplace(infeed.config(), Shape(infeed.shape()));
+  }
+
+  for (const auto& outfeed : proto.outfeeds()) {
+    info.outfeed_infos.emplace(outfeed.config(), Shape(outfeed.shape()));
+  }
+
+  for (const auto& send : proto.sends()) {
+    info.send_infos.emplace_back(send.stream_handle(), send.rendezvous_key(),
+                                 Shape(send.shape()));
+  }
+
+  for (const auto& recv : proto.recvs()) {
+    info.recv_infos.emplace_back(recv.stream_handle(), recv.rendezvous_key(),
+                                 Shape(recv.shape()));
+  }
+
+  for (const auto& lookup : proto.lookups()) {
+    info.host_embedding_lookup_infos.emplace_back(
+        lookup.stream_handle(), lookup.embedding_id(),
+        Shape(lookup.indices_shape()), Shape(lookup.activations_shape()));
+  }
+
+  for (const auto& update : proto.updates()) {
+    info.host_embedding_update_infos.emplace_back(
+        update.stream_handle(), update.embedding_id(),
+        Shape(update.indices_shape()), Shape(update.activations_shape()));
+  }
+
+  for (const auto& notification : proto.notifications()) {
+    info.host_embedding_notify_infos.emplace_back(
+        notification.stream_handle(), notification.embedding_id(),
+        Shape(notification.indices_shape()),
+        Shape(notification.activations_shape()));
+  }
+
+  for (const auto& remote_parameter : proto.remote_parameters()) {
+    info.remote_parameter_infos.emplace(RemoteParameterInfo{
+        remote_parameter.parameter_number(),
+        remote_parameter.is_replica_partitioned(),
+        remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
+        remote_parameter.num_merged()});
+  }
+
+  info.logging_cycle_count = proto.logging_cycle_count();
+
+  for (const auto& mapping : proto.key_id_mappings()) {
+    info.key_id_mappings.emplace(
+        mapping.handle(),
+        VerifiedStreamsIndices::KeyIdPair(mapping.key(), mapping.start_id()));
+  }
+
+  std::vector<std::string> checkpoint_feeds_order;
+  for (auto feed : proto.checkpoint_feeds_order()) {
+    info.checkpoint_feeds_order.push_back(feed);
+  }
+
+  // Load the additional Poplar engine options that we need to restore.
+  CHECK_NOTNULL(engine_options);
+  for (const auto& flag : proto.option_flags()) {
+    engine_options->set(flag.option(), flag.value());
+  }
+
+  return info;
+}
+
+PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
+                              const poplar::OptionFlags& poplar_options = {}) {
+  PoplarExecutableProto proto;
+
+  proto.set_replication_factor(info.replication_factor);
+
+  for (const auto& infeed : info.infeed_infos) {
+    auto* feed = proto.add_infeeds();
+    *(feed->mutable_config()) = infeed.config;
+    *(feed->mutable_shape()) = infeed.shape.ToProto();
+  }
+
+  for (const auto& outfeed : info.outfeed_infos) {
+    auto* feed = proto.add_outfeeds();
+    *(feed->mutable_config()) = outfeed.config;
+    *(feed->mutable_shape()) = outfeed.shape.ToProto();
+  }
+
+  for (const auto& send : info.send_infos) {
+    auto* send_proto = proto.add_sends();
+    send_proto->set_stream_handle(send.stream_handle);
+    send_proto->set_rendezvous_key(send.rendezvous_key);
+    *(send_proto->mutable_shape()) = send.shape.ToProto();
+  }
+
+  for (const auto& recv : info.recv_infos) {
+    auto* recv_proto = proto.add_recvs();
+    recv_proto->set_stream_handle(recv.stream_handle);
+    recv_proto->set_rendezvous_key(recv.rendezvous_key);
+    *(recv_proto->mutable_shape()) = recv.shape.ToProto();
+  }
+
+  for (const auto& lookup : info.host_embedding_lookup_infos) {
+    auto* lookup_proto = proto.add_lookups();
+    lookup_proto->set_stream_handle(lookup.stream_handle);
+    lookup_proto->set_embedding_id(lookup.embedding_id);
+    *lookup_proto->mutable_indices_shape() = lookup.indices_shape.ToProto();
+    *lookup_proto->mutable_activations_shape() =
+        lookup.activations_shape.ToProto();
+  }
+
+  for (const auto& update : info.host_embedding_update_infos) {
+    auto* update_proto = proto.add_updates();
+    update_proto->set_stream_handle(update.stream_handle);
+    update_proto->set_embedding_id(update.embedding_id);
+    *update_proto->mutable_indices_shape() = update.indices_shape.ToProto();
+    *update_proto->mutable_activations_shape() =
+        update.activations_shape.ToProto();
+  }
+
+  for (const auto& notification : info.host_embedding_notify_infos) {
+    auto* update_proto = proto.add_notifications();
+    update_proto->set_stream_handle(notification.stream_handle);
+    update_proto->set_embedding_id(notification.embedding_id);
+  }
+
+  for (const auto& remote_parameter_info : info.remote_parameter_infos) {
+    auto* remote_parameter = proto.add_remote_parameters();
+    remote_parameter->set_parameter_number(
+        remote_parameter_info.parameter_number);
+    remote_parameter->set_is_replica_partitioned(
+        remote_parameter_info.is_replica_partitioned);
+    remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
+    remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
+    remote_parameter->set_num_merged(remote_parameter_info.num_merged);
+  }
+
+  for (const auto& key_id_mapping : info.key_id_mappings) {
+    auto* mapping = proto.add_key_id_mappings();
+    mapping->set_handle(key_id_mapping.first);
+    mapping->set_key(key_id_mapping.second.key);
+    mapping->set_start_id(key_id_mapping.second.id);
+  }
+
+  for (const auto& feed : info.checkpoint_feeds_order) {
+    std::string* proto_feed = proto.add_checkpoint_feeds_order();
+    *proto_feed = feed;
+  }
+
+  proto.set_logging_cycle_count(info.logging_cycle_count);
+
+  // Items that don't need deserialising.
+  for (const auto& input_info : info.entry_input_infos) {
+    auto input = proto.mutable_signature()->add_inputs();
+    input->set_name(input_info.name);
+    input->set_handle(input_info.handle);
+    input->set_argument(input_info.argument);
+    input->set_tuple_index(input_info.tuple_index);
+    (*input->mutable_shape()) = input_info.shape.ToProto();
+  }
+
+  for (const auto& streamed_input_info : info.feed_input_infos) {
+    auto input = proto.mutable_signature()->add_streamed_inputs();
+    input->set_name(streamed_input_info.name);
+    input->set_handle(streamed_input_info.handle);
+    input->set_argument(streamed_input_info.argument);
+    input->set_tuple_index(streamed_input_info.tuple_index);
+    (*input->mutable_shape()) = streamed_input_info.shape.ToProto();
+  }
+
+  for (const auto& output_info : info.entry_output_infos) {
+    auto output = proto.mutable_signature()->add_outputs();
+    output->set_name(output_info.name);
+    output->set_handle(output_info.handle);
+    output->set_tuple_index(output_info.tuple_index);
+    (*output->mutable_shape()) = output_info.shape.ToProto();
+  }
+
+  for (const auto& streamed_output_info : info.feed_output_infos) {
+    auto output = proto.mutable_signature()->add_streamed_outputs();
+    output->set_name(streamed_output_info.name);
+    output->set_handle(streamed_output_info.handle);
+    output->set_tuple_index(streamed_output_info.tuple_index);
+    (*output->mutable_shape()) = streamed_output_info.shape.ToProto();
+  }
+
+  // Note that Poplar will serialize its own state. Here we can serialize
+  // additional engine options (typically run-time options) that Poplar
+  // does not consider a part of its own executable state.
+  for (const auto& flag : poplar_options) {
+    auto* poplar_opt = proto.add_option_flags();
+    poplar_opt->set_option(flag.first);
+    poplar_opt->set_value(flag.second);
+  }
+
+  return proto;
+}
+
+}  // namespace
 
 /*static*/ StatusOr<std::unique_ptr<PoplarExecutableCore>>
 PoplarExecutableCore::Deserialize(
@@ -101,69 +287,8 @@ PoplarExecutableCore::Deserialize(
                       PoplarExecutableBinaryFile::Read(
                           filenames.CachedExecutableFilename(), &proto));
 
-  // Load metadata
-  const uint32 replication_factor = proto.replication_factor();
-
-  const bool logging_cycle_count = proto.logging_cycle_count();
-
-  CanonicalInfeedInfos infeeds;
-  for (const auto& infeed : proto.infeeds()) {
-    infeeds.emplace(infeed.config(), Shape(infeed.shape()));
-  }
-
-  CanonicalOutfeedInfos outfeeds;
-  for (const auto& outfeed : proto.outfeeds()) {
-    outfeeds.emplace(outfeed.config(), Shape(outfeed.shape()));
-  }
-
-  SendRecvInfos sends;
-  for (const auto& send : proto.sends()) {
-    sends.emplace_back(send.stream_handle(), send.rendezvous_key(),
-                       Shape(send.shape()));
-  }
-
-  SendRecvInfos recvs;
-  for (const auto& recv : proto.recvs()) {
-    recvs.emplace_back(recv.stream_handle(), recv.rendezvous_key(),
-                       Shape(recv.shape()));
-  }
-
-  HostEmbeddingInfos lookups;
-  for (const auto& lookup : proto.lookups()) {
-    lookups.emplace_back(lookup.stream_handle(), lookup.embedding_id(),
-                         Shape(lookup.indices_shape()),
-                         Shape(lookup.activations_shape()));
-  }
-
-  HostEmbeddingInfos updates;
-  for (const auto& update : proto.updates()) {
-    updates.emplace_back(update.stream_handle(), update.embedding_id(),
-                         Shape(update.indices_shape()),
-                         Shape(update.activations_shape()));
-  }
-
-  HostEmbeddingInfos notifications;
-  for (const auto& notification : proto.notifications()) {
-    notifications.emplace_back(notification.stream_handle(),
-                               notification.embedding_id(),
-                               Shape(notification.indices_shape()),
-                               Shape(notification.activations_shape()));
-  }
-
-  RemoteParameterInfos remote_parameter_infos;
-  for (const auto& remote_parameter : proto.remote_parameters()) {
-    remote_parameter_infos.emplace(RemoteParameterInfo{
-        remote_parameter.parameter_number(),
-        remote_parameter.is_replica_partitioned(),
-        remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged()});
-  }
-
-  // Load the additional Poplar engine options that we need to restore.
   poplar::OptionFlags engine_options;
-  for (const auto& flag : proto.option_flags()) {
-    engine_options.set(flag.option(), flag.value());
-  }
+  PoplarExecutableInfo info = FromProto(proto, &engine_options);
 
   // Also set run-time replica engine options for multi-replica distribution, as
   // these are not serialized to allow for using the same serialized executable
@@ -171,19 +296,7 @@ PoplarExecutableCore::Deserialize(
   if (runtime_replica_options.has_value()) {
     SetRuntimeReplicaOptions(
         &engine_options, runtime_replica_options->process_index,
-        runtime_replica_options->process_count, replication_factor);
-  }
-
-  VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
-  for (const auto& mapping : proto.key_id_mappings()) {
-    key_id_mappings.emplace(
-        mapping.handle(),
-        VerifiedStreamsIndices::KeyIdPair(mapping.key(), mapping.start_id()));
-  }
-
-  std::vector<std::string> checkpoint_feeds_order;
-  for (auto feed : proto.checkpoint_feeds_order()) {
-    checkpoint_feeds_order.push_back(feed);
+        runtime_replica_options->process_count, info.replication_factor);
   }
 
   // Load the Poplar executable.
@@ -198,12 +311,8 @@ PoplarExecutableCore::Deserialize(
           /*is_constant_graph=*/false, std::vector<std::vector<Literal>>{},
           /*is_remap_graph=*/false,
           /*is_scalar_elementwise_graph=*/false,
-          /*loaded_from_cache=*/true, std::vector<uint64>{}, replication_factor,
-          std::move(infeeds), std::move(outfeeds), StreamInfos{},
-          StreamMetaInfos{}, std::move(sends), std::move(recvs),
-          std::move(lookups), std::move(updates), std::move(notifications),
-          std::move(remote_parameter_infos), logging_cycle_count,
-          key_id_mappings, checkpoint_feeds_order);
+          /*loaded_from_cache=*/true, std::vector<uint64>{}, StreamInfos{},
+          StreamMetaInfos{}, std::move(info));
 
   return executable_core;
 }
@@ -215,131 +324,31 @@ PoplarExecutableCore::Deserialize(
     const VerifiedStreamsIndices::KeyIdMappings& mappings,
     const std::vector<string>& checkpoint_feeds_order) {
   TENSORFLOW_TRACEPOINT();
-  PoplarExecutableProto proto;
 
-  proto.set_replication_factor(replication_count);
+  const PoplarExecutableProto proto = ToProto(
+      PoplarExecutableInfo{
+          replication_count,
+          annotations.infeed_infos,
+          annotations.outfeed_infos,
+          annotations.send_infos,
+          annotations.recv_infos,
+          annotations.host_embedding_lookup_infos,
+          annotations.host_embedding_update_infos,
+          annotations.host_embedding_notify_infos,
+          annotations.remote_parameter_infos,
+          annotations.entry_input_infos,
+          annotations.feed_input_infos,
+          annotations.entry_output_infos,
+          annotations.feed_output_infos,
+          logging_cycle_count,
+          mappings,
+          checkpoint_feeds_order,
+      },
+      opts);
 
-  for (const auto& infeed : annotations.infeed_infos) {
-    auto* feed = proto.add_infeeds();
-    *(feed->mutable_config()) = infeed.config;
-    *(feed->mutable_shape()) = infeed.shape.ToProto();
-  }
-
-  for (const auto& outfeed : annotations.outfeed_infos) {
-    auto* feed = proto.add_outfeeds();
-    *(feed->mutable_config()) = outfeed.config;
-    *(feed->mutable_shape()) = outfeed.shape.ToProto();
-  }
-
-  for (const auto& send : annotations.send_infos) {
-    auto* send_proto = proto.add_sends();
-    send_proto->set_stream_handle(send.stream_handle);
-    send_proto->set_rendezvous_key(send.rendezvous_key);
-    *(send_proto->mutable_shape()) = send.shape.ToProto();
-  }
-
-  for (const auto& recv : annotations.recv_infos) {
-    auto* recv_proto = proto.add_recvs();
-    recv_proto->set_stream_handle(recv.stream_handle);
-    recv_proto->set_rendezvous_key(recv.rendezvous_key);
-    *(recv_proto->mutable_shape()) = recv.shape.ToProto();
-  }
-
-  // Note that Poplar will serialize its own state. Here we can serialize
-  // additional engine options (typically run-time options) that Poplar
-  // does not consider a part of its own executable state.
-  for (const auto flag : opts) {
-    auto* poplar_opt = proto.add_option_flags();
-    poplar_opt->set_option(flag.first);
-    poplar_opt->set_value(flag.second);
-  }
-
-  for (const auto& lookup : annotations.host_embedding_lookup_infos) {
-    auto* lookup_proto = proto.add_lookups();
-    lookup_proto->set_stream_handle(lookup.stream_handle);
-    lookup_proto->set_embedding_id(lookup.embedding_id);
-    *lookup_proto->mutable_indices_shape() = lookup.indices_shape.ToProto();
-    *lookup_proto->mutable_activations_shape() =
-        lookup.activations_shape.ToProto();
-  }
-
-  for (const auto& update : annotations.host_embedding_update_infos) {
-    auto* update_proto = proto.add_updates();
-    update_proto->set_stream_handle(update.stream_handle);
-    update_proto->set_embedding_id(update.embedding_id);
-    *update_proto->mutable_indices_shape() = update.indices_shape.ToProto();
-    *update_proto->mutable_activations_shape() =
-        update.activations_shape.ToProto();
-  }
-
-  for (const auto& notification : annotations.host_embedding_notify_infos) {
-    auto* update_proto = proto.add_notifications();
-    update_proto->set_stream_handle(notification.stream_handle);
-    update_proto->set_embedding_id(notification.embedding_id);
-  }
-
-  for (const auto& remote_parameter_info : annotations.remote_parameter_infos) {
-    auto* remote_parameter = proto.add_remote_parameters();
-    remote_parameter->set_parameter_number(
-        remote_parameter_info.parameter_number);
-    remote_parameter->set_is_replica_partitioned(
-        remote_parameter_info.is_replica_partitioned);
-    remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
-    remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
-    remote_parameter->set_num_merged(remote_parameter_info.num_merged);
-  }
-
-  for (const auto& key_id_mapping : mappings) {
-    auto* mapping = proto.add_key_id_mappings();
-    mapping->set_handle(key_id_mapping.first);
-    mapping->set_key(key_id_mapping.second.key);
-    mapping->set_start_id(key_id_mapping.second.id);
-  }
-
-  for (const auto& feed : checkpoint_feeds_order) {
-    std::string* proto_feed = proto.add_checkpoint_feeds_order();
-    *proto_feed = feed;
-  }
-
-  proto.set_logging_cycle_count(logging_cycle_count);
-
-  // Items that don't need deserialising.
-  for (const auto& input_info : annotations.entry_input_infos) {
-    auto input = proto.mutable_signature()->add_inputs();
-    input->set_name(input_info.name);
-    input->set_handle(input_info.handle);
-    input->set_argument(input_info.argument);
-    input->set_tuple_index(input_info.tuple_index);
-    (*input->mutable_shape()) = input_info.shape.ToProto();
-  }
-
-  for (const auto& streamed_input_info : annotations.feed_input_infos) {
-    auto input = proto.mutable_signature()->add_streamed_inputs();
-    input->set_name(streamed_input_info.name);
-    input->set_handle(streamed_input_info.handle);
-    input->set_argument(streamed_input_info.argument);
-    input->set_tuple_index(streamed_input_info.tuple_index);
-    (*input->mutable_shape()) = streamed_input_info.shape.ToProto();
-  }
-
-  for (const auto& output_info : annotations.entry_output_infos) {
-    auto output = proto.mutable_signature()->add_outputs();
-    output->set_name(output_info.name);
-    output->set_handle(output_info.handle);
-    output->set_tuple_index(output_info.tuple_index);
-    (*output->mutable_shape()) = output_info.shape.ToProto();
-  }
-
-  for (const auto& streamed_output_info : annotations.feed_output_infos) {
-    auto output = proto.mutable_signature()->add_streamed_outputs();
-    output->set_name(streamed_output_info.name);
-    output->set_handle(streamed_output_info.handle);
-    output->set_tuple_index(streamed_output_info.tuple_index);
-    (*output->mutable_shape()) = streamed_output_info.shape.ToProto();
-  }
-
-  return PoplarExecutableBinaryFile::Write(filenames.CachedExecutableFilename(),
-                                           proto, executable);
+  return PoplarExecutableBinaryFile::Write(
+      filenames.CachedExecutableFilename(), proto,
+      [&executable](std::ostream& out) { executable.serialize(out); });
 }
 
 namespace {
@@ -406,6 +415,27 @@ Status ExportInternal(
   return Status::OK();
 }
 }  // namespace
+
+Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
+  if (is_scalar_elementwise_graph_) {
+    return FailedPrecondition("Cannot serialize a scalar elementwise graph");
+  }
+  if (is_constant_graph_) {
+    return FailedPrecondition("Cannot serialize a constant graph");
+  }
+  if (is_remap_graph_) {
+    return FailedPrecondition(
+        "Cannot serialize a graph in which all outputs are inputs");
+  }
+
+  if (!poplar_engine_) {
+    return InternalError("Missing Poplar engine");
+  }
+
+  return PoplarExecutableBinaryFile::Write(
+      filepath, ToProto(info_),
+      [this](std::ostream& out) { poplar_engine_->serializeExecutable(out); });
+}
 
 /*static*/ Status PoplarExecutableCore::Export(
     const ModuleFilenames& filenames, const poplar::Executable& executable,

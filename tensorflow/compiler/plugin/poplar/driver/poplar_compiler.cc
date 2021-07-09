@@ -1852,18 +1852,24 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           is_constant_graph, std::move(constant_output), is_remap_graph,
           is_scalar_elementwise_graph,
           /*loaded_from_cache=*/false, std::move(remaped_output),
-          replication_factor, std::move(resources.annotations.infeed_infos),
-          std::move(resources.annotations.outfeed_infos),
           std::move(resources.annotations.stream_infos),
           std::move(resources.annotations.stream_meta_infos),
-          std::move(resources.annotations.send_infos),
-          std::move(resources.annotations.recv_infos),
-          std::move(resources.annotations.host_embedding_lookup_infos),
-          std::move(resources.annotations.host_embedding_update_infos),
-          std::move(resources.annotations.host_embedding_notify_infos),
-          std::move(resources.annotations.remote_parameter_infos),
-          logging_cycle_count, resources.streams_indices.GetAssignedIds(),
-          resources.streams_indices.CheckpointFeedsOrder());
+          PoplarExecutableInfo{
+              replication_factor, std::move(resources.annotations.infeed_infos),
+              std::move(resources.annotations.outfeed_infos),
+              std::move(resources.annotations.send_infos),
+              std::move(resources.annotations.recv_infos),
+              std::move(resources.annotations.host_embedding_lookup_infos),
+              std::move(resources.annotations.host_embedding_update_infos),
+              std::move(resources.annotations.host_embedding_notify_infos),
+              std::move(resources.annotations.remote_parameter_infos),
+              std::move(resources.annotations.entry_input_infos),
+              std::move(resources.annotations.feed_input_infos),
+              std::move(resources.annotations.entry_output_infos),
+              std::move(resources.annotations.feed_output_infos),
+              logging_cycle_count, resources.streams_indices.GetAssignedIds(),
+              resources.streams_indices.CheckpointFeedsOrder()});
+
   return executable_core;
 }
 }  // namespace

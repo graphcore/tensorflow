@@ -39,6 +39,25 @@ namespace poplarplugin {
 struct CompilerAnnotations;
 struct CompilerResources;
 
+struct PoplarExecutableInfo {
+  uint32 replication_factor;
+  CanonicalInfeedInfos infeed_infos;
+  CanonicalOutfeedInfos outfeed_infos;
+  SendRecvInfos send_infos;
+  SendRecvInfos recv_infos;
+  HostEmbeddingInfos host_embedding_lookup_infos;
+  HostEmbeddingInfos host_embedding_update_infos;
+  HostEmbeddingInfos host_embedding_notify_infos;
+  RemoteParameterInfos remote_parameter_infos;
+  InputInfos entry_input_infos;
+  InputInfos feed_input_infos;
+  OutputInfos entry_output_infos;
+  OutputInfos feed_output_infos;
+  bool logging_cycle_count;
+  VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
+  std::vector<string> checkpoint_feeds_order;
+};
+
 class PoplarExecutableCore {
  public:
   PoplarExecutableCore(
@@ -48,16 +67,8 @@ class PoplarExecutableCore {
       std::vector<std::vector<Literal>> constant_literal_output,
       bool is_remap_graph, bool is_scalar_elementwise_graph,
       bool loaded_from_cache, std::vector<uint64> remaped_output,
-      uint32 replication_factor, const CanonicalInfeedInfos& infeed_infos,
-      const CanonicalOutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
-      StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
-      SendRecvInfos&& recv_infos,
-      HostEmbeddingInfos&& host_embedding_lookup_infos,
-      HostEmbeddingInfos&& host_embedding_update_infos,
-      HostEmbeddingInfos&& host_embedding_notify_infos,
-      RemoteParameterInfos&& remote_parameter_infos, bool logging_cycle_count,
-      const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
-      const std::vector<string>& checkpoint_feeds_order);
+      StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
+      PoplarExecutableInfo&& info);
 
   ~PoplarExecutableCore();
 
@@ -71,26 +82,28 @@ class PoplarExecutableCore {
     return constant_literal_output_;
   }
 
-  const CanonicalInfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
+  const CanonicalInfeedInfos& GetInfeedInfos() const {
+    return info_.infeed_infos;
+  }
 
   const CanonicalOutfeedInfos& GetOutfeedInfos() const {
-    return outfeed_infos_;
+    return info_.outfeed_infos;
   }
 
   const HostEmbeddingInfos& GetHostEmbeddingLookupInfos() const {
-    return host_embedding_lookup_infos_;
+    return info_.host_embedding_lookup_infos;
   }
 
   const HostEmbeddingInfos& GetHostEmbeddingUpdateInfos() const {
-    return host_embedding_update_infos_;
+    return info_.host_embedding_update_infos;
   }
 
   const HostEmbeddingInfos& GetHostEmbeddingNotifyInfos() const {
-    return host_embedding_notify_infos_;
+    return info_.host_embedding_notify_infos;
   }
 
   const RemoteParameterInfos& GetRemoteParameterInfos() const {
-    return remote_parameter_infos_;
+    return info_.remote_parameter_infos;
   }
 
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
@@ -99,11 +112,11 @@ class PoplarExecutableCore {
     return stream_meta_infos_;
   }
 
-  const SendRecvInfos& GetSendInfos() const { return send_infos_; }
+  const SendRecvInfos& GetSendInfos() const { return info_.send_infos; }
 
-  const SendRecvInfos& GetRecvInfos() const { return recv_infos_; }
+  const SendRecvInfos& GetRecvInfos() const { return info_.recv_infos; }
 
-  const uint32 GetReplicationFactor() const { return replication_factor_; }
+  const uint32 GetReplicationFactor() const { return info_.replication_factor; }
 
   bool IsConstantGraph() const { return is_constant_graph_; }
 
@@ -115,15 +128,17 @@ class PoplarExecutableCore {
 
   bool IsScalarElementwiseGraph() const { return is_scalar_elementwise_graph_; }
 
-  bool LoggingCycleCount() const { return logging_cycle_count_; }
+  bool LoggingCycleCount() const { return info_.logging_cycle_count; }
 
   const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return key_id_mappings_;
+    return info_.key_id_mappings;
   }
 
   const std::vector<string>& CheckpointFeedsOrder() const {
-    return checkpoint_feeds_order_;
+    return info_.checkpoint_feeds_order;
   }
+
+  Status Serialize(const std::string& filepath) const;
 
   struct RuntimeReplicaOptions {
     int64 process_index;
@@ -167,24 +182,17 @@ class PoplarExecutableCore {
   InputOutputAliasingMap input_output_aliasing_map_;
   std::vector<std::vector<Literal>> constant_literal_output_;
   const bool is_constant_graph_;
-  std::vector<uint64> remaped_output_;
   const bool is_remap_graph_;
   const bool is_scalar_elementwise_graph_;
   const bool loaded_from_cache_;
-  uint32 replication_factor_;
-  CanonicalInfeedInfos infeed_infos_;
-  CanonicalOutfeedInfos outfeed_infos_;
+  std::vector<uint64> remaped_output_;
+
+  // User op info that is not serialized.
   StreamInfos stream_infos_;
   StreamMetaInfos stream_meta_infos_;
-  SendRecvInfos send_infos_;
-  SendRecvInfos recv_infos_;
-  HostEmbeddingInfos host_embedding_lookup_infos_;
-  HostEmbeddingInfos host_embedding_update_infos_;
-  HostEmbeddingInfos host_embedding_notify_infos_;
-  RemoteParameterInfos remote_parameter_infos_;
-  const bool logging_cycle_count_;
-  VerifiedStreamsIndices::KeyIdMappings key_id_mappings_;
-  const std::vector<string> checkpoint_feeds_order_;
+
+  // All the other info that is serialized.
+  PoplarExecutableInfo info_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutableCore);
 };
@@ -295,6 +303,10 @@ class PoplarExecutable : public Executable {
 
   const std::vector<string>& CheckpointFeedsOrder() const {
     return executable_core_->CheckpointFeedsOrder();
+  }
+
+  Status Serialize(const std::string& filepath) const {
+    return executable_core_->Serialize(filepath);
   }
 
  private:
