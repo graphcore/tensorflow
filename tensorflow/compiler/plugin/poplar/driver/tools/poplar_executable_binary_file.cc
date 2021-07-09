@@ -26,8 +26,11 @@ namespace poplarplugin {
 Status PoplarExecutableBinaryFile::Write(
     const std::string& file_name,
     const ::tensorflow::protobuf::MessageLite& proto,
-    const poplar::Executable& executable) {
+    std::function<void(std::ostream&)> serialize_executable) {
   auto file = std::ofstream(file_name, std::ios::binary);
+  if (!file) {
+    return InternalErrorStrCat("Failed to open file for writing: ", file_name);
+  }
 
   std::string serialized;
   proto.AppendToString(&serialized);
@@ -47,7 +50,7 @@ Status PoplarExecutableBinaryFile::Write(
 
   // Append the Poplar executable.
   try {
-    executable.serialize(file);
+    serialize_executable(file);
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
   }

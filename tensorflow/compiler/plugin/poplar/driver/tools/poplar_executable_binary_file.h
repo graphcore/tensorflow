@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_POPLAR_EXECUTABLE_BINARY_FILE_H_
 
 #include <array>
+#include <functional>
 #include <string>
 
 #include <poplar/Executable.hpp>
@@ -31,7 +32,7 @@ class PoplarExecutableBinaryFile {
  public:
   static Status Write(const std::string& file_name,
                       const ::tensorflow::protobuf::MessageLite& proto,
-                      const poplar::Executable& executable);
+                      std::function<void(std::ostream&)> serialize_executable);
 
   static StatusOr<poplar::Executable> Read(
       const std::string& file_name, ::tensorflow::protobuf::MessageLite* proto);
