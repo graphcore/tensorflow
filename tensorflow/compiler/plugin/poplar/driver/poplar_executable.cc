@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable_cache.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_executable_binary_file.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -85,81 +86,6 @@ PoplarExecutableCore::~PoplarExecutableCore() {
     }
   }
 }
-
-namespace {
-class PoplarExecutableBinaryFile {
- public:
-  static Status Write(const std::string& file_name,
-                      const ::tensorflow::protobuf::MessageLite& proto,
-                      const poplar::Executable& executable) {
-    auto file = std::ofstream(file_name, std::ios::binary);
-
-    std::string serialized;
-    proto.AppendToString(&serialized);
-
-    // Write the length of the serialized protobuf metadata - make sure to store
-    // it as an 8 byte value and store it in a endian-independent format.
-    std::array<uint8, 8> proto_length_bytes;
-    for (uint64 i = 0; i != proto_length_bytes.size(); ++i) {
-      proto_length_bytes[i] = (serialized.size() >> i * 8ULL) & 0xFFU;
-    }
-
-    file.write(reinterpret_cast<char*>(proto_length_bytes.data()),
-               proto_length_bytes.size());
-
-    // Append the protobuf metadata.
-    file << serialized;
-
-    // Append the Poplar executable.
-    try {
-      executable.serialize(file);
-    } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
-    }
-
-    return Status::OK();
-  }
-
-  static StatusOr<poplar::Executable> Read(
-      const std::string& file_name,
-      ::tensorflow::protobuf::MessageLite* proto) {
-    auto file = absl::make_unique<std::ifstream>(file_name, std::ios::binary);
-    const std::string error_prefix =
-        absl::StrCat("[Deserialize][File: ", file_name, "] ");
-
-    // Read the protobuf metadata length.
-    std::array<uint8, 8> proto_length_bytes;
-    if (!file->read(reinterpret_cast<char*>(proto_length_bytes.data()),
-                    proto_length_bytes.size())) {
-      return InternalErrorStrCat(
-          error_prefix, "Corrupted - Cannot read the metadata length.");
-    }
-    uint64 metadata_length = 0;
-    for (uint64 i = 0; i != proto_length_bytes.size(); ++i) {
-      metadata_length |= static_cast<uint64>(proto_length_bytes[i]) << i * 8ULL;
-    }
-
-    // Read the protobuf metadata.
-    std::vector<char> serialized(metadata_length);
-    if (!file->read(serialized.data(), metadata_length)) {
-      return InternalErrorStrCat(error_prefix,
-                                 "Corrupted - Cannot read the metadata.");
-    }
-    if (!proto->ParseFromArray(serialized.data(), metadata_length)) {
-      return InternalErrorStrCat(error_prefix,
-                                 "Corrupted - Cannot parse the metadata.");
-    }
-    serialized.clear();
-
-    // Read the executable.
-    try {
-      return poplar::Executable::deserialize(std::move(file));
-    } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus(error_prefix, e);
-    }
-  }
-};
-}  // namespace
 
 /*static*/ StatusOr<std::unique_ptr<PoplarExecutableCore>>
 PoplarExecutableCore::Deserialize(
