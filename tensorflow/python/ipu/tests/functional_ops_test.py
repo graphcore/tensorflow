@@ -19,6 +19,7 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.config import SchedulingAlgorithm
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import gradients_impl
@@ -294,7 +295,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(body, inputs=[table, indices])
 
-      report = tu.ReportJSON(self, sess)
+      report = tu.ReportJSON(
+          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
       i_h = np.arange(0, DICT_SIZE, step=SPLIT_SIZE // 2)
       w_h = np.arange(EMB_SIZE, dtype=np.float16) * np.ones(
           [DICT_SIZE, EMB_SIZE], dtype=np.float16)

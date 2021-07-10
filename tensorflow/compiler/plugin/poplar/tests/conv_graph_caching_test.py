@@ -25,7 +25,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.config import IPUConfig, SchedulingAlgorithm
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -215,7 +215,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
+      report = tu.ReportJSON(
+          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
 
       sess.run(variables.global_variables_initializer())
 
@@ -271,7 +272,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
+      report = tu.ReportJSON(
+          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
 
       sess.run(variables.global_variables_initializer())
 

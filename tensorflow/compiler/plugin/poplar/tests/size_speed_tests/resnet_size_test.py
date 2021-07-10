@@ -183,7 +183,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 44803529)
+    self.assert_total_tile_memory(report, 41045760)
 
   def testTrainingMomentum(self):
     cfg = ipu.utils.IPUConfig()
@@ -215,7 +215,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45529234)
+    self.assert_total_tile_memory(report, 43746370)
 
   def testTrainingInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -255,7 +255,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 45425859)
+    self.assert_total_tile_memory(report, 41595004)
 
   def testTrainingMomentumInLoop(self):
     cfg = ipu.utils.IPUConfig()
@@ -335,7 +335,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 47911788)
+    self.assert_total_tile_memory(report, 45535722)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     cfg = ipu.utils.IPUConfig()
@@ -375,7 +375,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 44311808)
+    self.assert_total_tile_memory(report, 45978566)
 
 
 if __name__ == "__main__":

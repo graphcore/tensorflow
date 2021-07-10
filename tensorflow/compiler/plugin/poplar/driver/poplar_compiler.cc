@@ -845,7 +845,9 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
 StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
     CompilerResources& res) {
   std::vector<NamedIpuSchedulerAlgorithm> schedulers;
-  bool all = res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
+
+  const bool all =
+      res.scheduler_selection == IpuSchedulingAlgorithm::CHOOSE_BEST;
   if (all || res.scheduler_selection == IpuSchedulingAlgorithm::POST_ORDER) {
     schedulers.push_back(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::POST_ORDER),
@@ -856,22 +858,25 @@ StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::CLUSTERING),
          CreateClusteringMemoryScheduler(res.information)});
   }
-  if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
-    schedulers.push_back(
-        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
-         CreateLivenessLookAheadMemoryScheduler(res.information)});
-  }
-  if (res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
+  if (all || res.scheduler_selection == IpuSchedulingAlgorithm::SHORTEST_PATH) {
     schedulers.push_back(
         {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::SHORTEST_PATH),
          CreateShortestPathScheduler(res.information)});
   }
 
-  if (!schedulers.size()) {
+  // Not enabled with CHOOSE_BEST because of its time complexity.
+  if (res.scheduler_selection == IpuSchedulingAlgorithm::LOOK_AHEAD) {
+    schedulers.push_back(
+        {IpuSchedulingAlgorithm_Name(IpuSchedulingAlgorithm::LOOK_AHEAD),
+         CreateLivenessLookAheadMemoryScheduler(res.information)});
+  }
+
+  if (schedulers.empty()) {
     return xla::InvalidArgument(
         "Invalid scheduler specified. Options are 'LOOK_AHEAD',"
         " 'POST_ORDER', 'CLUSTERING' and 'SHORTEST_PATH'.");
   }
+
   return schedulers;
 }
 
@@ -1849,18 +1854,24 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           is_constant_graph, std::move(constant_output), is_remap_graph,
           is_scalar_elementwise_graph,
           /*loaded_from_cache=*/false, std::move(remaped_output),
-          replication_factor, std::move(resources.annotations.infeed_infos),
-          std::move(resources.annotations.outfeed_infos),
           std::move(resources.annotations.stream_infos),
           std::move(resources.annotations.stream_meta_infos),
-          std::move(resources.annotations.send_infos),
-          std::move(resources.annotations.recv_infos),
-          std::move(resources.annotations.host_embedding_lookup_infos),
-          std::move(resources.annotations.host_embedding_update_infos),
-          std::move(resources.annotations.host_embedding_notify_infos),
-          std::move(resources.annotations.remote_parameter_infos),
-          logging_cycle_count, resources.streams_indices.GetAssignedIds(),
-          resources.streams_indices.CheckpointFeedsOrder());
+          PoplarExecutableInfo{
+              replication_factor, std::move(resources.annotations.infeed_infos),
+              std::move(resources.annotations.outfeed_infos),
+              std::move(resources.annotations.send_infos),
+              std::move(resources.annotations.recv_infos),
+              std::move(resources.annotations.host_embedding_lookup_infos),
+              std::move(resources.annotations.host_embedding_update_infos),
+              std::move(resources.annotations.host_embedding_notify_infos),
+              std::move(resources.annotations.remote_parameter_infos),
+              std::move(resources.annotations.entry_input_infos),
+              std::move(resources.annotations.feed_input_infos),
+              std::move(resources.annotations.entry_output_infos),
+              std::move(resources.annotations.feed_output_infos),
+              logging_cycle_count, resources.streams_indices.GetAssignedIds(),
+              resources.streams_indices.CheckpointFeedsOrder()});
+
   return executable_core;
 }
 }  // namespace

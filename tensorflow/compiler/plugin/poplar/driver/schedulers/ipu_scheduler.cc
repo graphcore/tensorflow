@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 
 #include <map>
+#include <memory>
 #include <queue>
 #include <tuple>
 #include <utility>
@@ -46,8 +47,8 @@ StatusOr<HloSchedule> IpuScheduleModule(
   HloSchedule schedule(module);
   TF_ASSIGN_OR_RETURN(std::unique_ptr<TuplePointsToAnalysis> points_to_analysis,
                       TuplePointsToAnalysis::Run(module));
-  std::unique_ptr<HloAliasAnalysis> alias_analysis =
-      HloAliasAnalysis::NewEmptyAnalysis(module);
+  TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,
+                      HloAliasAnalysis::Run(module));
   absl::flat_hash_map<const HloComputation*, int64> memory_by_computation;
   for (auto* computation : module->MakeComputationPostOrder()) {
     if (!computation->IsFusionComputation()) {
@@ -113,8 +114,8 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
           const LogicalBuffer::SizeFunction& size_function,
           const absl::flat_hash_map<const HloComputation*, int64>&
               memory_by_computation) -> StatusOr<HloInstructionSequence> {
-        std::unique_ptr<HloAliasAnalysis> alias_analysis =
-            HloAliasAnalysis::NewEmptyAnalysis(computation->parent());
+        TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,
+                            HloAliasAnalysis::Run(computation->parent()));
 
         struct ScheduleResult {
           int64 schedule_memory;
