@@ -347,10 +347,10 @@ class ModelExtension(base_layer.KerasExtension):
 
     return self._ipu_predict_function
 
+  @trackable.no_automatic_dependency_tracking
   def _set_gradient_accumulation_options_impl(
-      self, gradient_accumulation_steps,
-      gradient_accumulation_optimizer_kwargs,
-      experimental_normalize_gradients):
+      self, gradient_accumulation_steps, experimental_normalize_gradients,
+      gradient_accumulation_optimizer_kwargs):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
@@ -361,6 +361,11 @@ class ModelExtension(base_layer.KerasExtension):
             "Expected `gradient_accumulation_steps` to be a positive integer, "
             "but got {gradient_accumulation_steps} instead.")
       self._gradient_accumulation_steps = gradient_accumulation_steps
+      reset_extension = True
+
+    if experimental_normalize_gradients:
+      self._experimental_gradient_accumulation_normalize_gradients = \
+        experimental_normalize_gradients
       reset_extension = True
 
     if gradient_accumulation_optimizer_kwargs is not None:
@@ -385,11 +390,6 @@ class ModelExtension(base_layer.KerasExtension):
         gradient_accumulation_optimizer_kwargs
       reset_extension = True
 
-    if experimental_normalize_gradients:
-      self._experimental_gradient_accumulation_normalize_gradients = \
-        experimental_normalize_gradients
-      reset_extension = True
-
     if reset_extension:
       self._reset_ipu_extension()
 
@@ -410,6 +410,7 @@ class ModelExtension(base_layer.KerasExtension):
 
     return config
 
+  @trackable.no_automatic_dependency_tracking
   def _from_base_config(self, config):
     self._gradient_accumulation_steps = config.get(
         "gradient_accumulation_steps", None)
