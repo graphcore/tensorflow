@@ -76,6 +76,24 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "functional_pipeline_api_test",
+    size = "large",
+    srcs = ["functional_pipeline_api_test.py"],
+    python_version = "PY3",
+    deps = [
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:tf2",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
+        "//tensorflow/python/keras:combinations",
+        "//third_party/py/numpy",
+    ],
+)
+
 test_suite(
     name = "tests",
     tests = [],

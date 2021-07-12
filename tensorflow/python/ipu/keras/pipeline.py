@@ -26,6 +26,7 @@ from tensorflow.python.eager import def_function
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import model as ipu_model
+from tensorflow.python.ipu.keras.extensions.functional_extensions import PipelineStage  # pylint: disable=unused-import
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.layers import InputLayer
@@ -919,33 +920,6 @@ SequentialPipelineModel = deprecation.deprecated_alias(
     deprecated_name="SequentialPipelineModel",
     name="PipelineSequential",
     func_or_class=PipelineSequential)
-
-
-class PipelineStage(object):
-  def __init__(self, stage):
-    self._stage = stage
-
-  def __enter__(self):
-    if self._stage < 0:
-      raise ValueError("%d is not a valid pipeline stage.")
-
-    strategy = distribution_strategy_context.get_strategy()
-    if not isinstance(strategy, ipu_strategy.IPUStrategyV1):
-      raise RuntimeError("PipelineStage may only be used from "
-                         "within an IPUStrategyV1 context.")
-
-    if hasattr(strategy, "_pipeline_stage"):
-      raise RuntimeError("Pipeline stages must not be nested.")
-
-    strategy._pipeline_stage = self._stage  # pylint: disable=protected-access
-
-    return self
-
-  def __exit__(self, exception_type, value, traceback):
-    strategy = distribution_strategy_context.get_strategy()
-    assert strategy and hasattr(strategy, "_pipeline_stage")
-
-    delattr(strategy, "_pipeline_stage")
 
 
 class PipelineModel(ipu_model.Model):

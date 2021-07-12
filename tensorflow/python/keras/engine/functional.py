@@ -119,6 +119,10 @@ class Functional(training_lib.Model):
     super(Functional, self).__init__(name=name, trainable=trainable)
     self._init_graph_network(inputs, outputs)
 
+    # Begin IPU specific changes.
+    base_layer.extension_delegate_if_exists("get_pipelining_from_nodes", self)
+    # End IPU specific changes.
+
   @trackable.no_automatic_dependency_tracking
   def _init_graph_network(self, inputs, outputs):
     base_layer.keras_api_gauge.get_cell('Functional').set(True)

@@ -447,6 +447,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
 
     # Begin IPU specific changes.
     _patch_keras_extension(self)
+    node_module._set_pipeline_stage_from_strategy(self)
     # End IPU specific changes.
 
   @trackable.no_automatic_dependency_tracking
