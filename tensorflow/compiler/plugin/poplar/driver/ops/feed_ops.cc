@@ -71,7 +71,7 @@ Status CreatePoplarH2DFIFO(
                                   debug_name_and_id));
   }
 
-  InputInfo info = {handle, handle, 0, tuple_index, inst->shape()};
+  InputInfo info = {handle, handle, 0, tuple_index, shape};
   TF_RETURN_IF_ERROR(AddFeedInputInfo(res.annotations, info));
 
   return Status::OK();
@@ -136,7 +136,12 @@ Status CreatePoplarD2HFIFO(
     seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
   }
 
-  OutputInfo info = {handle, handle, tuple_index, {}};
+  auto* op = inst->operand(0);
+  const auto& op_shape = op->shape();
+
+  auto fifo_shape =
+      op_shape.IsTuple() ? op_shape.tuple_shapes(tuple_index) : op_shape;
+  OutputInfo info = {handle, handle, tuple_index, fifo_shape};
   TF_RETURN_IF_ERROR(AddFeedOutputInfo(res.annotations, info));
 
   return Status::OK();

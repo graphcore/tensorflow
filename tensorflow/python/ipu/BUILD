@@ -31,6 +31,7 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
+        "//tensorflow/compiler/plugin/poplar:application_runtime_py",
         "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
         "//tensorflow/compiler/plugin/poplar:functional_ops_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
@@ -297,6 +298,25 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
+    name = "application_runtime_test",
+    size = "large",
+    srcs = ["tests/application_runtime_test.py"],
+    shard_count = 4,
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu:ipu_ops_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
     ],
 )
 
