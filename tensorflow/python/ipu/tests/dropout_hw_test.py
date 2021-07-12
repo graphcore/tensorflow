@@ -265,6 +265,9 @@ class DropoutTest(test_util.TensorFlowTestCase):
               outputs=outputs.astype(np.float32),
           )).repeat().batch(32, drop_remainder=True)
 
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.1)
+
     repeat_count = 32
     pipeline_depth = 32
 
@@ -289,7 +292,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        gradient_descent.GradientDescentOptimizer(0.1),
+        optimizer_fn,
         self,
         10000,
         recomp=True,
@@ -311,6 +314,9 @@ class DropoutTest(test_util.TensorFlowTestCase):
               outputs=outputs.astype(np.float32),
           )).repeat().batch(32, drop_remainder=True)
 
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.1)
+
     repeat_count = 32
     pipeline_depth = 32
 
@@ -335,7 +341,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        gradient_descent.GradientDescentOptimizer(0.1),
+        optimizer_fn,
         self,
         10000,
         recomp=True,
@@ -357,6 +363,9 @@ class DropoutTest(test_util.TensorFlowTestCase):
               outputs=outputs.astype(np.float32),
           )).repeat().batch(32, drop_remainder=True)
 
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.1)
+
     repeat_count = 32
     pipeline_depth = 32
 
@@ -381,7 +390,7 @@ class DropoutTest(test_util.TensorFlowTestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        gradient_descent.GradientDescentOptimizer(0.1),
+        optimizer_fn,
         self,
         10000,
         recomp=True,

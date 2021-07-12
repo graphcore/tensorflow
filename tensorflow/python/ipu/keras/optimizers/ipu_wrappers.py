@@ -162,8 +162,15 @@ class _KerasOptimizerWrapper(Optimizer):
                         aggregation_method=None,
                         colocate_gradients_with_ops=False,
                         grad_loss=None):
-    grads = self._optimizer.get_gradients(loss, self._model.trainable_weights)
-    grads_and_vars = zip(grads, self._model.trainable_weights)
+    if not self._model and not var_list:
+      raise ValueError(
+          "When _KerasOptimizerWrapper has been instantiated with it's model "
+          "set to None, var_list must be provided.")
+
+    v = var_list if not self._model else self._model.trainable_weights
+
+    grads = self._optimizer.get_gradients(loss, v)
+    grads_and_vars = zip(grads, v)
     return list(map(self.preprocess_gradients, grads_and_vars))
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):

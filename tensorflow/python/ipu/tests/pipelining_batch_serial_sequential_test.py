@@ -114,7 +114,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -156,7 +158,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         19826,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
@@ -180,7 +182,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -264,7 +268,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         201295,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
@@ -285,7 +289,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -320,7 +326,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         60107,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
@@ -342,7 +348,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -409,7 +417,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
@@ -431,7 +439,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -477,7 +487,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Sequential,
@@ -499,7 +509,9 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -553,7 +565,7 @@ class PipeliningBatchSerialSeqTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Sequential,

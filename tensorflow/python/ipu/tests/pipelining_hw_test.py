@@ -81,7 +81,9 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
 
     pipeline_depth = 18
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -166,7 +168,7 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         1000,
         device_mapping=[0, 1, 2],
@@ -229,7 +231,9 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
 
     pipeline_depth = 20
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -296,7 +300,7 @@ class PipeliningTest(test.TestCase, parameterized.TestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         1000,
         device_mapping=[0, 1, 2, 3, 0],

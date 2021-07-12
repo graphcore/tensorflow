@@ -556,7 +556,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -598,7 +600,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         14172,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
@@ -621,7 +623,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -705,7 +709,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         41871,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
@@ -729,7 +733,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -764,7 +770,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         13821,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
@@ -785,7 +791,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -852,7 +860,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
@@ -874,7 +882,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -920,7 +930,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,
@@ -942,7 +952,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -996,7 +1008,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         21458,
         schedule=pipelining_ops.PipelineSchedule.Grouped,

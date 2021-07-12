@@ -60,7 +60,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -102,7 +104,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         14374,
         True,
@@ -126,7 +128,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -210,7 +214,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         38003,
         True,
@@ -235,7 +239,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -270,7 +276,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         13821,
         True,
@@ -295,7 +301,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -338,7 +346,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         19542,
         True,
@@ -360,7 +368,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -392,7 +402,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         9444,
         True,
@@ -408,7 +418,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 6
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     cwd = os.getcwd()
     lib_path = os.path.join(
@@ -444,7 +456,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         12609,
         True,
@@ -466,7 +478,9 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       x = math_ops.cast(x, np.float32)
@@ -514,7 +528,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
           repeat_count,
           gradient_accumulation_count,
           dataset_fn,
-          optimizer,
+          optimizer_fn,
           self,
           21458,
           recomp=True,

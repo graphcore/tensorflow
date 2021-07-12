@@ -70,7 +70,7 @@ def test_inference_dataset(length=None, batch_size=1, x_val=1.0):
 # or last stage output).
 @def_function.function
 def run_model_on_cpu(test_wrapper, model, input_values, repeat_count,
-                     gradient_accumulation_count, loss, optimizer):
+                     gradient_accumulation_count, loss, optimizer_fn):
 
   assert len(model) == 2
 
@@ -93,7 +93,7 @@ def run_model_on_cpu(test_wrapper, model, input_values, repeat_count,
 
   outputs = pipelining_test_util.PipelineTester.run_on_cpu(
       test_wrapper, [stage1, stage2], inputs_fn, input_values, repeat_count,
-      gradient_accumulation_count, test_dataset, optimizer)
+      gradient_accumulation_count, test_dataset, optimizer_fn)
   return outputs
 
 
@@ -348,9 +348,10 @@ class IPUSequentialPipelineTest(test.TestCase):
       cfg.auto_select_ipus = 2
       cfg.configure_ipu_system()
 
-      opt = gradient_descent.GradientDescentOptimizer(0.001)
+      def optimizer_fn():
+        return gradient_descent.GradientDescentOptimizer(0.001)
 
-      m.compile(opt, loss='mse')
+      m.compile(optimizer_fn(), loss='mse')
 
       # Fit the weights to the dataset
       history = m.fit(test_dataset(length=96))
@@ -362,10 +363,9 @@ class IPUSequentialPipelineTest(test.TestCase):
       self.assertEqual(len(history.history['loss']), 1)
       self.assertEqual(type(history.history['loss'][0]), np.float64)
 
-    opt_cpu = gradient_descent.GradientDescentOptimizer(0.001)
     loss_cpu = keras.losses.mean_squared_error
     cpu_loss = run_model_on_cpu(self, fixed_weight_pipeline(), [], 12, 8,
-                                loss_cpu, opt_cpu)
+                                loss_cpu, optimizer_fn)
     cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
     cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
     cpu_loss = cpu_loss[0]

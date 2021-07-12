@@ -59,7 +59,9 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 1
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -97,8 +99,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 13936, True,
-        pipelining_ops.PipelineSchedule.Sequential)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 13936,
+        True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
@@ -119,7 +121,9 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 1
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -199,8 +203,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
         [stage1, stage2, stage3], lambda: [], [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 36502, True,
-        pipelining_ops.PipelineSchedule.Sequential)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 36502,
+        True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
@@ -222,7 +226,9 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 1
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -253,8 +259,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 13681, True,
-        pipelining_ops.PipelineSchedule.Sequential)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 13681,
+        True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
@@ -276,7 +282,9 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 1
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -315,8 +323,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 10760, True,
-        pipelining_ops.PipelineSchedule.Sequential)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 10760,
+        True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
@@ -334,7 +342,9 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 8
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -365,8 +375,8 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 6328, True,
-        pipelining_ops.PipelineSchedule.Sequential)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 6328,
+        True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only

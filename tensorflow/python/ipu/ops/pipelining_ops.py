@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.eager import backprop
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -34,6 +35,7 @@ from tensorflow.python.ipu.ops import op_util
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
@@ -119,7 +121,9 @@ class OptimizerFunctionOutput:
                compute_gradients_args=None,
                compute_gradients_kwargs=None,
                apply_gradients_args=None,
-               apply_gradients_kwargs=None):
+               apply_gradients_kwargs=None,
+               variables=None,
+               tape=None):
     """Creates an OptimizerFunctionOutput object.
 
     Args:
@@ -135,6 +139,10 @@ class OptimizerFunctionOutput:
          which are passed to the `apply_gradients` function.
        apply_gradients_kwargs: Keyword arguments (not including grads_and_vars)
          which are passed to the `apply_gradients` function.
+       variables: A list or tuple of variables to compute gradients with respect
+         to when `opt` is an instance of `OptimizerV2`.
+       tape: A `GradientTape` for gradient computation when `opt` is an instance
+         of `OptimizerV2`.
     """
     self.opt = opt
     self.loss = loss
@@ -146,6 +154,8 @@ class OptimizerFunctionOutput:
       apply_gradients_args if apply_gradients_args else tuple()
     self.apply_gradients_kwargs = \
       apply_gradients_kwargs if apply_gradients_kwargs else dict()
+    self.variables = variables if variables else tuple()
+    self.tape = tape
 
   @property
   def opt(self):
@@ -153,10 +163,10 @@ class OptimizerFunctionOutput:
 
   @opt.setter
   def opt(self, value):
-    if not isinstance(value, optimizer.Optimizer):
+    if not isinstance(value, (optimizer.Optimizer, optimizer_v2.OptimizerV2)):
       raise TypeError(
           "OptimizerFunctionOutput.opt must be a TensorFlow Optimizer "
-          "object.")
+          "or Keras OptimizerV2 object.")
     self._opt = value
 
   @property
@@ -179,6 +189,12 @@ class OptimizerFunctionOutput:
     if not isinstance(value, tuple):
       raise TypeError(
           "OptimizerFunctionOutput.compute_gradients_args must be a tuple.")
+
+    if value and isinstance(self.opt, optimizer_v2.OptimizerV2):
+      raise ValueError(
+          "OptimizerFunctionOutput.compute_gradients_args may not be used "
+          "with OptimizerV2 instances.")
+
     self._compute_gradients_args = value
 
   @property
@@ -190,6 +206,12 @@ class OptimizerFunctionOutput:
     if not isinstance(value, dict):
       raise TypeError(
           "OptimizerFunctionOutput.compute_gradients_kwargs must be a dict.")
+
+    if value and isinstance(self.opt, optimizer_v2.OptimizerV2):
+      raise ValueError(
+          "OptimizerFunctionOutput.compute_gradients_kwargs may not be used "
+          "with OptimizerV2 instances.")
+
     self._compute_gradients_kwargs = value
 
   @property
@@ -213,6 +235,46 @@ class OptimizerFunctionOutput:
       raise TypeError(
           "OptimizerFunctionOutput.apply_gradients_kwargs must be a dict.")
     self._apply_gradients_kwargs = value
+
+  @property
+  def variables(self):
+    return self._variables
+
+  @variables.setter
+  def variables(self, value):
+    if not isinstance(value, (tuple, list)):
+      raise TypeError(
+          "OptimizerFunctionOutput.variables must be a tuple or list.")
+
+    if value and not isinstance(self.opt, optimizer_v2.OptimizerV2):
+      raise ValueError(
+          "OptimizerFunctionOutput.variables may only be used with OptimizerV2."
+      )
+
+    if hasattr(self, '_tape') and self.tape:
+      raise ValueError("OptimizerFunctionOutput.variables must be empty when "
+                       "OptimizerFunctionOutput.tape is used.")
+
+    self._variables = value
+
+  @property
+  def tape(self):
+    return self._tape
+
+  @tape.setter
+  def tape(self, value):
+    if value and not isinstance(value, backprop.GradientTape):
+      raise TypeError("OptimizerFunctionOutput.tape must be a GradientTape.")
+
+    if value and not isinstance(self.opt, optimizer_v2.OptimizerV2):
+      raise ValueError(
+          "OptimizerFunctionOutput.tape may only be used with OptimizerV2.")
+
+    if hasattr(self, '_variables') and self.variables:
+      raise ValueError("OptimizerFunctionOutput.tape may not be used when "
+                       "OptimizerFunctionOutput.variables is nonempty.")
+
+    self._tape = value
 
 
 class PipelineStageOptions:
@@ -862,8 +924,24 @@ def pipeline(computational_stages,
 
       # Call the compute gradients function - this will be automatically put
       # into pipeline stages.
-      grads_and_vars = opt.compute_gradients(loss, *compute_gradients_args,
-                                             **compute_gradients_kwargs)
+      if isinstance(opt, optimizer.Optimizer):
+        grads_and_vars = opt.compute_gradients(loss, *compute_gradients_args,
+                                               **compute_gradients_kwargs)
+      else:
+        if opt_fn.tape:
+          trainable_vars = list(opt_fn.tape.watched_variables())
+        elif opt_fn.variables:
+          trainable_vars = list(opt_fn.variables)
+        else:
+          raise RuntimeError(
+              "No variables to optimize. When using OptimzerV2, "
+              "OptimizerFunctionOutput must contain a list of variables "
+              "or a GradientTape.")
+        grads = opt.get_gradients(loss, trainable_vars)
+        if len(grads) != len(trainable_vars):
+          raise RuntimeError("Inconsistent gradient and variable counts.")
+        grads_and_vars = [(g, v) for g, v in zip(grads, trainable_vars)]
+
       # Insert gradient accumulation ops.
       accumulated_grads_and_vars = []
       for grad, var in grads_and_vars:

@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+from absl.testing import parameterized
 from functools import partial
 from tensorflow.python.ipu.config import IPUConfig
 import numpy as np
@@ -21,11 +22,13 @@ import pva
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.keras.optimizer_v2 import gradient_descent as gradient_descent_v2
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import control_flow_ops
@@ -53,8 +56,98 @@ from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
 
+PIPELINE_COMPARE_TEST_CASES = [{
+    'testcase_name': 'V1',
+    'opt_type': gradient_descent.GradientDescentOptimizer,
+    'opt_args': (0.01,)
+}, {
+    'testcase_name': 'V2',
+    'opt_type': gradient_descent_v2.SGD,
+    'opt_args': (0.01,)
+}]
 
-class PipeliningTest(test_util.TensorFlowTestCase):
+
+class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+  @test_util.deprecated_graph_mode_only
+  def testNoComputeGradsArgsWithV2(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OptimizerFunctionOutput.compute_gradients_args may not be used "
+        "with OptimizerV2 instances."):
+      opt = gradient_descent_v2.SGD()
+      loss = math_ops.square(1)
+      compute_args = (1, 2, 3)
+      _ = pipelining_ops.OptimizerFunctionOutput(
+          opt, loss, compute_gradients_args=compute_args)
+
+  @test_util.deprecated_graph_mode_only
+  def testNoComputeGradsKwargsWithV2(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OptimizerFunctionOutput.compute_gradients_kwargs may not be used "
+        "with OptimizerV2 instances."):
+      opt = gradient_descent_v2.SGD()
+      loss = math_ops.square(1)
+      compute_kwargs = {'a': 1, 'b': 2}
+      _ = pipelining_ops.OptimizerFunctionOutput(
+          opt, loss, compute_gradients_kwargs=compute_kwargs)
+
+  @test_util.deprecated_graph_mode_only
+  def testInvalidTypeForTape(self):
+    with self.assertRaisesRegex(
+        TypeError, "OptimizerFunctionOutput.tape must be a GradientTape."):
+      opt = gradient_descent_v2.SGD()
+      loss = math_ops.square(1)
+      _ = pipelining_ops.OptimizerFunctionOutput(opt,
+                                                 loss,
+                                                 tape=['a', 'b', 'c'])
+
+  @test_util.deprecated_graph_mode_only
+  def testNoGradientTapeWithV1(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OptimizerFunctionOutput.tape may only be used with OptimizerV2."):
+      opt = gradient_descent.GradientDescentOptimizer(1)
+      with GradientTape() as tape:
+        loss = math_ops.square(1)
+        _ = pipelining_ops.OptimizerFunctionOutput(opt, loss, tape=tape)
+
+  @test_util.deprecated_graph_mode_only
+  def testNoVariablesWithV1(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OptimizerFunctionOutput.variables may only be used with OptimizerV2."
+    ):
+      opt = gradient_descent.GradientDescentOptimizer(1)
+      loss = math_ops.square(1)
+      _ = pipelining_ops.OptimizerFunctionOutput(opt,
+                                                 loss,
+                                                 variables=[1, 2, 3])
+
+  @test_util.deprecated_graph_mode_only
+  def testNoTapeWithVariables(self):
+    with self.assertRaisesRegex(
+        ValueError, "OptimizerFunctionOutput.tape may not be used when "
+        "OptimizerFunctionOutput.variables is nonempty."):
+      opt = gradient_descent_v2.SGD(1)
+      with GradientTape() as tape:
+        loss = math_ops.square(1)
+        _ = pipelining_ops.OptimizerFunctionOutput(opt,
+                                                   loss,
+                                                   variables=[1, 2, 3],
+                                                   tape=tape)
+
+  @test_util.deprecated_graph_mode_only
+  def testNoVariablesWithTape(self):
+    with self.assertRaisesRegex(
+        ValueError, "OptimizerFunctionOutput.variables must be empty when "
+        "OptimizerFunctionOutput.tape is used."):
+      opt = gradient_descent_v2.SGD(1)
+      with GradientTape() as tape:
+        loss = math_ops.square(1)
+        f = pipelining_ops.OptimizerFunctionOutput(opt, loss, tape=tape)
+        f.variables = [1, 2, 3]
+
   @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedInference(self):
     def stage1(x):
@@ -707,8 +800,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       results = sess.run(outfeed_op)
       self.assertAllClose(results[0], [[0.], [2.], [8.], [18.], [32.], [0.]])
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare1(self):
+  def testPipelineCompare1(self, opt_type, opt_args):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -722,7 +816,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -764,13 +860,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         15500,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare2(self):
+  def testPipelineCompare2(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -787,7 +884,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -871,13 +970,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         38555,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompare3(self):
+  def testPipelineCompare3(self, opt_type, opt_args):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
@@ -895,7 +995,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -930,13 +1032,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         12600,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareSharedWeights(self):
+  def testPipelineCompareSharedWeights(self, opt_type, opt_args):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
@@ -951,7 +1054,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 20
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(0.01, 0.98)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -1020,7 +1125,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           repeat_count,
           gradient_accumulation_count,
           dataset_fn,
-          optimizer,
+          optimizer_fn,
           self,
           21458,
           schedule=pipelining_ops.PipelineSchedule.Interleaved,
@@ -1771,7 +1876,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     @custom_gradient.custom_gradient
     def f(x):
@@ -1810,7 +1917,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         14415,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
@@ -1829,7 +1936,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -1859,7 +1968,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3], inputs_fn, [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 11326)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithTensorArray(self):
@@ -1876,7 +1985,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(x, label):
       x = math_ops.cast(x, np.float32)
@@ -1912,7 +2023,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3], inputs_fn, [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer, self, 11326)
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 11326)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithEmbeddingOptimization(self):
@@ -1932,7 +2043,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 8
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     np.random.seed(1)
     embedding_shape = (dataset_size, embedding_size)
@@ -1980,7 +2093,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         12049,
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
@@ -2215,8 +2328,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(ValueError, 'No variables to optimize.'):
         ipu_compiler.compile(my_net, inputs=[x])
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareMultiIPUStage(self):
+  def testPipelineCompareMultiIPUStage(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2233,7 +2347,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -2317,13 +2433,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         53362,
         device_mapping=[pipelining_ops._ALL_DEVICES, 0, 1])  # pylint: disable=W0212
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStages(self):
+  def testPipelineCompareParStages(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2340,7 +2457,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -2430,13 +2549,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         53362,
         device_mapping=[0, [0, 1], 1])
 
+  @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testPipelineCompareParStagesInfeed(self):
+  def testPipelineCompareParStagesInfeed(self, opt_type, opt_args):
     # Resnet like network.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(100, shape=[4])
@@ -2453,7 +2573,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return opt_type(*opt_args)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -2544,7 +2666,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         61059,
         device_mapping=[[0, 1], 0, 1])

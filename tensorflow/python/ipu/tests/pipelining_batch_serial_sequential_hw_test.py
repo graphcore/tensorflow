@@ -85,7 +85,9 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
 
     pipeline_depth = 9
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(1.0 * 10**-6, 0.8)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(1.0 * 10**-6, 0.8)
 
     def fc(x, num_units_out):
       return layers.Dense(
@@ -139,7 +141,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         1000,
         replication_factor=1,
@@ -165,7 +167,9 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
 
     pipeline_depth = 20
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(1.0 * 10**-6, 0.8)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(1.0 * 10**-6, 0.8)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -232,7 +236,7 @@ class BatchSerialPipeliningHwTest(test.TestCase, parameterized.TestCase):
         repeat_count,
         pipeline_depth,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         1000,
         replication_factor=2,

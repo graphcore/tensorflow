@@ -32,7 +32,7 @@ from tensorflow.python.ipu.tests import pipelining_test_util
 class PoprunReplicaPartitioningTest(test.TestCase):
   def _compare_partitioned_to_non_partitioned(self, stages, repeat_count,
                                               gradient_accumulation_count,
-                                              dataset_fn, optimizer):
+                                              dataset_fn, optimizer_fn):
 
     replication_factor = popdist.getNumLocalReplicas()
     ipu_id = popdist.getDeviceId()
@@ -50,7 +50,7 @@ class PoprunReplicaPartitioningTest(test.TestCase):
               repeat_count,
               gradient_accumulation_count,
               dataset_fn,
-              optimizer,
+              optimizer_fn,
               test_wrapper=self,
               recomp=False,
               schedule=None,
@@ -85,7 +85,9 @@ class PoprunReplicaPartitioningTest(test.TestCase):
 
     pipeline_depth = 8
     repeat_count = 2
-    optimizer = momentum.MomentumOptimizer(0.01, 0.5)
+
+    def optimizer_fn():
+      return momentum.MomentumOptimizer(0.01, 0.5)
 
     def fc(x, num_units_out):
       return layers.Dense(
@@ -124,7 +126,7 @@ class PoprunReplicaPartitioningTest(test.TestCase):
 
     self._compare_partitioned_to_non_partitioned([stage1, stage2],
                                                  repeat_count, pipeline_depth,
-                                                 dataset_fn, optimizer)
+                                                 dataset_fn, optimizer_fn)
 
 
 if __name__ == "__main__":

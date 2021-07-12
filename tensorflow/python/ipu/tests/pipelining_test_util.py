@@ -14,15 +14,20 @@
 # =============================================================================
 
 import math
+from functools import partial
+
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.framework import ops
+from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.training import optimizer as optimizer_v1
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -32,6 +37,7 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import cross_replica_optimizer
+from tensorflow.python.ipu.keras.optimizers import ipu_wrappers
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.utils import MergeRemoteBuffersBehaviour
 from tensorflow.compat.v1 import data as compat_v1_data
@@ -65,14 +71,14 @@ class PipelineTester(object):
   @staticmethod
   def _cpu_with_grad_accum(test_wrapper, stages, inputs_fn, input_values,
                            repeat_count, num_batches_to_accumulate, dataset_fn,
-                           optimizer):
-
+                           optimizer_fn):
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
       with variable_scope.variable_scope("cpu", use_resource=True,
                                          reuse=False):
+        optimizer = optimizer_fn() if optimizer_fn else None
 
         def pipeline(*args):
           # TF2 replacement for: iterator = dataset.make_one_shot_iterator()
@@ -97,7 +103,13 @@ class PipelineTester(object):
           zero_ops = [
               var.assign(array_ops.zeros_like(var)) for var in accum_vars
           ]
-          grads = optimizer.compute_gradients(loss, trainable_variables)
+          if isinstance(optimizer, optimizer_v1.Optimizer):
+            grads = optimizer.compute_gradients(loss, trainable_variables)
+          else:
+            grads_only = optimizer.get_gradients(loss, trainable_variables)
+            assert len(grads_only) == len(trainable_variables)
+            grads = [(g, v) for g, v in zip(grads_only, trainable_variables)]
+
           accum_ops = [
               accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
           ]
@@ -126,11 +138,11 @@ class PipelineTester(object):
 
   @staticmethod
   def run_on_cpu(test_wrapper, stages, inputs_fn, input_values, repeat_count,
-                 gradient_accumulation_count, dataset_fn, optimizer):
+                 gradient_accumulation_count, dataset_fn, optimizer_fn):
     return PipelineTester._cpu_with_grad_accum(test_wrapper, stages, inputs_fn,
                                                input_values, repeat_count,
                                                gradient_accumulation_count,
-                                               dataset_fn, optimizer)
+                                               dataset_fn, optimizer_fn)
 
   @staticmethod
   def _sharded_on_ipu(
@@ -140,7 +152,7 @@ class PipelineTester(object):
       repeat_count,
       num_batches_to_accumulate,
       dataset_fn,
-      optimizer,
+      optimizer_fn,
       test_wrapper,
       recomp,
       device_mapping,
@@ -155,6 +167,7 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
+      optimizer = optimizer_fn() if optimizer_fn else None
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
@@ -179,20 +192,35 @@ class PipelineTester(object):
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)
         if optimizer:
+          is_v2 = isinstance(optimizer, optimizer_v2.OptimizerV2)
+          if is_v2:
+            opt = ipu_wrappers._KerasOptimizerWrapper(None, optimizer)  # pylint: disable=protected-access
+          else:
+            opt = optimizer
+
           if replication_factor > 1:
             opt = \
               gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(# pylint: disable=line-too-long
-                  optimizer,
+                  opt,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding) # pylint: disable=line-too-long
           else:
             opt = \
               gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-                  optimizer,
+                  opt,
                   num_batches_to_accumulate,
                   replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)# pylint: disable=line-too-long
 
-          outs.append(opt.minimize(outputs))
+          if is_v2:
+            # Note that the V2 optimizer is wrapped in the V1 API
+            # in this instance.
+            trainable_variables = variables.trainable_variables()
+            grads = opt.compute_gradients(outputs, trainable_variables)
+
+            assert len(grads) == len(trainable_variables)
+            outs.append(opt.apply_gradients(grads))
+          else:
+            outs.append(opt.minimize(outputs))
         return outs
 
       def my_net(*args):
@@ -250,7 +278,7 @@ class PipelineTester(object):
       repeat_count,
       gradient_accumulation_count,
       dataset_fn,
-      optimizer,
+      optimizer_fn,
       test_wrapper,
       expected_max_tile_memory,
       recomp,
@@ -274,23 +302,24 @@ class PipelineTester(object):
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       dataset = dataset_fn()
       inputs = inputs_fn()
+      optimizer = optimizer_fn() if optimizer_fn else None
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
-      def opt_fn(loss):
+      def opt_fn(tape, loss):
         global_replication_factor = replication_factor * (process_count or 1)
         if global_replication_factor > 1:
           opt = cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
         else:
           opt = optimizer
-        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss, tape=tape)
 
-      optimizer_function = opt_fn if optimizer else None
-
-      def my_net(*args):
+      def my_net(tape, *args):
         with variable_scope.variable_scope("ipu",
                                            use_resource=True,
                                            reuse=False):
+          optimizer_function = partial(opt_fn, tape) if optimizer else None
+
           return pipelining_ops.pipeline(
               stages,
               gradient_accumulation_count,
@@ -308,7 +337,14 @@ class PipelineTester(object):
               replicated_optimizer_state_sharding)
 
       with ops.device("/device:IPU:0"):
-        compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
+        if isinstance(optimizer, optimizer_v1.Optimizer):
+          net_fn = partial(my_net, None)
+          compiled_model_pipeline = ipu_compiler.compile(net_fn, inputs=inputs)
+        else:
+          with GradientTape() as tape:
+            net_fn = partial(my_net, tape)
+            compiled_model_pipeline = ipu_compiler.compile(net_fn,
+                                                           inputs=inputs)
 
       # Execution profiles of code with dynamic control flow are not supported
       # on real HW.
@@ -377,7 +413,7 @@ class PipelineTester(object):
                               repeat_count,
                               gradient_accumulation_count,
                               dataset_fn,
-                              optimizer,
+                              optimizer_fn,
                               test_wrapper,
                               expected_max_tile_memory,
                               recomp=False,
@@ -402,7 +438,7 @@ class PipelineTester(object):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         test_wrapper,
         expected_max_tile_memory,
         recomp,
@@ -420,7 +456,7 @@ class PipelineTester(object):
                                  batch_serialization_iterations)
     cpu_losses = PipelineTester._cpu_with_grad_accum(
         test_wrapper, stages, inputs_fn, input_values, repeat_count,
-        num_batches_to_accumulate, dataset_fn, optimizer)
+        num_batches_to_accumulate, dataset_fn, optimizer_fn)
 
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
@@ -436,7 +472,7 @@ class PipelineTester(object):
       repeat_count,
       gradient_accumulation_count,
       dataset_fn,
-      optimizer,
+      optimizer_fn,
       test_wrapper,
       expected_max_tile_memory,
       recomp=False,
@@ -467,7 +503,7 @@ class PipelineTester(object):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         test_wrapper,
         expected_max_tile_memory,
         recomp,
@@ -493,7 +529,7 @@ class PipelineTester(object):
         repeat_count,
         num_batches_to_accumulate,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         test_wrapper,
         recomp,
         device_mapping,

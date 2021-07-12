@@ -51,7 +51,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -93,7 +95,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         19714,
         True,
@@ -118,7 +120,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 18
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def fixed_padding(inputs, kernel_size):
       pad_total = kernel_size - 1
@@ -202,7 +206,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         199241,
         True,
@@ -224,7 +228,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(idx, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -259,7 +265,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         60107,
         True,
@@ -282,7 +288,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 16
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -325,7 +333,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         19922,
         True,
@@ -347,7 +355,9 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     gradient_accumulation_count = 8
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def optimizer_fn():
+      return gradient_descent.GradientDescentOptimizer(0.01)
 
     def stage1(c, img, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -382,7 +392,7 @@ class PipeliningBatchSerialSeqRecomputationTest(test_util.TensorFlowTestCase):
         repeat_count,
         gradient_accumulation_count,
         dataset_fn,
-        optimizer,
+        optimizer_fn,
         self,
         8014,
         True,
