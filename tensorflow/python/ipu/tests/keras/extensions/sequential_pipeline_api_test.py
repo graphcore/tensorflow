@@ -39,9 +39,6 @@ def check_assignments(instance, model, assignments):
               SequentialLayerPipelineStageAssignment)
           for assignment in assignments))
   instance.assertTrue(
-      all(assignment.layer_index == i
-          for i, assignment in enumerate(assignments)))
-  instance.assertTrue(
       all(assignment.layer == model.layers[i]
           for i, assignment in enumerate(assignments)))
 
@@ -49,7 +46,7 @@ def check_assignments(instance, model, assignments):
 def create_default_assignment(model):
   return [
       extensions.sequential_extensions.SequentialLayerPipelineStageAssignment(
-          model, i, pipeline_stage=i) for i in range(len(model.layers))
+          layer, i) for i, layer in enumerate(model.layers)
   ]
 
 
@@ -128,23 +125,15 @@ class SequentialPipelineApiTest(test.TestCase):
           r"not match the number of layers in the model \(currently 10\)"):
         m.set_pipeline_stage_assignment(list(range(8)))
 
-      # Test duplicate assignment.
-      assignments = create_default_assignment(m)
-      assignments[-1]._layer_index = 1  # pylint: disable=protected-access
-      with self.assertRaisesRegex(
-          ValueError,
-          r"The provided `pipeline_stage_assignment` contains a duplicate "
-          r"assignment for layer dense.* at sequential index 1."):
-        m.set_pipeline_stage_assignment(assignments)
-
       # Test indexes match.
       m = get_simple_model()
       assignments = create_default_assignment(m)
       assignments[0], assignments[1] = assignments[1], assignments[0]
       with self.assertRaisesRegex(
           ValueError,
-          "The provided assignment at index 0 `pipeline_stage_assignment` does "
-          "not match with the layer index 1"):
+          r"The provided assignment at index 0 `pipeline_stage_assignment` is "
+          r"for layer dense.*, but the layer in the Sequential model at "
+          r"index 0 is dense.*"):
         m.set_pipeline_stage_assignment(assignments)
 
       # Test first layer is on pipeline stage 0.
@@ -163,16 +152,17 @@ class SequentialPipelineApiTest(test.TestCase):
       assignments[-1].pipeline_stage = 0
       with self.assertRaisesRegex(
           ValueError,
-          r"Layer dense.* at sequential index 9 has been assigned to pipeline "
-          r"stage 0, however the previous layer in the Sequential model was "
-          r"assigned to pipeline stage 8. A layer in a Sequential model can "
-          r"only be assigned to the same pipeline stage as the previous layer "
-          r"or to the next pipeline stage."):
+          r"Layer dense.* has been assigned to pipeline stage 0, however the "
+          r"previous layer in the Sequential model was assigned to pipeline "
+          r"stage 8. A layer in a Sequential model can only be assigned to the "
+          r"same pipeline stage as the previous layer or to the next pipeline "
+          r"stage."):
         m.set_pipeline_stage_assignment(assignments)
 
   @test_util.run_v2_only
   def testSaveRestore(self):
     cfg = config.IPUConfig()
+
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 

@@ -27,30 +27,21 @@ class SequentialLayerPipelineStageAssignment:
   """A class used to indicate in which pipeline stage a layer in a `Sequential`
   model should be executed in.
   """
-  def __init__(self, model, layer_index, pipeline_stage=None):
+  def __init__(self, layer, pipeline_stage=None):
     """Create a new SequentialLayerPipelineStageAssignment.
 
     Args:
-      model: The Keras Sequential model which is being pipelined.
-      layer_index: The index in the sequence of layers in the `model` for which
-        this assignment is for.
+      layer: The Keras layer for which this assignment is for.
       pipeline_stage: If provided, indicates which pipeline stage this layer
         should be assigned to. If not provided this layer will be unassigned.
     """
-    self._model = model
-    self._layer_index = layer_index
+    self._layer = layer
     self.pipeline_stage = pipeline_stage
 
   @property
   def layer(self):
     """Returns the Keras layer for which this assignment is for."""
-    return self._model.layers[self.layer_index]
-
-  @property
-  def layer_index(self):
-    """Returns the index in the sequence of layers in the Sequential model for
-    which this assignment is for."""
-    return self._layer_index
+    return self._layer
 
   @property
   def pipeline_stage(self):
@@ -65,9 +56,8 @@ class SequentialLayerPipelineStageAssignment:
     self._pipeline_stage = value
 
   def __str__(self):
-    return ("Layer: {} (Sequential layer index {}) is assigned to pipeline "
-            "stage: {}".format(self.layer.name, self.layer_index,
-                               self.pipeline_stage))
+    return ("Layer: {} is assigned to pipeline stage: {}".format(
+        self.layer.name, self.pipeline_stage))
 
 
 class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=abstract-method
@@ -114,7 +104,7 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
     self._pipeline_stage_assignment_valid = config.get(
         "pipeline_stage_assignment_valid", False)
     self._pipeline_stage_assignment = [
-        SequentialLayerPipelineStageAssignment(self, i, stage)
+        SequentialLayerPipelineStageAssignment(self.layers[i], stage)
         for i, stage in enumerate(config.get("pipeline_stage_assignment", []))
     ]
 
@@ -219,43 +209,24 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
       return copy.copy(self._pipeline_stage_assignment)
 
     return [
-        SequentialLayerPipelineStageAssignment(self, i)
-        for i in range(len(self.layers))
+        SequentialLayerPipelineStageAssignment(layer) for layer in self.layers
     ]
 
   def _validate_pipeline_stage_assignment(self, pipeline_stage_assignment):
-    num_layers = len(self.layers)
-
-    if len(pipeline_stage_assignment) != num_layers:
-      raise ValueError(
-          "The size of the provided `pipeline_stage_assignment` ({}) does not "
-          "match the number of layers in the model (currently {}). Each layer "
-          "in a Sequential model needs to be assigned to a pipeline "
-          "stage.".format(len(pipeline_stage_assignment), num_layers))
-
-    layers_assigned = set()
-    for assignment in pipeline_stage_assignment:
-      if assignment.layer_index in layers_assigned:
-        raise ValueError(
-            "The provided `pipeline_stage_assignment` contains a duplicate "
-            "assignment for layer {} at sequential index {}. Each layer index "
-            "in a Sequential model can only be assigned to a pipeline "
-            "stage.".format(assignment.layer.name, assignment.layer_index))
-      layers_assigned.add(assignment.layer_index)
-
     # Pipeline stages need to be strictly increasing.
     prev_pipeline_stage = 0
     for i, assignment in enumerate(pipeline_stage_assignment):
-      if i != assignment.layer_index:
-        raise ValueError(
-            "The provided assignment at index {} `pipeline_stage_assignment` "
-            "does not match with the layer index {}".format(
-                i, assignment.layer_index))
-
       if assignment.pipeline_stage is None:
         raise ValueError(
-            "Layer {} at sequential index {} has not been assigned a pipeline "
-            "stage.".format(assignment.layer.name, assignment.layer_index))
+            "Layer {} has not been assigned a pipeline stage.".format(
+                assignment.layer.name))
+
+      if self.layers[i] != assignment.layer:
+        raise ValueError(
+            "The provided assignment at index {} `pipeline_stage_assignment` "
+            "is for layer {}, but the layer in the Sequential model at index "
+            "{} is {}.".format(i, assignment.layer.name, i,
+                               self.layers[i].name))
 
       if i == 0:
         if assignment.pipeline_stage != 0:
@@ -267,13 +238,13 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
           prev_pipeline_stage, prev_pipeline_stage + 1
       ]:
         raise ValueError(
-            "Layer {} at sequential index {} has been assigned to pipeline "
-            "stage {}, however the previous layer in the Sequential model was "
-            "assigned to pipeline stage {}. A layer in a Sequential "
-            "model can only be assigned to the same pipeline stage as the "
-            "previous layer or to the next pipeline stage.".format(
-                assignment.layer.name, assignment.layer_index,
-                assignment.pipeline_stage, prev_pipeline_stage))
+            "Layer {} has been assigned to pipeline stage {}, however the "
+            "previous layer in the Sequential model was assigned to pipeline "
+            "stage {}. A layer in a Sequential model can only be assigned to "
+            "the same pipeline stage as the previous layer or to the next "
+            "pipeline stage.".format(assignment.layer.name,
+                                     assignment.pipeline_stage,
+                                     prev_pipeline_stage))
 
       prev_pipeline_stage = assignment.pipeline_stage
 
@@ -302,12 +273,19 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
     if not isinstance(pipeline_stage_assignment, list):
       raise ValueError("`pipeline_stage_assignment` needs to be a list")
 
+    if len(pipeline_stage_assignment) != len(self.layers):
+      raise ValueError(
+          "The size of the provided `pipeline_stage_assignment` ({}) does not "
+          "match the number of layers in the model (currently {}). Each layer "
+          "in a Sequential model needs to be assigned to a pipeline "
+          "stage.".format(len(pipeline_stage_assignment), len(self.layers)))
+
     if all(
         isinstance(assignment, int)
         for assignment in pipeline_stage_assignment):
       # Convert the assignment to `SequentialLayerPipelineStageAssignment`.
       pipeline_stage_assignment = [
-          SequentialLayerPipelineStageAssignment(self, i, stage)
+          SequentialLayerPipelineStageAssignment(self.layers[i], stage)
           for i, stage in enumerate(pipeline_stage_assignment)
       ]
 
