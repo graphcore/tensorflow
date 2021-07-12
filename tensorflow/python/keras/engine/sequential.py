@@ -156,6 +156,7 @@ class Sequential(functional.Functional):
     return layers[:]
 
   @trackable.no_automatic_dependency_tracking
+  @base_layer.extension_delegate
   def add(self, layer):
     """Adds a layer instance on top of the layer stack.
 
@@ -236,6 +237,7 @@ class Sequential(functional.Functional):
     self._layer_call_argspecs[layer] = tf_inspect.getfullargspec(layer.call)
 
   @trackable.no_automatic_dependency_tracking
+  @base_layer.extension_delegate
   def pop(self):
     """Removes the last layer in the model.
 

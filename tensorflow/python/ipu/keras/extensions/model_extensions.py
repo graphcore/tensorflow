@@ -17,6 +17,7 @@ IPU specific Keras Model extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 import copy
+import math
 
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
@@ -82,7 +83,7 @@ class ModelExtension(base_layer.KerasExtension):
 
   def _is_pipelined(self):
     """Returns whether the model is pipelined."""
-    return self._get_shard_count() > 1
+    raise NotImplementedError
 
   def _check_mode(self):
     if self.run_eagerly:
@@ -101,7 +102,11 @@ class ModelExtension(base_layer.KerasExtension):
                          " can only be used on an IPU device.")
 
       num_ipus = utils.get_num_of_ipus_in_device(device_string)
+
       shard_count = self._get_shard_count()
+      # Round the shard count to the next power of two.
+      shard_count = 2**int(math.ceil(math.log2(shard_count)))
+
       if self._get_shard_count() > num_ipus:
         raise ValueError(
             "Current device has {} IPUs attached, however the current model "
@@ -679,7 +684,7 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 
-        self._log_steps_per_execution_warning(inferred_steps,
+        self._log_steps_per_execution_warning(steps_per_execution_value,
                                               steps_per_execution_per_replica)
 
         self.reset_metrics()
@@ -785,7 +790,7 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 
-        self._log_steps_per_execution_warning(inferred_steps,
+        self._log_steps_per_execution_warning(steps_per_execution_value,
                                               steps_per_execution_per_replica)
 
         for step in data_handler.steps():
@@ -826,6 +831,15 @@ class ModelExtension(base_layer.KerasExtension):
     all_outputs = nest.map_structure_up_to(batch_outputs,
                                            training_module.concat, outputs)
     return tf_utils.to_numpy_or_python_type(all_outputs)
+
+  def get_pipeline_stage_assignment(self):
+    raise NotImplementedError
+
+  def set_pipeline_stage_assignment(self, pipeline_stage_assignment):
+    raise NotImplementedError
+
+  def reset_pipeline_stage_assignment(self):
+    raise NotImplementedError
 
 
 class _SyntheticDataGenerator(collections_abc.Iterator):

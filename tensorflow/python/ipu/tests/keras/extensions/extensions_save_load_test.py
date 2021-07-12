@@ -34,6 +34,7 @@ class KerasExtensionsSaveLoadTest(test.TestCase):
 
     class TestExtension(extensions.functional_extensions.FunctionalExtension):  # pylint: disable=abstract-method
       def __init__(self):
+        extensions.functional_extensions.FunctionalExtension.__init__(self)
         self.test_option = False
 
       @property
@@ -98,6 +99,7 @@ class KerasExtensionsSaveLoadTest(test.TestCase):
 
     class TestExtension(extensions.sequential_extensions.SequentialExtension):  # pylint: disable=abstract-method
       def __init__(self):
+        extensions.sequential_extensions.SequentialExtension.__init__(self)
         self.test_option = False
 
       @property

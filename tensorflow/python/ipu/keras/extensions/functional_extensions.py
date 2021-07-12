@@ -22,8 +22,15 @@ from tensorflow.python.training.tracking import base as trackable
 
 
 class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=abstract-method
+  @trackable.no_automatic_dependency_tracking
+  def __init__(self):
+    model_extensions.ModelExtension.__init__(self)
+
   def _get_shard_count(self):
     return 1
+
+  def _is_pipelined(self):
+    return False
 
   def _get_config_supported(self):
     return True
@@ -42,6 +49,7 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
   @trackable.no_automatic_dependency_tracking
   def _deserialize_from_config_delegate(self, config):
+    FunctionalExtension.__init__(self)
     self._from_base_config(config)
 
   def set_gradient_accumulation_options(
