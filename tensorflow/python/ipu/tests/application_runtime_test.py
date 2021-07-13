@@ -47,6 +47,11 @@ disable_v2_behavior()
 
 L1_SIZE = 320
 L2_SIZE = 10
+BATCH_SIZE = 16
+NUM_ITERATIONS = 8
+NUM_ENGINE_ITERATIONS = 4
+NUM_TEST_ITERATIONS = 10
+IMG_SIZE = 784
 
 tmp_dir_obj = tempfile.TemporaryDirectory()
 tmp_dir = tmp_dir_obj.name
@@ -129,7 +134,7 @@ def run_model():
   x_train, x_test = x_train / 255.0, x_test / 255.0
 
   n_train = 240
-  n_test = 48
+  n_test = BATCH_SIZE * NUM_ITERATIONS * NUM_ENGINE_ITERATIONS
 
   x_train = x_train[0:n_train, :, :]
   y_train = y_train[0:n_train]
@@ -139,7 +144,7 @@ def run_model():
   # Sizes/shapes for the dataset:
   image_shape = x_train.shape[1:]
   num_pixels = image_shape[0] * image_shape[1]
-  batch_size = 16
+  batch_size = BATCH_SIZE
   num_train = y_train.shape[0]
   num_test = y_test.shape[0]
   data_shape = [None, num_pixels]
@@ -154,7 +159,7 @@ def run_model():
   epochs = 5
   ipu_steps_per_epoch = 15
   batches_per_epoch = num_train // batch_size
-  test_batches = num_test // batch_size
+  test_batches = NUM_ITERATIONS
   batches_per_step = batches_per_epoch // ipu_steps_per_epoch
   if not batches_per_epoch % ipu_steps_per_epoch == 0:
     raise ValueError(f"IPU steps per epoch {ipu_steps_per_epoch} " +
@@ -246,10 +251,15 @@ def run_model():
 
     print(f"  Testing...")
 
+    out_labels = np.empty([NUM_ENGINE_ITERATIONS, NUM_ITERATIONS, BATCH_SIZE],
+                          dtype='int32')
+
     sess.run(metrics_initializer)
     sess.run(infeed_test_queue.initializer, feed_dict={place_x: x_test_flat})
-    sess.run(test_loop)
-    result = sess.run(dequeue_test_outfeed)
+    for ei in range(NUM_ENGINE_ITERATIONS):
+      sess.run(test_loop)
+      result = sess.run(dequeue_test_outfeed)
+      out_labels[ei, :, :] = result['predictions']
 
     d1_bias = train.load_variable(model_save_path, 'd1/bias')
     d1_weight = train.load_variable(model_save_path, 'd1/weight')
@@ -261,7 +271,7 @@ def run_model():
                      d2_bias=d2_bias,
                      d2_weight=d2_weight,
                      images=x_test_flat,
-                     labels=result['predictions'])
+                     labels=out_labels)
 
     return mnist_ref
 
@@ -289,7 +299,7 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
 
     input_descs = [
         ('XLA_Args/d1/bias', [L1_SIZE], dtypes.float32),  #0
-        ('XLA_Args/d1/weight', [784, L1_SIZE], dtypes.float32),  #1
+        ('XLA_Args/d1/weight', [IMG_SIZE, L1_SIZE], dtypes.float32),  #1
         ('XLA_Args/d2/bias', [L2_SIZE], dtypes.float32),  #2
         ('XLA_Args/d2/weight', [L1_SIZE, L2_SIZE], dtypes.float32),  #3
         ('XLA_Args/metrics_1/accuracy/count', [], dtypes.float32),  #4
@@ -313,11 +323,18 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
     input_placeholders = tuple(input_placeholders)
 
     images = array_ops.placeholder(dtypes.float32,
-                                   shape=[16, 784],
+                                   shape=[BATCH_SIZE, IMG_SIZE],
                                    name='images')
 
-    images_all = mnist_ref['images']
-    labels_all = np.empty(mnist_ref['labels'].shape, dtype='int32')
+    images_all = mnist_ref['images'].reshape(
+        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE, IMG_SIZE))
+    images_all = images_all[0:NUM_TEST_ITERATIONS, :, :]
+
+    labels_all = np.empty([NUM_TEST_ITERATIONS, BATCH_SIZE], dtype='int32')
+
+    labels_ref = mnist_ref['labels'].reshape(
+        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE))
+    labels_ref = labels_ref[0:NUM_TEST_ITERATIONS, :]
 
     with sl.Session() as session:
       for i in range(1):
@@ -328,24 +345,24 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
             filename=poplar_exec_filepath,
             engine_name=engine_name)
 
-        for j in range(3):
+        with ops.control_dependencies([run_app]):
           infeeds = (images,)
-          with ops.control_dependencies([run_app]):
-            result = gen_application_runtime.application_call(
-                infeeds, outfeed_types=[dtypes.int32], engine_name=engine_name)
-
-          images_host = images_all[j * 16:(j + 1) * 16, :]
+          result = gen_application_runtime.application_call(
+              infeeds, outfeed_types=[dtypes.int32], engine_name=engine_name)
 
           session.run(variables.global_variables_initializer())
-          results = session.run(result,
-                                feed_dict={
-                                    infeeds: (images_host,),
-                                    input_placeholders: inputs,
-                                })
+          for j in range(NUM_TEST_ITERATIONS):
+            images_host = images_all[j, :, :]
 
-          labels_all[j, :] = results[0]
+            results = session.run(result,
+                                  feed_dict={
+                                      infeeds: (images_host,),
+                                      input_placeholders: inputs,
+                                  })
 
-    self.assertAllClose(mnist_ref['labels'], labels_all)
+            labels_all[j, :] = results[0]
+
+    self.assertAllClose(labels_ref, labels_all)
 
 
 if __name__ == "__main__":
