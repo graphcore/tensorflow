@@ -183,6 +183,70 @@ class SequentialPipelineApiTest(test.TestCase):
             [assignment.pipeline_stage for assignment in assignments],
             list(range(10)))
 
+  @test_util.run_v2_only
+  def testSetPipeliningOptions(self):
+    cfg = config.IPUConfig()
+
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      m = get_simple_model()
+      m.set_pipeline_stage_assignment(list(range(10)))
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "Expected `gradient_accumulation_steps` to be a positive integer, "
+          "but got -1 instead"):
+        m.set_pipelining_options(gradient_accumulation_steps=-1)
+
+      with self.assertRaisesRegex(
+          ValueError, "Expected `device_mapping` to be a list of integers"):
+        m.set_pipelining_options(device_mapping=[0.0] * 10)
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "Found `gradient_accumulation_count` key in `pipelining_kwargs`. Set "
+          "the `gradient_accumulation_steps` argument to "
+          "`set_pipelining_options` instead."):
+        m.set_pipelining_options(gradient_accumulation_count=10)
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "Found `repeat_count` key in `pipelining_kwargs`. This argument is "
+          "automatically set by Keras"):
+        m.set_pipelining_options(repeat_count=10)
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "Found `repeat_count` key in `pipelining_kwargs`. This argument is "
+          "automatically set by Keras"):
+        m.set_pipelining_options(repeat_count=10)
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "Found `batch_serialization_iterations` key in `pipelining_kwargs`. "
+          "This argument is not compatible with Keras"):
+        m.set_pipelining_options(batch_serialization_iterations=10)
+
+      m.set_pipelining_options(gradient_accumulation_steps=10,
+                               device_mapping=[4, 3, 2, 1, 0])
+
+      with tempfile.TemporaryDirectory() as tmp:
+        save_path = os.path.join(tmp, "model")
+        m.build((4, 1))
+        m.save(save_path)
+        m = models.load_model(save_path)
+        self.assertTrue(m._pipeline_stage_assignment_valid)  # pylint: disable=protected-access
+        assignments = m.get_pipeline_stage_assignment()
+        check_assignments(self, m, assignments)
+        self.assertEqual(
+            [assignment.pipeline_stage for assignment in assignments],
+            list(range(10)))
+        self.assertEqual(m._pipelining_gradient_accumulation_steps, 10)  # pylint: disable=protected-access
+        self.assertEqual(m._pipelining_device_mapping, [4, 3, 2, 1, 0])  # pylint: disable=protected-access
+
 
 if __name__ == '__main__':
   test.main()

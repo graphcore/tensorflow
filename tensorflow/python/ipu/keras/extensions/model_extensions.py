@@ -52,6 +52,9 @@ class ModelExtension(base_layer.KerasExtension):
     self._gradient_accumulation_steps = None
     self._gradient_accumulation_optimizer_kwargs = dict()
     self._experimental_gradient_accumulation_normalize_gradients = None
+    self._pipelining_gradient_accumulation_steps = None
+    self._pipelining_device_mapping = None
+    self._pipelining_kwargs = dict()
 
     # Following values are runtime only.
     self._ipu_train_function = None
@@ -362,9 +365,9 @@ class ModelExtension(base_layer.KerasExtension):
     if gradient_accumulation_steps is not None:
       if not isinstance(gradient_accumulation_steps,
                         int) or gradient_accumulation_steps < 1:
-        raise TypeError(
+        raise ValueError(
             "Expected `gradient_accumulation_steps` to be a positive integer, "
-            "but got {gradient_accumulation_steps} instead.")
+            "but got {} instead.".format(gradient_accumulation_steps))
       self._gradient_accumulation_steps = gradient_accumulation_steps
       reset_extension = True
 
@@ -398,6 +401,69 @@ class ModelExtension(base_layer.KerasExtension):
     if reset_extension:
       self._reset_ipu_extension()
 
+  @trackable.no_automatic_dependency_tracking
+  def _set_pipelining_options_impl(self,
+                                   pipelining_gradient_accumulation_steps,
+                                   pipelining_device_mapping,
+                                   pipelining_kwargs):
+    # The extension might need to be reset if any of the values are set.
+    reset_extension = False
+
+    if pipelining_gradient_accumulation_steps is not None:
+      if not isinstance(pipelining_gradient_accumulation_steps,
+                        int) or pipelining_gradient_accumulation_steps < 1:
+        raise ValueError("Expected `gradient_accumulation_steps` to be a "
+                         "positive integer, but got {} instead.".format(
+                             pipelining_gradient_accumulation_steps))
+      self._pipelining_gradient_accumulation_steps = \
+        pipelining_gradient_accumulation_steps
+      reset_extension = True
+
+    if pipelining_device_mapping is not None:
+      if not isinstance(pipelining_device_mapping, list) or not all(
+          isinstance(x, int) for x in pipelining_device_mapping):
+        raise ValueError("Expected `device_mapping` to be a list of integers.")
+      self._pipelining_device_mapping = pipelining_device_mapping
+      reset_extension = True
+
+    if pipelining_kwargs is not None:
+      if not isinstance(pipelining_kwargs, (dict, collections_abc.Mapping)):
+        raise TypeError("`pipelining_kwargs` must be a dictionary.")
+
+      explicit_args = {
+          "gradient_accumulation_count": "gradient_accumulation_steps",
+          "device_mapping": "device_mapping"
+      }
+      for explicit_arg, alternative in explicit_args.items():
+        if explicit_arg in pipelining_kwargs:
+          raise ValueError(
+              "Found `{}` key in `pipelining_kwargs`. Set the `{}` argument to "
+              "`set_pipelining_options` instead.".format(
+                  explicit_arg, alternative))
+
+      automatic_args = [
+          "computational_stages", "repeat_count", "inputs", "infeed_queue",
+          "outfeed_queue", "optimizer_function"
+      ]
+      for automatic_arg in automatic_args:
+        if automatic_arg in pipelining_kwargs:
+          raise ValueError(
+              "Found `{}` key in `pipelining_kwargs`. This argument is "
+              "automatically set by Keras.".format(automatic_arg))
+
+      invalid_args = ["outfeed_loss", "batch_serialization_iterations"]
+      for invalid_arg in invalid_args:
+        if invalid_arg in pipelining_kwargs:
+          raise ValueError(
+              "Found `{}` key in `pipelining_kwargs`. This argument is "
+              "not compatible with Keras.".format(invalid_arg))
+
+      self._pipelining_kwargs = pipelining_kwargs
+      reset_extension = True
+
+    if reset_extension:
+      self._reset_ipu_extension()
+
   def _get_base_config(self):
     """Returns any configuration required to serialize this base class."""
     config = dict()
@@ -413,6 +479,17 @@ class ModelExtension(base_layer.KerasExtension):
           "you will need to call `set_gradient_accumulation_options` again if "
           "the model is restored.".format(self.name))
 
+    config["pipelining_gradient_accumulation_steps"] = \
+      self._pipelining_gradient_accumulation_steps
+    config["pipelining_device_mapping"] = self._pipelining_device_mapping
+
+    if self._pipelining_kwargs:
+      logging.info(
+          "Calling get_config() on {} - "
+          "`pipelining_kwargs` cannot be serialized and you will need to call "
+          "`set_pipelining_options` again if the model is restored.".format(
+              self.name))
+
     return config
 
   @trackable.no_automatic_dependency_tracking
@@ -421,6 +498,10 @@ class ModelExtension(base_layer.KerasExtension):
         "gradient_accumulation_steps", None)
     self._experimental_gradient_accumulation_normalize_gradients = config.get(
         "experimental_gradient_accumulation_normalize_gradients", None)
+    self._pipelining_gradient_accumulation_steps = config.get(
+        "pipelining_gradient_accumulation_steps", None)
+    self._pipelining_device_mapping = config.get("pipelining_device_mapping",
+                                                 None)
 
   def _fit_supported(self, *args, **kwargs):  # pylint:disable=unused-argument
     return True

@@ -155,9 +155,9 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
     `gradient_accumulation_steps` steps have been processed, the accumulated
     gradients are used to compute the weight update.
 
-    This feature of neural networks allows us to simulate bigger batch sizes.
-    For example if we have a model of batch size 16 and we accumulate the
-    gradients for 4 steps, this simulates an input batch of size 64.
+    Gradient Accumulation allows us to simulate bigger batch sizes. For example
+    if we have a model of batch size 16 and we accumulate the gradients for 4
+    steps, this simulates an input batch of size 64.
 
     When training a data-parallel model, enabling gradient accumulation also
     reduces the communication overhead as the all-reduce of gradients is now
@@ -191,6 +191,57 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
     self._set_gradient_accumulation_options_impl(
         gradient_accumulation_steps, experimental_normalize_gradients,
         gradient_accumulation_optimizer_kwargs)
+
+  def set_pipelining_options(self,
+                             gradient_accumulation_steps=None,
+                             device_mapping=None,
+                             **pipelining_kwargs):
+    """Sets the pipelining options, including gradient accumulation options,
+    for pipelined models.
+
+    Before training a pipelined model, `gradient_accumulation_steps` argument
+    needs to be set as pipelined models always perform gradient accumulation
+    when training. Setting `gradient_accumulation_steps > 1` means that instead
+    of performing the weight update for every step, gradients across multiple
+    steps are accumulated. After `gradient_accumulation_steps` steps have been
+    processed, the accumulated gradients are used to compute the weight update.
+
+    Gradient Accumulation allows us to simulate bigger batch sizes. For example
+    if we have a model of batch size 16 and we accumulate the gradients for 4
+    steps, this simulates an input batch of size 64.
+
+    When training a data-parallel model, enabling gradient accumulation also
+    reduces the communication overhead as the all-reduce of gradients is now
+    performed every `gradient_accumulation_steps` steps instead of every step.
+
+    See the :ref:`gradient-accumulation` section in the documention for more
+    details.
+
+    The value of `gradient_accumulation_steps` has no effect when using
+    `evaluate()` or `predict().
+
+    Args:
+      gradient_accumulation_steps: An integer which indicates the number of
+        steps the gradients will be accumulated for. This value needs to divide
+        the `steps_per_execution` value the model has been compiled with and
+        also be divisible by the replication factor if the model is running
+        in a data-parallel fashion. This value is also constrained on the
+        pipelining schedule used. This value is saved/loaded when the model
+        is saved/loaded.
+      device_mapping: If provided, a list of length equal to the number of
+        pipeline stages assigned in this model. An element at index `i` in the
+        list represents which IPU the `i`'th pipeline stage should reside on.
+        This can be used to make sure computational stages which share Keras
+        layers/`tf.Variable` objects are resident on the same IPU. This value is
+        saved/loaded when the model is saved/loaded.
+      pipelining_kwargs: All remaining keyword arguments are forwarded to
+        :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`. Note that this
+        dictionary is not serializable, which means that when the model is
+        being saved, these values are not saved. When restoring/loading a model,
+        please call `set_pipelining_options` again.
+    """
+    self._set_pipelining_options_impl(gradient_accumulation_steps,
+                                      device_mapping, pipelining_kwargs)
 
   def get_pipeline_stage_assignment(self):
     """Returns the pipeline stage assignment of the layers in the model.
