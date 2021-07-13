@@ -116,6 +116,7 @@ py_library(
         "ipu_session_run_hooks.py",
         "keras/__init__.py",
         "keras/layers/__init__.py",
+        "keras/layers/assume_equal_across_replicas.py",
         "keras/layers/dropout.py",
         "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
@@ -1528,6 +1529,7 @@ tf_py_test(
 test_suite(
     name = "all_tests",
     tests = [
+        "assume_equal_test",
         "candidate_sampler_test",
         "config_test",
         "dataset_benchmark_test",
