@@ -971,6 +971,7 @@ cc_library(
 cc_library(
     name = "kernels",
     srcs = [
+        "kernels/datastream/application_runtime.cc",
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
@@ -1392,6 +1393,30 @@ tf_custom_op_py_library(
 )
 
 cc_library(
+    name = "application_runtime",
+    srcs = ["ops/datastream/application_runtime.cc"],
+    deps = [
+        "//tensorflow/core:framework",
+    ],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "application_runtime_wrapper_py",
+    out = "ops/gen_application_runtime.py",
+    visibility = ["//tensorflow:internal"],
+    deps = [":application_runtime"],
+)
+
+tf_custom_op_py_library(
+    name = "application_runtime_py",
+    kernels = [":application_runtime"],
+    srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
+    deps = [":application_runtime_wrapper_py"],
+)
+
+cc_library(
     name = "dataset_exporters",
     srcs = ["ops/datastream/exporters.cc"],
     deps = [
@@ -1428,6 +1453,7 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
+        ":application_runtime",
         ":dataset_benchmark",
         ":dataset_exporters",
         ":dataset_ops",
