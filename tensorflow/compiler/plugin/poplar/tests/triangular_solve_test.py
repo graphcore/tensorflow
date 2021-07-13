@@ -75,32 +75,32 @@ class TriangularSolvePerformanceTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
     self.assert_execution_report_cycles(report, 0, 497693, tolerance=0.1)
-    self.assert_max_tile_memory(report, 2907, tolerance=0.1)
-    self.assert_total_tile_memory(report, 423760, tolerance=0.1)
+    self.assert_max_tile_memory(report, 3279, tolerance=0.1)
+    self.assert_total_tile_memory(report, 370565, tolerance=0.1)
 
   def testLowerNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, True, False)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
     self.assert_execution_report_cycles(report, 0, 500080, tolerance=0.1)
-    self.assert_max_tile_memory(report, 3764, tolerance=0.1)
-    self.assert_total_tile_memory(report, 426638, tolerance=0.1)
+    self.assert_max_tile_memory(report, 3988, tolerance=0.1)
+    self.assert_total_tile_memory(report, 374656, tolerance=0.1)
 
   def testUpperAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, True)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
     self.assert_execution_report_cycles(report, 0, 509228, tolerance=0.1)
-    self.assert_max_tile_memory(report, 3942, tolerance=0.1)
-    self.assert_total_tile_memory(report, 430342, tolerance=0.1)
+    self.assert_max_tile_memory(report, 4166, tolerance=0.1)
+    self.assert_total_tile_memory(report, 379172, tolerance=0.1)
 
   def testUpperNonAdjoint(self):
     report_helper = self._solveTestImpl(64, 64, 16, False, False)
     report = pva.openReport(report_helper.find_report())
     self.assert_number_of_executions(report, 1)
     self.assert_execution_report_cycles(report, 0, 470171, tolerance=0.1)
-    self.assert_max_tile_memory(report, 2702, tolerance=0.1)
-    self.assert_total_tile_memory(report, 423944, tolerance=0.1)
+    self.assert_max_tile_memory(report, 3110, tolerance=0.1)
+    self.assert_total_tile_memory(report, 369874, tolerance=0.1)
 
 
 if __name__ == "__main__":
