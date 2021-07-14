@@ -84,8 +84,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           '[cC]opy',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(945276, tolerance=0.1)
-      report.assert_max_tile_memory(1526, tolerance=0.1)
+      report.assert_total_tile_memory(827172, tolerance=0.1)
+      report.assert_max_tile_memory(1610, tolerance=0.1)
 
       # Entry computation and outlined one.
       self.assertEqual(len(report.tensor_map.computation_names()), 2)
@@ -155,8 +155,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1370576, tolerance=0.1)
-      report.assert_max_tile_memory(2952, tolerance=0.1)
+      report.assert_total_tile_memory(1221036, tolerance=0.1)
+      report.assert_max_tile_memory(3192, tolerance=0.1)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
@@ -242,8 +242,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1317440, tolerance=0.1)
-      report.assert_max_tile_memory(2952, tolerance=0.1)
+      report.assert_total_tile_memory(1145384, tolerance=0.1)
+      report.assert_max_tile_memory(3132, tolerance=0.1)
 
       # Entry computastion and 4 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 5)
@@ -484,8 +484,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1437160, tolerance=0.1)
-      report.assert_max_tile_memory(4950, tolerance=0.1)
+      report.assert_total_tile_memory(1270036, tolerance=0.1)
+      report.assert_max_tile_memory(5174, tolerance=0.1)
 
       # Entry computastion and 2 outlined ones.
       self.assertEqual(len(report.tensor_map.computation_names()), 3)

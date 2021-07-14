@@ -203,6 +203,8 @@ int64 CountShapes(const Shape& shape) {
   }
 }
 
+ShapeIndex RootShapeIndex() { return {}; }
+
 int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
                       int64 original_index) {
   // Count up the base tensors inside all tuple element preceeding the

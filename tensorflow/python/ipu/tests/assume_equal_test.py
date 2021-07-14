@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+from unittest import mock
+
 import numpy as np
 
 from absl.testing import parameterized
@@ -29,6 +31,8 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
+
+from tensorflow.python import keras
 
 
 def create_n_replica_ipu_config(ipu_count):
@@ -71,6 +75,9 @@ class TestAssumeEqual(test_util.TensorFlowTestCase, parameterized.TestCase):
 
   # the issue in this test can't be reproduces with 2 ipus.
   @tu.test_uses_ipus(num_ipus=4)
+  # v2 only since TF 1.15 cant handle the non-compile time slicing
+  # of replica_dependent_value
+  @test_util.run_v2_only
   def testNoDivergenceWithSlicedTensor(self):
     input_shape = [10]
     dataset = create_constant_repeating_dataset(1.0, input_shape)
@@ -190,6 +197,63 @@ class TestAssumeEqual(test_util.TensorFlowTestCase, parameterized.TestCase):
     # 1(infeed value)*2(replicas) = 2
     # 2+1(infeed value)*2(replicas) = 6
     self.assertAllClose(result[0], np.broadcast_to(6.0, input_shape))
+
+
+class ConditionalLayer(keras.layers.Layer):
+  def call(self, inputs, **kwargs):
+    c = constant_op.constant(0, shape=inputs.shape, dtype=inputs.dtype)
+    x = math_ops.reduce_all(math_ops.greater(inputs, c))
+    y = control_flow_ops.cond(
+        x, lambda: ipu.cross_replica_ops.cross_replica_sum(inputs),
+        lambda: constant_op.constant(0, shape=(2, 4), dtype=inputs.dtype))
+    return y
+
+
+class TestKerasAssumeEqual(test_util.TensorFlowTestCase,
+                           parameterized.TestCase):
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.run_v2_only
+  def testNoDivergenceWithAssumeEqualLayer(self):
+
+    cfg = create_n_replica_ipu_config(2)
+    cfg.configure_ipu_system()
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+
+      input_layer = keras.layers.Input(shape=(32),
+                                       dtype=np.single,
+                                       batch_size=2)
+      init = keras.initializers.Constant(0.1)
+
+      dense_layer = keras.layers.Dense(4,
+                                       name="layer0",
+                                       kernel_initializer=init)(input_layer)
+
+      assume_equals_layer = ipu.keras.layers.AssumeEqualAcrossReplicas()(
+          dense_layer)
+      conditional_layer = ConditionalLayer()(assume_equals_layer)
+
+      # Without the AssumeEqualAcrossReplicas layer we should get a Divergent control flow
+      # compilation error coming from ConditionalLayer
+      m = ipu.keras.Model(input_layer,
+                          conditional_layer,
+                          gradient_accumulation_count=12)
+      m.compile('sgd', loss='mse')
+
+      input_x = np.full([96, 32], 1.0, dtype=np.single)
+      m.predict(input_x, batch_size=2)
+
+  @parameterized.parameters(TestAssumeEqual.inplace_or_copy)
+  @test_util.deprecated_graph_mode_only
+  @mock.patch(
+      "tensorflow.python.ipu.ops.cross_replica_ops.assume_equal_across_replicas"
+  )
+  def testLayerUsesAssumeEqualOp(self, inplace, mock_op):
+    placeholder = array_ops.placeholder(np.single, 32)
+    ipu.keras.layers.AssumeEqualAcrossReplicas(inplace)(placeholder)
+
+    mock_op.assert_called_with(placeholder, inplace)
 
 
 if __name__ == "__main__":

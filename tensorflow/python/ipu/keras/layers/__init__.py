@@ -17,6 +17,7 @@ Keras layer specializations for the Graphcore IPU
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.ipu.keras.layers.assume_equal_across_replicas import AssumeEqualAcrossReplicas
 from tensorflow.python.ipu.keras.layers.dropout import Dropout
 from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm, InstanceNorm, LayerNorm
