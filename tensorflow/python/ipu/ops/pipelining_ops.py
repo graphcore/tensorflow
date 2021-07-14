@@ -351,6 +351,7 @@ def pipeline(computational_stages,
              outfeed_loss=False,
              accumulate_outfeed=False,
              accumulate_outfeed_dtype=None,
+             outfeed_mask=None,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -650,7 +651,7 @@ def pipeline(computational_stages,
       at the end of each execution of the pipeline.
     outfeed_loss: If True, the loss given by the `optimizer_function` will
       be enqueued on the outfeed, instead of the outputs from the last
-      computational stage.
+      computational stage. Cannot be set when `outfeed_mask` is set.
     accumulate_outfeed: Data (loss or outputs) is normally enqueued immediately
       after the last computational stage inside the pipeline. If this option is
       True, the data will instead be accumulated and only enqueued once at the
@@ -664,6 +665,12 @@ def pipeline(computational_stages,
       - A `DType`: Use this type for all the accumulators.
       - A callable that takes the variable and returns a `DType`: Allows
         specifying the accumulator type on a per-variable basis.
+    outfeed_mask: If set, a list of booleans of same length as the same number
+      of outputs from the last computational stage. If `outfeed_mask[i]`
+      evaluates to `False`, then the output at that index is enqueued to the
+      outfeed queue, and if it is set to `True` it is not enqueued. Cannot be
+      set when `outfeed_loss` is set. Can only be used when `optimizer_function`
+      has been set.
     name: name of this pipeline.
 
   Returns:
@@ -833,9 +840,17 @@ def pipeline(computational_stages,
     pipeline_poplar_config.resource_update.CopyFrom(
         weight_update_poplar_options.get_proto())
 
+  if outfeed_mask and not optimizer_function:
+    raise ValueError(
+        "An optimizer_function must be provided when outfeed_mask is set.")
+
   if outfeed_loss and not optimizer_function:
     raise ValueError(
-        "An optimizer_function must be provided when outfeed_loss is True")
+        "An optimizer_function must be provided when outfeed_loss is True.")
+
+  if outfeed_loss and outfeed_mask:
+    raise ValueError(
+        "Only one of `outfeed_loss` and `outfeed_mask` can be set.")
 
   if accumulate_outfeed:
     if not outfeed_queue:
@@ -915,12 +930,25 @@ def pipeline(computational_stages,
               "An outfeed_queue must be provided when outfeed_loss is True")
         _enqueue_or_accumulate(loss)
       elif outputs:
-        if not outfeed_queue:
+        # By default don't mask anything.
+        local_mask = outfeed_mask if outfeed_mask else [False] * len(outputs)
+        if len(outputs) != len(local_mask):
           raise ValueError(
-              "The last computational stage has tensor outputs: %s, but no"
-              " outfeed_queue has been provided." %
-              (', '.join(str(t) for t in outputs)))
-        _enqueue_or_accumulate(outputs)
+              "The last computational stage has %d outputs, but the "
+              "`outfeed_mask` has elements %d - these need to match in size." %
+              (len(outputs), len(local_mask)))
+
+        unmasked_outputs = [
+            t for mask, t in zip(local_mask, outputs) if not mask
+        ]
+
+        if unmasked_outputs:
+          if not outfeed_queue:
+            raise ValueError(
+                "The last computational stage has tensor outputs: %s, but no"
+                " outfeed_queue has been provided." %
+                (', '.join(str(t) for t in unmasked_outputs)))
+          _enqueue_or_accumulate(unmasked_outputs)
 
       # Call the compute gradients function - this will be automatically put
       # into pipeline stages.
