@@ -42,22 +42,19 @@ def test_dataset(length=None, batch_size=1):
 
 
 def fixed_weight_pipeline():
-  return [
-      [
-          keras.layers.Dense(
-              4,
-              name="layer0",
-              kernel_initializer=keras.initializers.Constant(0.1),
-              bias_initializer=keras.initializers.Constant(0.0)),
-      ],
-      [
-          keras.layers.Dense(
-              2,
-              name="layer1",
-              kernel_initializer=keras.initializers.Constant(0.1),
-              bias_initializer=keras.initializers.Constant(0.0)),
-      ],
-  ]
+  m = keras.Sequential([
+      keras.layers.Dense(4,
+                         name="layer0",
+                         kernel_initializer=keras.initializers.Constant(0.1),
+                         bias_initializer=keras.initializers.Constant(0.0)),
+      keras.layers.Dense(2,
+                         name="layer1",
+                         kernel_initializer=keras.initializers.Constant(0.1),
+                         bias_initializer=keras.initializers.Constant(0.0)),
+  ])
+  m.set_pipeline_stage_assignment(list(range(2)))
+  m.set_pipelining_options(gradient_accumulation_steps=24)
+  return m
 
 
 class IPUSequentialPipelineTest(test.TestCase):
@@ -67,18 +64,16 @@ class IPUSequentialPipelineTest(test.TestCase):
     dataset = test_dataset(length=72)
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 2
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
-                                       gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile(optimizer='sgd', loss='mse', steps_per_execution=24)
 
-      # Fit the weights to the dataset
+      # Fit the weights to the dataset.
       h = m.fit(dataset, epochs=1, verbose=0)
       loss = h.history['loss'][0]
 
@@ -100,10 +95,8 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     # Restore the weights and check that they are back to the trained
     with strategy.scope():
-      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
-                                       gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile(optimizer='sgd', loss='mse', steps_per_execution=24)
 
       # Can restore weights
       m.load_weights("trained_model_weights")
@@ -126,8 +119,8 @@ class IPUSequentialPipelineTest(test.TestCase):
     dataset = test_dataset(length=72)
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 2
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.configure_ipu_system()
 
     checkpoint_path = "ckpt/model"
@@ -139,10 +132,8 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
-                                       gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile(optimizer='sgd', loss='mse', steps_per_execution=24)
 
       cp_callback = keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
                                                     save_weights_only=True,
@@ -157,10 +148,8 @@ class IPUSequentialPipelineTest(test.TestCase):
     with strategy.scope():
 
       # Create a new model and train (should restore from checkpoint)
-      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
-                                       gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile(optimizer='sgd', loss='mse', steps_per_execution=24)
 
       # Can restore weights
       m.load_weights(checkpoint_path)
@@ -174,16 +163,14 @@ class IPUSequentialPipelineTest(test.TestCase):
   def testInvalidRestorePath(self):
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 2
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      m = ipu.keras.PipelineSequential(fixed_weight_pipeline(),
-                                       gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile(optimizer='sgd', loss='mse', steps_per_execution=24)
 
       with self.assertRaisesRegex(errors.NotFoundError,
                                   r"Failed to find any matching files"):

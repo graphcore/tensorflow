@@ -401,10 +401,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu(device_mapping)
 
@@ -473,10 +473,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu(device_mapping)
 
@@ -544,10 +544,10 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       report.parse_log()
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu((0, 1, 3))
 
@@ -798,7 +798,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       # Run the pipeline.
       sess.run(r)
       results = sess.run(outfeed_op)
-      self.assertAllClose(results[0], [[0.], [2.], [8.], [18.], [32.], [0.]])
+      self.assertAllClose(results, [[0.], [2.], [8.], [18.], [32.], [0.]])
 
   @parameterized.named_parameters(*PIPELINE_COMPARE_TEST_CASES)
   @test_util.deprecated_graph_mode_only
@@ -1941,7 +1941,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r)
       output = sess.run(outfeed_op)
-      self.assertAllClose(output, [[2.0, 2.0, 2.0, 1.0, 1.0, 1.0]])
+      self.assertAllClose(output, [2.0, 2.0, 2.0, 1.0, 1.0, 1.0])
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithCustomGradientFunction(self):

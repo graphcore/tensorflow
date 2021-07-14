@@ -157,8 +157,8 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
     model_extensions.ModelExtension.__init__(self)
     self._pipeline_stage_assignment = []
 
-  def _get_shard_count(self):
-    return 1
+    # Runtime values
+    self._pipeline_maximum_stage = None
 
   def _is_pipelined(self):
     return bool(self._pipeline_stage_assignment)
@@ -257,6 +257,8 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
   def set_pipelining_options(self,
                              gradient_accumulation_steps=None,
                              device_mapping=None,
+                             accumulate_outfeed=None,
+                             experimental_normalize_gradients=None,
                              **pipelining_kwargs):
     """Sets the pipelining options, including gradient accumulation options,
     for pipelined models.
@@ -296,6 +298,22 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
         This can be used to make sure computational stages which share Keras
         layers/`tf.Variable` objects are resident on the same IPU. This value is
         saved/loaded when the model is saved/loaded.
+      accumulate_outfeed: The metrics from the model are normally enqueued as
+        soon as they're available. If this option is True, the data will
+        instead be accumulated when they're available and enqueued at the end of
+        pipeline execution, reducing the amount of host <-> device
+        communication. When used with training, the accumulated metrics are
+        normalised `gradient_accumulation_steps`. When used with evaluation, the
+        accumulated metrics are normalised by `steps_per_epoch`. This option is
+        ignored when doing prediction. When using `accumulate_outfeed`, model
+        callbacks will be called with the same data for the batches which the
+        data was accumulated for. This value is saved/loaded when the model is
+        saved/loaded.
+      experimental_normalize_gradients: If set to `True`, the gradients for each
+        step are first scaled by `1/gradient_accumulation_steps` before being
+        added to the gradient accumulation buffer. Note that this option is
+        experimental and the behavior might change in future releases. This
+        value is saved/loaded when the model is saved/loaded.
       pipelining_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`. Note that this
         dictionary is not serializable, which means that when the model is
@@ -303,38 +321,9 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
         please call `set_pipelining_options` again.
     """
     self._set_pipelining_options_impl(gradient_accumulation_steps,
-                                      device_mapping, pipelining_kwargs)
-
-  @trackable.no_automatic_dependency_tracking
-  def _create_post_order(self):
-    post_order_node_execution = []
-    nodes_by_depth = self._nodes_by_depth
-    depth_keys = list(nodes_by_depth.keys())
-    depth_keys.sort(reverse=True)
-
-    visited_set = set()
-    for x in self.inputs:
-      visited_set.add(str(id(x)))
-      post_order_node_execution.append(x)
-
-    for depth in depth_keys:
-      nodes = nodes_by_depth[depth]
-      for node in nodes:
-        if node.is_input:
-          # Inputs are handled explicitly.
-          continue
-
-        if any(t_id not in visited_set for t_id in node.flat_input_ids):
-          # Node is not computable, skip.
-          continue
-
-        post_order_node_execution.append(node)
-
-        for x_id in node.flat_output_ids:
-          visited_set.add(x_id)
-
-    assert len(post_order_node_execution) == len(self._network_nodes)
-    return post_order_node_execution
+                                      device_mapping, accumulate_outfeed,
+                                      experimental_normalize_gradients,
+                                      pipelining_kwargs)
 
   @trackable.no_automatic_dependency_tracking
   def _get_pipelined_post_order(self, pipeline_stage_assignment):
@@ -377,18 +366,19 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
     # and to make sure pipeline stages can still be executed in order.
     post_order_per_stage = {}
     post_order = self._create_post_order()
-    for node in post_order[len(self.inputs):]:
-      pipeline_stage = node_to_stage[str(id(node))]
-      post_order_per_stage.setdefault(pipeline_stage, []).append(node)
+    num_inputs = len(self.inputs)
+
+    for idx, node in enumerate(post_order):
+      if idx < num_inputs:
+        layer = node._keras_history.layer  # pylint: disable=protected-access
+        assert len(layer.inbound_nodes) == 1
+        post_order_per_stage.setdefault(0, []).append(layer.inbound_nodes[0])
+      else:
+        pipeline_stage = node_to_stage[str(id(node))]
+        post_order_per_stage.setdefault(pipeline_stage, []).append(node)
 
     new_post_order_node_execution = []
     computed_set = set()
-    for x in self.inputs:
-      layer = x._keras_history.layer  # pylint: disable=protected-access
-      assert len(layer.inbound_nodes) == 1
-      new_post_order_node_execution.append(layer.inbound_nodes[0])
-      computed_set.add(str(id(x)))
-
     # New post order executes all the layers within a pipeline stage and it
     # makes sure that all the layer inputs have already executed.
     for stage_id in range(num_stages):
@@ -405,7 +395,12 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
         # Update computed_set.
         computed_set.update([x for x in node.flat_output_ids])
 
-    return new_post_order_node_execution
+    return post_order_per_stage, new_post_order_node_execution
+
+  def _get_pipeline_post_order(self, input_shapes, input_dtypes):
+    post_order_per_stage, _ = self._get_pipelined_post_order(
+        self._pipeline_stage_assignment)
+    return post_order_per_stage
 
   def get_pipeline_stage_assignment(self):
     """Returns the pipeline stage assignment of all the layers in the model.
@@ -413,7 +408,8 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
     If `set_pipeline_stage_assignment()` has been called before, then it returns
     a copy of the current assignment, otherwise returns a list of
     `FunctionalLayerPipelineStageAssignment` for each invocation of each layer
-    in the model (excluding input layers).
+    in the model (excluding input layers) in post order (which means that layers
+    are returned in the order they are executed).
     """
     if self._pipeline_stage_assignment:
       return copy.copy(self._pipeline_stage_assignment)
@@ -432,7 +428,7 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
   def _validate_pipeline_stage_assignment(self, pipeline_stage_assignment):
     # A functional pipeline stage assignment is valid if the graph can be
     # scheduled.
-    _ = self._get_pipelined_post_order(pipeline_stage_assignment)
+    self._get_pipelined_post_order(pipeline_stage_assignment)
 
   def _get_pipelining_from_nodes_supported(self):
     return True
@@ -533,3 +529,13 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
     # Pipelining has changed therefore functions need to be recompiled.
     self._reset_ipu_extension()
+
+  @trackable.no_automatic_dependency_tracking
+  def _get_pipeline_maximum_pipeline_stage(self):
+    assert self._is_pipelined()
+    if self._pipeline_maximum_stage is None:
+      self._pipeline_maximum_stage = -1
+      for assignment in self._pipeline_stage_assignment:
+        self._pipeline_maximum_stage = max(self._pipeline_maximum_stage,
+                                           assignment.pipeline_stage)
+    return self._pipeline_maximum_stage

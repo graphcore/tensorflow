@@ -296,10 +296,10 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu(device_mapping)
 
@@ -368,10 +368,10 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu(device_mapping)
 
@@ -435,10 +435,10 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[
+      self.assertAllClose(losses_pipeline, [
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
-      ]])
+      ])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu((0, 1, 3))
 

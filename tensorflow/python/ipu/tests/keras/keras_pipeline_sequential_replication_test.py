@@ -24,22 +24,6 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import keras as ipu_keras
 
 
-def stage1():
-  return [
-      keras.layers.Dense(4,
-                         name="layer0",
-                         kernel_initializer=keras.initializers.Constant(0.1))
-  ]
-
-
-def stage2():
-  return [
-      keras.layers.Dense(2,
-                         name="layer1",
-                         kernel_initializer=keras.initializers.Constant(0.1))
-  ]
-
-
 class IPUPipelineSequentialReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
@@ -52,10 +36,13 @@ class IPUPipelineSequentialReplicatedTest(test_util.TensorFlowTestCase):
     strategy = ipu_strategy.IPUStrategyV1()
 
     with strategy.scope():
-      m = ipu_keras.PipelineSequential([stage1(), stage2()],
-                                       gradient_accumulation_count=12)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      init = keras.initializers.Constant(0.1)
+      m = keras.Sequential([
+          keras.layers.Dense(4, name="layer0", kernel_initializer=init),
+          keras.layers.Dense(2, name="layer1", kernel_initializer=init),
+      ])
+      m.compile(steps_per_execution=12)
+      m.set_pipeline_stage_assignment([0, 1])
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)

@@ -1,17 +1,12 @@
 import argparse
 import tensorflow as tf
 
-from tensorflow.python.framework import dtypes
-
 from tensorflow.python import ipu
-
-from tensorflow.python.ipu.keras.layers import Embedding
-from tensorflow.python.ipu.keras.layers import LSTM
+from tensorflow.python.ipu.keras import layers as ipu_layers
 
 from tensorflow.python.keras.datasets import imdb
-from tensorflow.python.keras.layers import Concatenate
-from tensorflow.python.keras.layers import Dense
-from tensorflow.python.keras.layers import Input
+from tensorflow.python import keras
+from tensorflow.python.keras import layers
 from tensorflow.python.keras.preprocessing import sequence
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
@@ -33,26 +28,23 @@ def get_dataset():
 
 # Define the model
 def get_model():
-  input_layer = Input(shape=(80), dtype=dtypes.int32, batch_size=32)
+  input_layer = layers.Input(shape=(80), dtype=tf.int32, batch_size=32)
 
   with ipu.keras.PipelineStage(0):
-    x = Embedding(max_features, 64)(input_layer)
-    x = LSTM(64, dropout=0.2)(x)
+    x = ipu_layers.Embedding(max_features, 64)(input_layer)
+    x = ipu_layers.LSTM(64, dropout=0.2)(x)
 
   with ipu.keras.PipelineStage(1):
-    a = Dense(8, activation='relu')(x)
+    a = layers.Dense(8, activation='relu')(x)
 
   with ipu.keras.PipelineStage(2):
-    b = Dense(8, activation='relu')(x)
+    b = layers.Dense(8, activation='relu')(x)
 
   with ipu.keras.PipelineStage(3):
-    x = Concatenate()([a, b])
-    x = Dense(1, activation='sigmoid')(x)
+    x = layers.Concatenate()([a, b])
+    x = layers.Dense(1, activation='sigmoid')(x)
 
-  return ipu.keras.PipelineModel(input_layer,
-                                 x,
-                                 gradient_accumulation_count=16,
-                                 device_mapping=[0, 1, 1, 0])
+  return keras.Model(input_layer, x)
 
 
 #
@@ -81,8 +73,11 @@ strategy = ipu.ipu_strategy.IPUStrategyV1()
 with strategy.scope():
 
   model = get_model()
-
-  model.compile(loss='binary_crossentropy', optimizer=Adam(0.005))
+  model.set_pipelining_options(gradient_accumulation_steps=8,
+                               device_mapping=[0, 1, 1, 0])
+  model.compile(loss='binary_crossentropy',
+                optimizer=Adam(0.005),
+                steps_per_execution=16)
 
   model.fit(get_dataset(),
             steps_per_epoch=args.steps_per_epoch,

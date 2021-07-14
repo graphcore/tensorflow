@@ -269,7 +269,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       with ops.control_dependencies([compiled_prediction_loop]):
         predictions = self._outfeed_queue.dequeue(wait_for_completion=True)
 
-    if isinstance(predictions, dict):
+    if isinstance(predictions, (dict, ops.Tensor)):
       return predictions
 
     assert isinstance(predictions, list)

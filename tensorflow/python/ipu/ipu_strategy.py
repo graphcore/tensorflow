@@ -108,6 +108,10 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
     _validate_run_function(fn)
     return super().run(fn, args, kwargs, options)
 
+  def experimental_run_v2(self, *args, **kwargs):
+    raise RuntimeError(
+      "`experimental_run_v2` has been deleted. Use `run` instead.")
+
   @property
   def _device_ordinal(self):
     device_string = self.extended.non_slot_devices(None)

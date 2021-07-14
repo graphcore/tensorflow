@@ -45,12 +45,9 @@ class PipelineModelReplicatedTest(test_util.TensorFlowTestCase):
                                kernel_initializer=init)(input_layer)
       with ipu_keras.PipelineStage(1):
         x = keras.layers.Dense(2, name="layer1", kernel_initializer=init)(x)
-      m = ipu_keras.PipelineModel(input_layer,
-                                  x,
-                                  gradient_accumulation_count=12)
+      m = keras.Model(input_layer, x)
 
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m.compile(steps_per_execution=12)
 
       # Input data
       input_x = np.full([96, 32], 1.0, dtype=np.single)

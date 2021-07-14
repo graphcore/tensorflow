@@ -17,10 +17,13 @@ Keras API
 ~~~~~~~~~
 """
 
-from tensorflow.python.ipu.keras import extensions
+from tensorflow.python.ipu.keras.extensions import PipelineStage
+from tensorflow.python.ipu.keras.extensions import FunctionalLayerPipelineStageAssignment
+from tensorflow.python.ipu.keras.extensions import FunctionalExtension
+from tensorflow.python.ipu.keras.extensions import SequentialLayerPipelineStageAssignment
+from tensorflow.python.ipu.keras.extensions import SequentialExtension
 from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.keras.model import Model, Sequential
 from tensorflow.python.ipu.keras.pipeline import PipelineModel
 from tensorflow.python.ipu.keras.pipeline import PipelineSequential
-from tensorflow.python.ipu.keras.pipeline import PipelineStage
 from tensorflow.python.ipu.keras.losses import CTCLoss

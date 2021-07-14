@@ -5136,7 +5136,7 @@ py_test(
     srcs = ["docs/example_tf2_pipelined_model.py"],
     args = [
         "--epochs=1",
-        "--steps-per-epoch=2",
+        "--steps-per-epoch=16",
     ],
     deps = [
         "//tensorflow:tensorflow_py",

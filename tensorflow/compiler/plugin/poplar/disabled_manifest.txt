@@ -31,6 +31,7 @@ ExcessivePaddingTest.testAsFunctionInput # No registered OpKernel
 ExcessivePaddingTest.testAsFunctionOutput # No registered OpKernel
 FFTTest # No support for FFT
 GatherTest.testHigherRank # Bad
+IgammaTest.testGradMediumValues # Too slow
 IgammaTest.testGradLargeValues # Too slow
 InverseOpTest # matrix inversing
 ListDiffTest.testEmptyY # no int64 iota

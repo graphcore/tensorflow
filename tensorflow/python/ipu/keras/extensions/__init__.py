@@ -16,3 +16,11 @@
 IPU specific Keras extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+
+# pylint: disable=unused-import
+from tensorflow.python.ipu.keras.extensions.functional_extensions import PipelineStage
+from tensorflow.python.ipu.keras.extensions.functional_extensions import FunctionalLayerPipelineStageAssignment
+from tensorflow.python.ipu.keras.extensions.functional_extensions import FunctionalExtension
+from tensorflow.python.ipu.keras.extensions.sequential_extensions import SequentialLayerPipelineStageAssignment
+from tensorflow.python.ipu.keras.extensions.sequential_extensions import SequentialExtension
+# pylint: enable=unused-import

@@ -313,18 +313,14 @@ class FunctionalPipelineApiTest(test.TestCase):
 
       with self.assertRaisesRegex(
           ValueError,
-          "Found `repeat_count` key in `pipelining_kwargs`. This argument is "
-          "automatically set by Keras"):
-        m.set_pipelining_options(repeat_count=10)
-
-      with self.assertRaisesRegex(
-          ValueError,
           "Found `batch_serialization_iterations` key in `pipelining_kwargs`. "
           "This argument is not compatible with Keras"):
         m.set_pipelining_options(batch_serialization_iterations=10)
 
       m.set_pipelining_options(gradient_accumulation_steps=10,
-                               device_mapping=[4, 3, 2, 1, 0])
+                               device_mapping=[4, 3, 2, 1, 0],
+                               accumulate_outfeed=True,
+                               experimental_normalize_gradients=True)
 
       with tempfile.TemporaryDirectory() as tmp:
         save_path = os.path.join(tmp, "model")
@@ -332,6 +328,8 @@ class FunctionalPipelineApiTest(test.TestCase):
         m = models.load_model(save_path)
         self.assertEqual(m._pipelining_gradient_accumulation_steps, 10)  # pylint: disable=protected-access
         self.assertEqual(m._pipelining_device_mapping, [4, 3, 2, 1, 0])  # pylint: disable=protected-access
+        self.assertEqual(m._pipelining_accumulate_outfeed, True)  # pylint: disable=protected-access
+        self.assertEqual(m._experimental_pipelining_normalize_gradients, True)  # pylint: disable=protected-access
 
 
 if __name__ == '__main__':

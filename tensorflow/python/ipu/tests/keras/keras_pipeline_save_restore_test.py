@@ -60,28 +60,26 @@ def fixed_weight_pipeline():
         bias_initializer=keras.initializers.Constant(0.0))
     output_layer = layer1(output_layer)
 
-  return input_layer, output_layer
+  m = keras.Model(input_layer, output_layer)
+  m.set_pipelining_options(gradient_accumulation_steps=24)
+  return m
 
 
 class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testCanSaveWeights(self):
 
-    dataset = test_dataset(length=72)
+    dataset = test_dataset(length=96)
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile('sgd', loss='mse', steps_per_execution=48)
 
       # Fit the weights to the dataset
       h = m.fit(dataset, epochs=1, verbose=0)
@@ -105,12 +103,8 @@ class IPUPipelineTest(test.TestCase):
 
     # Restore the weights and check that they are back to the trained
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile('sgd', loss='mse', steps_per_execution=48)
 
       # Can restore weights
       m.load_weights("trained_model_weights")
@@ -130,10 +124,10 @@ class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testCanDoTrainingCheckpoint(self):
 
-    dataset = test_dataset(length=72)
+    dataset = test_dataset(length=96)
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
@@ -146,12 +140,8 @@ class IPUPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile('sgd', loss='mse', steps_per_execution=48)
 
       cp_callback = keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
                                                     save_weights_only=True,
@@ -166,12 +156,8 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
 
       # Create a new model and train (should restore from checkpoint)
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile('sgd', loss='mse', steps_per_execution=48)
 
       # Can restore weights
       m.load_weights(checkpoint_path)
@@ -185,18 +171,14 @@ class IPUPipelineTest(test.TestCase):
   def testInvalidRestorePath(self):
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg.ipu_model.tiles_per_ipu = 4
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
-      input_layer, output_layer = fixed_weight_pipeline()
-      m = ipu.keras.PipelineModel(input_layer,
-                                  output_layer,
-                                  gradient_accumulation_count=24)
-      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
-      m.compile(opt, loss='mse')
+      m = fixed_weight_pipeline()
+      m.compile('sgd', loss='mse', steps_per_execution=48)
 
       with self.assertRaisesRegex(errors.NotFoundError,
                                   r"Failed to find any matching files"):

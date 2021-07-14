@@ -32,6 +32,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
     cfg.ipu_model.compile_ipu_code = False
+    cfg.ipu_model.tiles_per_ipu = 16
     cfg.auto_select_ipus = 2
     cfg.allow_recompute = True
     cfg.scheduling.algorithm = ipu.config.SchedulingAlgorithm.POST_ORDER
@@ -64,15 +65,14 @@ class KerasPipelineRecomputationTest(test.TestCase):
                                activation=keras.activations.relu)(x)
 
       # Checkpoints require Grouped/Seq and RecomputeAndBackpropagateInterleaved
-      m = ipu.keras.PipelineModel(
-          inputs=input_layer,
-          outputs=x,
-          gradient_accumulation_count=4,
+      m = keras.Model(inputs=input_layer, outputs=x)
+      m.set_pipelining_options(
+          gradient_accumulation_steps=4,
           pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Grouped,
           recomputation_mode=ipu.ops.pipelining_ops.RecomputationMode.
           RecomputeAndBackpropagateInterleaved)
       opt = gradient_descent.GradientDescentOptimizer(0.001)
-      m.compile(opt, loss='mse')
+      m.compile(opt, loss='mse', steps_per_execution=8)
       return m
 
     # Make sure the checkpoints reduce peak liveness.

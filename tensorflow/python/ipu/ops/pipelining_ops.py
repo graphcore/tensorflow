@@ -877,16 +877,19 @@ def pipeline(computational_stages,
       else:
         tensors = functional_ops._convert_to_list(tensor_or_tensors)  # pylint: disable=protected-access
         for tensor in tensors:
-          # Find the data type for the outfeed accumulator.
-          dtype = op_util.get_accumulator_dtype(tensor,
-                                                accumulate_outfeed_dtype)
-          # Create a new tensor for the accumulator buffer.
-          acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
-              shape=tensor.shape, output_type=dtype)
-          acc = gen_poputil_ops.gradient_accumulator_add(acc, tensor)
-          sink = gen_poputil_ops.gradient_accumulator_sink(
-              acc, num_mini_batches=gradient_accumulation_count)
-          outfeed_sinks.append(sink)
+
+          def create_accumulate(t):
+            # Find the data type for the outfeed accumulator.
+            dtype = op_util.get_accumulator_dtype(t, accumulate_outfeed_dtype)
+            # Create a new t for the accumulator buffer.
+            acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
+                shape=t.shape, output_type=dtype)
+            acc = gen_poputil_ops.gradient_accumulator_add(acc, t)
+            sink = gen_poputil_ops.gradient_accumulator_sink(
+                acc, num_mini_batches=gradient_accumulation_count)
+            return sink
+
+          outfeed_sinks.append(nest.map_structure(create_accumulate, tensor))
 
     # Build all of the forward stage computations.
     for stage_id, stage in enumerate(computational_stages):
@@ -1006,13 +1009,16 @@ def pipeline(computational_stages,
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
                                             *apply_gradients_args,
                                             **apply_gradients_kwargs)
-          resource_update_ops.append(apply_grads)
+          if apply_grads:
+            resource_update_ops.append(apply_grads)
 
         # Enqueue any accumulated outfeed data
         if outfeed_sinks:
           # Note: unpack if we're outfeeding loss.
           to_enqueue = outfeed_sinks[0] if outfeed_loss else outfeed_sinks
-          resource_update_ops.append(outfeed_queue.enqueue(to_enqueue))
+          enqueue = outfeed_queue.enqueue(to_enqueue)
+          if enqueue:
+            resource_update_ops.append(enqueue)
 
       with ops.name_scope(name + "/WU") as scope:
         func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
@@ -1192,7 +1198,7 @@ def _pipeline_stage(func,
       outputs = func(*args, **kwargs)
       # Check if there are output tensors - if there are then enqueue them.
       if not isinstance(outputs, ops.Operation):
-        if not isinstance(outputs, dict):
+        if not isinstance(outputs, (dict, ops.Tensor)):
           outputs = functional_ops._convert_to_list(outputs)  # pylint: disable=protected-access
         outputs = outfeed_queue.enqueue(outputs)
       control_outputs.append(outputs)

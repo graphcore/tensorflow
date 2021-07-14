@@ -121,7 +121,6 @@ py_library(
         "keras/extensions/functional_extensions.py",
         "keras/extensions/model_extensions.py",
         "keras/extensions/sequential_extensions.py",
-        "keras/layer_replacement.py",
         "keras/layers/__init__.py",
         "keras/layers/assume_equal_across_replicas.py",
         "keras/layers/ctc.py",
@@ -489,20 +488,6 @@ tf_py_test(
     size = "large",
     srcs = ["tests/keras/keras_sequential_pipeline_save_restore_test.py"],
     tags = ["isolated_poplar_tests"],
-    deps = [
-        ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras",
-        "//third_party/py/numpy",
-    ],
-)
-
-tf_py_test(
-    name = "keras_layer_replacement_test",
-    size = "large",
-    srcs = ["tests/keras/keras_layer_replacement_test.py"],
     deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
