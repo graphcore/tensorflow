@@ -299,7 +299,7 @@ class HloMatcher : public HloModulePass {
                                           const HloMatcherPattern& pattern,
                                           HloMatcherMatched& match);
 
-  std::set<HloInstruction*> ReorderGraph(const HloMatcherMatched& matched);
+  void ReorderGraph(const HloMatcherMatched& matched);
 
   bool root_computation_only_;
   bool requires_unique_sharding_;

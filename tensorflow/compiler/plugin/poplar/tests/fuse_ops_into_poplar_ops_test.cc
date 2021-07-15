@@ -19,10 +19,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 namespace xla {
+namespace m = match;
+
 namespace poplarplugin {
 namespace {
 
@@ -87,6 +90,44 @@ ENTRY c1 {
   auto* comp = hlo_module->entry_computation();
   auto* custom_op = comp->root_instruction()->operand(0)->operand(1);
   EXPECT_EQ("ReluGrad", custom_op->custom_call_target());
+}
+
+TEST_F(FuseOpsIntoPoplarOpsTest, MatchScaledInplaceXbyTest) {
+  const unsigned int look_through_depth = 0;
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  p2 = f32[10] parameter(2)
+  c0 = f32[] constant(0.1)
+  b0 = f32[10] broadcast(c0), dimensions={}
+  c1 = f32[] constant(0.2)
+  b1 = f32[10] broadcast(c1), dimensions={}
+
+  divide = f32[10] divide(p0, p1)
+  multiply = f32[10] multiply(divide, b0)
+  add = f32[10] add(multiply, b1)
+
+  ROOT root = f32[10] add(add, p2)
+ }
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(hlo_module);
+  FuseOpsIntoPoplarOps pass(annotations);
+  EXPECT_TRUE(pass.Run(hlo_module).ValueOrDie());
+
+  auto* root = hlo_module->entry_computation()->root_instruction();
+  CHECK(Match(
+      root, m::Add(m::CustomCall(m::Divide(m::Parameter(), m::Parameter()),
+                                 m::Parameter(), m::Constant(), m::Constant()),
+                   m::Broadcast(m::Constant()))));
 }
 
 }  // namespace

@@ -1023,10 +1023,7 @@ StatusOr<bool> HloMatcher::Run(HloModule* module) {
   return matched;
 }
 
-std::set<HloInstruction*> HloMatcher::ReorderGraph(
-    const HloMatcherMatched& matched) {
-  std::set<HloInstruction*> modified_instructions;
-
+void HloMatcher::ReorderGraph(const HloMatcherMatched& matched) {
   // This reordering relies on associativity:
   // For instance, if we have "[root] add1 add2 … addN [target]",
   // we relink root to have [target] as operand and make first
@@ -1043,12 +1040,7 @@ std::set<HloInstruction*> HloMatcher::ReorderGraph(
     TF_CHECK_OK(
         target_user.inst->ReplaceOperandWith(target_user.op_idx, root.inst));
     TF_CHECK_OK(root.inst->ReplaceOperandWith(root.op_idx, target.inst));
-    absl::c_transform(
-        trace,
-        std::inserter(modified_instructions, modified_instructions.begin()),
-        [](InstructionIndex const& x) { return x.inst; });
   }
-  return modified_instructions;
 }
 
 Status HloMatcher::RemoveUnusedInstructions(const HloMatcherMatched& matched) {
@@ -1116,8 +1108,8 @@ StatusOr<HloInstruction*> HloMatcher::OutlineFusionFromComputation(
     dep->ReplaceAllUsesWith(dep->mutable_operand(0));
   }
 
-  // We need to update the graph with any instructions that will be reordered
-  auto modified_instructions = ReorderGraph(matched);
+  // We need to update the graph with any instructions that will be reordered.
+  ReorderGraph(matched);
   // A map from original instructions to their new counterparts
   absl::flat_hash_map<NodeId, HloInstruction*> outlined;
   // A set of nodes which we have already outlined.
@@ -1354,6 +1346,9 @@ StatusOr<HloInstruction*> HloMatcher::OutlineCustomOpFromComputation(
   for (auto* dep : matched.dependency_predecessors) {
     dep->ReplaceAllUsesWith(dep->mutable_operand(0));
   }
+
+  // We need to update the graph with any instructions that will be reordered.
+  ReorderGraph(matched);
 
   auto* old_meta_target = matched.GetMetaTarget();
 
