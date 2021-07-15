@@ -1195,6 +1195,87 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.ones(8), sess.run(outfed))
 
   @test_util.deprecated_graph_mode_only
+  def testOutfeedMaskRequiresOutfeedAndOptimizerFunction(self):
+    def identity(x):
+      return x
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    with ops.device("/device:IPU:0"):
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+      with self.assertRaisesRegex(ValueError,
+                                  "An optimizer_function must be provided"):
+        pipelining_ops.pipeline([identity, identity, identity, identity],
+                                gradient_accumulation_count=4,
+                                inputs=[1.0],
+                                outfeed_queue=outfeed_queue,
+                                outfeed_mask=[False])
+
+      with self.assertRaisesRegex(ValueError,
+                                  r".*no outfeed_queue has been provided"):
+        pipelining_ops.pipeline([identity, identity, identity, identity],
+                                gradient_accumulation_count=4,
+                                inputs=[1.0],
+                                optimizer_function=optimizer_function,
+                                outfeed_mask=[False])
+
+      with self.assertRaisesRegex(
+          ValueError, "Only one of `outfeed_loss` and "
+          "`outfeed_mask` can be set."):
+        pipelining_ops.pipeline([identity, identity, identity, identity],
+                                gradient_accumulation_count=4,
+                                inputs=[1.0],
+                                optimizer_function=optimizer_function,
+                                outfeed_queue=outfeed_queue,
+                                outfeed_mask=[False],
+                                outfeed_loss=True)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedMask(self):
+
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          return x, w * x
+
+      def stage(x, x2):
+        return x, x2 + 1
+
+      def optimizer_function(x, _):
+        opt = gradient_descent.GradientDescentOptimizer(0.01)
+        return pipelining_ops.OptimizerFunctionOutput(opt, x)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def my_net(x):
+        return pipelining_ops.pipeline([stage1, stage, stage, stage],
+                                       gradient_accumulation_count=8,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function,
+                                       outfeed_mask=[True, False])
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
+
+      cfg = IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.ipu_model.tiles_per_ipu = 2
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
+      utils.move_variable_initialization_to_cpu()
+
+      outfed = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      sess.run(pipeline)
+      self.assertAllEqual(np.full((1, 8), 4), sess.run(outfed))
+
+  @test_util.deprecated_graph_mode_only
   def testOutfeedLossAccumulated(self):
     """ Tests accumulating the loss from the optimizer function. """
     cfg = IPUConfig()
