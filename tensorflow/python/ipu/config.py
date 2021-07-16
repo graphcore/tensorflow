@@ -1261,9 +1261,24 @@ class _IPUDeviceConnectionConfig(_ConfigBase):
     `DeviceConnectionType.PRE_COMPILE`, `DeviceConnectionType.NEVER` or
     `DeviceConnectionType.ON_DEMAND`, this argument is used to indicate whether
     remote buffers are enabled and supported in the system which will eventually
-    be used to execute the compiled programs. Set it to `True` if your model
-    requires remote buffers and :ref:`connection type <device_connection.type>`
-    is not `DeviceConnectionType.ALWAYS`.
+    be used to execute the compiled programs. Set it to True if the system on
+    which you will execute the compiled programs has remote buffers enabled and
+    `connection_type` is not `DeviceConnectionType.ALWAYS`. If the
+    `connection_type` is `DeviceConnectionType.ALWAYS` then the
+    `enable_remote_buffers` parameter is ignored because in that case it is
+    possible to query the device.
+
+    In order to check whether your target system supports remote buffers you can
+    run the command:
+
+    .. code-block:: console
+
+      $ gc-info -d 0 -I
+
+    If you see ``remote buffers supported: 1`` in the output, that means that
+    remote buffers are supported on your system. For more information, see the
+    `gc-info documentation
+    <https://docs.graphcore.ai/projects/command-line-tools/en/latest/gc-info_main.html>`__.
     """
     self.enable_remote_buffers = False
 
