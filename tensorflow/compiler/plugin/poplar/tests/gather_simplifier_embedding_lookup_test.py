@@ -89,8 +89,6 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
         '__seed/set/setMasterSeed',
         'host-exchange-local-copy-',
     ]
-    if y_0 == 1:
-      ok = ok[:-1]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
 

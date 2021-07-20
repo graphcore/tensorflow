@@ -837,9 +837,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         '__seed*',
-        'host-exchange-local-copy-*/OnTileCopy-0',
         '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        'ExpandDims/input/multi-update-add.3/multiUpdateAdd/*/Fill',
         '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
@@ -904,9 +904,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     ok = [
         '__seed*',
-        'host-exchange-local-copy-*/OnTileCopy-0',
         '/negate/Op/Negate',
         'ExpandDims/input/multi-update-add.3/multiUpdateAdd',
+        'ExpandDims/input/multi-update-add.3/multiUpdateAdd/*/Fill',
         '[cC]opy*/OnTileCopy',
         'vs/Gather*/multi-slice',
         'vs/add/add*/Add',
@@ -967,6 +967,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
         'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
         'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd',
+        'GradientDescent/update_vs/w/ResourceScatterAdd/multi-update-add*/multiUpdateAdd/*/Fill',
         'gradients/vs/absolute_difference/Abs_grad/Sign',
         'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
         'vs/embedding_lookup/multi-slice',
@@ -974,6 +975,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'vs/absolute_difference/Abs/abs.*/Op/Absolute',
         'vs/absolute_difference/Sum/reduce',
         'vs/absolute_difference/value/multiply',
+        'host-exchange-local-copy-*/OnTileCopy-0',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
@@ -1032,17 +1034,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     report = pva.openReport(report_helper.find_report())
     # pylint: disable=line-too-long
     ok = [
-      '__seed*',
-      'host-exchange-local-copy-*/OnTileCopy-0',
-      'gradients/vs/absolute_difference/Abs_grad/Sign',
-      'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
-      '/negate/Op/Negate',
-      'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
-      'vs/embedding_lookup*/multi-slice',
-      'vs/absolute_difference/Sub/subtract.*/Subtract',
-      'vs/absolute_difference/Abs/abs.*/Op/Absolute',
-      'vs/absolute_difference/Sum/reduce',
-      'vs/absolute_difference/value/multiply',
+        '__seed*',
+        'gradients/vs/absolute_difference/Abs_grad/Sign',
+        'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
+        '/negate/Op/Negate',
+        'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd',
+        'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd/*/Fill',
+        'vs/embedding_lookup*/multi-slice',
+        'vs/absolute_difference/Sub/subtract.*/Subtract',
+        'vs/absolute_difference/Abs/abs.*/Op/Absolute',
+        'vs/absolute_difference/Sum/reduce',
+        'vs/absolute_difference/value/multiply',
     ]
     # pylint: enable=line-too-long
     self.assert_all_compute_sets_and_list(report, ok)
