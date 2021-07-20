@@ -18,6 +18,7 @@ limitations under the License.
 #include <vector>
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/register_types.h"
+#include "tensorflow/core/util/overflow.h"
 #include "tensorflow/core/util/sparse/sparse_tensor.h"
 
 namespace tensorflow {
@@ -62,6 +63,16 @@ class SparseSplitOp : public OpKernel {
                                         "and the splitting dimension size (",
                                         input_shape.vec<int64>()(axis),
                                         "), got ", num_split_));
+
+    // Prevent overflow by constructing the dense shape separately
+    int64 total_elements = 1;
+    const auto input_shape_flat = input_shape.flat<int64>();
+    for (int i = 0; i < input_shape.NumElements(); i++) {
+      total_elements =
+          MultiplyWithoutOverflow(total_elements, input_shape_flat(i));
+      OP_REQUIRES(context, total_elements >= 0,
+                  errors::Internal("Encountered overflow in dense shape"));
+    }
 
     sparse::SparseTensor sparse_tensor;
     OP_REQUIRES_OK(context,
