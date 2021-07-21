@@ -41,7 +41,6 @@ class IpuXlaCholeskyTest(xla_test.XLATestCase):
   def __configureIPU(self):
     if not self.configured:
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.optimizations.cholesky_block_size = IpuXlaCholeskyTest.BLOCK_SIZE

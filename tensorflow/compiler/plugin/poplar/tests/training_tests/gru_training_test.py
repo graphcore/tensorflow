@@ -140,7 +140,7 @@ class GRUTrainingTest(xla_test.XLATestCase):
         r = ipu.ipu_compiler.compile(layer_func, inputs=compile_inputs)
 
       opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       opts._profiling.use_poplar_text_report = True  # pylint: disable=protected-access
       opts.ipu_model.compile_ipu_code = False
       opts.configure_ipu_system()

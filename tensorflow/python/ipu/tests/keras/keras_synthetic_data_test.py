@@ -81,7 +81,6 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
-        cfg._profiling.profiling = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
@@ -100,7 +99,6 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
-        cfg._profiling.profiling = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
@@ -119,7 +117,6 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
-        cfg._profiling.profiling = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
@@ -138,7 +135,7 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategy()
       with strategy.scope():
         cfg = IPUConfig()
-        cfg._profiling.profiling = True  # pylint: disable=protected-access
+        cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 1
         cfg.configure_ipu_system()
 
@@ -157,7 +154,6 @@ class KerasSyntheticDataTest(test.TestCase):
       strategy = ipu.ipu_strategy.IPUStrategyV1()
       with strategy.scope():
         cfg = IPUConfig()
-        cfg._profiling.profiling = True  # pylint: disable=protected-access
         cfg.auto_select_ipus = 2
         tu.add_hw_ci_connection_options(cfg)
         cfg.configure_ipu_system()

@@ -203,7 +203,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
         [stage1, stage2, stage3], lambda: [], [], repeat_count,
-        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 36502,
+        gradient_accumulation_count, dataset_fn, optimizer_fn, self, 15190,
         True, pipelining_ops.PipelineSchedule.Sequential)
 
   @tu.skip_on_hw
@@ -435,9 +435,6 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
           device_mapping=[0] * 3)
 
     with self.test_session() as session:
-      with ops.device("/device:IPU:0"):
-        compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=[])
-
       cfg = IPUConfig()
       report_helper = tu.ReportHelper()
       report_helper.set_autoreport_options(cfg)
@@ -447,6 +444,10 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
       cfg.norms.experimental.distributed_batch_norm_replica_group_size = 2
       tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=[])
+
       utils.move_variable_initialization_to_cpu()
 
       session.run(variables.global_variables_initializer())

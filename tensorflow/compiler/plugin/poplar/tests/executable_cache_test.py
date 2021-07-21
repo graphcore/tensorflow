@@ -66,26 +66,6 @@ def _temporary_executable_cache():
       yield
 
 
-def _count_ipu_compilations_in_summary(summary):
-  count = 0
-  for val in summary.value:
-    if val.tag == "ipu_trace":
-      for evt_str in val.tensor.string_val:
-        evt = IpuTraceEvent.FromString(evt_str)
-        if (evt.type == IpuTraceEvent.COMPILE_END
-            and evt.compile_end.compilation_report):
-          count += 1
-  return count
-
-
-def _count_ipu_compilations_in_dir(model_dir):
-  count = 0
-  for event_file in glob.glob(os.path.join(model_dir, "event*")):
-    for event in summary_iterator.summary_iterator(event_file):
-      count += _count_ipu_compilations_in_summary(event.summary)
-  return count
-
-
 class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-method
   def _run_in_new_process(self, fn):
     q = multiprocessing.Queue()
@@ -110,14 +90,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       def my_net(x):
@@ -149,14 +127,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       dataset = dataset_ops.Dataset.from_tensor_slices(
@@ -205,14 +181,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       def my_net(x):
@@ -250,14 +224,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       def my_net(x):
@@ -318,13 +290,14 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      ipu_options = IPUConfig()
-      ipu_options._profiling.profiling = True  # pylint: disable=protected-access
-      _extra_ipu_config(ipu_options)
-      ipu_options.auto_select_ipus = 1
+      cfg = IPUConfig()
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
+      _extra_ipu_config(cfg)
+      cfg.auto_select_ipus = 1
 
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   ipu_options=ipu_options,
+                                                   ipu_options=cfg,
                                                    compile_summary=True)
 
       run_config = ipu.ipu_run_config.RunConfig(ipu_run_config=ipu_config)
@@ -332,27 +305,27 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
                                                  config=run_config)
 
       log_dir = estimator.model_dir
-      self.assertEqual(0, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 0)
 
       # Compile the training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 1)
 
       # Re-use cached training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 1)
 
       # Compile the evaluation graph
       estimator.evaluate(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
       # Re-use cached evaluation graph
       estimator.evaluate(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
       # Re-use cached training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
     with _temporary_executable_cache():
       self._run_in_new_process(build_and_run_model)
@@ -360,14 +333,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def test_model_with_outside_compilation_scope(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       def my_net(x):
@@ -397,14 +368,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       cwd = os.getcwd()
@@ -452,14 +421,12 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
   @tu.test_uses_ipus(num_ipus=1, allow_ipu_model=True)
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
-    # Use the same report_helper to ensure the autoReport options are
-    # identical on each run so they do not affect the device hashes.
+    cfg = IPUConfig()
     report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _extra_ipu_config(cfg)
 
     def build_and_run_model():
-      cfg = IPUConfig()
-      report_helper.set_autoreport_options(cfg)
-      _extra_ipu_config(cfg)
       cfg.configure_ipu_system()
 
       cwd = os.getcwd()

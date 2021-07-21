@@ -312,7 +312,6 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -339,7 +338,6 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -366,7 +364,6 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -396,7 +393,6 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 

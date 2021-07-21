@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
@@ -219,6 +220,12 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testMatMulPartialsType(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       outputs = {}
       with ops.device("/device:IPU:0"):
@@ -238,18 +245,21 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           output = math_ops.matmul(pa, pb)
           outputs[output] = ("poplin::ConvPartial*<half,half", fd)
 
-      report = tu.ReportJSON(self, sess)
-
       for output, expected_output in outputs.items():
-        report.reset()
-
         sess.run(output, expected_output[1])
 
-        report.parse_log()
-        report.assert_vertices_contain_list([expected_output[0]])
+        report = pva.openReport(report_helper.find_report())
+        self.assert_vertices_contain_list(report, [expected_output[0]])
+        report_helper.clear_reports()
 
   @test_util.deprecated_graph_mode_only
   def testLSTMPartialsType(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     ops.reset_default_graph()
     with self.session() as sess:
       dtype = np.float16
@@ -309,16 +319,13 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
             outputs.append(createLSTM("poplin::ConvPartial*<half,float"))
           outputs.append(createLSTM("poplin::ConvPartial*<half,half"))
 
-      report = tu.ReportJSON(self, sess)
-
       for output, expected_output, fd in outputs:
         sess.run(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
         sess.run(variables.global_variables_initializer())
-
-        report.reset()
+        report_helper.clear_reports()
         sess.run(output, fd)
-        report.parse_log()
-        report.assert_vertices_contain_list([expected_output])
+        report = pva.openReport(report_helper.find_report())
+        self.assert_vertices_contain_list(report, [expected_output])
 
   @test_util.deprecated_graph_mode_only
   def testUnsupportedPartialsType(self):

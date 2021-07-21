@@ -15,9 +15,11 @@
 """Tests for IPU Keras Model"""
 
 import numpy as np
+import pva
 
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
@@ -272,7 +274,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -312,7 +313,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -342,7 +342,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -372,7 +371,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -396,7 +394,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -429,7 +426,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -455,7 +451,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -482,7 +477,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -496,6 +490,12 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitTwice(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       ds = test_dataset()
@@ -503,26 +503,18 @@ class IPUModelModelTest(test.TestCase):
       x = simple_model(input_layer, [16, 8, 2])
       m = keras.Model(inputs=input_layer, outputs=x)
 
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
-
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
-      # Clear profiling logs
-      ipu.ops.summary_ops.get_ipu_reports()
-
       # Fit the weights to the dataset
-      history = m.fit(ds, steps_per_epoch=2)
+      history = m.fit(ds, steps_per_epoch=1)
       l = history.history['loss'][0]
 
       # # Record weights
       w_1 = [w.numpy() for w in m.weights]
 
       # Fit the weights to the dataset
-      history = m.fit(ds, steps_per_epoch=2)
+      history = m.fit(ds, steps_per_epoch=1)
 
       # Loss should be different after second training.
       self.assertTrue(l > history.history['loss'][0])
@@ -534,12 +526,13 @@ class IPUModelModelTest(test.TestCase):
         self.assertFalse(np.all(w1 == w2))
 
       # Should have compiled the graph once, and executed twice.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(1, len(evts))
+      self.assert_num_reports(report_helper, 1)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_number_of_executions(report, 2)
+      report_helper.clear_reports()
 
       # Fit the weights with a new dataset
-      history = m.fit(test_dataset(), steps_per_epoch=2)
+      history = m.fit(test_dataset(), steps_per_epoch=1)
 
       # Loss should be different after second training.
       self.assertTrue(l > history.history['loss'][0])
@@ -551,9 +544,7 @@ class IPUModelModelTest(test.TestCase):
         self.assertFalse(np.all(w2 == w3))
 
       # Don't need to compile the graph again.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(0, len(evts))
+      self.assert_num_reports(report_helper, 0)
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):
@@ -564,7 +555,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -584,6 +574,12 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
@@ -592,11 +588,6 @@ class IPUModelModelTest(test.TestCase):
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
       m = keras.Model(inputs=input_layer, outputs=x)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
@@ -612,6 +603,12 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
@@ -620,11 +617,6 @@ class IPUModelModelTest(test.TestCase):
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
       m = keras.Model(inputs=input_layer, outputs=x)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
           0.001, 4, 0.1, staircase=True)
@@ -641,6 +633,12 @@ class IPUModelModelTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       # Clear old reports
@@ -649,11 +647,6 @@ class IPUModelModelTest(test.TestCase):
       input_layer = keras.layers.Input(shape=(32))
       x = simple_model(input_layer, [8, 8, 2])
       m = keras.Model(inputs=input_layer, outputs=x)
-
-      cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg.auto_select_ipus = 1
-      cfg.configure_ipu_system()
 
       lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
           boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
@@ -677,7 +670,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -706,7 +698,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -733,7 +724,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -754,7 +744,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -786,7 +775,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=[input_a, input_b], outputs=[block_c, block_d])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -821,7 +809,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=[input_a, input_b], outputs=[block_c, block_d])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -846,7 +833,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
       ipu_out = m.predict(xs, batch_size=2)
@@ -871,7 +857,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=[x, x])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -898,7 +883,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=x)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -926,7 +910,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(inputs=input_layer, outputs=[x, x])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -950,7 +933,6 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -1019,7 +1001,6 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -1107,7 +1088,6 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -1165,7 +1145,6 @@ class IPUModelModelTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 
@@ -1229,7 +1208,6 @@ class IPUModelModelTest(test.TestCase):
 
     # IPU Test.
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
@@ -1272,7 +1250,6 @@ class IPUModelModelTest(test.TestCase):
       return ((input_1, input_2, input_3), (dense_3, dense_4))
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = 1
     cfg.configure_ipu_system()
 
@@ -1316,7 +1293,6 @@ class IPUModelModelTest(test.TestCase):
       m = keras.Model(i, o)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
 

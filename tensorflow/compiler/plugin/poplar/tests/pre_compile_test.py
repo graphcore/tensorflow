@@ -15,15 +15,12 @@
 
 import contextlib
 from tensorflow.python.ipu.config import IPUConfig
-import glob
 import multiprocessing
 import os
 import tempfile
 import numpy as np
 import test_utils as tu
 
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, count_ipu_compilations
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session
@@ -40,12 +37,12 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
-from tensorflow.python.summary import summary_iterator
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
 
 def _options_function(opts):
+  opts.ipu_model.compile_ipu_code = False
   opts.device_connection.version = 'ipu1'
   opts.device_connection.type = ipu.utils.DeviceConnectionType.PRE_COMPILE
 
@@ -61,22 +58,6 @@ def _temporary_executable_cache():
     poplar_flags = poplar_flags.replace("--use_ipu_model", "")
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       yield
-
-
-def _count_ipu_compilations_in_summary(summary):
-  count = 0
-  for val in summary.value:
-    if val.tag == "ipu_trace":
-      count += count_ipu_compilations(val.tensor.string_val)
-  return count
-
-
-def _count_ipu_compilations_in_dir(model_dir):
-  count = 0
-  for event_file in glob.glob(os.path.join(model_dir, "event*")):
-    for event in summary_iterator.summary_iterator(event_file):
-      count += _count_ipu_compilations_in_summary(event.summary)
-  return count
 
 
 class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-method
@@ -102,7 +83,14 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _options_function(cfg)
+
     def build_and_run_model():
+      cfg.configure_ipu_system()
+
       def my_net(x):
         return x * x
 
@@ -111,22 +99,29 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess, set_opts_fn=_options_function)
         res = sess.run(result, {v: [1.0, 2.0]})
-        events = report.get_event_trace(sess)
-        return res, events
+        num_reports = len(report_helper.find_reports())
+        report_helper.clear_reports()
+        return res, num_reports
 
     with _temporary_executable_cache():
-      result0, report0 = self._run_in_new_process(build_and_run_model)
-      result1, report1 = self._run_in_new_process(build_and_run_model)
+      result0, num_reports_0 = self._run_in_new_process(build_and_run_model)
+      result1, num_reports_1 = self._run_in_new_process(build_and_run_model)
       self.assertAllClose(result0, result1)
       self.assertAllClose(result1, [0.0, 0.0])
-      self.assertEqual(1, count_ipu_compilations(report0))
-      self.assertEqual(0, count_ipu_compilations(report1))
+      self.assertEqual(1, num_reports_0)
+      self.assertEqual(0, num_reports_1)
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_infeed_and_outfeed(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _options_function(cfg)
+
     def build_and_run_model():
+      cfg.configure_ipu_system()
+
       dataset = dataset_ops.Dataset.from_tensor_slices(
           np.ones(10, dtype=np.float32))
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
@@ -146,27 +141,34 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
       dequeued = outfeed_queue.dequeue()
 
+      report_helper.clear_reports()
       with session.Session() as sess:
-        report = ReportJSON(self, sess, set_opts_fn=_options_function)
         sess.run(infeed_queue.initializer)
         res = sess.run(result, {v: 0.0})
         deq = sess.run(dequeued)
-        events = report.get_event_trace(sess)
-        return res, deq, events
+        num_reports = len(report_helper.find_reports())
+        return res, deq, num_reports
 
     with _temporary_executable_cache():
-      result0, dequeued0, events0 = self._run_in_new_process(
+      result0, dequeued0, num_reports_0 = self._run_in_new_process(
           build_and_run_model)
-      result1, dequeued1, events1 = self._run_in_new_process(
+      result1, dequeued1, num_reports_1 = self._run_in_new_process(
           build_and_run_model)
       self.assertEqual(dequeued0.shape, dequeued1.shape)
       self.assertEqual(result0, result1)
-      self.assertEqual(1, count_ipu_compilations(events0))
-      self.assertEqual(0, count_ipu_compilations(events1))
+      self.assertEqual(1, num_reports_0)
+      self.assertEqual(0, num_reports_1)
 
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _options_function(cfg)
+
     def build_and_run_model():
+      cfg.configure_ipu_system()
+
       def my_net(x):
         return x * x
 
@@ -174,28 +176,33 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
+      report_helper.clear_reports()
       with session.Session() as sess:
-        report = ReportJSON(self, sess, set_opts_fn=_options_function)
-
         res = sess.run(result, {v: [1.0, 2.0]})
-        events = report.get_event_trace(sess)
-        return res, events
+        num_reports = len(report_helper.find_reports())
+        return res, num_reports
 
     with _temporary_executable_cache():
       # Since each Graph will have its own XLA compilation cache,
       # the cache we test is the last-level Poplar executable cache.
 
       with ops.Graph().as_default():
-        result0, events0 = build_and_run_model()
+        result0, num_reports_0 = build_and_run_model()
 
       with ops.Graph().as_default():
-        result1, events1 = build_and_run_model()
+        result1, num_reports_1 = build_and_run_model()
 
       self.assertAllEqual(result0, result1)
-      self.assertEqual(1, count_ipu_compilations(events0))
-      self.assertEqual(0, count_ipu_compilations(events1))
+      self.assertEqual(1, num_reports_0)
+      self.assertEqual(0, num_reports_1)
 
   def test_ipu_estimator(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.auto_select_ipus = 1
+    _options_function(cfg)
+
     def my_model_fn(features, labels, mode):
       loss = features + labels
       # Make different graphs for train and eval
@@ -218,41 +225,35 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       return dataset.batch(1, drop_remainder=True)
 
     def build_and_run_model():
-      ipu_options = IPUConfig()
-      ipu_options._profiling.profiling = True  # pylint: disable=protected-access
-      ipu_options.auto_select_ipus = 1
-      _options_function(ipu_options)
-
       ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   ipu_options=ipu_options,
+                                                   ipu_options=cfg,
                                                    compile_summary=True)
 
       run_config = ipu.ipu_run_config.RunConfig(ipu_run_config=ipu_config)
       estimator = ipu.ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                                  config=run_config)
 
-      log_dir = estimator.model_dir
-      self.assertEqual(0, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 0)
 
       # Compile the training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 1)
 
       # Re-use cached training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 1)
 
       # Compile the evaluation graph
       estimator.evaluate(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
       # Re-use cached evaluation graph
       estimator.evaluate(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
       # Re-use cached training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+      self.assert_num_reports(report_helper, 2)
 
     with _temporary_executable_cache():
       self._run_in_new_process(build_and_run_model)
@@ -260,6 +261,10 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
   @test_util.deprecated_graph_mode_only
   def test_unhashable_op(self):
     def build_and_run_model():
+      cfg = IPUConfig()
+      _options_function(cfg)
+      cfg.configure_ipu_system()
+
       cwd = os.getcwd()
       outputs = {
           "output_types": [dtypes.float32],
@@ -283,7 +288,6 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
       with session.Session() as sess:
-        ReportJSON(self, sess, set_opts_fn=_options_function)
         excepted = False
         try:
           sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
@@ -298,7 +302,14 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
   @tu.skip_with_asan("non-deterministic dlopen user ops addresses with asan")
   @test_util.deprecated_graph_mode_only
   def test_hashable_op(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _options_function(cfg)
+
     def build_and_run_model():
+      cfg.configure_ipu_system()
+
       cwd = os.getcwd()
       outputs = {
           "output_types": [dtypes.float32],
@@ -321,22 +332,29 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
 
         result = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
+      report_helper.clear_reports()
       with session.Session() as sess:
-        report = ReportJSON(self, sess, set_opts_fn=_options_function)
         sess.run(result, feed_dict={x: np.ones([128]), y: np.ones([128])})
-        events = report.get_event_trace(sess)
-        return events
+        num_reports = len(report_helper.find_reports())
+        return num_reports
 
     with _temporary_executable_cache():
-      events0 = self._run_in_new_process(build_and_run_model)
-      events1 = self._run_in_new_process(build_and_run_model)
+      num_reports_0 = self._run_in_new_process(build_and_run_model)
+      num_reports_1 = self._run_in_new_process(build_and_run_model)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, count_ipu_compilations(events0))
-      self.assertEqual(0, count_ipu_compilations(events1))
+      self.assertEqual(1, num_reports_0)
+      self.assertEqual(0, num_reports_1)
 
   @test_util.deprecated_graph_mode_only
   def test_host_embeddings(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    _options_function(cfg)
+
     def build_and_run_model():
+      cfg.configure_ipu_system()
+
       shape = [100, 20]
       lookup_count = 20
 
@@ -371,10 +389,8 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
       with session.Session() as sess:
         i_h = np.arange(0, lookup_count).reshape([lookup_count])
 
-        report = ReportJSON(self, sess, set_opts_fn=_options_function)
-
         sess.run(variables.global_variables_initializer())
-        report.reset()
+        report_helper.clear_reports()
         sess.run(
             gen_pop_datastream_ops.ipu_host_embedding_register(
                 w, "host_embedding", optimizer="SGD+GA"))
@@ -383,17 +399,17 @@ class TestPreCompileMode(xla_test.XLATestCase):  # pylint: disable=abstract-meth
             gen_pop_datastream_ops.ipu_host_embedding_deregister(
                 w, "host_embedding"))
 
-        events = report.get_event_trace(sess)
-        return result, events
+        num_reports = len(report_helper.find_reports())
+        return result, num_reports
 
     with _temporary_executable_cache():
-      result0, events0 = self._run_in_new_process(build_and_run_model)
-      result1, events1 = self._run_in_new_process(build_and_run_model)
+      result0, num_reports_0 = self._run_in_new_process(build_and_run_model)
+      result1, num_reports_1 = self._run_in_new_process(build_and_run_model)
       self.assertFalse(np.any(result0))
       self.assertAllEqual(result0, result1)
       # Expect no second compilation as the executable should be cached
-      self.assertEqual(1, count_ipu_compilations(events0))
-      self.assertEqual(0, count_ipu_compilations(events1))
+      self.assertEqual(1, num_reports_0)
+      self.assertEqual(0, num_reports_1)
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
       self.assertAllClose(result[0], np.broadcast_to(45, [500]))
 
     # Check that there is only one real compile
-    report_helper.assert_num_reports(1)
+    self.assert_num_reports(report_helper, 1)
     report = pva.openReport(report_helper.find_report())
     # Check that there is only one execute
     self.assert_number_of_executions(report, 1)

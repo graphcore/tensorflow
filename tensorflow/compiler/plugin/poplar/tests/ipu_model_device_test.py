@@ -17,14 +17,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import pva
 import numpy as np
-
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -41,9 +42,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb
 
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts.configure_ipu_system()
+      cfg = IPUConfig()
+      cfg.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       result = sess.run(output, fd)
@@ -60,9 +60,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      opts = IPUConfig()
-      opts._profiling.profiling = False  # pylint: disable=protected-access
-      opts.configure_ipu_system()
+      cfg = IPUConfig()
+      cfg.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -73,6 +72,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       self.assertTrue(len(rep) == 0)
 
   def testIpuModelDeviceWithReport(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
@@ -83,7 +87,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      r = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -92,7 +96,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       rep = sess.run(report, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
-      types = r.parse_events(rep, assert_len=4)
+      types = report_json.parse_events(rep, assert_len=4)
       self.assertEqual(1, types[IpuTraceEvent.COMPILE_BEGIN])
       self.assertEqual(1, types[IpuTraceEvent.COMPILE_END])
       self.assertEqual(1, types[IpuTraceEvent.EXECUTE])
@@ -110,10 +114,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([out1, out2]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts._profiling.profile_execution = True  # pylint: disable=protected-access
-      opts.configure_ipu_system()
+      cfg = IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+      cfg.configure_ipu_system()
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -136,9 +140,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [480], name="b")
         output = pa + pb
 
-      opts = IPUConfig()
-      opts.compilation_poplar_options = {'some_option': 'some_value'}
-      opts.configure_ipu_system()
+      cfg = IPUConfig()
+      cfg.compilation_poplar_options = {'some_option': 'some_value'}
+      cfg.configure_ipu_system()
 
       fd = {pa: np.zeros([480]), pb: np.zeros([480])}
       with self.assertRaisesRegex(errors.InvalidArgumentError,
@@ -146,6 +150,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         sess.run(output, fd)
 
   def testNamedOperations(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
@@ -153,188 +163,14 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.name_scope('my_ops'):
           out = math_ops.add(pa, pb, 'my_add_op')
 
-      r = tu.ReportJSON(self, sess)
-
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      r.reset()
 
       result = sess.run(out, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
-      r.parse_log()
-
-      ok = ['__seed*', 'my_ops/my_add_op/add']
-      r.assert_all_compute_sets_and_list(ok)
-
-  def testReportEveryNthExecution_FirstOnly(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      r = tu.ReportJSON(self, sess)
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      r.reset()
-
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-
-      types = r.parse_log()
-      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
-      self.assertEqual(
-          len(r.get_execution_reports()), 1,
-          "Only the first execution should have generated a report")
-
-  def testReportEveryNthExecution_Every2(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts._profiling.profile_execution = True  # pylint: disable=protected-access
-      opts._profiling.report_every_nth_execution = 2  # pylint: disable=protected-access
-      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
-      opts.configure_ipu_system()
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
-
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-
-      rep = sess.run(report, fd)
-      r = tu.ReportJSON(self)
-      types = r.parse_events(rep)
-      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
-      self.assertEqual(
-          len(r.get_execution_reports()), 3,
-          "The 1st, 3rd and 5th execution should have generated a report")
-
-  def testReportEveryNthExecution_Every1(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts._profiling.profile_execution = True  # pylint: disable=protected-access
-      opts._profiling.report_every_nth_execution = 1  # pylint: disable=protected-access
-      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
-      opts.configure_ipu_system()
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
-
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-      sess.run(out, fd)
-
-      rep = sess.run(report, fd)
-      r = tu.ReportJSON(self)
-      types = r.parse_events(rep)
-      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
-      self.assertEqual(len(r.get_execution_reports()), 5,
-                       "Every execution should have generated a report")
-
-  def testJsonReport(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      r = tu.ReportJSON(self, sess)
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      r.reset()
-
-      sess.run(out, fd)
-
-      r.parse_log(assert_len=4, assert_msg="engine, begin, end, execute")
-
-  def testCborReport(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
-      opts._profiling.profile_execution = True  # pylint: disable=protected-access
-      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
-      opts._profiling.use_poplar_cbor_report = True  # pylint: disable=protected-access
-      opts.configure_ipu_system()
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
-
-      sess.run(out, fd)
-
-      rep = sess.run(report, fd)
-      evts = utils.extract_all_events(rep)
-      self.assertEqual(len(evts), 4)  # engine, begin, end, execute
-
-      self.assertEqual(evts[1].compile_end.compilation_report[0],
-                       bytes(bytearray([217]))[0])
-      self.assertEqual(evts[3].execute.execution_report[0],
-                       bytes(bytearray([217]))[0])
-
-  def testIpuEventsWithoutPoplarReporting(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        pa = array_ops.placeholder(np.float32, [2, 2], name="a")
-        pb = array_ops.placeholder(np.float32, [2, 2], name="b")
-        out = math_ops.add(pa, pb)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = IPUConfig()
-      opts._profiling.profiling = False  # pylint: disable=protected-access
-      opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-      opts.configure_ipu_system()
-
-      fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
-
-      sess.run(out, fd)
-
-      rep = sess.run(report, fd)
-      evts = utils.extract_all_events(rep)
-      self.assertEqual(len(evts), 3)  # compile begin, compile end, execute
-
-      for e in evts:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          self.assertFalse(e.compile_end.compilation_report)
-        if e.type == IpuTraceEvent.EXECUTE:
-          self.assertFalse(e.execute.execution_report)
-
-      sess.close()
+    report = pva.openReport(report_helper.find_report())
+    ok = ['__seed*', 'my_ops/my_add_op/add']
+    self.assert_all_compute_sets_and_list(report, ok)
 
 
 if __name__ == "__main__":

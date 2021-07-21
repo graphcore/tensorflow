@@ -29,6 +29,11 @@ from tensorflow.python.platform import googletest
 
 class MappingTest(xla_test.XLATestCase):
   def testGather(self):
+    cfg = ipu.utils.IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_net(w, i):
@@ -42,8 +47,8 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       i_h = np.arange(0, 3 * 256, 3)
       w_h = np.arange(8192).reshape(1024, 8)
@@ -52,8 +57,8 @@ class MappingTest(xla_test.XLATestCase):
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], expect)
 
-      report.parse_log()
-      tm = report.get_tensor_map()
+      report_json.parse_log()
+      tm = report_json.get_tensor_map()
 
       bad_maps = []
       for tensor in tm.all_tensors():
@@ -64,6 +69,11 @@ class MappingTest(xla_test.XLATestCase):
       self.assertFalse(bad_maps)
 
   def testMappingJson(self):
+    cfg = ipu.utils.IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_net(a, b, c):
@@ -81,8 +91,8 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
 
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       fd = {a: 1.0, b: np.ones([8192]), c: np.ones([512])}
       result = sess.run(r, fd)
@@ -90,8 +100,8 @@ class MappingTest(xla_test.XLATestCase):
       expected = [2] * 256 + [3] * 512 + [2] * 256
       self.assertAllClose(result[0], expected)
 
-      report.parse_log()
-      tm = report.get_tensor_map()
+      report_json.parse_log()
+      tm = report_json.get_tensor_map()
 
       # There are two fusions in the graph, zero pad and implicit
       # broadcast add. We work out which one's which by looking at
@@ -139,6 +149,11 @@ class MappingTest(xla_test.XLATestCase):
       self.assertEqual(slice_layout.tiles, add_layout.tiles)
 
   def testInplaceReadWrite(self):
+    cfg = ipu.utils.IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_net(x, y, a):
@@ -154,8 +169,8 @@ class MappingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
 
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       i_x = np.full(100, 1)
       i_y = np.full(100, 2)
@@ -167,8 +182,8 @@ class MappingTest(xla_test.XLATestCase):
       self.assertAllClose(result_c, expect_c)
       self.assertAllClose(result_z, expect_z)
 
-      report.parse_log()
-      tm = report.get_tensor_map()
+      report_json.parse_log()
+      tm = report_json.get_tensor_map()
 
       bad_maps = []
       for tensor in tm.all_tensors():

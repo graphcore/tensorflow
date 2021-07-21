@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import test_utils as tu
 
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.eager import function as eager_function
@@ -34,6 +34,12 @@ from tensorflow.python.platform import googletest
 
 class CaseTest(xla_test.XLATestCase):
   def testCaseSimple(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(pa, pb, pc):
@@ -71,10 +77,6 @@ class CaseTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      report = ReportJSON(self, sess)
-
-      report.reset()
-
       result = sess.run(out, {pa: 0, pb: [0., 1.], pc: [1., 5.]})
       self.assertAllClose(result[0], [1., 6.])
 
@@ -87,10 +89,15 @@ class CaseTest(xla_test.XLATestCase):
       result = sess.run(out, {pa: 10, pb: [0., 1.], pc: [1., 5.]})
       self.assertAllClose(result[0], [0., 5.])
 
-      report.parse_log()
-      report.assert_contains_one_compile_event()
+      self.assert_num_reports(report_helper, 1)
 
   def testCaseVariables(self):
+    cfg = ipu.utils.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(pa, pb):
@@ -131,11 +138,7 @@ class CaseTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb])
 
-      report = ReportJSON(self, sess)
-
       sess.run(variables_lib.global_variables_initializer())
-
-      report.reset()
 
       result = sess.run(out, {pa: 0, pb: [0., 1.]})
       self.assertAllClose(result[0], [1., 6.])
@@ -149,8 +152,7 @@ class CaseTest(xla_test.XLATestCase):
       result = sess.run(out, {pa: 10, pb: [0., 1.]})
       self.assertAllClose(result[0], [0., 5.])
 
-      report.parse_log()
-      report.assert_contains_one_compile_event()
+      self.assert_num_reports(report_helper, 1)
 
 
 if __name__ == "__main__":
