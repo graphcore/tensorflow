@@ -75,34 +75,34 @@ string ExecutableBuildOptions::ToString() const {
       device_ordinal_, result_layout, num_replicas_);
 }
 
-ExecutableBuildOptions& ExecutableBuildOptions::set_argument_count(
-    int count) {
-  argument_count_ = count;
+ExecutableBuildOptions& ExecutableBuildOptions::set_argument_input_indices(
+    const std::vector<int>& argument_input_indices) {
+  argument_input_indices_ = argument_input_indices;
   return *this;
 }
 
-int ExecutableBuildOptions::argument_count() const {
-  return argument_count_;
+std::vector<int> ExecutableBuildOptions::argument_input_indices() const {
+  return argument_input_indices_;
 }
 
-ExecutableBuildOptions& ExecutableBuildOptions::set_resource_input_count(
-    int count) {
-  resource_input_count_ = count;
+ExecutableBuildOptions& ExecutableBuildOptions::set_resource_input_indices(
+    const std::vector<int>& resource_input_indices) {
+  resource_input_indices_ = resource_input_indices;
   return *this;
 }
 
-int ExecutableBuildOptions::resource_input_count() const {
-  return resource_input_count_;
+std::vector<int> ExecutableBuildOptions::resource_input_indices() const {
+  return resource_input_indices_;
 }
 
-ExecutableBuildOptions& ExecutableBuildOptions::set_input_mapping(
-    const std::vector<int>& input_mapping) {
-  input_mapping_ = input_mapping;
+ExecutableBuildOptions& ExecutableBuildOptions::set_resource_input_initialized(
+    const std::vector<bool>& resource_input_initialized) {
+  resource_input_initialized_ = resource_input_initialized;
   return *this;
 }
 
-const std::vector<int>& ExecutableBuildOptions::input_mapping() const {
-  return input_mapping_;
+std::vector<bool> ExecutableBuildOptions::resource_input_initialized() const {
+  return resource_input_initialized_;
 }
 
 ExecutableBuildOptions&
@@ -114,7 +114,7 @@ ExecutableBuildOptions::set_resource_update_to_input_index(
   return *this;
 }
 
-const std::vector<int>& ExecutableBuildOptions::resource_update_to_input_index()
+std::vector<int> ExecutableBuildOptions::resource_update_to_input_index()
     const {
   return resource_update_to_input_index_;
 }

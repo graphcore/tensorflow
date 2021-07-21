@@ -67,13 +67,7 @@ ENTRY c1 {
 }
 
 )";
-
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 

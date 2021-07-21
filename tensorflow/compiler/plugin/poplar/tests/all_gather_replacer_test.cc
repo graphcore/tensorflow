@@ -95,11 +95,7 @@ ENTRY c1 {
   }
   */
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
 
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
@@ -244,11 +240,7 @@ ENTRY c1 {
   }
   */
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
 
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
@@ -364,11 +356,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
 
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
@@ -421,12 +409,7 @@ ENTRY c1 {
 }
 
 )";
-
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
 
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
@@ -518,12 +501,7 @@ ENTRY c1 {
   backend_config="{\"hashOfCustomAttributes\":\"-7046029254386353152\"}"
   }
   */
-
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
 
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();

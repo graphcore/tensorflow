@@ -110,12 +110,7 @@ ENTRY e {
   ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
-  auto config = GetModuleConfigForTest();
-  // config.set_resource_input_count(4);
-  // config.set_input_mapping({0, 1, 2, 3});
-  // config.set_resource_update_to_input_index({0, 1, 2, 3});
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
 
   CompilerAnnotations annotations(module.get());
   HostEmbeddingNotification prvo;
