@@ -1038,8 +1038,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         'gradients/vs/absolute_difference/Abs_grad/Sign',
         'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
         '/negate/Op/Negate',
-        'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd',
-        'gradients/vs/Reshape_grad/Reshape/tensor/multi-update-add*/multiUpdateAdd/*/Fill',
+        'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd',
+        'gradients/vs/Reshape_grad/UnsortedSegmentSum/multi-update-add*/multiUpdateAdd/*/Fill',
         'vs/embedding_lookup*/multi-slice',
         'vs/absolute_difference/Sub/subtract.*/Subtract',
         'vs/absolute_difference/Abs/abs.*/Op/Absolute',
@@ -1231,8 +1231,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
     report = pva.openReport(report_helper.find_report())
     ok = [
-      'random_normal/RandomStandardNormal/rng.*/normal',
-      'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
+        'random_normal/RandomStandardNormal/rng.*/normal',
+        'mul/multiply.*/Op/Multiply', 'add/add*/Op/Add', '__seed*'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
 
