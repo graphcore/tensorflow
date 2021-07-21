@@ -17,6 +17,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import pva
 
 from google.protobuf import json_format
 
@@ -59,6 +60,13 @@ def _compare_ipu_to_cpu(test_wrapper,
                         compute_sets=None,
                         partial_compute_sets=None):
   def _run_on_ipu():
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
       g.add_to_collection("run_type", "ipu")
@@ -69,20 +77,23 @@ def _compare_ipu_to_cpu(test_wrapper,
         with ipu.scopes.ipu_scope("/device:IPU:0"):
           res = ipu.ipu_compiler.compile(model_fn, inputs=inputs)
 
-      report = tu.ReportJSON(test_wrapper, session)
+      report_json = tu.ReportJSON(test_wrapper, session)
       tu.move_variable_initialization_to_cpu()
       session.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       r = session.run(res, fd)[0]
 
-      report.parse_log()
-      if compute_sets:
-        report.assert_all_compute_sets_and_list(compute_sets)
-      if partial_compute_sets:
-        report.assert_compute_sets_contain_list(partial_compute_sets)
-
-      test_wrapper.assertAllEqual(report.get_ml_type_counts(),
+      report_json.parse_log()
+      test_wrapper.assertAllEqual(report_json.get_ml_type_counts(),
                                   conv_classifications)
+
+      report = pva.openReport(report_helper.find_report())
+      if compute_sets:
+        test_wrapper.assert_all_compute_sets_and_list(report, compute_sets)
+      if partial_compute_sets:
+        test_wrapper.assert_compute_sets_contain_list(report,
+                                                      partial_compute_sets)
+
       tvars = session.run(variables.trainable_variables())
       return r, tvars
 
@@ -395,6 +406,10 @@ class MultiConvTest(test_util.TensorFlowTestCase):
         return a, b
 
       def body(a, b):
+        cfg = ipu.config.IPUConfig()
+        cfg.ipu_model.compile_ipu_code = False
+        cfg.configure_ipu_system()
+
         w1 = variable_scope.get_variable(
             "w1",
             dtype=np.float32,
@@ -421,7 +436,6 @@ class MultiConvTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(body, inputs=[a, b])
 
-      tu.ReportJSON(self, session)
       tu.move_variable_initialization_to_cpu()
       session.run(variables.global_variables_initializer())
       with self.assertRaisesRegex(

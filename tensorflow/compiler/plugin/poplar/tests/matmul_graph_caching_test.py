@@ -21,7 +21,6 @@ import numpy as np
 import pva
 import test_utils as tu
 
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops

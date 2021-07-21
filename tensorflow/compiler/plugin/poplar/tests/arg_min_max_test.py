@@ -26,6 +26,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 
@@ -47,12 +48,17 @@ def _get_random_input(dtype, shape):
 class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxBasic(self, dtype):
+    cfg = IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -66,16 +72,18 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=0))
 
-      report.parse_log(assert_len=4)
+      report_json.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxHalf(self, dtype):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      ReportJSON(self, sess)
-
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
 
@@ -90,13 +98,15 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxMultiDimensional(self, dtype):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a, axis):
       return math_ops.argmax(a, axis=axis, output_type=dtypes.int32)
 
     for axis in range(6):
       with self.session() as sess:
-        ReportJSON(self, sess)
-
         with ops.device('cpu'):
           pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
           p_axis = array_ops.placeholder(np.int32, shape=())
@@ -112,11 +122,16 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinBasic(self, dtype):
+    cfg = IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -124,7 +139,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       with ops.device("/device:IPU:0"):
         out = model(pa)
 
-      report.reset()
+      report_json.reset()
 
       input = _get_random_input(dtype, (3, 5, 2))
 
@@ -132,16 +147,18 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmin(input, axis=0))
 
-      report.parse_log(assert_len=4)
+      report_json.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinHalf(self, dtype):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      ReportJSON(self, sess)
-
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
 
@@ -156,13 +173,15 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinMultiDimensional(self, dtype):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a, axis):
       return math_ops.argmin(a, axis=axis, output_type=dtypes.int32)
 
     for axis in range(6):
       with self.session() as sess:
-        ReportJSON(self, sess)
-
         with ops.device('cpu'):
           pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
           p_axis = array_ops.placeholder(np.int32, shape=())
@@ -178,12 +197,17 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxNegativeDim(self, dtype):
+    cfg = IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmax(a, axis=-1, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -197,16 +221,21 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=-1))
 
-      report.parse_log(assert_len=4)
+      report_json.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxVector(self, dtype):
+    cfg = IPUConfig()
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def model(a):
       return math_ops.argmax(a, axis=0, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess)
-      report.reset()
+      report_json = ReportJSON(self, sess)
+      report_json.reset()
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3])
@@ -220,7 +249,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input))
 
-      report.parse_log(assert_len=4)
+      report_json.parse_log(assert_len=4)
 
 
 if __name__ == "__main__":

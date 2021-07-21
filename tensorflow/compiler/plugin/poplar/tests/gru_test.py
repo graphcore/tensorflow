@@ -21,7 +21,7 @@ from __future__ import print_function
 import os
 import numpy as np
 import pva
-from test_utils import ReportJSON, ReportHelper
+from test_utils import ReportHelper
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test
@@ -294,6 +294,10 @@ class GRUTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_out, ref_out)
 
   def testGRULayerInference(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(0)
     # Run with attention scores (augru):
     for init_state_value in [0., 1.]:
@@ -433,6 +437,10 @@ class GRUTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_losses, ref_losses)
 
   def testGRULayerTraining(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     np.random.seed(42)
 
     # Run with random weights

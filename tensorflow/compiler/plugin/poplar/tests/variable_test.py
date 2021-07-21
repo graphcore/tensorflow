@@ -15,10 +15,13 @@
 
 import os
 import numpy as np
+import pva
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -30,11 +33,13 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
 
-import test_utils as tu
-
 
 class IpuXlaVariableTest(xla_test.XLATestCase):
   def testInitializeSimpleVariables(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with ops.device("/device:IPU:0"):
       with self.session() as sess:
 
@@ -53,6 +58,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(r2, [0.0], atol=1.0)
 
   def testInitializeSharedVariables(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with ops.device("/device:IPU:0"):
       with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -76,6 +85,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(r2, 2)
 
   def testRead(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with ops.device("/device:IPU:0"):
       with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -92,6 +105,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(r, 3)
 
   def testAssign(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with ops.device("/device:IPU:0"):
       with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -112,6 +129,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(r, 8)
 
   def testGradientDescent(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -152,6 +173,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                           rtol=1e-4)
 
   def testRepeatedGradientDescent(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -197,6 +222,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                           rtol=1e-4)
 
   def testMultipleUpdate(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -225,6 +254,12 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(r, 10.0)
 
   def testRandomNormalInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -234,12 +269,8 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
       sess.run(variables.global_variables_initializer())
-      report.parse_log()
+      report = pva.openReport(report_helper.find_report())
 
       o = sess.run(z)
       self.assertAllClose(o, 2.0, 0.2, 0.2)
@@ -248,9 +279,15 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
           '__seed*',
           'vs/z1/Initializer/random_normal/RandomStandardNormal/fusion/normal'
       ]
-      report.assert_all_compute_sets_and_list(ok)
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testRandomNormalNonScalarInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -259,13 +296,8 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           shape=[2],
                                           dtype=np.float32,
                                           initializer=i)
-
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
       sess.run(variables.global_variables_initializer())
-      report.parse_log()
+      report = pva.openReport(report_helper.find_report())
 
       o = sess.run(z)
       self.assertAllClose(o, [2.0, 2.0], 0.2, 0.2)
@@ -274,9 +306,13 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
           '__seed*',
           'vs/z1/Initializer/random_normal/RandomStandardNormal/fusion/normal'
       ]
-      report.assert_all_compute_sets_and_list(ok)
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testDefaultRandomNormalInitalizer(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -291,6 +327,12 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(o, 0.0, 1.0, 3.0)
 
   def testTruncatedNormalScalarInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -300,29 +342,30 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, 1.0, 0.2, 0.2)
 
-      # Find of the names of compute sets
-      report.parse_log()
+    # Find of the names of compute sets
+    report = pva.openReport(report_helper.find_report())
 
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
-          'z1/Initializer/truncated_normal/mul/multiply.*/Op/Multiply',
-          'z1/Initializer/truncated_normal/add*/Add'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
+        'z1/Initializer/truncated_normal/mul/multiply.*/Op/Multiply',
+        'z1/Initializer/truncated_normal/add*/Add'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testTruncatedNormalInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -332,28 +375,29 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, np.ones((2, 4)), 0.2, 0.2)
 
-      # Find of the names of compute sets
-      report.parse_log()
+    # Find of the names of compute sets
+    report = pva.openReport(report_helper.find_report())
 
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
-          'z1/Initializer/truncated_normal/scaled-inplace',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal',
+        'z1/Initializer/truncated_normal/scaled-inplace',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDefaultTruncatedNormalScalarInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -362,24 +406,29 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           shape=[],
                                           dtype=np.float32,
                                           initializer=i)
-
-      report = tu.ReportJSON(self, sess)
-      report.reset()
 
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, 1.0, 2.0, 2.0)
 
       # Find of the names of compute sets
-      report.parse_log()
+    report = pva.openReport(report_helper.find_report())
 
-      ok = [
-          '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testDefaultTruncatedNormalInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -389,25 +438,28 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, np.ones((2, 4)), 2.0, 2.0)
 
-      # Find of the names of compute sets
-      report.parse_log()
+    # Find of the names of compute sets
+    report = pva.openReport(report_helper.find_report())
 
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'z1/Initializer/truncated_normal/TruncatedNormal/truncated-normal*/truncatedNormal'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testUniformRandomInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -417,12 +469,8 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
       sess.run(variables.global_variables_initializer())
-      report.parse_log()
+      report = pva.openReport(report_helper.find_report())
 
       o = sess.run(z)
       self.assertAllClose(o, 0.0, 2.0, 2.0)
@@ -431,9 +479,15 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
           '__seed*',
           'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
       ]
-      report.assert_all_compute_sets_and_list(ok)
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testUniformRandomNonScalarInitalizer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -443,12 +497,8 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                                           dtype=np.float32,
                                           initializer=i)
 
-      report = tu.ReportJSON(self, sess)
-
-      # Clean existing reports
-      report.reset()
       sess.run(variables.global_variables_initializer())
-      report.parse_log()
+      report = pva.openReport(report_helper.find_report())
 
       o = sess.run(z)
       self.assertAllClose(o, [0.0, 0.0], 2.0, 2.0)
@@ -457,9 +507,13 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
           '__seed*',
           'vs/z1/Initializer/random_uniform/RandomUniform/fusion/uniform'
       ]
-      report.assert_all_compute_sets_and_list(ok)
+      self.assert_all_compute_sets_and_list(report, ok)
 
   def testDefaultUniformRandomInitalizer(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with ops.device("/device:IPU:0"):
       with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -474,6 +528,11 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         self.assertAllClose(o, 0.5, 0.5, 0.5)
 
   def testVariablesRemainResident(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -499,11 +558,11 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
 
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
@@ -516,17 +575,17 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       b_dl = "2.0"
       b_ul = "out_2.0"
 
-      report.parse_log()
+      report_json.parse_log()
 
       # The initialization is constant, so there are no events generated on the
       # IPU.
 
-      report.assert_host_to_device_event_names(
+      report_json.assert_host_to_device_event_names(
           [w_dl, b_dl],
           "Weights/biases should be downloaded once, and the input no times "
           "because it is streamed")
 
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [],
           "Weights/biases should not be uploaded, and the loss is streamed")
 
@@ -543,16 +602,21 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
                           vb,
                           rtol=1e-4)
 
-      report.parse_log()
+      report_json.parse_log()
 
-      report.assert_host_to_device_event_names(
+      report_json.assert_host_to_device_event_names(
           [], "Weights/biases/inputs should not be downloaded at all")
 
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [w_ul, b_ul],
           "Weights/biases should be uploaded once (explicitly fetched)")
 
   def testResourceCountsAreCorrect(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -592,11 +656,11 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
 
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
@@ -613,18 +677,18 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       w1_ul = "out_1.0"
       w2_ul = "out_2.0"
 
-      report.parse_log()
+      report_json.parse_log()
 
       # The initialization is constant, so there are no events generated on the
       # IPU.
 
-      report.assert_host_to_device_event_names(
+      report_json.assert_host_to_device_event_names(
           [w1_dl, b1_dl, w2_dl, b2_dl],
           "Weights/biases should be downloaded once, and the input no times "
           "because it is streamed")
 
       # Weights should not be uploaded, and the loss is streamed
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [],
           "Weights/biases should not be uploaded, and the loss is streamed")
 
@@ -640,17 +704,22 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
 
       self.assertAllClose(np.array([2, 3], dtype=np.float32), vb, rtol=1e-4)
 
-      report.parse_log()
+      report_json.parse_log()
 
-      report.assert_host_to_device_event_names(
+      report_json.assert_host_to_device_event_names(
           [], "Weights/biases/inputs should not be downloaded at all")
 
       # Note all weights are fetched as a group
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [w1_ul, w2_ul],
           "Weights/biases should be uploaded once (explicitly fetched)")
 
   def testTuplesOfTuplesAreStreamed(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -659,9 +728,9 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
           pc = array_ops.placeholder(np.int64, [2, 2], name="c")
           c = control_flow_ops.tuple((pa + pc, pb + pc))
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
-      report.reset()
+      report_json.reset()
       in0 = np.full((2, 2), 7)
       in1 = np.full((2, 2), 6)
       in2 = np.full((2, 2), 5)
@@ -674,13 +743,18 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       self.assertEqual(len(out), 2)
       self.assertAllClose(out, (np.full((2, 2), 12), np.full((2, 2), 11)))
 
-      report.parse_log()
-      report.assert_host_to_device_event_names(
+      report_json.parse_log()
+      report_json.assert_host_to_device_event_names(
           [], "No io events implies the data was streamed")
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [], "No io events implies the data was streamed")
 
   def testNonModifiedResourceIsNotOverwrittenInPlaceOp(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # This test verifies that if we have a resource varaible (w) which is marked
     # as not modified then a copy is inserted to make sure it is not overwritten
     # between executions if it is used by an inplace op
@@ -698,11 +772,11 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         px = array_ops.placeholder(np.float32, shape=[4])
         y = w + px
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
       xs = [
           np.array([7, 3, 5, 9], dtype=np.float32),
           np.array([1, 8, 3, 4], dtype=np.float32),
@@ -712,13 +786,13 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
         out = sess.run(y, {px: x})
         self.assertAllClose(out, x + w_val)
 
-      report.parse_log()
+      report_json.parse_log()
 
       w_dl = "1.0"
-      report.assert_host_to_device_event_names(
+      report_json.assert_host_to_device_event_names(
           [w_dl], "w should be copied to device once and "
           "that should be the only io event")
-      report.assert_device_to_host_event_names(
+      report_json.assert_device_to_host_event_names(
           [], "w should be copied to device once and "
           "that should be the only io event")
 

@@ -21,7 +21,6 @@ Looping utilities
 # tensorflow/python/tpu/training_loop.py
 # which creates the loops for the TPUs.
 
-
 from tensorflow.python.framework import ops
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.ops import array_ops
@@ -121,7 +120,7 @@ def while_loop(condition,
 
     # If the computation only returned one value, make it a tuple.
     if not isinstance(outputs, (list, tuple)):
-      outputs = (outputs, )
+      outputs = (outputs,)
 
     outputs = [
         o if isinstance(o, ops.Operation) else ops.convert_to_tensor(o)

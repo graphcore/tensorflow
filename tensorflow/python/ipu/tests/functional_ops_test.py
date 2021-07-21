@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+import pva
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
@@ -35,6 +36,13 @@ from tensorflow.python.training import gradient_descent
 class FunctionalOpsTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testFunctionInferenceWithVariableScope(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def func(a, b, name):
@@ -68,30 +76,38 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, b, c]})
       self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
-      report.parse_log()
-      # There would be multiple non-linearities if the function was not
-      # cached.
-      ok = [
-          'MatMul/dot*/Conv_1',
-          'add/add*/Op/Add',
-          'Sigmoid/sigmoid/Nonlinearity',
-          'sub/subtract*/Op/Subtract',
-          '__seed',
-          '[cC]opy',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(827172, tolerance=0.1)
-      report.assert_max_tile_memory(1610, tolerance=0.1)
-
+      report_json.parse_log()
       # Entry computation and outlined one.
-      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
+
+    report = pva.openReport(report_helper.find_report())
+    # There would be multiple non-linearities if the function was not
+    # cached.
+    ok = [
+        'MatMul/dot*/Conv_1',
+        'add/add*/Op/Add',
+        'Sigmoid/sigmoid/Nonlinearity',
+        'sub/subtract*/Op/Subtract',
+        '__seed',
+        '[cC]opy',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_total_tile_memory(report, 743720, tolerance=0.1)
+    self.assert_max_tile_memory(report, 1306, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionTraining(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -134,35 +150,44 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, b, c, labels]})
       self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
-      report.parse_log()
-      # There would be multiple non-linearities(grads) if the function was not
-      # cached.
-      # pylint: disable=line-too-long
-      ok = [
-          'MatMul/dot*/Conv_1', 'add/add*/Op/Add',
-          'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract',
-          '__seed', '[cC]opy', 'SparseSoftmaxCrossEntropyWithLogits',
-          'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
-          'gradients/sub_grad/Neg/negate*/Op/Negate',
-          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
-          'gradients/AddN/scaled-inplace',
-          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
-          'gradients/MatMul_grad/MatMul_1/dot', '/Transpose'
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1221036, tolerance=0.1)
-      report.assert_max_tile_memory(3192, tolerance=0.1)
+      report_json.parse_log()
 
       # Entry computastion and 2 outlined ones.
-      self.assertEqual(len(report.tensor_map.computation_names()), 3)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 3)
+
+    report = pva.openReport(report_helper.find_report())
+    # There would be multiple non-linearities(grads) if the function was not
+    # cached.
+    # pylint: disable=line-too-long
+    ok = [
+        'MatMul/dot*/Conv_1', 'add/add*/Op/Add',
+        'Sigmoid/sigmoid/Nonlinearity', 'sub/subtract*/Op/Subtract', '__seed',
+        '[cC]opy', 'SparseSoftmaxCrossEntropyWithLogits',
+        'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
+        'gradients/sub_grad/Neg/negate*/Op/Negate',
+        'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
+        'gradients/AddN/scaled-inplace',
+        'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
+        'gradients/MatMul_grad/MatMul_1/dot', '/Transpose'
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_total_tile_memory(report, 1133976, tolerance=0.1)
+    self.assert_max_tile_memory(report, 2976, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testNestedFunctionTraining(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       def matmul_with_bias(x, scope_name):
@@ -214,42 +239,52 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, labels]})
       self.assertAllClose(result[0], np.broadcast_to(1., [64, 64]))
 
-      report.parse_log()
-      # There would be multiple non-linearities(grads) if the function was not
-      # cached.
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed/set/setMasterSeed',
-          'matmul/dot*/Conv_1',
-          'add_0/fusion/Op/Add',
-          'Sigmoid/sigmoid/Nonlinearity',
-          'SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits',
-          'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/',
-          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad/NonLinearityGrad',
-          'gradients/add_grad/Sum/reduce*/Reduce',
-          'GradientDescent/update_1/bias/ResourceApplyGradientDescent/scaled-inplace',
-          'GradientDescent/update_1/w/ResourceApplyGradientDescent/scaled-inplace',
-          'GradientDescent/update_2/bias/ResourceApplyGradientDescent/scaled-inplace',
-          'GradientDescent/update_2/w/ResourceApplyGradientDescent/scaled-inplace',
-          '[cC]opy',
-          '/Transpose',
-          'gradients/matmul_grad/MatMul/dot',
-          'gradients/matmul_grad/MatMul_1/dot',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1145384, tolerance=0.1)
-      report.assert_max_tile_memory(3132, tolerance=0.1)
+      report_json.parse_log()
 
       # Entry computastion and 4 outlined ones.
-      self.assertEqual(len(report.tensor_map.computation_names()), 5)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 5)
+
+    report = pva.openReport(report_helper.find_report())
+    # There would be multiple non-linearities(grads) if the function was not
+    # cached.
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed/set/setMasterSeed',
+        'matmul/dot*/Conv_1',
+        'add_0/fusion/Op/Add',
+        'Sigmoid/sigmoid/Nonlinearity',
+        'SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits',
+        'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/',
+        'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad/NonLinearityGrad',
+        'gradients/add_grad/Sum/reduce*/Reduce',
+        'GradientDescent/update_1/bias/ResourceApplyGradientDescent/scaled-inplace',
+        'GradientDescent/update_1/w/ResourceApplyGradientDescent/scaled-inplace',
+        'GradientDescent/update_2/bias/ResourceApplyGradientDescent/scaled-inplace',
+        'GradientDescent/update_2/w/ResourceApplyGradientDescent/scaled-inplace',
+        '[cC]opy',
+        '/Transpose',
+        'gradients/matmul_grad/MatMul/dot',
+        'gradients/matmul_grad/MatMul_1/dot',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_total_tile_memory(report, 1098660, tolerance=0.1)
+    self.assert_max_tile_memory(report, 2984, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
+    cfg.configure_ipu_system()
+
     # Disable the arithmetic_optimization Grappler pass, as it combines the
     # slice additions in this test into an AddN which gives them all the same
     # name, which means we can't look for them individually in the compute sets.
@@ -295,45 +330,53 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(body, inputs=[table, indices])
 
-      report = tu.ReportJSON(
-          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
+      report_json = tu.ReportJSON(self, sess)
       i_h = np.arange(0, DICT_SIZE, step=SPLIT_SIZE // 2)
       w_h = np.arange(EMB_SIZE, dtype=np.float16) * np.ones(
           [DICT_SIZE, EMB_SIZE], dtype=np.float16)
       result = sess.run(res, {table: w_h, indices: i_h})
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
 
-      report.parse_log()
-      # There would be multiple multi slices if the function was not cached.
-      ok = [
-          'Less/fusion*/Op/LessThan',
-          'GreaterEqual/fusion*/Op/GreaterThanEqual',
-          'sub/fusion/Op/Subtract',
-          'embedding_lookup/multi-slice/output/multiSlice',
-          'LogicalAnd/and*/Op/LogicalAnd',
-          'Cast/convert*/Cast',
-          'mul_0/fusion*/Op/Multiply',
-          'slice_1*/add.*/Op/Add',
-          'slice_2*/add.*/Op/Add',
-          'slice_3*/add.*/Op/Add',
-          'slice_4*/add.*/Op/Add',
-          'slice_5*/add.*/Op/Add',
-          'slice_6*/add.*/Op/Add',
-          'slice_7*/add.*/Op/Add',
-          'slice_8*/add.*/Op/Add',
-          'slice_9*/add.*/Op/Add',
-          '__seed',
-          '[cC]opy',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(11688302, tolerance=0.1)
-      report.assert_max_tile_memory(8480, tolerance=0.1)
+      report_json.parse_log()
 
       # Main computation and outlined serialized one.
-      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
+
+    report = pva.openReport(report_helper.find_report())
+    # There would be multiple multi slices if the function was not cached.
+    ok = [
+        'Less/fusion*/Op/LessThan',
+        'GreaterEqual/fusion*/Op/GreaterThanEqual',
+        'sub/fusion/Op/Subtract',
+        'embedding_lookup/multi-slice/output/multiSlice',
+        'LogicalAnd/and*/Op/LogicalAnd',
+        'Cast/convert*/Cast',
+        'mul_0/fusion*/Op/Multiply',
+        'slice_1*/add.*/Op/Add',
+        'slice_2*/add.*/Op/Add',
+        'slice_3*/add.*/Op/Add',
+        'slice_4*/add.*/Op/Add',
+        'slice_5*/add.*/Op/Add',
+        'slice_6*/add.*/Op/Add',
+        'slice_7*/add.*/Op/Add',
+        'slice_8*/add.*/Op/Add',
+        'slice_9*/add.*/Op/Add',
+        '__seed',
+        '[cC]opy',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_total_tile_memory(report, 11688302, tolerance=0.1)
+    self.assert_max_tile_memory(report, 8480, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -354,27 +397,36 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, b, c]})
       self.assertAllClose(result[0], np.broadcast_to(1.0, [64, 64]))
       self.assertAllClose(result[1], np.broadcast_to(1.0, [64, 64]))
       self.assertAllClose(result[2], np.broadcast_to(1.0, [64, 64]))
 
-      report.parse_log()
-      # Two non-linearties, as one of them has a different type.
-      ok = [
-          'Relu/relu/Nonlinearity',
-          'Relu/relu.*/Nonlinearity',
-          '__seed',
-          '[cC]opy',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+      report_json.parse_log()
 
       # Main computation (including inlined fp32 one, and the fp16 outlined).
-      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
+
+    report = pva.openReport(report_helper.find_report())
+    # Two non-linearties, as one of them has a different type.
+    ok = [
+        'Relu/relu/Nonlinearity',
+        'Relu/relu.*/Nonlinearity',
+        '__seed',
+        '[cC]opy',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testSingleFunctionElided(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -393,23 +445,31 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {a: np.ones(a.shape)})
       self.assertAllClose(result[0], np.broadcast_to(1.0, [64, 64]))
 
-      report.parse_log()
-
-      ok = [
-          'Relu/relu*/Nonlinearity',
-          '__seed',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+      report_json.parse_log()
 
       # Function inlined into the entry computation.
-      self.assertEqual(len(report.tensor_map.computation_names()), 1)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 1)
+
+    report = pva.openReport(report_helper.find_report())
+    ok = [
+        'Relu/relu*/Nonlinearity',
+        '__seed',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionTrainingConstants(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -456,42 +516,48 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, b, c, labels]})
       self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
 
-      report.parse_log()
-      # There would be multiple non-linearities(grads) if the function was not
-      # cached.
-      # pylint: disable=line-too-long
-      ok = [
-          'MatMul/dot*/Conv_1',
-          '*/slice-apply*/Op/Add',
-          'Sigmoid/sigmoid/Nonlinearity',
-          'sub/subtract*/Op/Subtract',
-          '__seed',
-          '[cC]opy',
-          'Transpose',
-          'SparseSoftmaxCrossEntropyWithLogits',
-          'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
-          'gradients/sub_grad/Neg/negate*/Op/Negate',
-          'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
-          'gradients/AddN/scaled-inplace',
-          'gradients/AddN/add*/Op/Add',
-          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
-          'gradients/MatMul_1_grad/MatMul/dot',
-          'gradients/MatMul_grad/MatMul_1/dot',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(1270036, tolerance=0.1)
-      report.assert_max_tile_memory(5174, tolerance=0.1)
+      report_json.parse_log()
 
       # Entry computastion and 2 outlined ones.
-      self.assertEqual(len(report.tensor_map.computation_names()), 3)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 3)
+
+    report = pva.openReport(report_helper.find_report())
+    # There would be multiple non-linearities(grads) if the function was not
+    # cached.
+    # pylint: disable=line-too-long
+    ok = [
+        'MatMul/dot*/Conv_1',
+        '*/slice-apply*/Op/Add',
+        'Sigmoid/sigmoid/Nonlinearity',
+        'sub/subtract*/Op/Subtract',
+        '__seed',
+        '[cC]opy',
+        'Transpose',
+        'SparseSoftmaxCrossEntropyWithLogits',
+        'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
+        'gradients/sub_grad/Neg/negate*/Op/Negate',
+        'gradients/Sigmoid_grad/SigmoidGrad/sigmoid-grad*/NonLinearityGrad',
+        'gradients/AddN/scaled-inplace',
+        'gradients/AddN/add*/Op/Add',
+        'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/scaled-inplace',
+        'gradients/MatMul_1_grad/MatMul/dot',
+        'gradients/MatMul_grad/MatMul_1/dot',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_total_tile_memory(report, 1200672, tolerance=0.1)
+    self.assert_max_tile_memory(report, 4950, tolerance=0.1)
 
   @test_util.deprecated_graph_mode_only
   def testNoGradient(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -529,6 +595,13 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testInputsWithAliasing(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
 
       @ipu.outlined_function
@@ -550,15 +623,17 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       sess.run(variables.global_variables_initializer())
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       result = sess.run(res, {x: np.ones(x.shape) for x in [a, b]})
       self.assertAllClose(result[0], np.broadcast_to(0., [1024]))
 
-      report.parse_log()
-      report.assert_max_tile_memory(539, tolerance=0.1)
+      report_json.parse_log()
 
       # Entry computation and outlined one.
-      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+      self.assertEqual(len(report_json.tensor_map.computation_names()), 2)
+
+    report = pva.openReport(report_helper.find_report())
+    self.assert_max_tile_memory(report, 439, tolerance=0.1)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,20 @@ IPUs in C++, all other operations should use the standard TensorFlow C++ API. No
 directly depended on.
 
 
+Reports removed from ipu events
+'''''''''''''''''''''''''''''''''
+
+Following the exclusion of profiling options from the :ref:`new-configuration-api`, reports have
+been removed from IPU events. The following functions from `tensorflow.python.ipu.utils` have been
+deprecated and now return blank lists:
+
+  - extract_compile_reports
+  - extract_poplar_serialized_graphs
+  - extract_execute_reports
+
+See the :ref:`new-configuration-api` changes for information on profiling TensorFlow programs using
+the profiling tools available in the SDK.
+
 
 Non-breaking changes
 ____________________

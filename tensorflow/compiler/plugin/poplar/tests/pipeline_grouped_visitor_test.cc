@@ -21,6 +21,7 @@ limitations under the License.
 #include <popops/codelets.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poprand/codelets.hpp>
+#include <pva/pva.hpp>
 #include <sstream>
 
 #include "absl/memory/memory.h"
@@ -35,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -745,9 +747,17 @@ ENTRY pipeline {
   // Get the pipeline program
   auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
+  // Create unique reporting directory to avoid tests overwriting
+  // eachother's reports.
+  TemporaryDirManager dir_manager(
+      "PipelineGroupedVisitorTest.TestPipelineVisitorFifoOverlap");
+
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program,
-                        /*options=*/{{"debug.retainDebugInformation", "true"}});
+                        /*options=*/
+                        {{"debug.retainDebugInformation", "true"},
+                         {"autoReport.all", "true"},
+                         {"autoReport.directory", dir_manager.GetDirName()}});
   engine.enableExecutionProfiling();
 
   device.attach();
@@ -756,34 +766,39 @@ ENTRY pipeline {
   device.detach();
 
   // Get the execution steps
-  auto exec_profile = engine.getExecutionProfile();
-  auto steps = exec_profile["simulation"]["steps"].asVector();
+  auto report = engine.getReport(/*reportExecution=*/true);
+  std::vector<pva::ExecutionStep> steps(report.execution().steps().begin(),
+                                        report.execution().steps().end());
 
   // Only consider the on tile execute steps
-  auto is_on_tile_exec_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step["type"].asString() == "OnTileExecute";
+  auto is_on_tile_exec_pred = [](pva::ExecutionStep& step) -> bool {
+    return step.program()->type() == pva::Program::Type::OnTileExecute;
   };
   auto itr =
       std::stable_partition(steps.begin(), steps.end(), is_on_tile_exec_pred);
 
   // And only consider the computation steps
-  auto is_add_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step.asMap().count("name") == 1 &&
-           absl::StrContains(step["name"].asString(), "add") &&
-           !absl::StrContains(step["name"].asString(), "Copy");
+  auto is_add_pred = [](pva::ExecutionStep& step) -> bool {
+    return absl::StrContains(step.program()->name(), "add") &&
+           !absl::StrContains(step.program()->name(), "Copy");
   };
   itr = std::stable_partition(steps.begin(), itr, is_add_pred);
   steps.erase(itr, steps.end());
 
-  // Compute the total number of cycles that were overlapped
-  auto overlapped_cycles = [](int accum,
-                              const poplar::ProfileValue& step) -> int {
-    return accum + step["cyclesOverlapped"].asInt();
+  // Compute the total number of cycles that were overlapped.
+  auto overlapped_cycles = [](int accum, pva::ExecutionStep& step) -> int {
+    for (auto& ipu : step.ipus()) {
+      accum += ipu.allCycles().from().max() - ipu.allCycles().from().min();
+    }
+    return accum;
   };
-  auto cycles = [](int accum, const poplar::ProfileValue& step) -> int {
-    return accum + step["cycles"].asInt();
+  // Compute the total number of cycles.
+  auto cycles = [](int accum, pva::ExecutionStep& step) -> int {
+    for (auto& ipu : step.ipus()) {
+      accum += ipu.cycles();
+    }
+    return accum;
   };
-
   int total_overlapped_cycles =
       std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
   int total_cycles = std::accumulate(steps.begin(), steps.end(), 0, cycles);
@@ -930,9 +945,17 @@ ENTRY pipeline {
   // Get the pipeline program
   auto program = visitor.GetPipelineSequence(12).ValueOrDie();
 
+  // Create unique reporting directory to avoid tests overwriting
+  // eachother's reports.
+  TemporaryDirManager dir_manager(
+      "PipelineGroupedVisitorTest.TestPipelineVisitorRevisitIPU");
+
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program,
-                        /*options=*/{{"debug.retainDebugInformation", "true"}});
+                        /*options=*/
+                        {{"debug.retainDebugInformation", "true"},
+                         {"autoReport.all", "true"},
+                         {"autoReport.directory", dir_manager.GetDirName()}});
   engine.enableExecutionProfiling();
 
   device.attach();
@@ -941,32 +964,38 @@ ENTRY pipeline {
   device.detach();
 
   // Get the execution steps
-  auto exec_profile = engine.getExecutionProfile();
-  auto steps = exec_profile["simulation"]["steps"].asVector();
+  auto report = engine.getReport(/*reportExecution=*/true);
+  std::vector<pva::ExecutionStep> steps(report.execution().steps().begin(),
+                                        report.execution().steps().end());
 
   // Only consider the on tile execute steps
-  auto is_on_tile_exec_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step["type"].asString() == "OnTileExecute";
+  auto is_on_tile_exec_pred = [](pva::ExecutionStep& step) -> bool {
+    return step.program()->type() == pva::Program::Type::OnTileExecute;
   };
   auto itr =
       std::stable_partition(steps.begin(), steps.end(), is_on_tile_exec_pred);
 
   // And only consider the computation steps
-  auto is_add_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step.asMap().count("name") == 1 &&
-           absl::StrContains(step["name"].asString(), "add") &&
-           !absl::StrContains(step["name"].asString(), "Copy");
+  auto is_add_pred = [](pva::ExecutionStep& step) -> bool {
+    return absl::StrContains(step.program()->name(), "add") &&
+           !absl::StrContains(step.program()->name(), "Copy");
   };
   itr = std::stable_partition(steps.begin(), itr, is_add_pred);
   steps.erase(itr, steps.end());
 
-  // Compute the total number of cycles that were overlapped
-  auto overlapped_cycles = [](int accum,
-                              const poplar::ProfileValue& step) -> int {
-    return accum + step["cyclesOverlapped"].asInt();
+  // Compute the total number of cycles that were overlapped.
+  auto overlapped_cycles = [](int accum, pva::ExecutionStep& step) -> int {
+    for (auto& ipu : step.ipus()) {
+      accum += ipu.allCycles().from().max() - ipu.allCycles().from().min();
+    }
+    return accum;
   };
-  auto cycles = [](int accum, const poplar::ProfileValue& step) -> int {
-    return accum + step["cycles"].asInt();
+  // Compute the total number of cycles.
+  auto cycles = [](int accum, pva::ExecutionStep& step) -> int {
+    for (auto& ipu : step.ipus()) {
+      accum += ipu.cycles();
+    }
+    return accum;
   };
   int total_overlapped_cycles =
       std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);

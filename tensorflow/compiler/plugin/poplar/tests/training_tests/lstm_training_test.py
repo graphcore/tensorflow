@@ -23,6 +23,7 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -116,8 +117,8 @@ class LstmTrainingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(layer_func, inputs=compile_inputs)
 
-      opts = ipu.config.IPUConfig()
-      opts._profiling.profiling = True  # pylint: disable=protected-access
+      opts = IPUConfig()
+      opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       opts._profiling.use_poplar_text_report = True  # pylint: disable=protected-access
       opts.ipu_model.compile_ipu_code = False
       opts.configure_ipu_system()

@@ -59,26 +59,25 @@ class GclTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
     cfg.io_tiles.place_ops_on_io_tiles = True
     cfg.auto_select_ipus = 2
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(infeed.initializer)
       sess.run(compiled_net)
       sess.run(outfeed.dequeue())
 
-      report.parse_log()
-      self.assertEqual(report.get_num_tiles_per_ipu(), tiles_per_ipu)
-      for t in report.get_tensor_map().all_tensors():
+      report_json.parse_log()
+      for t in report_json.get_tensor_map().all_tensors():
         self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
   @tu.test_uses_ipus(num_ipus=4)
@@ -104,7 +103,6 @@ class GclTest(test_util.TensorFlowTestCase):
     cfg = IPUConfig()
     report_helper = tu.ReportHelper()
     report_helper.set_autoreport_options(cfg)
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.auto_select_ipus = num_replicas * num_shards
     cfg.gcl_poplar_options = {'useSynclessCollectives': 'true'}
     cfg.io_tiles.num_io_tiles = 128

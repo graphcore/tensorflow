@@ -23,6 +23,7 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.utils import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -93,6 +94,10 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
   @test_util.deprecated_graph_mode_only
   def testTwoConvs(self):
     # Check that we get all classifications for a simple conv
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def graph(x, label):
       x = conv(x, 3, 1, 16)
@@ -119,20 +124,24 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
 
-      report.parse_log()
+      report_json.parse_log()
 
       # 2 convs, one grad, 2 updates
       # 1 backward converted to forward + flip both marked as forward (bwd - 1, fwd + 2)
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 0, 2])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 0, 2])
 
   @test_util.deprecated_graph_mode_only
   def testResnetLike(self):
     # Check that we get all classifications for a small resnet correct
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def graph(img, label):
       x = conv(img, 7, 2, 16)
@@ -160,19 +169,23 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 4 convs, 3 grads, 4 updates
       # minus one bwd converted by conv_bwd_input_to_fwd_weights_transpose pass
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 6, 2, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 6, 2, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoMatMuls(self):
     # Check that we get all classifications for a simple conv
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def graph(x, label):
       x = fc(x, 16)
@@ -202,18 +215,22 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 4x updates, 3x grads
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 3, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoParallelMatMuls(self):
     # Check that we get all classifications for a simple conv
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def graph(x, label):
       a = fc(x, 48)
@@ -245,14 +262,14 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 4x updates, 2x grads
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 2, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 2, 4])
 
 
 if __name__ == "__main__":

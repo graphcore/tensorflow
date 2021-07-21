@@ -78,7 +78,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
       ipu_gather_simplifier = sess.run(r, {y: y_i, w: w_i})
       self.assertAllClose(ipu_gather_simplifier[0], cpu_take)
 
-    report_helper.assert_num_reports(1)
+    self.assert_num_reports(report_helper, 1)
     report = pva.openReport(report_helper.find_reports()[0])
 
     # This tests gather simplifier hlo pass for embedding_lookup case.

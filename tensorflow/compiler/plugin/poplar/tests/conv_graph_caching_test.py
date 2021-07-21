@@ -40,6 +40,13 @@ from tensorflow.python.training import gradient_descent
 
 class ConvGraphCachingTest(xla_test.XLATestCase):
   def testConvolutionsMatch(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -54,27 +61,33 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                             use_bias=False,
                             kernel_initializer=init_ops.ones_initializer())(y)
 
-      report = tu.ReportJSON(self, sess)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
+      report_json.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [2, 0, 0, 0])
 
-      # Would fail if there were two convolutions in the graph as they would be
-      # called conv2d and conv2d_1
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [2, 0, 0, 0])
+    report = pva.openReport(report_helper.find_report())
+    # Would fail if there were two convolutions in the graph as they would be
+    # called conv2d and conv2d_1
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionsDontMatchDifferentTypes(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -92,32 +105,38 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer(),
                             dtype=np.float16)(y)
 
-      report = tu.ReportJSON(self, sess)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
+      report_json.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [2, 0, 0, 0])
 
-      # Matches two convolutions
-      ok = [
-          '__seed*',
-          'host-exchange-local-copy-',
-          'Copy_*weightsRearranged',
-          'Copy_',
-          'Copy_vs/*/OnTileCopy-0',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/Cast/convert.*/Cast',
-          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [2, 0, 0, 0])
+    report = pva.openReport(report_helper.find_report())
+    # Matches two convolutions
+    ok = [
+        '__seed*',
+        'host-exchange-local-copy-',
+        'Copy_*weightsRearranged',
+        'Copy_',
+        'Copy_vs/*/OnTileCopy-0',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/Cast/convert.*/Cast',
+        'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionsDontMatchDifferentShapes(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -133,27 +152,32 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                             use_bias=False,
                             kernel_initializer=init_ops.ones_initializer())(y)
 
-      report = tu.ReportJSON(self, sess)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
-
+      report_helper.clear_reports()
+      report_json.reset()
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [2, 0, 0, 0])
 
-      # Matches two convolutions
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [2, 0, 0, 0])
+    report = pva.openReport(report_helper.find_report())
+    # Matches two convolutions
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionsDontMatchDifferentConvParams(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -169,27 +193,34 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                             strides=(2, 1),
                             kernel_initializer=init_ops.ones_initializer())(y)
 
-      report = tu.ReportJSON(self, sess)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
+      report_json.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [2, 0, 0, 0])
 
-      # Matches two convolutions
-      ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
-          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [2, 0, 0, 0])
+    report = pva.openReport(report_helper.find_report())
+    # Matches two convolutions
+    ok = [
+        '__seed*', 'host-exchange-local-copy-', 'Copy_',
+        'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+        'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
+    ]
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionsMatchFwdBwdWu(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -215,37 +246,43 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(
-          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
+      report_json.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 7, 0, 3])
 
-      # Fwd and BackpropInput should be shared
-      # Weight transpose for BackpropInput should be present
-      # Both BackpropFilter should be shared
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'copy*/OnTileCopy',
-          'vs/conv1/Conv2D/convolution.*/Conv_1x1',
-          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
-          'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 7, 0, 3])
+    report = pva.openReport(report_helper.find_report())
+    # Fwd and BackpropInput should be shared
+    # Weight transpose for BackpropInput should be present
+    # Both BackpropFilter should be shared
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'copy*/OnTileCopy',
+        'vs/conv1/Conv2D/convolution.*/Conv_1x1',
+        'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
+        'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
+        'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
+        'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+        'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y*/WeightsTransposeChansFlipXY/WeightsTranspose',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionsMatchFwdBwdWuVariableLR(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.scheduling.algorithm = SchedulingAlgorithm.POST_ORDER
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -272,36 +309,34 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(
-          self, sess, scheduling_algorithm=SchedulingAlgorithm.POST_ORDER)
-
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-
-      report.reset()
+      report_helper.clear_reports()
+      report_json.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2]), lr: 0.1})
 
-      report.parse_log()
+      report_json.parse_log()
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 7, 0, 3])
 
-      # Fwd and BackpropInput should be shared
-      # Weight transpose for BackpropInput should be present
-      # Both BackpropFilter should be shared
-      # pylint: disable=line-too-long
-      ok = [
-          '__seed*',
-          'host-exchange-local-copy-',
-          'Copy_',
-          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
-          'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
-          'vs/conv*/Conv2D/convolution*/Conv_1x1',
-      ]
-      # pylint: enable=line-too-long
-      report.assert_all_compute_sets_and_list(ok)
-
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 7, 0, 3])
+    report = pva.openReport(report_helper.find_report())
+    # Fwd and BackpropInput should be shared
+    # Weight transpose for BackpropInput should be present
+    # Both BackpropFilter should be shared
+    # pylint: disable=line-too-long
+    ok = [
+        '__seed*',
+        'host-exchange-local-copy-',
+        'Copy_',
+        'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
+        'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
+        'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
+        'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+        'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/weights-transpose-chans-flip-x-y/WeightsTransposeChansFlipXY/WeightsTranspose',
+        'vs/conv*/Conv2D/convolution*/Conv_1x1',
+    ]
+    # pylint: enable=line-too-long
+    self.assert_all_compute_sets_and_list(report, ok)
 
   def testConvolutionApply(self):
     cfg = IPUConfig()
@@ -337,6 +372,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                   conv_scaled_inplace(input3, grads3, weights3, 0.2))
 
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
       r = sess.run(
           result, {
@@ -399,6 +435,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                   conv_scaled_inplace(input3, grads3, 0.2))
 
       sess.run(variables.global_variables_initializer())
+      report_helper.clear_reports()
 
       r = sess.run(
           result, {

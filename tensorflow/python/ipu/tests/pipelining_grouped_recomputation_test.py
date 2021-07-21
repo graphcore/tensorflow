@@ -14,6 +14,7 @@
 # =============================================================================
 
 import os
+import pva
 import numpy as np
 from absl.testing import parameterized
 
@@ -921,20 +922,21 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
       with ops.device('cpu'):
         return []
 
-    report = pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3],
-        inputs_fn, [],
-        repeat_count,
-        gradient_accumulation_count,
-        dataset_fn,
-        optimizer,
-        self,
-        10535,
-        recomp=True,
-        schedule=pipelining_ops.PipelineSchedule.Grouped,
-        recomputation_mode=pipelining_ops.RecomputationMode.
-        RecomputeAndBackpropagateInterleaved,
-        return_report=True)
+    _, report_helper = \
+        pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+            [stage1, stage2, stage3],
+            inputs_fn, [],
+            repeat_count,
+            gradient_accumulation_count,
+            dataset_fn,
+            optimizer,
+            self,
+            10535,
+            recomp=True,
+            schedule=pipelining_ops.PipelineSchedule.Grouped,
+            recomputation_mode=pipelining_ops.RecomputationMode.
+            RecomputeAndBackpropagateInterleaved,
+            return_report=True)
 
     # With recomputation, we expect the following final forward stage
     #
@@ -963,7 +965,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase,
     #  - s3/mul_3/multiply.*/Op/Multiply
     # When we recompute, the scopes are copied with a different ID, so we can
     # make sure the multiply s3/mul_2/multiply.*/Op/Multiply isn't there twice.
-    report.assert_compute_sets_matches("s3/mul_2/multiply.*/Op/Multiply", 1)
+    report = pva.openReport(report_helper.find_report())
+    self.assert_compute_sets_matches(report, "s3/mul_2/multiply.*/Op/Multiply",
+                                     1)
 
   @parameterized.parameters([0, 32])
   @test_util.deprecated_graph_mode_only

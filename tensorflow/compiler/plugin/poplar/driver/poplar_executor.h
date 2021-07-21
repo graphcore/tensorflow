@@ -590,11 +590,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
-                                const std::string& compilation_report,
-                                const std::string& poplar_graph,
                                 const std::string& tensor_map_json,
                                 const std::string& instruction_info,
-                                const std::string& tensorflow_info,
                                 int64 duration);
 
   void AddHostToDeviceEventRecord(const std::string& transfer_json);
@@ -603,8 +600,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void AddLoadEngineEventRecord(const std::string& module_name);
 
-  void AddExecuteEventRecord(const std::string& module_name,
-                             const std::string& report);
+  void AddExecuteEventRecord(const std::string& module_name);
 
   Status GetCompilerEvents(std::list<tensorflow::IpuTraceEvent>& out);
 

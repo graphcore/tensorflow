@@ -26,6 +26,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import random_seed
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
@@ -284,8 +285,7 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
@@ -317,8 +317,7 @@ class WhileLoopTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope('/device:IPU:0'):
         ret = ipu.ipu_compiler.compile(model, [features])
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

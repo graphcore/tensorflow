@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import threading
+import test_utils as tu
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -50,18 +51,6 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
 
     return tuple(results)
 
-  def _count_ipu_compilations(self):
-    with self.session() as sess:
-      with ops.device('cpu'):
-        e = gen_ipu_ops.ipu_event_trace()
-      events = sess.run(e)
-    count = 0
-    for evt_str in events:
-      evt = IpuTraceEvent.FromString(evt_str)
-      if evt.type == IpuTraceEvent.COMPILE_END:
-        count += 1
-    return count
-
   def setUp(self):
     super().setUp()
     with session.Session() as sess:
@@ -69,9 +58,10 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
 
   @test_util.deprecated_graph_mode_only
   def test_with_infeed_and_outfeed_sequential(self):
-    opts = ipu.config.IPUConfig()
-    opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    opts.configure_ipu_system()
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
 
     with self.session() as sess:
 
@@ -106,13 +96,14 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
     self.assertAllClose(dequeue0, dequeue1)
     # Expect a single compilation when the model is built and run for the same
     # device in the same session but with different feed ids.
-    self.assertEqual(1, self._count_ipu_compilations())
+    self.assert_num_reports(report_helper, 1)
 
   @test_util.deprecated_graph_mode_only
   def test_with_infeed_and_outfeed_parallel(self):
-    opts = ipu.config.IPUConfig()
-    opts._profiling.enable_ipu_events = True  # pylint: disable=protected-access
-    opts.configure_ipu_system()
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.configure_ipu_system()
 
     def build_and_run_model(barrier):
       with session.Session() as sess:
@@ -148,7 +139,7 @@ class CompileCacheTest(xla_test.XLATestCase):  # pylint: disable=abstract-method
     self.assertAllClose(result0, result1)
     # Expect a single compilation when the model is built and run in parallel for
     # the same device in different session with different feed ids.
-    self.assertEqual(1, self._count_ipu_compilations())
+    self.assert_num_reports(report_helper, 1)
 
 
 if __name__ == "__main__":

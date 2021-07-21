@@ -52,7 +52,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(e, fd)
       self.assertAllClose(result, 4)
 
-    report_helper.assert_num_reports(0)
+    self.assert_num_reports(report_helper, 0)
 
   def tesInplaceAddCopyWithInplacePeer(self):
     cfg = IPUConfig()

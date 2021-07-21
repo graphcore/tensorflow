@@ -14,5 +14,4 @@
 # ==============================================================================
 """Keras layers API."""
 
-
 from tensorflow.python.ipu.keras import layers

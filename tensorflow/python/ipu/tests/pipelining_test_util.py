@@ -14,6 +14,8 @@
 # =============================================================================
 
 import math
+import pva
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.config import MergeRemoteBuffersBehaviour
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -207,8 +209,7 @@ class PipelineTester(object):
       profiling = utils.running_on_ipu_model()
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = profiling  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+      cfg._profiling.enable_ipu_events = profiling  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       if number_of_io_tiles > 0:
@@ -306,15 +307,18 @@ class PipelineTester(object):
 
       # Execution profiles of code with dynamic control flow are not supported
       # on real HW.
-      profiling = utils.running_on_ipu_model()
+      profiling = return_report and utils.running_on_ipu_model()
       cfg = IPUConfig()
-      cfg._profiling.profiling = profiling  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       if number_of_io_tiles > 0:
         cfg.io_tiles.num_io_tiles = number_of_io_tiles
         cfg.io_tiles.place_ops_on_io_tiles = True
+
+      if profiling:
+        cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+        report_helper = tu.ReportHelper()
+        report_helper.set_autoreport_options(cfg)
 
       if ipu_id is None:
         num_ipus = get_num_ipus(device_mapping) if device_mapping else 4
@@ -340,26 +344,31 @@ class PipelineTester(object):
       utils.move_variable_initialization_to_cpu()
 
       outfeed_op = outfeed_queue.dequeue()
-      report = tu.ReportJSON(test_wrapper, session, configure_device=False)
+      report_json = tu.ReportJSON(test_wrapper, session)
 
       session.run(variables.global_variables_initializer())
       session.run(infeed_queue.initializer)
-      report.reset()
+      report_json.reset()
       session.run(compiled_model_pipeline,
                   feed_dict=dict(zip(inputs, input_values)))
       out = session.run(outfeed_op)
       if profiling:
-        report.parse_log()
+        report_json.parse_log()
         if not device_mapping:
           device_mapping = [
               i - (i % 4) + ((i % 4) if (i % 4) < 2 else 5 - (i % 4))
               for i in range(len(stages))
           ]
-        report.assert_pipeline_stages_on_expected_ipu(device_mapping)
-        report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.5)
+        report_json.assert_pipeline_stages_on_expected_ipu(
+            device_mapping, cfg.ipu_model.tiles_per_ipu)
+
+        report = pva.openReport(report_helper.find_report())
+        test_wrapper.assert_max_tile_memory(report,
+                                            expected_max_tile_memory,
+                                            tolerance=0.5)
       out = out[0] if optimizer else out
       if return_report:
-        return out, report
+        return out, report_json, report_helper
       elif return_vars:
         return out, _get_vars(session, "ipu")
       return out
@@ -408,7 +417,7 @@ class PipelineTester(object):
         return_report=return_report)
 
     if return_report:
-      pipeline_losses, report = pipeline_losses
+      pipeline_losses, report_json, report_helper = pipeline_losses
 
     num_batches_to_accumulate = (gradient_accumulation_count *
                                  batch_serialization_iterations)
@@ -419,7 +428,7 @@ class PipelineTester(object):
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
     if return_report:
-      return report
+      return report_json, report_helper
     return None
 
   @staticmethod
