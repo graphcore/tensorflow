@@ -158,8 +158,9 @@ XlaCompilationCache::BuildSignature(
 Status XlaCompilationCache::BuildExecutable(
     const XlaCompiler::Options& options,
     const XlaCompiler::CompilationResult& result,
-    const uint64 number_of_arguments,
-    const uint64 number_of_variables,
+    const std::vector<int32>& argument_input_indices,
+    const std::vector<int32>& resource_input_indices,
+    const std::vector<bool>& resource_input_initialized,
     std::unique_ptr<xla::LocalExecutable>* executable) {
   VLOG(2) << "Compiling to local executable";
 
@@ -174,9 +175,9 @@ Status XlaCompilationCache::BuildExecutable(
                                        : client_->default_device_ordinal());
   build_options.set_result_layout(result.xla_output_shape);
   build_options.set_device_allocator(options.device_allocator);
-  build_options.set_argument_count(number_of_arguments);
-  build_options.set_resource_input_count(number_of_variables);
-  build_options.set_input_mapping(result.input_mapping);
+  build_options.set_argument_input_indices(argument_input_indices);
+  build_options.set_resource_input_indices(resource_input_indices);
+  build_options.set_resource_input_initialized(resource_input_initialized);
   std::vector<int> resource_update_to_input_index;
   std::transform(
       result.resource_updates.begin(), result.resource_updates.end(),
@@ -475,17 +476,27 @@ Status XlaCompilationCache::CompileImpl(
     XlaCompiler compiler(options);
     entry->compiled = true;
 
-    unsigned num_parameter_args = 0;
-    for (const XlaCompiler::Argument& arg : args) {
-      if (arg.kind == XlaCompiler::Argument::kParameter) {
-        num_parameter_args++;
-      }
-    }
-
-    unsigned num_variable_args = 0;
-    for (const XlaCompiler::Argument& arg : args) {
-      if (arg.kind == XlaCompiler::Argument::kResource) {
-        num_variable_args++;
+    std::vector<int32> argument_input_indices;
+    std::vector<int32> resource_input_indices;
+    std::vector<bool> resource_input_initialized;
+    for (int64 i = 0; i != args.size(); ++i) {
+      const XlaCompiler::Argument& arg = args[i];
+      switch (arg.kind) {
+        case XlaCompiler::Argument::kTensorList:
+        case XlaCompiler::Argument::kToken:
+        case XlaCompiler::Argument::kParameter: {
+          argument_input_indices.push_back(i);
+          break;
+        }
+        case XlaCompiler::Argument::kResource: {
+          resource_input_indices.push_back(i);
+          resource_input_initialized.push_back(arg.initialized);
+          break;
+        }
+        case XlaCompiler::Argument::kConstant: {
+          break;
+        }
+        default: { return xla::InternalError("Unknown Xla Argument type."); }
       }
     }
 
@@ -493,9 +504,9 @@ Status XlaCompilationCache::CompileImpl(
         compile_fn(&compiler, &entry->compilation_result);
     TF_RETURN_IF_ERROR(entry->compilation_status);
     CHECK_EQ(entry->executable.get(), nullptr);
-    entry->compilation_status =
-        BuildExecutable(options, entry->compilation_result,  num_parameter_args,
-                        num_variable_args, &entry->executable);
+    entry->compilation_status = BuildExecutable(
+        options, entry->compilation_result, argument_input_indices,
+        resource_input_indices, resource_input_initialized, &entry->executable);
 
     const uint64 compile_end_us = env->NowMicros();
     const uint64 compile_time_us = compile_end_us - compile_start_us;

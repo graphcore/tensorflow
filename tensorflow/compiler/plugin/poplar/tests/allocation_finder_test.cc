@@ -110,12 +110,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -168,12 +163,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -222,12 +212,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -291,12 +276,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -358,12 +338,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -784,12 +759,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1183,12 +1153,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1332,12 +1297,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1410,12 +1370,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(4);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1494,12 +1449,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1564,12 +1514,7 @@ HloModule top
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1634,12 +1579,7 @@ HloModule top
  }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1692,12 +1632,7 @@ HloModule top
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1756,12 +1691,7 @@ ENTRY top {
 
  )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(5);
-  config.set_resource_input_count(1);
-  config.set_input_mapping({0, 1, 2, 3, 4});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1813,12 +1743,7 @@ ENTRY top  {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(4);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -1888,12 +1813,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2006,12 +1926,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(4);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto* entry_computation = module0->entry_computation();
@@ -2106,12 +2021,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2214,12 +2124,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2325,12 +2230,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2429,12 +2329,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2, 3});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2522,12 +2417,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2, 3});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2596,11 +2486,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2685,7 +2571,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2781,7 +2667,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2857,7 +2743,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -2904,7 +2790,7 @@ ENTRY %top (arg: f32[1,1,2,2]) -> f32[1,1,2,2] {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto status_module = ParseAndReturnVerifiedModule(hlo, config);
+  auto status_module = ParseAndReturnVerifiedModule(hlo);
   ASSERT_TRUE(status_module.ok()) << status_module.status().error_message();
 
   auto* module = status_module.ValueOrDie().get();
@@ -2945,12 +2831,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(5);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   EXPECT_TRUE(CustomOpReplacer().Run(module0).ValueOrDie());
@@ -3030,7 +2911,7 @@ HloModule top
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3103,7 +2984,7 @@ HloModule top
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3173,7 +3054,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3255,7 +3136,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3322,7 +3203,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3389,7 +3270,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3422,12 +3303,7 @@ ENTRY cast1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3478,12 +3354,7 @@ ENTRY cast2 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3540,11 +3411,7 @@ ENTRY cast3 (arg0.78.22: f32[1,4,4,2], arg1: f32[1,1,2,2], arg2: f32[2], arg3: f
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3604,12 +3471,7 @@ ENTRY cast4 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3653,7 +3515,7 @@ ENTRY cast4 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3709,12 +3571,7 @@ ENTRY cast4 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(3);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3763,12 +3620,7 @@ ENTRY main {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -3851,7 +3703,7 @@ ENTRY main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   const HloInstruction* p0 = FindInstruction(module0, "p0");
@@ -3899,12 +3751,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4027,12 +3874,7 @@ ENTRY c1 {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4152,12 +3994,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4240,12 +4077,7 @@ ENTRY top {
 
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(6);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3, 4, 5});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4338,9 +4170,7 @@ ENTRY pipeline {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4383,7 +4213,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4423,7 +4253,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4477,7 +4307,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -4553,7 +4383,7 @@ ENTRY top {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   CompilerAnnotations annotations(module0);
@@ -4624,12 +4454,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(3);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   auto resources = CompilerResources::CreateTestDefault(module0);
@@ -4712,7 +4537,7 @@ main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 
@@ -4806,7 +4631,7 @@ main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 
@@ -4907,7 +4732,7 @@ main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 
@@ -5003,7 +4828,7 @@ main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 
@@ -5077,7 +4902,7 @@ ENTRY main {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 
@@ -5166,7 +4991,7 @@ ENTRY cluster_14155272572172615694__.29 (arg0.1: f32[2,2], arg1.2: f32[2,2], arg
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module0 = ParseAndReturnVerifiedModule(hlo, config);
+  auto module0 = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module0.ok());
   auto* module_ptr = module0.ValueOrDie().get();
 

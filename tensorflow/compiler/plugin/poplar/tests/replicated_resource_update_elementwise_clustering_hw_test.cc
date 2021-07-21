@@ -105,8 +105,9 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                             CreateIpuDevice(param.replication_factor, 4));
 
     auto config = GetModuleConfigForTest();
-    config.set_resource_input_count(4);
-    config.set_input_mapping({0, 1, 2, 3});
+    config.set_argument_input_indices({});
+    config.set_resource_input_indices({0, 1, 2, 3});
+    config.set_resource_input_initialized({true, true, true, true});
     config.set_resource_update_to_input_index({0, 1, 2, 3});
     TF_ASSERT_OK_AND_ASSIGN(auto module,
                             ParseAndReturnVerifiedModule(param.hlo, config));

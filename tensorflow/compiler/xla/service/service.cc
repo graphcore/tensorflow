@@ -320,14 +320,25 @@ StatusOr<std::unique_ptr<HloModuleConfig>> Service::CreateModuleConfig(
     config->set_seed(execution_options->seed());
     config->set_launch_id(execution_options->launch_id());
     config->set_debug_options(execution_options->debug_options());
-    config->set_argument_count(execution_options->argument_count());
-    config->set_resource_input_count(execution_options->resource_input_count());
-    const auto& proto_input_mapping =
-        execution_options->input_mapping();
-    std::vector<int> input_mapping(
-        proto_input_mapping.begin(),
-        proto_input_mapping.end());
-    config->set_input_mapping(input_mapping);
+
+    const auto& proto_argument_input_indices =
+        execution_options->argument_input_indices();
+    std::vector<int> argument_input_indices(
+        proto_argument_input_indices.begin(),
+        proto_argument_input_indices.end());
+    config->set_argument_input_indices(argument_input_indices);
+    const auto& proto_resource_input_indices =
+        execution_options->resource_input_indices();
+    std::vector<int> resource_input_indices(
+        proto_resource_input_indices.begin(),
+        proto_resource_input_indices.end());
+    config->set_resource_input_indices(resource_input_indices);
+    const auto& proto_resource_input_initialized =
+        execution_options->resource_input_initialized();
+    std::vector<bool> resource_input_initialized(
+        proto_resource_input_initialized.begin(),
+        proto_resource_input_initialized.end());
+    config->set_resource_input_initialized(resource_input_initialized);
     const auto& proto_resource_update_to_input_index =
         execution_options->resource_update_to_input_index();
     std::vector<int> resource_update_to_input_index(

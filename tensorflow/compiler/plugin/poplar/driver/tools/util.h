@@ -89,9 +89,6 @@ absl::optional<To> convert_scalar(const From& from) {
 // Strip all Layout information from the Shapes of HloInstructions.
 void StripAllInstructionLayouts(const HloModule*);
 
-// Calculate the number of resource variable parameters
-int64 GetResourceVariableParameterCount(const HloModule*);
-
 // Check if there are any operations in the computation which have sharding
 // information
 bool HaveSharding(HloComputation* comp);

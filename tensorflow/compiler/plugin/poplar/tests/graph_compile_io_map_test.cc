@@ -105,11 +105,7 @@ main {
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(2);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({});
-
+  config.set_argument_input_indices({0, 1});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -154,11 +150,10 @@ main {
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(1);
-  config.set_resource_input_count(1);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({0});
+  config.set_resource_input_indices({1});
+  config.set_resource_input_initialized({true});
   config.set_resource_update_to_input_index({1});
-
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -213,11 +208,10 @@ main {
    */
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(1);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({0});
+  config.set_resource_input_indices({1, 2, 3});
+  config.set_resource_input_initialized({true, true, true});
   config.set_resource_update_to_input_index({2});
-
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -276,11 +270,7 @@ main {
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(3);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({});
-
+  config.set_argument_input_indices({0, 1, 2});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -331,11 +321,7 @@ main {
 
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(3);
-  config.set_resource_input_count(0);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({});
-
+  config.set_argument_input_indices({0, 1, 2});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -384,11 +370,10 @@ main {
    */
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(3);
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2});
-  config.set_resource_update_to_input_index({3, 4, 5, 6});
-
+  config.set_argument_input_indices({4, 5, 6});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({false, false, false, false});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
@@ -508,11 +493,10 @@ main {
    */
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_argument_count(0);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
-
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
