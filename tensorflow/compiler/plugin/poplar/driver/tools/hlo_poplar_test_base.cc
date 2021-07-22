@@ -94,6 +94,9 @@ StatusOr<int32> HloPoplarTestBase::GetMaxIpuCount() {
 
 StatusOr<poplar::Engine> HloPoplarTestBase::Compile(
     CompilerResources& resources, HloModule* module) {
+  VLOG(1) << "Compiling...";
+  XLA_VLOG_LINES(1, module->ToString());
+
   EXPECT_TRUE(HloTrivialScheduler().Run(module).ValueOrDie());
 
   auto entry = module->entry_computation();
