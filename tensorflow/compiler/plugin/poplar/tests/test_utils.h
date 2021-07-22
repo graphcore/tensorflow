@@ -73,10 +73,11 @@ std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
   return stream;
 }
 
+template <class Base = HloTestFixture>
 struct ParameterizedHloTestFixture
-    : HloTestFixture,
+    : Base,
       ::testing::WithParamInterface<HloTestCase> {
-  void SetUp() override { ASSERT_TRUE(SetUpHloModule(GetParam().hlo)); }
+  void SetUp() override { ASSERT_TRUE(Base::SetUpHloModule(GetParam().hlo)); }
 };
 
 // Utility for setting the name of parameterized tests from the

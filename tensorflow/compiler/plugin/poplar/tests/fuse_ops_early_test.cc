@@ -31,7 +31,7 @@ MATCHER_P(EqualsProto, expected, "") {
   return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
 }
 
-using EarlyFuseTest = ParameterizedHloTestFixture;
+using EarlyFuseTest = ParameterizedHloTestFixture<>;
 
 // Fixture for tests that apply to both convolution with reverse and sliced
 // convolution with reverse instructions
