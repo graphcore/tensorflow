@@ -433,6 +433,15 @@ PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   data = static_cast<char*>(tensorflow::port::AlignedMalloc(size_, 64));
 }
 
+std::size_t PoplarExecutor::TensorControl::GetRemoteBufferSize() const {
+  if (host_rearrangement) {
+    return ShapeUtil::ByteSizeOf(ShapeUtil::MakeShape(
+        element_type, {host_rearrangement->replicationFactor,
+                       host_rearrangement->totalElementsPerReplica}));
+  }
+  return size;
+}
+
 PoplarExecutor::TensorControl::~TensorControl() {
   tensorflow::port::AlignedFree(data);
 }
@@ -2280,12 +2289,32 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList bufs;
     auto remote_parameter_info =
         FindRemoteParameterInfo(a, executable.GetRemoteParameterInfos());
-    FlattenedDeviceMemoryList(bufs, shapes[a],
-                              const_cast<void*>(args[a].opaque()), input_info,
-                              remote_parameter_info);
+    const Shape& shape = shapes[a];
+    FlattenedDeviceMemoryList(bufs, shape, const_cast<void*>(args[a].opaque()),
+                              input_info, remote_parameter_info);
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef& input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
+      input.tc->element_type = shape.element_type();
+
+      if (remote_parameter_info && remote_parameter_info->host_rearrangement) {
+        auto& param_host_rearrangement =
+            *remote_parameter_info->host_rearrangement;
+        gcl::CollectiveBalancedHostRearrangement host_rearrangement;
+        host_rearrangement.replicationFactor =
+            param_host_rearrangement.replication_factor;
+        host_rearrangement.totalElementsPerReplica =
+            param_host_rearrangement.total_elements_per_replica;
+        host_rearrangement.gatheredToRefSlices.reserve(
+            param_host_rearrangement.gathered_to_ref_slice.size());
+        for (auto& slice : param_host_rearrangement.gathered_to_ref_slice) {
+          host_rearrangement.gatheredToRefSlices.emplace_back(slice.first,
+                                                              slice.second);
+        }
+        host_rearrangement.elementMap = param_host_rearrangement.element_map;
+        input.tc->host_rearrangement = std::move(host_rearrangement);
+      }
+
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
           // We found an alias - we add a copy.
@@ -2303,7 +2332,7 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
         modified_resources.insert(input.tc);
       }
 
-      input.tc->element_type = shapes[a].element_type();
+      input.tc->element_type = shape.element_type();
       args_map.emplace(ArgHandle{a, i, input_handle}, input);
     }
   }
@@ -2825,6 +2854,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
     for (const auto& tc : allocations_) {
       // Set up streams
       if (tc->on_device == true && tc->output_handle) {
+        auto buffer_size = tc->size;
         if (tc->in_memory_remote_parameter_info) {
           // We currently only get one copy of the buffer.
           // Note that only resource variables are on device, hence they must
@@ -2835,33 +2865,57 @@ Status PoplarExecutor::MoveDeviceToHost() {
               tc->in_memory_remote_parameter_info->buffer_name;
           const int64 buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
+          buffer_size = tc->GetRemoteBufferSize();
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+            if (HostSizeToDeviceSize(buffer_size, tc->element_type) !=
+                buffer_size) {
               return InvalidArgumentStrCat(
                   "Unsupported replica partitioned type ",
                   PrimitiveType_Name(tc->element_type), " for ", buffer_name);
             }
 
             const std::size_t bytes_per_replica =
-                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                PartitionedByteCountPerReplica(buffer_size, tc->element_type,
                                                current_replication_factor_);
 
-            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+            std::vector<char> buffer;
+            const bool rearrange = tc->host_rearrangement.has_value();
+            if (rearrange) {
+              buffer.resize(buffer_size);
+            } else {
+              buffer.resize(bytes_per_replica);
+            }
 
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               const std::size_t offset = replica_id * bytes_per_replica;
-              CHECK_LE(offset, tc->size);
+              CHECK_LE(offset, buffer_size);
               const std::size_t replica_length =
-                  std::min(bytes_per_replica, tc->size - offset);
+                  std::min(bytes_per_replica, buffer_size - offset);
 
-              current_engine_->copyFromRemoteBuffer(buffer_name, buffer.get(),
-                                                    buffer_offset, replica_id);
+              if (rearrange) {
+                // Collect all shards into full buffer to rearrange collective
+                // balanced reorder later.
+                current_engine_->copyFromRemoteBuffer(
+                    buffer_name, buffer.data() + offset, buffer_offset,
+                    replica_id);
+              } else {
+                current_engine_->copyFromRemoteBuffer(
+                    buffer_name, buffer.data(), buffer_offset, replica_id);
 
-              std::memcpy(tc->data + offset, buffer.get(), replica_length);
+                std::memcpy(tc->data + offset, buffer.data(), replica_length);
+              }
+            }
+            if (rearrange) {
+              auto bytes_per_element =
+                  ShapeUtil::ByteSizeOfPrimitiveType(tc->element_type);
+              VLOG(3) << "Undo rearrangement for " << tc->output_handle->name
+                      << ", size: " << tc->size << "/" << buffer_size;
+              tc->host_rearrangement->undoRearrangeForCollective(
+                  buffer.data(), tc->data, bytes_per_element);
             }
           } else {
             const unsigned replica_id = 0;
@@ -2878,9 +2932,9 @@ Status PoplarExecutor::MoveDeviceToHost() {
             Json::Value::Int64(tc->output_handle->parameter_index);
         tensor["flat_tensor_index"] =
             Json::Value::Int64(tc->output_handle->flat_tensor_index);
-        tensor["size"] = Json::Value::UInt64(tc->size);
+        tensor["size"] = Json::Value::UInt64(buffer_size);
         root["tensors"].append(tensor);
-        total_size += tc->size;
+        total_size += buffer_size;
         total_count++;
       }
     }
@@ -2943,6 +2997,7 @@ Status PoplarExecutor::MoveHostToDevice() {
       TensorControl* tc = arg.second.tc;
       std::vector<std::pair<std::string, int64>> stream_list;
       void* buf(static_cast<void*>(tc->data));
+      auto buffer_size = tc->size;
       if (!arg.second.streamed) {
         buf = PreProcessBuffer(arg.second);
 
@@ -2950,47 +3005,78 @@ Status PoplarExecutor::MoveHostToDevice() {
           tc->in_memory_remote_parameter_info.emplace(
               *arg.second.remote_parameter_info);
 
+          buffer_size = tc->GetRemoteBufferSize();
           const std::string buffer_name =
               tc->in_memory_remote_parameter_info->buffer_name;
           const int64 buffer_offset =
               tc->in_memory_remote_parameter_info->buffer_offset;
 
           if (tc->in_memory_remote_parameter_info->is_replica_partitioned) {
-            if (HostSizeToDeviceSize(tc->size, tc->element_type) != tc->size) {
+            if (HostSizeToDeviceSize(buffer_size, tc->element_type) !=
+                buffer_size) {
               return InvalidArgumentStrCat(
                   "Unsupported replica partitioned type ",
                   PrimitiveType_Name(tc->element_type), " for ", buffer_name);
             }
 
             const std::size_t bytes_per_replica =
-                PartitionedByteCountPerReplica(tc->size, tc->element_type,
+                PartitionedByteCountPerReplica(buffer_size, tc->element_type,
                                                current_replication_factor_);
 
-            auto buffer = absl::make_unique<char[]>(bytes_per_replica);
+            std::vector<char> buffer;
+            const bool rearrange = tc->host_rearrangement.has_value();
+            if (rearrange) {
+              CHECK_LE(tc->size, buffer_size);
+              buffer.resize(buffer_size);
+
+              VLOG(3) << "Rearranging data for collective " << buffer_name
+                      << ", size: " << tc->size << "/" << buffer_size;
+              auto bytes_per_element =
+                  ShapeUtil::ByteSizeOfPrimitiveType(tc->element_type);
+              if (tc->size < buffer_size) {
+                std::vector<char> temp(buffer_size);
+                memcpy(temp.data(), tc->data, tc->size);
+                memset(temp.data() + tc->size, 0, buffer_size - tc->size);
+                tc->host_rearrangement->rearrangeForCollective(
+                    temp.data(), buffer.data(), bytes_per_element);
+              } else {
+                tc->host_rearrangement->rearrangeForCollective(
+                    tc->data, buffer.data(), bytes_per_element);
+              }
+            } else {
+              buffer.resize(bytes_per_replica);
+            }
 
             // This is a remote parameter - copy it to the remote buffer for
             // each replica.
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               const std::size_t offset = replica_id * bytes_per_replica;
-              CHECK_LE(offset, tc->size);
-              const std::size_t replica_length =
-                  std::min(bytes_per_replica, tc->size - offset);
+              CHECK_LE(offset, buffer_size);
 
-              // Copy the replica-local region into the tmp buffer (with
-              // padding).
-              std::memcpy(buffer.get(), static_cast<char*>(buf) + offset,
-                          replica_length);
+              if (rearrange) {
+                current_engine_->copyToRemoteBuffer(buffer.data() + offset,
+                                                    buffer_name, buffer_offset,
+                                                    replica_id);
+              } else {
+                const std::size_t replica_length =
+                    std::min(bytes_per_replica, buffer_size - offset);
+                // Copy the replica-local region into the tmp buffer (with
+                // padding).
+                std::memcpy(buffer.data(), static_cast<char*>(buf) + offset,
+                            replica_length);
 
-              // Zero the padding
-              std::memset(buffer.get() + replica_length, 0,
-                          bytes_per_replica - replica_length);
+                // Zero the padding
+                std::memset(buffer.data() + replica_length, 0,
+                            bytes_per_replica - replica_length);
 
-              // Copy the padded buffer to the remote buffer.
-              current_engine_->copyToRemoteBuffer(buffer.get(), buffer_name,
-                                                  buffer_offset, replica_id);
+                // Copy the padded buffer to the remote buffer.
+                current_engine_->copyToRemoteBuffer(buffer.data(), buffer_name,
+                                                    buffer_offset, replica_id);
+              }
             }
           } else {
+            CHECK(!tc->host_rearrangement.has_value());
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               current_engine_->copyToRemoteBuffer(buf, buffer_name,
@@ -3012,9 +3098,9 @@ Status PoplarExecutor::MoveHostToDevice() {
         tensor["flat_tensor_index"] =
             Json::Value::Int64(arg.first.flat_tensor_index);
         tensor["name"] = Json::Value(arg.first.name);
-        tensor["size"] = Json::Value::UInt64(tc->size);
+        tensor["size"] = Json::Value::UInt64(buffer_size);
         root["tensors"].append(tensor);
-        total_size += tc->size;
+        total_size += buffer_size;
 
         stream_list.push_back(std::make_pair(arg.first.name, 0));
       }

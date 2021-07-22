@@ -25,12 +25,25 @@ message HostEmbeddingConfig {
   ShapeProto activations_shape = 4;
 }
 
+message CollectiveBalancedRefSlice {
+  int64 begin = 1;
+  int64 end = 2;
+}
+
+message CollectiveBalancedHostRearrangement {
+  int64 total_elements_per_replica = 1;
+  int64 replication_factor = 2;
+  repeated CollectiveBalancedRefSlice gathered_to_ref_slices = 3;
+  repeated uint32 element_map = 4 [packed = true];
+}
+
 message RemoteParameterConfig {
   int64 parameter_number = 1;
   bool is_replica_partitioned = 2;
   string buffer_name = 3;
   int64 buffer_offset = 4;
   int64 num_merged = 5;
+  CollectiveBalancedHostRearrangement host_rearrangement = 6;
 }
 
 message KeyIdMapping {
