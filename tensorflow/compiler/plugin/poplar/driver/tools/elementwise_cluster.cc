@@ -335,19 +335,17 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   return clusters;
 }
 
-bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
-                                  ThreeState partition_offload_variables) {
-  CHECK(!finalized_);
-
+ElementwiseClusterClass ElementwiseCluster::Classify(
+    const ElementwiseClusterValidator& validator) const {
   if (IsScalar(top_)) {
-    return false;
+    return ElementwiseClusterClass::Invalid;
   }
 
   // Check all inputs are valid.
   for (auto input : inputs_) {
     if (!ValidClusterInput(input, validator)) {
       VLOG(2) << "Invalid cluster input: " << input->ToString();
-      return false;
+      return ElementwiseClusterClass::Invalid;
     }
   }
 
@@ -362,21 +360,35 @@ bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
   VLOG(2) << "Number of non replicated parameter load inputs: "
           << num_non_replicated_parameter_load;
 
-  if (partition_offload_variables == THREESTATE_OFF &&
-      num_replicated_parameter_load) {
-    VLOG(2) << "Resource update partition offload is turned off, cannot "
-               "offload cluster.";
-    return false;
-  }
-
-  if (!num_replicated_parameter_load && !num_non_replicated_parameter_load) {
-    VLOG(2) << "No parameter load inputs found.";
-    return false;
-  }
-
   if (num_replicated_parameter_load && num_non_replicated_parameter_load) {
     VLOG(2) << "Found a cluster with both replicated and non replicated "
                "parameter loads which is currently unsupported.";
+    return ElementwiseClusterClass::Invalid;
+  } else if (num_replicated_parameter_load &&
+             !num_non_replicated_parameter_load) {
+    return ElementwiseClusterClass::Partitioned;
+  } else if (!num_replicated_parameter_load &&
+             num_non_replicated_parameter_load) {
+    return ElementwiseClusterClass::NonPartitioned;
+  } else {
+    VLOG(2) << "No parameter load inputs found.";
+    return ElementwiseClusterClass::Invalid;
+  }
+}
+
+bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
+                                  ThreeState partition_offload_variables) {
+  CHECK(!finalized_);
+
+  auto cluster_class = Classify(validator);
+  if (cluster_class == ElementwiseClusterClass::Invalid) {
+    return false;
+  }
+
+  if (partition_offload_variables == THREESTATE_OFF &&
+      cluster_class == ElementwiseClusterClass::Partitioned) {
+    VLOG(2) << "Resource update partition offload is turned off, cannot "
+               "offload cluster.";
     return false;
   }
 
@@ -448,7 +460,8 @@ bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
                          cluster_shape_.dimensions().end()};
 
   // Only perform replica partitioning if there is a replicated parameter load.
-  is_replica_partitioned_ = num_replicated_parameter_load;
+  is_replica_partitioned_ =
+      cluster_class == ElementwiseClusterClass::Partitioned;
   if (is_replica_partitioned_) {
     // Get all parameter loads.
     std::vector<HloInstruction*> parameter_loads;

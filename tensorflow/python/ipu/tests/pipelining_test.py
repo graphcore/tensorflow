@@ -158,8 +158,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 4
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
@@ -285,22 +283,23 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
+    with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 4
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
-    outfeed_op = outfeed_queue.dequeue()
-    with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      outfeed_op = outfeed_queue.dequeue()
+
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -309,8 +308,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
       ]])
-      report.parse_log()
-      report.assert_pipeline_stages_on_expected_ipu(device_mapping)
+      report_json.parse_log()
+      report_json.assert_pipeline_stages_on_expected_ipu(
+          device_mapping, cfg.ipu_model.tiles_per_ipu)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMappingSameIpu(self):
@@ -355,22 +355,23 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
+    with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 4
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
-    outfeed_op = outfeed_queue.dequeue()
-    with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      outfeed_op = outfeed_queue.dequeue()
+
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -379,8 +380,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
       ]])
-      report.parse_log()
-      report.assert_pipeline_stages_on_expected_ipu(device_mapping)
+      report_json.parse_log()
+      report_json.assert_pipeline_stages_on_expected_ipu(
+          device_mapping, cfg.ipu_model.tiles_per_ipu)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithInfeedsKwargs(self):
@@ -423,33 +425,35 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
+    with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 4
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.configure_ipu_system()
       utils.move_variable_initialization_to_cpu()
 
-    outfeed_op = outfeed_queue.dequeue()
-    with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      outfeed_op = outfeed_queue.dequeue()
+
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
-      report.parse_log()
+      report_json.parse_log()
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[
           410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
           570.01, 890.01, 410.01, 730.01
       ]])
-      report.parse_log()
-      report.assert_pipeline_stages_on_expected_ipu((0, 1, 3))
+      report_json.parse_log()
+      report_json.assert_pipeline_stages_on_expected_ipu(
+          (0, 1, 3), cfg.ipu_model.tiles_per_ipu)
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
@@ -532,8 +536,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                                      inputs=[x, y])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
-    cfg._profiling.profile_execution = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 128
     cfg.auto_select_ipus = 4
@@ -617,8 +619,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.auto_select_ipus = 4
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
@@ -681,8 +681,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         r = ipu_compiler.compile(model, inputs=[])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -1180,8 +1178,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -1325,9 +1321,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       self.assertAllEqual([8], sess.run(outfed))
 
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
-    report = pva.openReport(report_helper.find_report())
+    report_json = pva.openReport(report_helper.find_report())
     ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-    self.assert_compute_sets_contain_list(report, ok)
+    self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTraining(self):
@@ -1379,10 +1375,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       # '1' is accumulated 8 times.
       self.assertAllEqual([[8]], sess.run(outfed))
 
-    report = pva.openReport(report_helper.find_report())
+    report_json = pva.openReport(report_helper.find_report())
     # There should be 2 GA-adds. One for the weight and one for the outfeed.
     ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-    self.assert_compute_sets_contain_list(report, ok)
+    self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedTrainingSetDtype(self):
@@ -1425,8 +1421,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                            inputs=[1.0])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -1497,13 +1491,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
       self.assertAllEqual([[8], [16]], sess.run(outfed))
 
-    report = pva.openReport(report_helper.find_report())
+    report_json = pva.openReport(report_helper.find_report())
     # There should be 3 GA-adds. One for the weight and one for each output.
     ok = [
         'GradientAccumulatorAdd', 'GradientAccumulatorAdd_1',
         'GradientAccumulatorAdd_2'
     ]
-    self.assert_compute_sets_contain_list(report, ok)
+    self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInference(self):
@@ -1543,10 +1537,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       # '1' is accumulated 8 times.
       self.assertAllEqual([[8]], sess.run(outfed))
 
-    report = pva.openReport(report_helper.find_report())
+    report_json = pva.openReport(report_helper.find_report())
     # There should be 1 GA-add for the outfeed.
     ok = ['GradientAccumulatorAdd']
-    self.assert_compute_sets_contain_list(report, ok)
+    self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedAccumulatedInferenceMultipleOutputs(self):
@@ -1586,10 +1580,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       # '1' is accumulated 8 times, '2' is accumulated 8 times.
       self.assertAllEqual([[8], [16]], sess.run(outfed))
 
-    report = pva.openReport(report_helper.find_report())
+    report_json = pva.openReport(report_helper.find_report())
     # There should be a GA-add for each output from the last stage.
     ok = ['GradientAccumulatorAdd', 'GradientAccumulatorAdd_1']
-    self.assert_compute_sets_contain_list(report, ok)
+    self.assert_compute_sets_contain_list(report_json, ok)
 
   @test_util.deprecated_graph_mode_only
   def testOutfeedDictInference(self):
@@ -1615,8 +1609,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -1750,8 +1742,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -1816,8 +1806,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         r = ipu_compiler.compile(my_net)
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = True
       cfg.ipu_model.tiles_per_ipu = 128
       cfg.auto_select_ipus = 4
@@ -2130,8 +2118,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     dequeued_gradient = grad_outfeed_queue.dequeue()
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
-    cfg._profiling.profile_execution = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 128
     cfg.auto_select_ipus = 4

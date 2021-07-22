@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import numpy as np
 
 from tensorflow_estimator.python.estimator import model_fn

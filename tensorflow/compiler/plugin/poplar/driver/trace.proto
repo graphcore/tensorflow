@@ -10,24 +10,18 @@ message IpuTraceCompileBeginEvent {
 };
 
 message IpuTraceCompileEndEvent {
-  // Compilation report
-  bytes compilation_report = 1;
-
   // duration of compilation
-  int64 duration = 2;
+  int64 duration = 1;
 
   // The name of the module associated with the event
-  bytes module_name = 3;
+  bytes module_name = 2;
 
   // A JSON structure describing the tensor mappings
-  bytes tensor_map = 4;
+  bytes tensor_map = 3;
 
   // A JSON structure describing the allocation targets
   // and convolution/matmul classifications
-  bytes instruction_info = 5;
-
-  // A serialized form of the poplar graph
-  bytes poplar_graph = 6;
+  bytes instruction_info = 4;
 };
 
 message IpuTraceDataTransferEvent {
@@ -41,14 +35,11 @@ message IpuTraceLoadEngineEvent {
 };
 
 message IpuTraceExecuteEvent {
-  // Execution report
-  bytes execution_report = 1;
-
   // Activity trace
-  bytes activity_trace = 2;
+  bytes activity_trace = 1;
 
   // The name of the module associated with the event
-  bytes module_name = 3;
+  bytes module_name = 2;
 };
 
 message IpuTraceEvent {

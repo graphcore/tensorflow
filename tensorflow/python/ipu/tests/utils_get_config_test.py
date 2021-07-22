@@ -35,7 +35,6 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   def testGetConfig(self):
     # Generate a simple IPU config.
     cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.auto_select_ipus = [2, 4]
 
@@ -67,7 +66,6 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
   def testGetNumberOfIpus(self):
     # Generate a simple IPU config.
     cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.auto_select_ipus = [2, 4]
     cfg.configure_ipu_system()

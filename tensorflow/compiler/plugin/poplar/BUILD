@@ -2255,6 +2255,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
@@ -2279,6 +2280,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],

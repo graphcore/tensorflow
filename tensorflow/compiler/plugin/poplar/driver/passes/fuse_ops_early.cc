@@ -27,8 +27,9 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-// Utility function for processing the padding/slice information of a sliced convolution.
-// The given apply function is called for each spatial dimension where a slice occurs.
+// Utility function for processing the padding/slice information of a sliced
+// convolution. The given apply function is called for each spatial dimension
+// where a slice occurs.
 template <typename Fn>
 void VisitSlicedConv2dPadding(const HloSliceInstruction* slice, Fn&& apply) {
   const HloInstruction* conv = slice->operand(0);

@@ -772,8 +772,7 @@ def _augment_model_fn(model_fn, wrapper_class, ipu_device):
     hooks = []
 
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-        dataset,
-        prefetch_depth=config.ipu_run_config.prefetch_depth)
+        dataset, prefetch_depth=config.ipu_run_config.prefetch_depth)
     hooks.append(_IPUInfeedLifecycleHook(infeed_queue))
 
     if not wrapper_class.need_outfeed(mode):

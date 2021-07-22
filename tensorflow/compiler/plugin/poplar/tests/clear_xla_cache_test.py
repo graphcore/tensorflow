@@ -53,7 +53,7 @@ class TestClearXlaCompilationCache(xla_test.XLATestCase):
       sess.run(self.outputs_, self.feed_dict_)
       sess.run(self.outputs_, self.feed_dict_)
 
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
   def testClearingCausesRecompilation(self):
     cfg = ipu.config.IPUConfig()
@@ -63,17 +63,17 @@ class TestClearXlaCompilationCache(xla_test.XLATestCase):
 
     with session.Session() as sess:
       sess.run(self.outputs_, self.feed_dict_)
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
       report_helper.clear_reports()
       sess.run([gen_ipu_ops.ipu_clear_all_xla_compilation_caches()])
       sess.run(self.outputs_, self.feed_dict_)
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
       report_helper.clear_reports()
       sess.run([gen_ipu_ops.ipu_clear_all_xla_compilation_caches()])
       sess.run(self.outputs_, self.feed_dict_)
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
   def testClearingEmptyCacheIsSafe(self):
     with session.Session() as sess:

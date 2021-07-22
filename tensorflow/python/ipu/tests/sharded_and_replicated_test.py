@@ -24,6 +24,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
@@ -68,8 +69,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
       cfg.auto_select_ipus = 4
@@ -127,7 +127,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
         return [loss, train]
 
       with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        get_events = gen_ipu_ops.ipu_event_trace()
 
       def my_net():
         v = 0.0
@@ -136,8 +136,10 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
       cfg.auto_select_ipus = 4
@@ -146,24 +148,23 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report_helper.clear_reports()
+      sess.run(get_events)
 
       loss = sess.run(out)
       self.assertAllClose(loss, [49.906597])
 
-      rep = sess.run(report)
+      events = sess.run(get_events)
 
       num_compiles = 0
 
-      evts = ipu.utils.extract_all_events(rep)
+      evts = ipu.utils.extract_all_events(events)
       for evt in evts:
         if evt.type == IpuTraceEvent.COMPILE_END:
           num_compiles = num_compiles + 1
 
-      self.assertEqual(num_compiles, 1)
-
-      compile_report = ipu.utils.extract_compile_reports(rep)
-      self.assertEqual(len(compile_report), 1)
+    self.assertEqual(num_compiles, 1)
+    self.assert_num_reports(report_helper, 1)
 
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.deprecated_graph_mode_only
@@ -209,12 +210,12 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
         return r
 
       with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        get_events = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
+      cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
       cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
       cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
       cfg.auto_select_ipus = 4
@@ -223,16 +224,16 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      sess.run(get_events)
 
       loss = sess.run(out)
       self.assertAllClose(loss, [648.78577])
 
-      rep = sess.run(report)
+      events = sess.run(get_events)
 
       num_compiles = 0
 
-      evts = ipu.utils.extract_all_events(rep)
+      evts = ipu.utils.extract_all_events(events)
       for evt in evts:
         if evt.type == IpuTraceEvent.COMPILE_END:
           num_compiles = num_compiles + 1
@@ -244,8 +245,7 @@ class TestShardedAndReplicated(test_util.TensorFlowTestCase):
 class TestMixedShardedAndReplicated(test_util.TensorFlowTestCase):
   @classmethod
   def setUpClass(cls):
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.optimizations.maximum_inter_ipu_copies_buffer_size = 10000
 

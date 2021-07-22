@@ -2158,69 +2158,15 @@ std::string PoplarExecutor::ReportFileExtension() const {
 }
 
 void PoplarExecutor::AddCompileEndEventRecord(
-    const std::string& module_name, const std::string& report,
-    const std::string& poplar_graph, const std::string& tensor_map,
-    const std::string& instruction_info, const std::string& tensorflow_info,
-    int64 duration) {
-  std::string rep = std::move(report);
-  std::string map = std::move(tensor_map);
-  std::string gph = std::move(poplar_graph);
-  std::string tfi = std::move(tensorflow_info);
-
-  if (ReportDirectory().size() > 0) {
-    std::unique_ptr<tensorflow::WritableFile> file;
-
-    std::string report_file_extension = ReportFileExtension();
-
-    std::string report_dir =
-        tensorflow::io::JoinPath(ReportDirectory(), module_name);
-    CreateDirIfMissing(report_dir);
-
-    if (rep.size() > 0) {
-      std::string filename = tensorflow::io::JoinPath(
-          report_dir, "graph." + report_file_extension);
-      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-      TF_CHECK_OK(file->Append(rep));
-      TF_CHECK_OK(file->Close());
-      rep = filename;
-    }
-
-    if (map.size() > 0) {
-      std::string filename =
-          tensorflow::io::JoinPath(report_dir, "tensor_map.json");
-      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-      TF_CHECK_OK(file->Append(map));
-      TF_CHECK_OK(file->Close());
-      map = filename;
-    }
-
-    if (gph.size() > 0) {
-      std::string filename =
-          tensorflow::io::JoinPath(report_dir, "serialized_graph.capnp");
-      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-      TF_CHECK_OK(file->Append(gph));
-      TF_CHECK_OK(file->Close());
-      gph = filename;
-    }
-
-    if (tfi.size() > 0) {
-      std::string filename =
-          tensorflow::io::JoinPath(report_dir, "framework.json");
-      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-      TF_CHECK_OK(file->Append(tfi));
-      TF_CHECK_OK(file->Close());
-    }
-  }
-
+    const std::string& module_name, const std::string& tensor_map,
+    const std::string& instruction_info, int64 duration) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::COMPILE_END);
 
   auto* compile_end = evt.mutable_compile_end();
   compile_end->set_module_name(std::move(module_name));
-  compile_end->set_compilation_report(std::move(rep));
-  compile_end->set_poplar_graph(std::move(gph));
   compile_end->set_duration(duration);
-  compile_end->set_tensor_map(std::move(map));
+  compile_end->set_tensor_map(std::move(tensor_map));
   compile_end->set_instruction_info(std::move(instruction_info));
 
   reports_.push_back(evt);
@@ -2250,30 +2196,10 @@ void PoplarExecutor::AddLoadEngineEventRecord(const std::string& module_name) {
   reports_.push_back(evt);
 }
 
-void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name,
-                                           const std::string& report) {
-  std::string rep = std::move(report);
-  if (ReportDirectory().size() > 0 && rep.size()) {
-    std::unique_ptr<tensorflow::WritableFile> file;
-
-    std::string report_file_extension = ReportFileExtension();
-
-    std::string report_dir =
-        tensorflow::io::JoinPath(ReportDirectory(), module_name);
-    CreateDirIfMissing(report_dir);
-
-    std::string filename = tensorflow::io::JoinPath(
-        report_dir, "execution." + report_file_extension);
-    TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-    TF_CHECK_OK(file->Append(rep));
-    TF_CHECK_OK(file->Close());
-    rep = filename;
-  }
-
+void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name) {
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::EXECUTE);
   evt.mutable_execute()->set_module_name(std::move(module_name));
-  evt.mutable_execute()->set_execution_report(std::move(rep));
 
   reports_.push_back(evt);
 }
@@ -3846,50 +3772,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
       }
 
       if (current_config_.profiling().enable_ipu_trace_events()) {
-        std::string report;
-        if (current_config_.profiling().execution_trace_type() !=
-            IpuExecutionProfileType::NO_PROFILE) {
-          if (executable.ExecutionCount() == 0 &&
-              !executable.IsLoadedFromCache()) {
-            std::stringstream report_stream;
-            auto graph_profile = current_engine_->getGraphProfile();
-            auto exec_profile = current_engine_->getExecutionProfile();
-
-            if (CompilerReportingTextFormat()) {
-              auto opts = GetReportExecutionFlags();
-              SetFlagIfNotPresent(opts, "showExecutionSteps", "true");
-
-              poplar::printExecutionSummary(report_stream, graph_profile,
-                                            exec_profile, opts);
-            } else if (CompilerReportingCborFormat()) {
-              poplar::serializeToCBOR(report_stream, exec_profile);
-            } else {
-              poplar::serializeToJSON(report_stream, exec_profile);
-            }
-
-            current_engine_->resetExecutionProfile();
-
-            if (report_stream.tellp() > MaxReportSize()) {
-              LOG(INFO) << "Dropping a Poplar compilation report of size "
-                        << report_stream.tellp()
-                        << " which is larger than the configured maximum "
-                           "report size "
-                        << std::to_string(MaxReportSize())
-                        << ". To change the maximum report size use the "
-                           "max_report_size"
-                        << " argument in ipu.utils.create_ipu_config.\n"
-                        << "Example:\n"
-                        << "cfg = "
-                           "ipu.utils.create_ipu_config(max_report_size="
-                           "0x100000000) "
-                        << "Note that the max report size is in bytes.";
-              report_stream.str(std::string());
-            }
-            report = report_stream.str();
-          }
-        }
-
-        AddExecuteEventRecord(executable.module().name(), report);
+        AddExecuteEventRecord(executable.module().name());
       }
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);

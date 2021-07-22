@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-import six
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.client import session as sl
-from tensorflow.python.framework import errors
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import constant_op
@@ -46,8 +45,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -85,8 +83,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -121,8 +118,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [x, y])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -156,8 +152,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     out = ipu.ipu_compiler.compile(my_graph, [])
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -195,8 +190,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -248,8 +242,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -312,8 +305,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -398,8 +390,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
         ]
 
     out = ipu.ipu_compiler.compile(my_graph, [])
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)
@@ -436,8 +427,7 @@ class TestReplicatedGraph(test_util.TensorFlowTestCase):
 
     outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.config.IPUConfig()
-    cfg._profiling.profiling = False  # pylint: disable=protected-access
+    cfg = IPUConfig()
     cfg.optimizations.maximum_cross_replica_sum_buffer_size = 10000
     cfg.auto_select_ipus = 2
     tu.add_hw_ci_connection_options(cfg)

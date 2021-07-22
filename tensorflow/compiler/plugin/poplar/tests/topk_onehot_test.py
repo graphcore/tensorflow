@@ -24,12 +24,17 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 
 
 class OneHotTopK(xla_test.XLATestCase):
   def testOneHot(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     def executeModel(inputs, expected):
       with self.session() as sess:
 
@@ -56,8 +61,6 @@ class OneHotTopK(xla_test.XLATestCase):
 
         with ops.device(device):
           out = model(pa)
-
-        tu.ReportJSON(self, sess)
 
         in_data = np.array(inputs["in_values"])
 
@@ -209,6 +212,11 @@ class OneHotTopK(xla_test.XLATestCase):
       executeModel(test_case, result)
 
   def testTopK(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     def doTestTopK(self, dtype):
       with self.session() as sess:
 
@@ -225,8 +233,8 @@ class OneHotTopK(xla_test.XLATestCase):
         with ops.device("/device:IPU:0"):
           out = model(pa)
 
-        report = tu.ReportJSON(self, sess)
-        report.reset()
+        report_json = tu.ReportJSON(self, sess)
+        report_json.reset()
 
         # Shuffled set of values of specified dtype in [0:n_categories).
         # This ensures there is a single unique sort result.
@@ -238,13 +246,18 @@ class OneHotTopK(xla_test.XLATestCase):
         result = sess.run(out, fd)
         self.assertAllClose(result, expected)
 
-        report.parse_log(assert_len=4)
+        report_json.parse_log(assert_len=4)
 
     testTypes = [np.float16, np.float32, np.int32]
     for dtype in testTypes:
       doTestTopK(self, dtype)
 
   def testInTopK(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       batchsize = 4
@@ -261,8 +274,8 @@ class OneHotTopK(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = model(pa, pb)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       input = np.random.rand(batchsize, n_categories)
       input = input / np.sqrt(np.sum(input**2))
@@ -274,7 +287,7 @@ class OneHotTopK(xla_test.XLATestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, [True, True, True, True])
 
-      report.parse_log(assert_len=4)
+      report_json.parse_log(assert_len=4)
 
 
 if __name__ == "__main__":

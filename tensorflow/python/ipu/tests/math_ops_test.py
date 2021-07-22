@@ -271,7 +271,6 @@ class ErfTest(test_util.TensorFlowTestCase):
   def __configureIPU(self):
     if not self.configured:
       cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

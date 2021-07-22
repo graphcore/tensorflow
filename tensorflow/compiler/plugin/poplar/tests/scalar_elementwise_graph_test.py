@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import test_utils as tu
 
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
@@ -46,6 +46,11 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
     return 0
 
   def testDoNotCompileScalarElementWiseGraphWithParameter(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(a, b):
@@ -58,18 +63,20 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
         b = array_ops.placeholder(np.int32, name="b")
 
       out = ipu.ipu_compiler.compile(my_graph, [a, b])
-      report = ReportJSON(self, sess)
-      report.reset()
 
       fd = {a: np.int32(2), b: np.int32(3)}
       result = sess.run(out, fd)
 
-      report.parse_log()
-      report.assert_contains_no_compile_event()
+      self.assert_num_reports(report_helper, 0)
 
       self.assertAllClose(result, [5])
 
   def testDoNotCompileScalarConstGraph(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(a, b):
@@ -81,17 +88,20 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
         a = 2
         b = 3
       out = ipu.ipu_compiler.compile(my_graph, [a, b])
-      report = ReportJSON(self, sess)
-      report.reset()
 
       result = sess.run(out)
 
-      report.parse_log()
-      report.assert_contains_no_compile_event()
+      # If compile was called, a report_json would be generated
+      self.assert_num_reports(report_helper, 0)
 
       self.assertEqual(result, [5])
 
   def testDoNotCompileScalarElementWiseGraphWithParameterAdd1(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
 
       def my_graph(a, b):
@@ -105,19 +115,24 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
         b = array_ops.placeholder(np.int32, name="b")
 
       out = ipu.ipu_compiler.compile(my_graph, [a, b])
-      report = ReportJSON(self, sess)
-      report.reset()
 
       fd = {a: np.int32(2.0), b: np.int32(3.0)}
       result = sess.run(out, fd)
 
-      report.parse_log()
-      report.assert_contains_no_compile_event()
+      # If compile was called, a report_json would be generated
+      self.assert_num_reports(report_helper, 0)
 
       self.assertEqual(result, [6])
 
   @test_util.deprecated_graph_mode_only
   def testWhenSomeScalarOnDevice(self):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     def conv(x, ksize, stride, filters_out):
       return layers.Conv2D(
           filters_out,
@@ -167,37 +182,39 @@ class ScalarElementWiseGraphTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_helper.clear_reports()
 
       result1 = sess.run(output1, {x: np.ones(x.shape)})
-      report.parse_log()
-      report.assert_contains_host_to_device_transfer_event()
-      report.assert_contains_one_compile_event()
-      report.reset()
+      report_json.parse_log()
+      report_json.assert_contains_host_to_device_transfer_event()
+      report_json.reset()
+      self.assert_num_reports(report_helper, 1)
+      report_helper.clear_reports()
 
       result2 = sess.run(output2)
-      report.parse_log()
+      report_json.parse_log()
       # Check that there was a copy from device to host. If there was no the copy
       # there would be one compile event at this place. We see no compile event
       # as expected.
-      report.assert_contains_device_to_host_transfer_event()
-      report.assert_contains_no_compile_event()
-      report.reset()
+      report_json.assert_contains_device_to_host_transfer_event()
+      report_json.reset()
+      self.assert_num_reports(report_helper, 0)
 
       result3 = sess.run(output1, {x: np.ones(x.shape)})
-      report.parse_log()
-      report.assert_contains_host_to_device_transfer_event()
-      report.assert_contains_no_compile_event()
-      report.reset()
+      report_json.parse_log()
+      report_json.assert_contains_host_to_device_transfer_event()
+      report_json.reset()
+      self.assert_num_reports(report_helper, 0)
 
       # Read comment for case result2.
       result4 = sess.run(output2)
-      report.parse_log()
-      report.assert_contains_device_to_host_transfer_event()
-      report.assert_contains_no_compile_event()
-      report.reset()
+      report_json.parse_log()
+      report_json.assert_contains_device_to_host_transfer_event()
+      report_json.reset()
+      self.assert_num_reports(report_helper, 0)
 
       self.assertAllClose(result1, [2.25])
       self.assertAllClose(result2, [4.25])

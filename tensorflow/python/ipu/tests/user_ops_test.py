@@ -14,6 +14,7 @@
 #  =============================================================================
 
 import os
+import pva
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -44,6 +45,10 @@ def count_grad_ops(graph):
 class UserProvidedOpsTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testUserOp(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -89,6 +94,11 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpWithAllocate(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -113,8 +123,8 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
         model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(variables.global_variables_initializer())
       res = sess.run(model, {
@@ -122,10 +132,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
           y: np.ones([128]),
       })
 
-      report.parse_log()
+      report_json.parse_log()
 
       found = 0
-      for t in report.get_tensor_map().all_tensors():
+      for t in report_json.get_tensor_map().all_tensors():
         if t.inst == "arg0.1":
           # Allocator maps all of input 0 to tile 0
           self.assertAllEqual(t.tile_ids(), [0])
@@ -139,6 +149,12 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.full([128], 2.0), res[0])
 
   def runCustomUserOpWithUnusedOutput(self, op_name, ok):
+    cfg = ipu.config.IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -163,20 +179,21 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
         model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
       sess.run(model, {
           x: np.ones([128]),
           y: np.ones([128]),
       })
 
-      report.parse_log()
-      report.assert_all_compute_sets_and_list(ok)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_all_compute_sets_and_list(report, ok)
 
   @test_util.deprecated_graph_mode_only
   def testStatefulUserOp(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     ok = [
         '__seed*',
         'add/add.*/Op/Add',
@@ -186,6 +203,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testStatelessUserOp(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     ok = [
         '__seed*',
         'add/add.*/Op/Add',
@@ -194,6 +215,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpBackwards(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -250,6 +275,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserReadWriteOpBackwardsUnusedGradients(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     SIZE = 5
 
     def scaled_add_op(x, scale, y):
@@ -308,6 +337,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserReadWriteOpBackwards(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -345,6 +378,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpBackwardsSeparateOps(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -407,6 +444,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
   # we don't have metadata in the above tests.
   @test_util.deprecated_graph_mode_only
   def testUserOpMetadata(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -464,6 +505,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpCPU(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -506,6 +551,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpLoadNonExistentSharedLibrary(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {
@@ -531,6 +580,10 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpLoadLibraryWithWrongApiLevel(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.configure_ipu_system()
+
     with tu.ipu_session() as sess:
       cwd = os.getcwd()
       outputs = {

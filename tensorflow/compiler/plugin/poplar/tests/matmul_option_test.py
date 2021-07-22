@@ -20,7 +20,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.python import ipu
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -36,8 +36,7 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
   def testMatMulFwdBackwd(self):
     with self.session() as sess:
 
-      cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
+      cfg = IPUConfig()
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

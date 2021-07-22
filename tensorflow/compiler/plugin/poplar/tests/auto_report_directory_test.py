@@ -173,14 +173,14 @@ class AutoReportDirTest(xla_test.XLATestCase):
       run_graph_op_1, x_1 = createSimpleGraph()
       sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
       # Assert one report generated.
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
       sess.run(gen_ipu_ops.ipu_clear_all_xla_compilation_caches())
 
       run_graph_op_2, x_2 = createSimpleGraph()
       sess.run(run_graph_op_2, {x_2: np.full((2, 2), 10)})
       # Assert second report does not override first.
-      report_helper.assert_num_reports(2)
+      self.assert_num_reports(report_helper, 2)
 
   def testAutoAssignReportSubdirectoriesSubdirectoryReused(self):
     report_helper = tu.ReportHelper()
@@ -193,11 +193,11 @@ class AutoReportDirTest(xla_test.XLATestCase):
       run_graph_op_1, x_1 = createSimpleGraph()
       sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
       # Assert one report generated.
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
       sess.run(run_graph_op_1, {x_1: np.full((2, 2), 5)})
       # Assert report from rerun overrides report from previous run.
-      report_helper.assert_num_reports(1)
+      self.assert_num_reports(report_helper, 1)
 
 
 if __name__ == "__main__":

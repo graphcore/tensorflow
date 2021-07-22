@@ -26,6 +26,7 @@ limitations under the License.
 #include <thread>
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/synchronization/notification.h"
 #include "include/json/json.h"
 
 #include <poplar/DeviceManager.hpp>
@@ -236,10 +237,14 @@ class ApplicationRuntimeComm {
     tensorflow::Tensor result;
     {
       std::unique_lock<std::mutex> lk(input_mutex_);
-      input_cv_.wait(lk, [&]() { return !input_queues_[name].empty(); });
+      input_cv_.wait(lk, [&, this]() {
+        return Exiting() || !input_queues_[name].empty();
+      });
 
-      result = std::move(input_queues_[name].front());
-      input_queues_[name].pop();
+      if (!Exiting()) {
+        result = std::move(input_queues_[name].front());
+        input_queues_[name].pop();
+      }
     }
 
     return result;
@@ -258,15 +263,30 @@ class ApplicationRuntimeComm {
     std::function<void(void*)> result;
     {
       std::unique_lock<std::mutex> lk(output_mutex_);
-      output_cv_.wait(lk, [&]() { return !output_queues_[name].empty(); });
-      result = std::move(output_queues_[name].front());
-      output_queues_[name].pop();
+      output_cv_.wait(lk, [&, this]() {
+        return Exiting() || !output_queues_[name].empty();
+      });
+
+      if (!Exiting()) {
+        result = std::move(output_queues_[name].front());
+        output_queues_[name].pop();
+      }
     }
 
     return result;
   }
 
+  void InitiateExit() {
+    engine_exit_notification_.Notify();
+    input_cv_.notify_all();
+    output_cv_.notify_all();
+  }
+
+  bool Exiting() const { return engine_exit_notification_.HasBeenNotified(); }
+
  private:
+  absl::Notification engine_exit_notification_;
+
   std::mutex input_mutex_;
   std::mutex output_mutex_;
 
@@ -325,6 +345,8 @@ class ApplicationRuntime : public OpKernel {
     if (GetEngineThreads().contains(engine_name_)) {
       auto& thread = GetEngineThreads()[engine_name_];
       if (thread.joinable()) {
+        auto& comm = resources_.Comm();
+        comm.InitiateExit();
         thread.join();
       }
     }
@@ -351,9 +373,13 @@ class ApplicationRuntime : public OpKernel {
     if (!GetEngineThreads().contains(engine_name_)) {
       GetEngineThreads()[engine_name_] =
           std::thread([context, e, res_mgr, this]() {
-            ConnectStreams(context);
+            ConnectStreams();
             ApplicationRuntime::GetEngine(e)->run(0);
-            ApplicationRuntime::GetEngine(e)->run(1);
+
+            auto& comm = resources_.Comm();
+            do {
+              ApplicationRuntime::GetEngine(e)->run(1);
+            } while (!comm.Exiting());
 
             TF_CHECK_OK(res_mgr->Delete<ApplicationRuntimeResources>(
                 APPLICATION_RUNTIME_RESOURCE_CONTAINER, engine_name_));
@@ -384,7 +410,7 @@ class ApplicationRuntime : public OpKernel {
     }
   }
 
-  void ConnectStreams(OpKernelContext* context) {
+  void ConnectStreams() {
     auto& engine = GetEngines()[engine_name_];
 
     auto& io_config = resources_.IOCfg();
@@ -409,17 +435,23 @@ class ApplicationRuntime : public OpKernel {
     for (auto& infeed_pair : io_config.GetInfeeds()) {
       std::string feed = infeed_pair.first;
       auto& io_item = infeed_pair.second;
-      engine->connectStreamToCallback(feed, [feed, io_item, &comm](void* ptr) {
-        tensorflow::Tensor t = comm.PopInputData(feed);
-        auto buffer = tensorflow::DMAHelper::buffer(&t);
-        std::memcpy(ptr, buffer->data(), buffer->size());
-      });
+      engine->connectStreamToCallback(
+          feed, [feed, io_item, &comm, this](void* ptr) {
+            tensorflow::Tensor t = comm.PopInputData(feed);
+            if (!comm.Exiting()) {
+              auto buffer = tensorflow::DMAHelper::buffer(&t);
+              std::memcpy(ptr, buffer->data(), buffer->size());
+            }
+          });
     }
 
     for (auto& outfeed_pair : io_config.GetOutfeeds()) {
       std::string feed = outfeed_pair.first;
-      engine->connectStreamToCallback(feed, [feed, &comm](void* ptr) {
-        comm.PopOutputCallback(feed)(ptr);
+      engine->connectStreamToCallback(feed, [feed, &comm, this](void* ptr) {
+        auto callback = comm.PopOutputCallback(feed);
+        if (!comm.Exiting()) {
+          callback(ptr);
+        }
       });
     }
   }

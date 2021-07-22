@@ -67,7 +67,6 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
       out = ipu.ipu_compiler.compile(my_net, inputs=[lr])
 
       cfg = ipu.config.IPUConfig()
-      cfg._profiling.profiling = False  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 2
       cfg.configure_ipu_system()

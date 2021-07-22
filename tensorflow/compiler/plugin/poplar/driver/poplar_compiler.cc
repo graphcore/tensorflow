@@ -880,56 +880,6 @@ StatusOr<std::vector<NamedIpuSchedulerAlgorithm>> GetSchedulerList(
   return schedulers;
 }
 
-void GetCompileProfileStream(const std::unique_ptr<poplar::Engine>& engine,
-                             PoplarExecutor* poplar_executor,
-                             std::stringstream& report_stream) {
-  auto rep = engine->getGraphProfile();
-  if (poplar_executor->CompilerReportingTextFormat()) {
-    auto opts = poplar_executor->GetReportGraphFlags();
-    SetFlagIfNotPresent(opts, "showVarStorage", "true");
-    poplar::printGraphSummary(report_stream, rep, opts);
-  } else if (poplar_executor->CompilerReportingCborFormat()) {
-    poplar::serializeToCBOR(report_stream, rep);
-  } else {
-    poplar::serializeToJSON(report_stream, rep);
-  }
-
-  if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
-    LOG(INFO)
-        << "Dropping a Poplar compilation report of size "
-        << report_stream.tellp()
-        << " which is larger than the configured maximum report size "
-        << std::to_string(poplar_executor->MaxReportSize())
-        << ". To change the maximum report size use the max_report_size"
-        << " argument in ipu.utils.create_ipu_config.\n"
-        << "Example:\n"
-        << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
-        << "Note that the max report size is in bytes.";
-    report_stream.str(std::string());
-  }
-}
-
-void GetPoplarSerializedGraphStream(
-    const poplar::Graph& graph,
-    const std::vector<poplar::program::Program>& progs,
-    PoplarExecutor* poplar_executor, std::stringstream& report_stream) {
-  graph.serialize(report_stream, progs, poplar::SerializationFormat::Binary);
-
-  if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
-    LOG(INFO)
-        << "Dropping a Poplar serialized graph of size "
-        << report_stream.tellp()
-        << " which is larger than the configured maximum report size "
-        << std::to_string(poplar_executor->MaxReportSize())
-        << ". To change the maximum report size use the max_report_size"
-        << " argument in ipu.utils.create_ipu_config.\n"
-        << "Example:\n"
-        << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
-        << "Note that the max report size is in bytes.";
-    report_stream.str(std::string());
-  }
-}
-
 Status GetOperatingSystemInfo(utsname& details) {
   bool is_ok = uname(&details) == 0;
   if (!is_ok) {
@@ -1623,7 +1573,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
-  std::string map_json;
   bool logging_cycle_count;
 
   if (compile) {
@@ -1810,38 +1759,16 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     }
 
     if (enable_trace_events && compile) {
-      std::stringstream report_stream;
-      std::stringstream graph_stream;
-
-      if (poplar_executor->CompilerReportingEnabled() && engine != nullptr) {
-        try {
-          GetCompileProfileStream(engine, poplar_executor, report_stream);
-        } catch (const std::exception& e) {
-          return PoplarExceptionToTensorflowStatus("[Compiler report] ", e);
-        }
-
-        if (poplar_executor->IncludePoplarSerializedGraph()) {
-          try {
-            GetPoplarSerializedGraphStream(main_graph, progs, poplar_executor,
-                                           graph_stream);
-          } catch (const std::exception& e) {
-            return PoplarExceptionToTensorflowStatus(
-                "[Compiler serialize graph] ", e);
-          }
-        }
-      }
-
       uint64 duration = tensorflow::Env::Default()->NowMicros() - start_micros;
 
       TF_ASSIGN_OR_RETURN(auto inst_info,
                           GetInstructionCompilationInfo(module, resources));
 
-      map_json = GetTensorMappingJson(module->name(), main_graph,
-                                      resources.tensor_maps);
+      std::string map_json = GetTensorMappingJson(module->name(), main_graph,
+                                                  resources.tensor_maps);
 
-      poplar_executor->AddCompileEndEventRecord(
-          module->name(), report_stream.str(), graph_stream.str(), map_json,
-          inst_info, tensorflow_info, duration);
+      poplar_executor->AddCompileEndEventRecord(module->name(), map_json,
+                                                inst_info, duration);
     }
   }
 
