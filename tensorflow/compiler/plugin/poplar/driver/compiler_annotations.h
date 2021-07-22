@@ -17,10 +17,10 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
@@ -67,20 +67,41 @@ struct HostEmbeddingInfo {
   HostEmbeddingSplittingStrategy strategy;
 };
 
+struct RemoteParameterHostRearrangement {
+  using GatheredToRefSlice = std::vector<std::pair<int64, int64>>;
+
+  int32 replication_factor = 0;
+  int64 total_elements_per_replica = 0;
+  GatheredToRefSlice gathered_to_ref_slice;
+  std::vector<uint32> element_map;
+
+  RemoteParameterHostRearrangement() = default;
+  RemoteParameterHostRearrangement(
+      int32 replication_factor, int64 total_elements_per_replica,
+      const GatheredToRefSlice& gathered_to_ref_slice,
+      const std::vector<uint32>& element_map)
+      : replication_factor(replication_factor),
+        total_elements_per_replica(total_elements_per_replica),
+        gathered_to_ref_slice(gathered_to_ref_slice),
+        element_map(element_map) {}
+};
+
 struct RemoteParameterInfo {
   // Constructor used for lookups.
   explicit RemoteParameterInfo(int64 parameter_number)
-      : RemoteParameterInfo(parameter_number, false, "", 0, 0) {}
+      : RemoteParameterInfo(parameter_number, false, "", 0, 0, {}) {}
 
-  explicit RemoteParameterInfo(int64 parameter_number,
-                               bool is_replica_partitioned,
-                               const std::string& buffer_name,
-                               int64 buffer_offset, int64 num_merged)
+  explicit RemoteParameterInfo(
+      int64 parameter_number, bool is_replica_partitioned,
+      const std::string& buffer_name, int64 buffer_offset, int64 num_merged,
+      const absl::optional<RemoteParameterHostRearrangement>&
+          host_rearrangement = absl::nullopt)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
         buffer_offset(buffer_offset),
-        num_merged(num_merged) {}
+        num_merged(num_merged),
+        host_rearrangement(host_rearrangement) {}
 
   RemoteParameterInfo() = delete;
 
@@ -89,6 +110,7 @@ struct RemoteParameterInfo {
   const std::string buffer_name;
   const int64 buffer_offset;
   const int64 num_merged;
+  absl::optional<RemoteParameterHostRearrangement> host_rearrangement;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;
