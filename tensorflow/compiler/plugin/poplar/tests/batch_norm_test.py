@@ -17,12 +17,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import pva
 import numpy as np
+import test_utils as tu
 
 from tensorflow.python import ipu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -37,6 +40,13 @@ from test_utils import ReportJSON
 
 class IpuXlaBatchNormTest(xla_test.XLATestCase):
   def testBatchNormalize(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       a = array_ops.placeholder(np.float32, [4, 64, 64, 4], name="input_a")
 
@@ -61,21 +71,31 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                             1e-3)
             return normed
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
+      report_helper.clear_reports()
+
       result = sess.run(out, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([1, 4, 64, 64, 4]))
 
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a", "x", "y")
 
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a", "x", "y")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeFp16(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       a = array_ops.placeholder(np.float16, [4, 64, 64, 4], name="input_a")
 
@@ -100,20 +120,31 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                             1e-3)
             return normed
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
-      report.reset()
+
+      report_json.reset()
+      report_helper.clear_reports()
+
       result = sess.run(out, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([1, 4, 64, 64, 4]))
 
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a", "x", "y")
 
-      bl = ['*FusedBatchNorm*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a", "x", "y")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*FusedBatchNorm*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeFused(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       a = array_ops.placeholder(np.float32, [4, 64, 64, 4], name="input_a")
 
@@ -142,21 +173,30 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                          is_training=False)
             return normed
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       out = ipu.ipu_compiler.compile(my_graph, [a])
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
+      report_helper.clear_reports()
+
       result, _, _ = sess.run(out, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a", "x", "y")
 
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-
-      report.assert_tensor_input_names("input_a", "x", "y")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeFusedFp16(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -184,21 +224,31 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                          is_training=False)
             return normed
 
-        report = ReportJSON(self, sess)
+        report_json = ReportJSON(self, sess)
         out = ipu.ipu_compiler.compile(my_graph, [a])
         sess.run(variables.global_variables_initializer())
 
-        report.reset()
+        report_json.reset()
+        report_helper.clear_reports()
+
         result, _, _ = sess.run(out, {a: np.zeros([4, 64, 64, 4])})
         self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
-        report.parse_log()
+        report_json.parse_log()
+        report_json.assert_tensor_input_names("input_a", "x", "y")
 
-        bl = ['*FusedBatchNorm*/Cast*']
-        report.assert_compute_sets_not_in_blacklist(bl)
-        report.assert_tensor_input_names("input_a", "x", "y")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*FusedBatchNorm*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeLayer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -206,27 +256,34 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=False)
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
+      report_helper.clear_reports()
+
       result = sess.run(normed, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a")
 
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeLayerWithStableStatistics(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.norms.use_stable_statistics = True
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
           a = array_ops.placeholder(np.float32, [4, 64, 64, 4], name="input_a")
           normed = layers_norm.batch_normalization(a, training=True)
 
-      ReportJSON(self, sess, use_stable_norm_statistics=True)
       sess.run(variables.global_variables_initializer())
 
       # Use a tensor with large mean to test the stability. This blows up with
@@ -242,6 +299,13 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
       self.assertAllEqual(result, np.zeros([4, 64, 64, 4]))
 
   def testBatchNormalizeFusedLayer(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -249,20 +313,30 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=True)
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
+      report_helper.clear_reports()
+
       result = sess.run(normed, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a")
 
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeLayerFusedFp16(self):
+    cfg = IPUConfig()
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("", use_resource=True):
@@ -270,20 +344,28 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
           normed = layers_norm.batch_normalization(a, fused=True)
 
-      report = ReportJSON(self, sess)
+      report_json = ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
+      report_helper.clear_reports()
+
       result = sess.run(normed, {a: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
-      report.parse_log()
+      report_json.parse_log()
+      report_json.assert_tensor_input_names("input_a")
 
-      bl = ['*convert*/Cast*']
-      report.assert_compute_sets_not_in_blacklist(bl)
-      report.assert_tensor_input_names("input_a")
+    report = pva.openReport(report_helper.find_report())
+    bl = ['*convert*/Cast*']
+    self.assert_compute_sets_not_in_blacklist(report, bl)
 
   def testBatchNormalizeLayerFusedTrainingFp16(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       # This test checks for the correct behaviour in batch norm grad when
       # perofrming training, but the batch norm attribute `training` is False
@@ -296,8 +378,6 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
         loss = math_ops.reduce_sum(normed)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
-
-      ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
       result = sess.run([normed, train], {a: np.zeros([4, 64, 64, 4])})

@@ -286,7 +286,6 @@ class WhileLoopTest(xla_test.XLATestCase):
       out = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()
@@ -319,7 +318,6 @@ class WhileLoopTest(xla_test.XLATestCase):
         ret = ipu.ipu_compiler.compile(model, [features])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

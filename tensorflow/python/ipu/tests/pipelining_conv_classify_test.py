@@ -19,6 +19,7 @@ from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -94,6 +95,12 @@ def conv(x, ksize, stride, filters_out):
 class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testTwoConvs(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # Check that we get all classifications for a simple conv
 
     def stage1(x, label):
@@ -143,18 +150,24 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
 
-      report = tu.ReportJSON(self, sess, pipelining=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 1 conv in each of 2 stages = 2
       # 1 backward converted to forward + flip both marked as forward (bwd - 1, fwd + 2)
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 0, 2])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 0, 2])
 
   @test_util.deprecated_graph_mode_only
   def testResnetLike(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # Check that we get all classifications for a small resnet correct
 
     def stage1(img, label):
@@ -205,18 +218,24 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
 
-      report = tu.ReportJSON(self, sess, pipelining=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 1 conv in stage1, 2 conv in stage2, 1 matmul in stage3 = 4
       # minus one bwd converted by conv_bwd_input_to_fwd_weights_transpose pass
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 6, 2, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 6, 2, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoMatMuls(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # Check that we get all classifications for a simple conv
 
     def stage1(x, label):
@@ -269,17 +288,23 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
 
-      report = tu.ReportJSON(self, sess, pipelining=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 2x matmul in 2 stages = 4 (4x updates, 3x grads)
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 3, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoParallelMatMuls(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # Check that we get all classifications for a simple conv
 
     def stage1(x, label):
@@ -332,17 +357,23 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
 
-      report = tu.ReportJSON(self, sess, pipelining=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 2x matmul in 2 stages = 4 (4x updates, 2x grads)
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 2, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 4, 2, 4])
 
   @test_util.deprecated_graph_mode_only
   def testOutlinedFunction(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     # Check that we get all classifications for a simple conv
 
     def stage1(x, label):
@@ -401,14 +432,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       tu.move_variable_initialization_to_cpu()
       outfeed_queue.dequeue()
 
-      report = tu.ReportJSON(self, sess, pipelining=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 3 matmul in stage 1, 2 matmuls in stage 2 = 5 (5x updates, 5x grads)
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 5, 2, 5])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 5, 2, 5])
 
 
 if __name__ == "__main__":

@@ -1652,8 +1652,9 @@ class _ProfilingConfig(_ConfigBase):
 
     pb.profiling.enable_ipu_trace_events = self.profiling or \
         self.enable_ipu_events
-    pb.profiling.enable_compilation_trace = self.profiling
-    pb.profiling.enable_io_trace = self.profiling
+    pb.profiling.enable_compilation_trace = self.profiling or \
+        self.enable_ipu_events
+    pb.profiling.enable_io_trace = self.profiling or self.enable_ipu_events
     pb.profiling.execution_trace_type = profile_execution.value
     pb.profiling.enable_poplar_reports_text = self.use_poplar_text_report
     pb.profiling.enable_poplar_reports_cbor = self.use_poplar_cbor_report

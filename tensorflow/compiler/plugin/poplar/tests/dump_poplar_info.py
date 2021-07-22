@@ -53,8 +53,6 @@ class DumpPoplarInfo(xla_test.XLATestCase):
         r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = False  # pylint: disable=protected-access
-      cfg._profiling.profile_execution = False  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.configure_ipu_system()
 

@@ -201,8 +201,8 @@ def create_ipu_config(profiling=False,
 
   # Configure IpuOptions according to the passed arguments.
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
-  opts.profiling.enable_compilation_trace = profiling
-  opts.profiling.enable_io_trace = profiling
+  opts.profiling.enable_compilation_trace = profiling or enable_ipu_events
+  opts.profiling.enable_io_trace = profiling or enable_ipu_events
   opts.profiling.execution_trace_type = profile_execution.value
   opts.profiling.enable_poplar_reports_text = use_poplar_text_report
   opts.profiling.enable_poplar_reports_cbor = use_poplar_cbor_report
@@ -1339,8 +1339,7 @@ def extract_all_strings_from_event_trace(events):
     elif evt.type == IpuTraceEvent.COMPILE_END:
       evt_str = "Compile end: " + \
                 evt.compile_end.module_name.decode('utf-8') + "\n" + \
-                "Duration: " + str(evt.compile_end.duration) + " us\n" + \
-                evt.compile_end.compilation_report.decode('utf-8')
+                "Duration: " + str(evt.compile_end.duration)
     elif evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
       evt_str = "Host->Device\n" + \
                 evt.data_transfer.data_transfer.decode('utf-8') + "\n"
@@ -1352,8 +1351,7 @@ def extract_all_strings_from_event_trace(events):
                 evt.load_engine.module_name.decode('utf-8') + "\n"
     elif evt.type == IpuTraceEvent.EXECUTE:
       evt_str = "Execute: " + \
-                evt.execute.module_name.decode('utf-8') + "\n" + \
-                evt.execute.execution_report.decode('utf-8')
+                evt.execute.module_name.decode('utf-8')
     else:
       evt_str = "Unknown event"
 
@@ -1394,6 +1392,9 @@ def extract_all_events(events):
   return result
 
 
+@deprecation.deprecated(None, "Poplar reports are no longer included in "
+                        "trace events. You can use the PopVision Graph "
+                        "Analyser for manual inspection of reports.")
 def extract_compile_reports(events):
   """Get a list of all compiler reports in the event list.
 
@@ -1402,20 +1403,12 @@ def extract_compile_reports(events):
 
   Returns:
     A list of tuples containing the module name and report."""
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type == IpuTraceEvent.COMPILE_END:
-      try:
-        module = evt.compile_end.module_name.decode('utf-8')
-        rep = evt.compile_end.compilation_report.decode('utf-8')
-        if rep:
-          result += [(module, rep)]
-      except UnicodeDecodeError:
-        pass
-  return result
+  return []
 
 
+@deprecation.deprecated(None, "Poplar reports are no longer included in "
+                        "trace events. You can use the PopVision Graph "
+                        "Analyser for manual inspection of reports.")
 def extract_poplar_serialized_graphs(events):
   """Get a list of all Poplar serialized graphs in the event list.
 
@@ -1424,21 +1417,12 @@ def extract_poplar_serialized_graphs(events):
 
   Returns:
     A list of tuples containing the module name and report."""
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type == IpuTraceEvent.COMPILE_END:
-      try:
-        rep = evt.compile_end.poplar_graph.decode('utf-8')
-      except UnicodeDecodeError:
-        rep = evt.compile_end.poplar_graph
-
-      module = evt.compile_end.module_name.decode('utf-8')
-      if rep:
-        result += [(module, rep)]
-  return result
+  return []
 
 
+@deprecation.deprecated(None, "Poplar reports are no longer included in "
+                        "trace events. You can use the PopVision Graph "
+                        "Analyser for manual inspection of reports.")
 def extract_execute_reports(events):
   """Get a list of all compiler reports in the event list.
 
@@ -1447,18 +1431,7 @@ def extract_execute_reports(events):
 
   Returns:
     A list of tuples containing the module name and report."""
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type == IpuTraceEvent.EXECUTE:
-      try:
-        module = evt.execute.module_name.decode('utf-8')
-        rep = evt.execute.execution_report.decode('utf-8')
-        if rep:
-          result += [(module, rep)]
-      except UnicodeDecodeError:
-        pass
-  return result
+  return []
 
 
 def move_variable_initialization_to_cpu(graph=None):

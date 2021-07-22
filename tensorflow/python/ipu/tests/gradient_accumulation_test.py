@@ -101,8 +101,7 @@ def _gradient_accumulation_loop(test_wrapper,
     profiling = utils.running_on_ipu_model()
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = profiling  # pylint: disable=protected-access
-    cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = profiling  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 128
     cfg.optimizations.minimum_remote_tensor_size = minimum_remote_tensor_size
@@ -630,8 +629,7 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
 
     profiling = utils.running_on_ipu_model()
     cfg = IPUConfig()
-    cfg._profiling.profiling = profiling  # pylint: disable=protected-access
-    cfg._profiling.profile_execution = profiling  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = profiling  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 128
     cfg.auto_select_ipus = 1

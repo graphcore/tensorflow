@@ -55,7 +55,7 @@ def _get_compiled_modules(trace_events):
   for evt in trace_events:
     if evt.type == IpuTraceEvent.COMPILE_END:
       # Skip empty reports, i.e. when compilation was skipped.
-      if evt.compile_end.compilation_report:
+      if evt.compile_end.tensor_map:
         compiled_modules.append(evt.compile_end.module_name)
   return compiled_modules
 
@@ -132,7 +132,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertTrue(model.built)
       self.assertEqual(4, len(model.variables))
 
-    report_helper.assert_num_reports(0)
+    self.assert_num_reports(report_helper, 0)
 
   @test_util.run_v2_only
   def test_building_model_explicitly(self):
@@ -161,7 +161,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertTrue(model.built)
       self.assertEqual(4, len(model.variables))
 
-    report_helper.assert_num_reports(0)
+    self.assert_num_reports(report_helper, 0)
 
   @test_util.run_v2_only
   def test_model_with_autograph_loop(self):
@@ -459,7 +459,7 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
     validation_execs = num_epochs * validation_steps
 
     # Training and validation
-    report_helper.assert_num_reports(2)
+    self.assert_num_reports(report_helper, 2)
 
     # Training report
     report = pva.openReport(report_helper.find_reports()[0])

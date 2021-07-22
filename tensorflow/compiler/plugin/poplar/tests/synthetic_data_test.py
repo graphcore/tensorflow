@@ -15,10 +15,12 @@
 
 import os
 import numpy as np
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -26,11 +28,14 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
 
-import test_utils as tu
-
 
 class IpuXlaVariableTestSyntheticData(xla_test.XLATestCase):
   def testResourceCountsAreCorrect(self):
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
+
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
@@ -70,11 +75,11 @@ class IpuXlaVariableTestSyntheticData(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess)
+      report_json = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      report.reset()
+      report_json.reset()
 
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
@@ -82,16 +87,16 @@ class IpuXlaVariableTestSyntheticData(xla_test.XLATestCase):
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
 
-      report.parse_log()
-      report.assert_host_to_device_event_names([])
-      report.assert_device_to_host_event_names([])
+      report_json.parse_log()
+      report_json.assert_host_to_device_event_names([])
+      report_json.assert_device_to_host_event_names([])
 
       # Explicitly fetch the first set of weights and biases
       sess.run([w1, b1])
 
-      report.parse_log()
-      report.assert_host_to_device_event_names([])
-      report.assert_device_to_host_event_names([])
+      report_json.parse_log()
+      report_json.assert_host_to_device_event_names([])
+      report_json.assert_device_to_host_event_names([])
 
 
 if __name__ == "__main__":

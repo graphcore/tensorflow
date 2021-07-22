@@ -15,9 +15,11 @@
 """Test for IPU Keras Pipelined model."""
 
 import numpy as np
+import pva
 from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
@@ -209,7 +211,8 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitTwice(self):
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg, output_execution_profile=True)
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
@@ -224,9 +227,6 @@ class IPUSequentialPipelineTest(test.TestCase):
       m.compile('sgd', loss='mse', steps_per_execution=16)
       history = m.fit(ds, steps_per_epoch=16)
 
-      # Clear profiling logs.
-      ipu.ops.summary_ops.get_ipu_reports()
-
       l = history.history['loss'][0]
 
       # # Record weights
@@ -234,11 +234,6 @@ class IPUSequentialPipelineTest(test.TestCase):
 
       # Fit the weights to the dataset
       history = m.fit(ds, steps_per_epoch=16)
-
-      # Don't need to compile the graph again.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(0, len(evts))
 
       # Loss should be different after second training.
       self.assertTrue(l > history.history['loss'][0])
@@ -248,6 +243,12 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Weights should be different too.
       for w1, w2 in zip(w_1, w_2):
         self.assertFalse(np.all(w1 == w2))
+
+      # Should have compiled the graph once, and executed twice.
+      self.assert_num_reports(report_helper, 1)
+      report = pva.openReport(report_helper.find_report())
+      self.assert_number_of_executions(report, 2)
+      report_helper.clear_reports()
 
       # Fit the weights with a new dataset
       history = m.fit(test_dataset(), steps_per_epoch=16)
@@ -262,14 +263,12 @@ class IPUSequentialPipelineTest(test.TestCase):
         self.assertFalse(np.all(w2 == w3))
 
       # Don't need to compile the graph again.
-      evts = ipu.ops.summary_ops.get_ipu_reports()
-      evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(0, len(evts))
+      self.assert_num_reports(report_helper, 0)
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
@@ -297,7 +296,7 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()
@@ -326,7 +325,7 @@ class IPUSequentialPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.tiles_per_ipu = 8
     cfg.auto_select_ipus = 2
     cfg.configure_ipu_system()

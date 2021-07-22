@@ -41,7 +41,6 @@ from tensorflow.python.framework.test_util import TensorFlowTestCase
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu import utils
-from tensorflow.python.ipu.config import IPUConfig
 
 
 def compute_device_count(pipelining=False, sharded=False, replicated=False):
@@ -136,8 +135,7 @@ class TensorMap(object):
     def id(self):
       return "%s,%d" % (self.inst, self.index)
 
-  def __init__(self, tensor_map, num_tiles_per_ipu):
-    self.num_tiles_per_ipu = num_tiles_per_ipu
+  def __init__(self, tensor_map):
     self.mappings = {}
     for comp, js_tensors in tensor_map["mappings"].items():
       tensors = []
@@ -173,10 +171,6 @@ class TensorMap(object):
       for tensor in self.mappings[c]:
         ids.update(tensor.tile_ids())
     return ids
-
-  def ipu_ids(self, computation=None):
-    tile_ids = self.tile_ids(computation)
-    return {int(tile_id / self.num_tiles_per_ipu) for tile_id in tile_ids}
 
   def computation_names(self):
     return list(self.mappings.keys())
@@ -233,6 +227,10 @@ class TestCaseExtensions(object):
 
     self.assertFalse(not_in_report + not_in_whitelist, error_msg)
 
+  def assert_num_reports(self, report_helper, n):
+    """Asserts the number of reports found by the given report helper."""
+    self.assertLen(report_helper.find_reports(), n)
+
   def assert_compute_sets_matches(self, report, expr, num_matches, msg=None):
     """Asserts the number of compute sets in the report which match expr."""
     cs_names = (cs.name for cs in report.compilation.computeSets)
@@ -272,6 +270,27 @@ class TestCaseExtensions(object):
         in_report, "Blacklist items [%s] found in compute sets:\n\t%s" %
         (",".join(in_report), "\n\t".join(
             cs.name for cs in report.compilation.computeSets)))
+
+  def assert_vertices_contain_list(self, report, ok):
+    """Asserts that all the whitelist patterns match at least one vertex."""
+    whitelist = ['*' + x + '*' for x in ok]
+    not_in_report = []
+
+    def vertex_iterator():
+      for cs in report.compilation.computeSets:
+        for v in cs.vertices:
+          yield v
+      return
+
+    for expected in whitelist:
+      if not any(
+          fnmatch.fnmatch(v.type.name, expected) for v in vertex_iterator()):
+        not_in_report.append(expected)
+
+    self.assertFalse(
+        not_in_report, "Whitelist items [%s] not found in vertices:\n\t%s" %
+        (",".join(not_in_report), "\n\t".join(v.type.name
+                                              for v in vertex_iterator())))
 
   def assert_each_tile_memory_is_less_than(self,
                                            report,
@@ -391,11 +410,6 @@ class ReportHelper():
     cfg.compilation_poplar_options = options
     cfg._profiling.auto_assign_report_subdirectories = True  # pylint: disable=protected-access
 
-  def assert_num_reports(self, n):
-    """Asserts the number of reports found matches the number given."""
-    num_reports = len(self.find_reports())
-    assert num_reports == n, f"Expected {n} report(s) but found {num_reports}"
-
   def find_reports(self):
     """Finds and returns the paths to generated report files in order of
     creation time (oldest first).
@@ -438,33 +452,7 @@ class ReportHelper():
 
 
 class ReportJSON(object):
-  def __init__(self,
-               test,
-               sess=None,
-               profiling=True,
-               compile_ipu_code=False,
-               tiles_per_ipu=0,
-               device_count_override=None,
-               execution_trace=True,
-               sharded=False,
-               pipelining=False,
-               configure_device=True,
-               replicated=False,
-               max_cross_replica_sum_buffer_size=0,
-               max_inter_ipu_copies_buffer_size=0,
-               merge_infeed_io_copies=False,
-               always_rearrange_copies_on_the_host=False,
-               serialization_folder="",
-               estimator_hook=False,
-               eager_mode=False,
-               allow_recompute=False,
-               use_stable_norm_statistics=False,
-               set_opts_fn=None,
-               triangular_solve_expander_block_size=0,
-               minimum_remote_tensor_size=128,
-               use_hw=False,
-               num_io_tiles=0,
-               scheduling_algorithm=None):
+  def __init__(self, test, sess=None, eager_mode=False):
     self.report = None
     self.test = test
     self.sess = sess
@@ -476,59 +464,6 @@ class ReportJSON(object):
     # the events will be provided by the user.
     if sess:
       self.create_ipu_event_trace()
-    if (sess or estimator_hook or eager_mode) and configure_device:
-      # yapf: disable
-      assert not (pipelining and device_count_override
-                 ), "Can't have both pipelining enabled and device_count_override"
-      assert not (sharded and device_count_override
-                 ), "Can't have both sharded enabled and device_count_override"
-      # yapf: enable
-
-      opts = IPUConfig()
-      opts._profiling.profiling = profiling  # pylint: disable=protected-access
-      opts._profiling.use_poplar_text_report = False  # pylint: disable=protected-access
-      opts._profiling.use_poplar_cbor_report = False  # pylint: disable=protected-access
-      opts._profiling.profile_execution = execution_trace  # pylint: disable=protected-access
-      opts.experimental.always_rearrange_copies_on_the_host = \
-          always_rearrange_copies_on_the_host
-      opts.optimizations.merge_infeed_io_copies = merge_infeed_io_copies
-
-      opts.optimizations.maximum_cross_replica_sum_buffer_size = \
-          max_cross_replica_sum_buffer_size
-      opts.optimizations.maximum_inter_ipu_copies_buffer_size = \
-          max_inter_ipu_copies_buffer_size
-      opts.optimizations.triangular_solve_expander_block_size = \
-          triangular_solve_expander_block_size
-      opts.optimizations.minimum_remote_tensor_size = \
-          minimum_remote_tensor_size
-
-      device_count = device_count_override or compute_device_count(
-          pipelining, sharded, replicated)
-      if device_count:
-        opts.auto_select_ipus = device_count
-
-      opts.serialization_output_folder = serialization_folder
-      opts.ipu_model.compile_ipu_code = compile_ipu_code
-      opts.ipu_model.tiles_per_ipu = tiles_per_ipu
-      opts.allow_recompute = allow_recompute
-      if num_io_tiles > 0:
-        opts.io_tiles.num_io_tiles = num_io_tiles
-        opts.io_tiles.place_ops_on_io_tiles = True
-
-      opts.norms.use_stable_statistics = use_stable_norm_statistics
-
-      if scheduling_algorithm is not None:
-        opts.scheduling.algorithm = scheduling_algorithm
-
-      if use_hw:
-        add_hw_ci_connection_options(opts)
-
-      if set_opts_fn:
-        set_opts_fn(opts)
-
-      if not estimator_hook:
-        opts.configure_ipu_system()
-      self.ipu_config = opts
 
   def create_ipu_event_trace(self):
     with ops.device('cpu'):
@@ -553,10 +488,6 @@ class ReportJSON(object):
   def assert_no_event(self, msg=""):
     types, _ = self.get_ipu_events()
     self.test.assertFalse(types, msg)
-
-  def assert_compiled_for_ipu(self, msg=""):
-    types, _ = self.get_ipu_events()
-    self.test.assertContainsSubset([IpuTraceEvent.COMPILE_END], types, msg)
 
   def get_event_trace(self, session=None):
     if self.eager_mode:
@@ -602,13 +533,10 @@ class ReportJSON(object):
         if evt.type == IpuTraceEvent.COMPILE_BEGIN:
           pass
         if evt.type == IpuTraceEvent.COMPILE_END:
-          if evt.compile_end.compilation_report:
+          if evt.compile_end.tensor_map:
             assert IpuTraceEvent.COMPILE_END not in self.events
-            self.events[IpuTraceEvent.COMPILE_END] = js.loads(
-                evt.compile_end.compilation_report, encoding="utf-8")
             self.tensor_map = TensorMap(
-                js.loads(evt.compile_end.tensor_map, encoding="utf-8"),
-                self.get_num_tiles_per_ipu())
+                js.loads(evt.compile_end.tensor_map, encoding="utf-8"))
             self.instruction_info = js.loads(evt.compile_end.instruction_info,
                                              encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
@@ -624,11 +552,8 @@ class ReportJSON(object):
         if evt.type == IpuTraceEvent.LOAD_ENGINE:
           pass
         if evt.type == IpuTraceEvent.EXECUTE:
-          if evt.execute.execution_report:
-            self.events[IpuTraceEvent.EXECUTE] = self.events.get(
-                IpuTraceEvent.EXECUTE, []) + [
-                    js.loads(evt.execute.execution_report, encoding="utf-8")
-                ]
+          self.events[IpuTraceEvent.EXECUTE] = self.events.get(
+              IpuTraceEvent.EXECUTE, [])
       except UnicodeDecodeError:
         pass
     return events_types
@@ -667,46 +592,6 @@ class ReportJSON(object):
           count_matches_in_list(self.get_device_to_host_event_names(), name),
           1, msg)
 
-  def assert_num_execution_reports_equal(self, num):
-    self.test.assertEqual(len(self.get_execution_reports()), num)
-
-  def get_each_tile_memory(self):
-    return self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"]
-
-  # Excluding gaps
-  def get_max_tile_memory(self):
-    return max(self.get_each_tile_memory())
-
-  def get_always_live_memory(self):
-    return sum(self.events[IpuTraceEvent.COMPILE_END]["memory"]["liveness"]
-               ["alwaysLive"]["bytesByTile"])
-
-  # Excluding always live
-  def get_peak_liveness(self):
-    # byProgram can be a nested tree of objects each with a "bytes" entry.
-    def _helper(prog):
-      # Reduce a generator so we only keep 2 values in memory at once.
-      return reduce(max, map(_helper, prog["children"]), prog["bytes"])
-
-    prog_livenesses = (self.events[IpuTraceEvent.COMPILE_END]["memory"]
-                       ["liveness"]["notAlwaysLive"]["byProgram"])
-    return reduce(max, map(_helper, prog_livenesses), 0)
-
-  def get_total_tile_memory(self):
-    return sum(self.get_each_tile_memory())
-
-  def get_vertices(self):
-    return self.events[IpuTraceEvent.COMPILE_END]["vertexTypes"]["names"]
-
-  def get_compute_sets(self):
-    return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
-
-  def get_execution_reports(self):
-    return self.events[IpuTraceEvent.EXECUTE]
-
-  def get_execution_report_cycles(self, idx):
-    return self.get_execution_reports()[idx]['simulation']['cycles']
-
   def get_instruction_info(self):
     return self.instruction_info
 
@@ -716,17 +601,6 @@ class ReportJSON(object):
       ml_type = i - 1
       res[ml_type] = res[ml_type] + 1
     return res
-
-  def assert_no_compute_set(self):
-    self.test.assertFalse(
-        self.events.get(IpuTraceEvent.COMPILE_END,
-                        {}).get("computeSets", {}).get("names", {}))
-
-  def assert_contains_one_compile_event(self):
-    self.test.assertTrue(IpuTraceEvent.COMPILE_END in self.events)
-
-  def assert_contains_no_compile_event(self):
-    self.test.assertFalse(IpuTraceEvent.COMPILE_END in self.events)
 
   def assert_contains_host_to_device_transfer_event(self):
     assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER in self.events
@@ -767,31 +641,8 @@ class ReportJSON(object):
           "Name '%s' for argument %d does not match expected pattern '%s'" %
           (m.group(1), arg_num, expected_name))
 
-  def get_num_ipus(self):
-    return self.events[IpuTraceEvent.COMPILE_END]["target"]["numIPUs"]
-
-  def get_num_tiles(self):
-    return self.events[IpuTraceEvent.COMPILE_END]["target"]["numTiles"]
-
-  def get_num_tiles_per_ipu(self):
-    return self.get_num_tiles() / self.get_num_ipus()
-
-  def get_first_program_of_type(self, program_type):
-    for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]:
-      if program_type == p['type']:
-        return p
-    return None
-
-  def get_program_names_of_type(self, program_type):
-    return [
-        p['name'] for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]
-        if p['type'] == program_type
-    ]
-
-  def get_program(self, index=0):
-    return self.events[IpuTraceEvent.COMPILE_END]["programs"][index]
-
-  def assert_pipeline_stages_on_expected_ipu(self, expected_ipus):
+  def assert_pipeline_stages_on_expected_ipu(self, expected_ipus,
+                                             tile_per_ipu):
     self.test.assertFalse(
         items_matching_at_least_one_pattern(
             self.tensor_map.computation_names(),
@@ -802,7 +653,10 @@ class ReportJSON(object):
         stage = items_matching_at_least_one_pattern(
             self.tensor_map.computation_names(), ["*_stage_%d_" % i])
         self.test.assertTrue(stage, "No stage %d found" % i)
-        ipus = self.tensor_map.ipu_ids(stage)
+        ipus = {
+            tile // tile_per_ipu
+            for tile in self.tensor_map.tile_ids(stage)
+        }
 
         # A stage using device -1 can be on any of the devices.
         if ipus:
@@ -812,99 +666,6 @@ class ReportJSON(object):
           self.test.assertEqual(
               ipus.pop(), expected_ipu,
               "Stage %d did not run on the expected IPU" % (i + 1))
-
-  def assert_each_tile_memory_is_less_than(self, expected, tolerance=0.01):
-    low = 0
-    high = int(expected * (1.0 + tolerance))
-    self.test.assertAllInRange(self.get_each_tile_memory(), low, high)
-
-  def assert_total_tile_memory(self, expected, tolerance=0.01):
-    low = int(expected * (1.0 - tolerance))
-    high = int(expected * (1.0 + tolerance))
-    self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
-
-  def assert_max_tile_memory(self, expected, tolerance=0.01):
-    low = int(expected * (1.0 - tolerance))
-    high = int(expected * (1.0 + tolerance))
-    self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
-
-  def assert_always_live_memory(self, expected, tolerance=0.01):
-    low = int(expected * (1.0 - tolerance))
-    high = int(expected * (1.0 + tolerance))
-    self.test.assertAllInRange([self.get_always_live_memory()], low, high)
-
-  def assert_execution_report_cycles(self, idx, expected, tolerance=0.01):
-    low = int(expected * (1.0 - tolerance))
-    high = int(expected * (1.0 + tolerance))
-    self.test.assertAllInRange([self.get_execution_report_cycles(idx)], low,
-                               high)
-
-  # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
-  def assert_all_compute_sets_and_list(self, ok):
-    missing_whitelist = missing_whitelist_entries_in_names(
-        self.get_compute_sets(), ok)
-    missing_in_whitelist = missing_names_in_whitelist_entries(
-        self.get_compute_sets(), ok)
-
-    error_msg = "\n"
-    if missing_whitelist:
-      error_msg = "Whitelist items [%s] not found in compute sets:\n\t%s" % (
-          ",".join(missing_whitelist), "\n\t".join(self.get_compute_sets()))
-    if missing_whitelist and missing_in_whitelist:
-      error_msg += "\n"
-    if missing_in_whitelist:
-      error_msg += "Compute sets items [%s] not found in whitelist:\n\t%s" % (
-          ",".join(missing_in_whitelist), "\n\t".join(ok))
-
-    self.test.assertFalse(missing_whitelist + missing_in_whitelist, error_msg)
-
-  # Asserts all the global exchanges match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one global exchange
-  def assert_all_global_exchanges_and_list(self, ok):
-    self.test.assertFalse(
-        missing_whitelist_entries_in_names(
-            self.get_program_names_of_type('GlobalExchange'),
-            ok), "Whitelist items not found in global exchanges:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
-    self.test.assertFalse(
-        missing_names_in_whitelist_entries(
-            self.get_program_names_of_type('GlobalExchange'),
-            ok), "Global exchanges item not found in whitelist:\n\t%s" %
-        "\n\t".join(ok))
-
-  # Asserts that all the whitelist patterns match at least one compute set
-  def assert_compute_sets_contain_list(self, ok):
-    self.test.assertFalse(
-        missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
-
-  # Asserts that none of the compute sets match any of the blacklist items
-  def assert_compute_sets_not_in_blacklist(self, blacklist):
-    self.test.assertFalse(
-        names_in_blacklist(self.get_compute_sets(), blacklist),
-        "Compute sets items found in blacklist:\n\t%s" %
-        "\n\t".join(blacklist))
-
-  # Asserts that all the whitelist patterns match at least one vertex
-  def assert_vertices_contain_list(self, ok):
-    self.test.assertFalse(
-        missing_whitelist_entries_in_names(self.get_vertices(), ok),
-        "Whitelist items not found in vertices:\n\t%s" %
-        "\n\t".join(self.get_vertices()))
-
-  def assert_compute_sets_matches(self, expr, num_matches, msg=None):
-    self.test.assertEqual(count_matches_in_list(self.get_compute_sets(), expr),
-                          num_matches, msg)
-
-
-def count_ipu_compilations(events):
-  count = 0
-  for evt_str in events:
-    evt = IpuTraceEvent.FromString(evt_str)
-    if (evt.type == IpuTraceEvent.COMPILE_END
-        and evt.compile_end.compilation_report):
-      count += 1
-  return count
 
 
 def create_multi_increasing_dataset(value,

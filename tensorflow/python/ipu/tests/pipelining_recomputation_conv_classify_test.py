@@ -30,6 +30,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.compat.v1 import disable_v2_behavior
 
 disable_v2_behavior()
@@ -46,6 +47,12 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testTwoMatMuls(self):
     # Check that we get all classifications for a simple conv
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg.allow_recompute = True
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def stage1(x, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -96,18 +103,24 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
       outfeed_queue.dequeue()
       tu.move_variable_initialization_to_cpu()
 
-      report = tu.ReportJSON(self, sess, pipelining=True, allow_recompute=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 2x matmul in 2 stages = 4x fwd x recomputation, 3x grads, 4x updates
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 8, 3, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 8, 3, 4])
 
   @test_util.deprecated_graph_mode_only
   def testTwoParallelMatMuls(self):
     # Check that we get all classifications for a simple conv
+    cfg = IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.auto_select_ipus = 4
+    cfg.allow_recompute = True
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
+    cfg.configure_ipu_system()
 
     def stage1(x, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
@@ -158,14 +171,14 @@ class PipeliningRecomputationConvClassifyTest(test_util.TensorFlowTestCase):
       outfeed_queue.dequeue()
       tu.move_variable_initialization_to_cpu()
 
-      report = tu.ReportJSON(self, sess, pipelining=True, allow_recompute=True)
+      report_json = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      report.reset()
+      report_json.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      report.parse_log()
+      report_json.parse_log()
 
       # 2x matmul in 2 stages = 4x fwd x recomputation, 2x grads, 4x updates
-      self.assertAllEqual(report.get_ml_type_counts(), [0, 8, 2, 4])
+      self.assertAllEqual(report_json.get_ml_type_counts(), [0, 8, 2, 4])
 
 
 if __name__ == "__main__":

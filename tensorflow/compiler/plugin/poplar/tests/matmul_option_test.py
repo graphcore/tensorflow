@@ -38,7 +38,6 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       cfg = IPUConfig()
-      cfg._profiling.profiling = True  # pylint: disable=protected-access
       cfg.ipu_model.compile_ipu_code = False
       cfg.auto_select_ipus = 1
       cfg.configure_ipu_system()

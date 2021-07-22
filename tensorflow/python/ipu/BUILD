@@ -248,16 +248,6 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "report_tf2_test",
-    size = "medium",
-    srcs = ["tests/report_tf2_test.py"],
-    deps = [
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-    ],
-)
-
-tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -307,16 +297,16 @@ tf_py_test(
     srcs = ["tests/application_runtime_test.py"],
     shard_count = 4,
     deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/ipu:ipu_ops_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/ipu:ipu_ops_lib",
     ],
 )
 

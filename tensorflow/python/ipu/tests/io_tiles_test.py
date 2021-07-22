@@ -14,6 +14,7 @@
 # =============================================================================
 
 import numpy as np
+import pva
 from tensorflow.python.ipu.config import IPUConfig
 
 from absl.testing import parameterized
@@ -59,9 +60,12 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
+
+    report_helper = tu.ReportHelper()
+    report_helper.set_autoreport_options(cfg)
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
 
     cfg.io_tiles.num_io_tiles = num_io_tiles
     cfg.io_tiles.place_ops_on_io_tiles = True
@@ -71,8 +75,8 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(infeed.initializer)
       sess.run(compiled_net)
@@ -80,12 +84,12 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       [result] = sess.run(outfeed.dequeue())
       self.assertAllEqual(np.dot(data, data), result)
 
-      report.parse_log()
+      report_json.parse_log()
 
       # Check that the tensors are mapped as expected.
       io_tensors = []
       compute_tensors = []
-      for t in report.get_tensor_map().all_tensors():
+      for t in report_json.get_tensor_map().all_tensors():
         if t.name.startswith("infeed") or t.name.startswith("outfeed"):
           io_tensors.append(t)
         elif t.name.startswith("matmul"):
@@ -103,17 +107,20 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       for t in compute_tensors:
         self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
-      # Check that the expected inter-tileset exchanges are performed.
-      exchanges = report.get_program_names_of_type("DoExchange")
-      expected_exchanges = [
-          "infeed/*/inter-tileset-copy",  # copy from IO tiles to compute tiles
-          "matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
-      ]
-      if buffer_fits_on_io_tiles:
-        self.assertFalse(
-            tu.missing_whitelist_entries_in_names(exchanges,
-                                                  expected_exchanges),
-            exchanges)
+    report = pva.openReport(report_helper.find_report())
+    # Check that the expected inter-tileset exchanges are performed.
+    exchanges = [
+        t.name for t in report.compilation.programs
+        if t.type == pva.Program.Type.DoExchange
+    ]
+    expected_exchanges = [
+        "infeed/*/inter-tileset-copy",  # copy from IO tiles to compute tiles
+        "matmul/*/inter-tileset-copy",  # copy from compute tiles to IO tiles
+    ]
+    if buffer_fits_on_io_tiles:
+      self.assertFalse(
+          tu.missing_whitelist_entries_in_names(exchanges, expected_exchanges),
+          exchanges)
 
   @test_util.deprecated_graph_mode_only
   @tu.test_may_use_ipus_or_model(num_ipus=1)
@@ -136,7 +143,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
 
@@ -147,18 +154,18 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(infeed.initializer)
       [result] = sess.run(compiled_net)
       self.assertAllEqual(data * data, result)
 
-      report.parse_log()
+      report_json.parse_log()
 
       # Find the IO tile tensors.
       io_tensors = []
-      for t in report.get_tensor_map().all_tensors():
+      for t in report_json.get_tensor_map().all_tensors():
         if t.name.startswith("infeed"):
           io_tensors.append(t)
       self.assertGreater(len(io_tensors), 0)
@@ -198,7 +205,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
@@ -207,18 +214,18 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(infeed.initializer)
       result, = sess.run(compiled_net)
-      report.parse_log()
+      report_json.parse_log()
 
       # Sanity check results.
       self.assertAllEqual(np.dot(np.dot(data, data), data), result)
 
       # Find matmul operations.
-      tensors = report.get_tensor_map().all_tensors()
+      tensors = report_json.get_tensor_map().all_tensors()
       matmuls = [t for t in tensors if t.id.startswith("dot")]
       self.assertEqual(len(matmuls), 2)
 
@@ -254,7 +261,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
@@ -263,12 +270,12 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(infeed.initializer)
       result, = sess.run(compiled_net)
-      report.parse_log()
+      report_json.parse_log()
 
       # Sanity check results.
       expected_result = np.dot(data, data)
@@ -277,7 +284,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       matmuls = []
       iics = []
-      for t in report.get_tensor_map().all_tensors():
+      for t in report_json.get_tensor_map().all_tensors():
         # Find matmul operations.
         if t.id.startswith("dot"):
           matmuls.append(t)
@@ -320,7 +327,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[a])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
+    cfg._profiling.enable_ipu_events = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.ipu_model.tiles_per_ipu = tiles_per_ipu
     cfg.io_tiles.num_io_tiles = num_io_tiles
@@ -329,12 +336,12 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     cfg.configure_ipu_system()
 
     with session.Session() as sess:
-      report = tu.ReportJSON(self, sess, configure_device=False)
-      report.reset()
+      report_json = tu.ReportJSON(self, sess)
+      report_json.reset()
 
       sess.run(compiled_net, {a: data})
       result, = sess.run(outfeed.dequeue())
-      report.parse_log()
+      report_json.parse_log()
 
       # Sanity check results.
       expected_result = np.dot(data, data)
@@ -343,7 +350,7 @@ class IoTilesTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       matmuls = []
       iics = []
-      for t in report.get_tensor_map().all_tensors():
+      for t in report_json.get_tensor_map().all_tensors():
         # Find matmul operations.
         if t.id.startswith("dot"):
           matmuls.append(t)

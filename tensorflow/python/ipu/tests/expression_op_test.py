@@ -47,7 +47,6 @@ class CodeletExpressionOpTest(test_util.TensorFlowTestCase):
       r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
 
     cfg = IPUConfig()
-    cfg._profiling.profiling = True  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = False
     cfg.configure_ipu_system()
     with sl.Session() as sess:

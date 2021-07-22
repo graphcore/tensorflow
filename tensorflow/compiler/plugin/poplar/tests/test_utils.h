@@ -111,6 +111,26 @@ bool HasOperandIn(const HloInstruction* parent,
   return false;
 }
 
+struct TemporaryDirManager {
+ public:
+  explicit TemporaryDirManager(const std::string& dir_name)
+      : dir_name_(dir_name) {
+    if (!tensorflow::Env::Default()->LocalTempFilename(&dir_name_)) {
+      LOG(FATAL) << "Could not create a temporary directory.";
+    }
+    TF_CHECK_OK(tensorflow::Env::Default()->CreateDir(dir_name_));
+  }
+  ~TemporaryDirManager() {
+    tensorflow::int64 undeleted_dirs, undeleted_files;
+    TF_CHECK_OK(tensorflow::Env::Default()->DeleteRecursively(
+        dir_name_, &undeleted_dirs, &undeleted_files));
+  }
+  const std::string& GetDirName() { return dir_name_; }
+
+ private:
+  std::string dir_name_;
+};
+
 namespace reference_util {
 // Implementations of 3D functions which are missing from the reference util.
 std::vector<float> Reduce3DTo1D(

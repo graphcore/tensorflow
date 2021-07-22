@@ -50,6 +50,8 @@ struct ElementwiseClusterValidator {
       const HloComputation* comp);
 };
 
+enum struct ElementwiseClusterClass { Invalid, Partitioned, NonPartitioned };
+
 class ElementwiseCluster {
  public:
   explicit ElementwiseCluster(HloInstruction* top) noexcept;
@@ -58,6 +60,8 @@ class ElementwiseCluster {
   bool AllUsersIn(HloInstruction* inst) const;
   void Add(HloInstruction* inst);
   bool MaybeAdd(HloInstruction* inst);
+  ElementwiseClusterClass Classify(
+      const ElementwiseClusterValidator& validator) const;
   bool CanMerge(const ElementwiseCluster& other);
   void Merge(const ElementwiseCluster& other);
   const HloInstruction* GetTop() const;
