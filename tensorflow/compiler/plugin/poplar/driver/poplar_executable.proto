@@ -117,4 +117,8 @@ message PoplarExecutableProto {
   bool logging_cycle_count = 13;
 
   EmbeddedRuntimeConfig embedded_runtime_config = 14;
+
+  uint32 tf_major_version = 15;
+  uint32 tf_minor_version = 16;
+  string tf_git_version = 17;
 };
