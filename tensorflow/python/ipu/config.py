@@ -1624,13 +1624,11 @@ class _ProfilingConfig(_ConfigBase):
     """
     self.execution_poplar_options = {}
     """
-    When the autoReport.directory Poplar engine option is set through
-    IPUConfig.compilation_poplar_options and not through an environment
-    variable, this determines whether or not individual compiled clusters are
-    given their own sub-directories in the autoReport.directory by the
+    This determines whether or not individual compiled clusters are
+    given their own sub-directories of the autoReport.directory by the
     TensorFlow Poplar backend.
     """
-    self.auto_assign_report_subdirectories = False
+    self.auto_assign_report_subdirectories = True
 
   def _to_protobuf(self, pb):
     if self.profiling and self.enable_ipu_events:

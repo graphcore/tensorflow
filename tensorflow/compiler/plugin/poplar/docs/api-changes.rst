@@ -60,6 +60,16 @@ The ``feed_name`` argument of ``IPUInfeedQueue``, ``IPUOutfeedQueue`` and
 ``IPULoggingTensorHook`` has been deprecated and will be removed in release 2.3.
 The ``feed_name`` is now generated automatically internally.
 
+Change of output location for profiling information
+'''''''''''''''''''''''''''''''''''''''''''''''''''
+
+By default the profile information (``profile.pop`` & ``frameworks.json``) will now be output to a 
+subdirectory of the Poplar ``autoReport.directory``. If ``autoReport.directory`` is not set, it will be output to
+a subdirectory of the current working directory. This change means that mutliple
+profiles can be captured for a single model, if it is separated into different Poplar graphs.
+
+The subdirectories are created using the following format ``tf_report__<iso_date>__<pid>``
+and the cluster name can be read from the ``frameworks.json`` file in each subdirectory.
 
 Release 2.1
 ~~~~~~~~~~~
