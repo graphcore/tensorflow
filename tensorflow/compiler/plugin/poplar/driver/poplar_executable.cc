@@ -114,11 +114,30 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   }
 
   for (const auto& remote_parameter : proto.remote_parameters()) {
+    absl::optional<RemoteParameterHostRearrangement> host_rearrangement;
+    if (remote_parameter.has_host_rearrangement()) {
+      host_rearrangement.emplace();
+      host_rearrangement->replication_factor =
+          remote_parameter.host_rearrangement().replication_factor();
+      host_rearrangement->total_elements_per_replica =
+          remote_parameter.host_rearrangement().total_elements_per_replica();
+      auto& gathered_to_ref_slices =
+          remote_parameter.host_rearrangement().gathered_to_ref_slices();
+      host_rearrangement->gathered_to_ref_slice.reserve(
+          gathered_to_ref_slices.size());
+      for (const auto& slice : gathered_to_ref_slices) {
+        host_rearrangement->gathered_to_ref_slice.emplace_back(slice.begin(),
+                                                               slice.end());
+      }
+      auto& elementMap = remote_parameter.host_rearrangement().element_map();
+      host_rearrangement->element_map.assign(
+          elementMap.data(), elementMap.data() + elementMap.size());
+    }
     info.remote_parameter_infos.emplace(RemoteParameterInfo{
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
         remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged()});
+        remote_parameter.num_merged(), std::move(host_rearrangement)});
   }
 
   info.logging_cycle_count = proto.logging_cycle_count();
@@ -208,6 +227,22 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
     remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
     remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
     remote_parameter->set_num_merged(remote_parameter_info.num_merged);
+    if (remote_parameter_info.host_rearrangement) {
+      auto* host_rearrangement = remote_parameter->mutable_host_rearrangement();
+      host_rearrangement->set_replication_factor(
+          remote_parameter_info.host_rearrangement->replication_factor);
+      host_rearrangement->set_total_elements_per_replica(
+          remote_parameter_info.host_rearrangement->total_elements_per_replica);
+      for (auto& slice :
+           remote_parameter_info.host_rearrangement->gathered_to_ref_slice) {
+        auto* interval = host_rearrangement->add_gathered_to_ref_slices();
+        interval->set_begin(slice.first);
+        interval->set_end(slice.second);
+      }
+      auto& element_map = remote_parameter_info.host_rearrangement->element_map;
+      *host_rearrangement->mutable_element_map() = {element_map.begin(),
+                                                    element_map.end()};
+    }
   }
 
   for (const auto& key_id_mapping : info.key_id_mappings) {
