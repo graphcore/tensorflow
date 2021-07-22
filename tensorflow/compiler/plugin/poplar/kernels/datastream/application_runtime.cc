@@ -388,6 +388,21 @@ class ApplicationRuntime : public OpKernel {
       poplar::Executable executable =
           PoplarExecutableBinaryFile::Read(filename_, &proto).ValueOrDie();
 
+      OP_REQUIRES(ctx,
+                  proto.tf_major_version() == TF_MAJOR_VERSION &&
+                      proto.tf_minor_version() == TF_MINOR_VERSION,
+                  errors::InvalidArgument(absl::StrFormat(
+                      "TF version mismatch. Runtime version is %u.%u, "
+                      "executable version is %u.%u",
+                      TF_MAJOR_VERSION, TF_MINOR_VERSION,
+                      proto.tf_major_version(), proto.tf_minor_version())));
+
+      OP_REQUIRES(ctx, proto.tf_git_version() == tf_git_version(),
+                  errors::InvalidArgument(absl::StrFormat(
+                      "TF build version mismatch. Runtime version is %s, "
+                      "executable version is %s",
+                      tf_git_version(), proto.tf_git_version())));
+
       auto& ertc = proto.embedded_runtime_config();
       const std::string target_type_string = ertc.target_type();
       poplar::TargetType target_type;
