@@ -178,6 +178,7 @@ int64 GetPipelineStageID(const HloInstruction*);
 int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
 ThreeState GetResourceUpdateOffloadVariables(const HloInstruction*);
 ThreeState GetResourceUpdatePartitionOffloadedVariables(const HloInstruction*);
+bool GetFunctionPartitionedElementwiseCluster(const HloInstruction*);
 bool GetFunctionKeepInputLayouts(const HloInstruction*);
 bool GetFunctionUniqueSharding(const HloInstruction*);
 int64 GetFunctionNumberModifiedRemoteBufferInputs(const HloInstruction*);

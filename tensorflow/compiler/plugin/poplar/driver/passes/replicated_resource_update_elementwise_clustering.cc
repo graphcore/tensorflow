@@ -465,5 +465,23 @@ ReplicatedResourceUpdateElementwiseClustering::GetClusterOutlinePolicy(
   return ClusterOutlinePolicy::Outline;
 }
 
+Status
+ReplicatedResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
+    const ElementwiseCluster& cluster,
+    PoplarBackendConfig& backend_config) const {
+  TF_RETURN_IF_ERROR(
+      ResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
+          cluster, backend_config));
+  auto* call_config = backend_config.mutable_call_config();
+  auto* function_config = call_config->mutable_function_config();
+  // Setting parititoned_elementwise_cluster attribute indicates that we will
+  // process those clusters differently:
+  // - Remote buffer outlining pass will outline load/stores regardless if it's
+  // unique or not.
+  // - We may use different visitor for such clusters later.
+  function_config->set_partitioned_elementwise_cluster(true);
+  return Status::OK();
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
