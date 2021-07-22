@@ -30,7 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-#include "tensorflow/core/platform/stacktrace.h"
+#include "tensorflow/core/public/version.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -81,6 +81,10 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   info.target_arch = ertc.target_arch();
   info.gateway_mode = ertc.gateway_mode();
   info.supports_remote_buffers = ertc.supports_remote_buffers();
+
+  info.tf_major_version = proto.tf_major_version();
+  info.tf_minor_version = proto.tf_minor_version();
+  info.tf_git_version = proto.tf_git_version();
 
   info.replication_factor = proto.replication_factor();
 
@@ -180,6 +184,10 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   ertc->set_target_arch(info.target_arch);
   ertc->set_gateway_mode(info.gateway_mode);
   ertc->set_supports_remote_buffers(info.supports_remote_buffers);
+
+  proto.set_tf_major_version(info.tf_major_version);
+  proto.set_tf_minor_version(info.tf_minor_version);
+  proto.set_tf_git_version(info.tf_git_version);
 
   proto.set_replication_factor(info.replication_factor);
 
