@@ -1032,6 +1032,17 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
   // Check for autoReport.directory value in POPLAR_ENGINE_OPTIONS.
   // POPLAR_ENGINE_OPTIONS overrides values in opt_flags.
+
+  // The output will be as follows
+  // <autoReport.directory> or <cwd>
+  //   debug.cbor
+  //   tf_report_<xxx>
+  //     frameworks.json
+  //     profile.pop
+  //   tf_report_<yyy>
+  //     frameworks.json
+  //     profile.pop
+
   absl::optional<std::string> auto_dir =
       GetPoplarEngineOption("autoReport.directory");
 
@@ -1045,21 +1056,10 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           return flag.first == "autoReport.directory";
         });
     if (auto_dir_itr != opt_flags.end()) {
-      if (poplar_executor->GetAutoAssignReportSubdirectories()) {
-        // Add subdirectory to path.
-        auto_dir = tensorflow::io::JoinPath(
-            auto_dir_itr->second,
-            poplar_executor->GetModuleReportDirectory(module->name()));
-        // Update value in ipu options.
-        opt_flags.set("autoReport.directory", *auto_dir);
-      } else {
-        auto_dir = auto_dir_itr->second;
-      }
+      auto_dir = auto_dir_itr->second;
     } else {
-      // If no preexisting value found then set a default.
-      auto_dir = poplar_executor->GetModuleReportDirectory(module->name());
-      // Set value in ipu options.
-      opt_flags.set("autoReport.directory", *auto_dir);
+      // default to the current working directory
+      auto_dir = "./";
     }
   }
 
@@ -1583,7 +1583,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     TF_ASSIGN_OR_RETURN(std::string tensorflow_info,
                         GetFrameworkInfo(module->name()));
     if (GetPoplarEngineOption("autoReport.all").has_value()) {
-      AddFrameworkFileToDirectory(tensorflow_info, *auto_dir);
+      // The current behaviour is to output the frameworks.json into the sub
+      // director for each module.
+      auto subdir = poplar_executor->GetModuleReportDirectory(module->name());
+      AddFrameworkFileToDirectory(tensorflow_info,
+                                  tensorflow::io::JoinPath(*auto_dir, subdir));
     }
     std::string tf_report_dir = poplar_executor->ReportDirectory();
     if (tf_report_dir.size() > 0) {
@@ -1704,8 +1708,20 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         opt_flags.set("target.syncReplicasIndependently", "true");
       }
 
+      // The poplar exeutableDebugName will cause the profile reports to be
+      // output to a subdirectory of autoReport.directory if it is set to a
+      // non-empty string.
+      // If set to an empty string the profile reports will be written to the
+      // autoReport.directory.
+      std::string executable_debug_name = "";
+      if (poplar_executor->GetAutoAssignReportSubdirectories()) {
+        executable_debug_name =
+            poplar_executor->GetModuleReportDirectory(module->name());
+      }
+
       poplar::Executable exec =
-          poplar::compileGraph(main_graph, progs, opt_flags, progress_logging);
+          poplar::compileGraph(main_graph, progs, opt_flags, progress_logging,
+                               executable_debug_name);
 
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.
