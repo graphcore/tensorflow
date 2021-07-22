@@ -61,7 +61,7 @@ def fixed_weight_pipeline():
     output_layer = layer1(output_layer)
 
   m = keras.Model(input_layer, output_layer)
-  m.set_pipelining_options(gradient_accumulation_steps=24)
+  m.set_pipelining_options(gradient_accumulation_steps_per_replica=24)
   return m
 
 

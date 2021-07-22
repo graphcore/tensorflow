@@ -162,19 +162,20 @@ class IPUPipelineTest(test.TestCase):
     cfg.configure_ipu_system()
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
-    gradient_accumulation_steps = 8
+    gradient_accumulation_steps_per_replica = 8
 
     # Run on CPU - simulate gradient accumulation by just using a bigger batch
     # size but less steps per epoch.
     m = simple_model([32, 2], [0, 1], w=0.2)
     m.compile('sgd', loss='mse')
-    m.fit(test_dataset(length=96, batch_size=gradient_accumulation_steps),
+    m.fit(test_dataset(length=96,
+                       batch_size=gradient_accumulation_steps_per_replica),
           epochs=2)
     cpu_weights = m.weights
 
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       m.compile('sgd', loss='mse', steps_per_execution=16)
       m.fit(test_dataset(length=96), epochs=2)
@@ -191,7 +192,7 @@ class IPUPipelineTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       m.compile('sgd', loss='mse', steps_per_execution=16)
       m.fit(test_dataset(length=96), epochs=2)
@@ -219,7 +220,7 @@ class IPUPipelineTest(test.TestCase):
       ds = test_dataset()
 
       m = simple_pipeline([32, 32, 2], [0, 1, 1])
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       m.compile('sgd', loss='mse', steps_per_execution=16)
       history = m.fit(ds, steps_per_epoch=16)
@@ -285,7 +286,7 @@ class IPUPipelineTest(test.TestCase):
                                 name="output2")(input_layer)
 
       m = keras.Model(inputs=input_layer, outputs=[y1, y2])
-      m.set_pipelining_options(gradient_accumulation_steps=4)
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=4)
       m.compile('sgd', loss='mse', steps_per_execution=4)
 
     # Fit the weights to the dataset
@@ -320,7 +321,7 @@ class IPUPipelineTest(test.TestCase):
       ds = test_dataset()
 
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
@@ -348,7 +349,7 @@ class IPUPipelineTest(test.TestCase):
       ds = test_dataset()
 
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
           0.001, 4, 0.1, staircase=True)
@@ -377,7 +378,7 @@ class IPUPipelineTest(test.TestCase):
       ds = test_dataset()
 
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
           boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
@@ -412,7 +413,7 @@ class IPUPipelineTest(test.TestCase):
         x = keras.layers.Dense(1, activation='sigmoid')(x)
 
       m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps=24)
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=24)
       m.compile('sgd', loss='mse', steps_per_execution=48)
 
       # Fit the weights to the dataset
@@ -431,7 +432,7 @@ class IPUPipelineTest(test.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       m.compile('sgd',
                 loss='mse',
@@ -463,9 +464,9 @@ class IPUPipelineTest(test.TestCase):
     # Accumulating the outfeeds shouldn't make a difference to the outputs.
     with strategy.scope():
       m = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m.set_pipelining_options(gradient_accumulation_steps=8)
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8)
       m_acc = simple_pipeline([32, 2], [0, 1], w=0.2)
-      m_acc.set_pipelining_options(gradient_accumulation_steps=8,
+      m_acc.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                    accumulate_outfeed=True)
 
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
@@ -537,7 +538,7 @@ class IPUPipelineTest(test.TestCase):
                     keras.metrics.RootMeanSquaredError()
                 ],
                 steps_per_execution=8)
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                accumulate_outfeed=True)
 
       # With default types nothing overflows.
@@ -554,7 +555,7 @@ class IPUPipelineTest(test.TestCase):
           return np.float16
         return var.dtype
 
-      m.set_pipelining_options(gradient_accumulation_steps=8,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                accumulate_outfeed=True,
                                accumulate_outfeed_dtype=fp16metrics)
       history = m.fit(test_dataset(), steps_per_epoch=8, epochs=1)
@@ -659,7 +660,7 @@ class IPUPipelineTest(test.TestCase):
       with ipu.keras.PipelineStage(2):
         x = layer1(x)
       m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps=6,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=6,
                                device_mapping=[0, 1, 0])
 
       m.compile('sgd', loss='mse', metrics=['accuracy'], steps_per_execution=6)
@@ -688,7 +689,7 @@ class IPUPipelineTest(test.TestCase):
           x = layer(x)
 
       m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps=6,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=6,
                                device_mapping=[0, 0, 0])
 
       m.compile('sgd', loss='mse', metrics=['accuracy'], steps_per_execution=6)
@@ -717,7 +718,7 @@ class IPUPipelineTest(test.TestCase):
           x = layer(x)
 
       m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps=4,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=4,
                                device_mapping=[0, 1])
       m.compile('sgd', loss='mse', metrics=['accuracy'], steps_per_execution=4)
 
@@ -755,7 +756,7 @@ class IPUPipelineTest(test.TestCase):
       x = layer2(x)
 
       m = keras.Model(input_layer, x)
-      m.set_pipelining_options(gradient_accumulation_steps=4,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=4,
                                device_mapping=[0, 0])
 
       m.compile('sgd', loss='mse', metrics=['accuracy'], steps_per_execution=4)

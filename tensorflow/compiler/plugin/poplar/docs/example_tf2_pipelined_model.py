@@ -73,7 +73,7 @@ strategy = ipu.ipu_strategy.IPUStrategyV1()
 with strategy.scope():
 
   model = get_model()
-  model.set_pipelining_options(gradient_accumulation_steps=8,
+  model.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                device_mapping=[0, 1, 1, 0])
   model.compile(loss='binary_crossentropy',
                 optimizer=Adam(0.005),
