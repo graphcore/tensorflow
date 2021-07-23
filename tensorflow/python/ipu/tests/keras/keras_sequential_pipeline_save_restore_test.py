@@ -53,7 +53,7 @@ def fixed_weight_pipeline():
                          bias_initializer=keras.initializers.Constant(0.0)),
   ])
   m.set_pipeline_stage_assignment(list(range(2)))
-  m.set_pipelining_options(gradient_accumulation_steps=24)
+  m.set_pipelining_options(gradient_accumulation_steps_per_replica=24)
   return m
 
 

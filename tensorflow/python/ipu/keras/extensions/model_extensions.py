@@ -67,10 +67,10 @@ class ModelExtension(base_layer.KerasExtension):
   @trackable.no_automatic_dependency_tracking
   def __init__(self):
     # Following values need to be serializable.
-    self._gradient_accumulation_steps = None
+    self._gradient_accumulation_steps_per_replica = None
     self._gradient_accumulation_optimizer_kwargs = dict()
     self._experimental_gradient_accumulation_normalize_gradients = None
-    self._pipelining_gradient_accumulation_steps = None
+    self._pipelining_gradient_accumulation_steps_per_replica = None
     self._pipelining_device_mapping = None
     self._pipelining_accumulate_outfeed = None
     self._experimental_pipelining_normalize_gradients = None
@@ -83,8 +83,8 @@ class ModelExtension(base_layer.KerasExtension):
     self._replication_factor = None
     self._use_synthetic_data = utils.use_synthetic_data_for(
         utils.SyntheticDataCategory.Outfeed)
-    self._compiled_gradient_accumulation_steps = None
-    self._compiled_pipeline_gradient_accumulation_steps = None
+    self._compiled_gradient_accumulation_steps_per_replica = None
+    self._compiled_pipeline_gradient_accumulation_steps_per_replica = None
     self._compiled_pipeline_train_iterations = None
     self._compiled_pipeline_test_iterations = None
     self._compiled_pipeline_predict_iterations = None
@@ -174,27 +174,32 @@ class ModelExtension(base_layer.KerasExtension):
 
     return data_steps_per_execution_value // replication_factor
 
-  def _gradient_accumulation_steps_per_replica(
+  def _verify_and_get_gradient_accumulation_steps_per_replica(
       self, inferred_steps, original_steps_per_execution_value,
       data_steps_per_execution_value):
     model_mode_message = ""
-    gradient_accumulation_steps = self._gradient_accumulation_steps
 
     if self._is_pipelined():
       model_mode_message = "pipelined "
-      if self._pipelining_gradient_accumulation_steps is None:
+      if self._pipelining_gradient_accumulation_steps_per_replica is None:
         raise ValueError(
             "The model which you are attempting to train is pipelined, however "
-            "`gradient_accumulation_steps` has not been set through "
-            "`set_pipelining_options()`. You need to set this value as "
+            "`gradient_accumulation_steps_per_replica` has not been set "
+            "through `set_pipelining_options()`. You need to set this value as "
             "pipelined models will perform gradient accumulation when "
             "training.")
-      gradient_accumulation_steps = self._pipelining_gradient_accumulation_steps
+      gradient_accumulation_steps_per_replica = \
+        self._pipelining_gradient_accumulation_steps_per_replica
     else:
-      if self._gradient_accumulation_steps is None:
+      if self._gradient_accumulation_steps_per_replica is None:
         # Non-pipelined models don't need gradient accumulation.
         return 1
-      gradient_accumulation_steps = self._gradient_accumulation_steps
+      gradient_accumulation_steps_per_replica = \
+        self._gradient_accumulation_steps_per_replica
+
+    replication_factor = self._get_replication_factor()
+    gradient_accumulation_steps = (gradient_accumulation_steps_per_replica *
+                                   replication_factor)
 
     if data_steps_per_execution_value % gradient_accumulation_steps != 0:
       if data_steps_per_execution_value != original_steps_per_execution_value:
@@ -206,29 +211,20 @@ class ModelExtension(base_layer.KerasExtension):
       raise RuntimeError(
           "The {}model has been configured to use gradient accumulation for "
           "training, however the current `steps_per_execution` value (set to "
-          "{}{}) is not divisible by `gradient_accumulation_steps` (set to "
-          "{}). You need to adjust either `steps_per_execution` or"
-          "`gradient_accumulation_steps` to make sure that "
+          "{}{}) is not divisible by "
+          "`gradient_accumulation_steps_per_replica * number of replicas` "
+          "(`gradient_accumulation_steps_per_replica` is set to {} and there "
+          "are {} replicas). You need to adjust either `steps_per_execution` or"
+          "`gradient_accumulation_steps_per_replica` to make sure that "
           "`steps_per_execution` is divisible by "
-          "`gradient_accumulation_steps`.".format(
-              model_mode_message, data_steps_per_execution_value,
-              truncation_message, gradient_accumulation_steps))
+          "`gradient_accumulation_steps_per_replica * number of "
+          "replicas`.".format(model_mode_message,
+                              data_steps_per_execution_value,
+                              truncation_message,
+                              gradient_accumulation_steps_per_replica,
+                              replication_factor))
 
-    replication_factor = self._get_replication_factor()
-
-    if gradient_accumulation_steps % replication_factor != 0:
-      raise RuntimeError(
-          "Currently `gradient_accumulation_steps` is set to {} and the "
-          "current IPU system configuration and model configuration means that "
-          "your Keras model will automatically execute in a data-parallel "
-          "fashion across {} replicas. However the number of replicas needs to "
-          "divide `gradient_accumulation_steps`. Either make sure that "
-          "`gradient_accumulation_steps` is a multiple of {} or adjust your "
-          "IPU system configuration to reduce the number of IPUs used for "
-          "this IPUStrategy.".format(gradient_accumulation_steps,
-                                     replication_factor, replication_factor))
-
-    return gradient_accumulation_steps // replication_factor
+    return gradient_accumulation_steps_per_replica
 
   def _reset_ipu_extension(self):
     """Function which resets any internal state of the extension when
@@ -297,14 +293,16 @@ class ModelExtension(base_layer.KerasExtension):
     return train_function
 
   def _make_single_ipu_train_function_with_gradient_accumulation(
-      self, gradient_accumulation_steps):
+      self, gradient_accumulation_steps_per_replica):
+    replication_factor = self._get_replication_factor()
     optimizer = _NormalizedKerasOptimizerWrapper(
         self._experimental_gradient_accumulation_normalize_gradients,
-        self._gradient_accumulation_steps, self, self.optimizer)
+        (gradient_accumulation_steps_per_replica * replication_factor), self,
+        self.optimizer)
     optimizer = \
       gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
           optimizer,
-          gradient_accumulation_steps,
+          gradient_accumulation_steps_per_replica,
           **self._gradient_accumulation_optimizer_kwargs)
 
     def train_step(data):
@@ -362,7 +360,7 @@ class ModelExtension(base_layer.KerasExtension):
 
   def _make_pipeline(self,
                      iterations,
-                     gradient_accumulation_steps,
+                     gradient_accumulation_steps_per_replica,
                      add_loss=False,
                      add_optimizer=False):
     @def_function.function(experimental_compile=True)
@@ -483,7 +481,8 @@ class ModelExtension(base_layer.KerasExtension):
 
           if self._pipelining_accumulate_outfeed:
             for name, val in metrics_output.items():
-              metrics_output[name] = val / gradient_accumulation_steps
+              metrics_output[
+                  name] = val / gradient_accumulation_steps_per_replica
 
           if add_optimizer:
             return loss, metrics_output
@@ -510,16 +509,18 @@ class ModelExtension(base_layer.KerasExtension):
       outfeed_mask = [True, False] if add_loss and add_optimizer else None
 
       def optimizer_function(loss, *_):
+        replication_factor = self._get_replication_factor()
         optimizer = _NormalizedKerasOptimizerWrapper(
             self._experimental_pipelining_normalize_gradients,
-            self._pipelining_gradient_accumulation_steps, self, self.optimizer)
+            (gradient_accumulation_steps_per_replica * replication_factor),
+            self, self.optimizer)
         return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
       opt = optimizer_function if add_optimizer else None
 
       pipelining_ops.pipeline(
           computational_stages,
-          gradient_accumulation_count=gradient_accumulation_steps,
+          gradient_accumulation_count=gradient_accumulation_steps_per_replica,
           repeat_count=iterations,
           device_mapping=self._pipelining_device_mapping,
           accumulate_outfeed=self._pipelining_accumulate_outfeed,
@@ -532,10 +533,10 @@ class ModelExtension(base_layer.KerasExtension):
 
     return pipeline_function
 
-  def _make_pipeline_ipu_train_function(self, iterations,
-                                        gradient_accumulation_steps):
+  def _make_pipeline_ipu_train_function(
+      self, iterations, gradient_accumulation_steps_per_replica):
     return self._make_pipeline(iterations,
-                               gradient_accumulation_steps,
+                               gradient_accumulation_steps_per_replica,
                                add_loss=True,
                                add_optimizer=True)
 
@@ -568,7 +569,7 @@ class ModelExtension(base_layer.KerasExtension):
                                add_optimizer=False)
 
   def _make_ipu_train_function_wrapper(self):
-    def wrapper(pipeline_iterations, gradient_accumulation_steps):
+    def wrapper(pipeline_iterations, gradient_accumulation_steps_per_replica):
       with trackable.no_automatic_dependency_tracking_scope(self):
         need_to_rerun = self._ipu_train_function is None
         if self._is_pipelined():
@@ -577,30 +578,32 @@ class ModelExtension(base_layer.KerasExtension):
           need_to_rerun = (
               need_to_rerun or
               self._compiled_pipeline_train_iterations != pipeline_iterations
-              or self._compiled_pipeline_gradient_accumulation_steps !=
-              gradient_accumulation_steps)
+              or
+              self._compiled_pipeline_gradient_accumulation_steps_per_replica
+              != gradient_accumulation_steps_per_replica)
         else:
           # Gradient accumulation needs to be embedded in the graph.
-          need_to_rerun = (need_to_rerun
-                           or self._compiled_gradient_accumulation_steps !=
-                           gradient_accumulation_steps)
+          need_to_rerun = (
+              need_to_rerun
+              or self._compiled_gradient_accumulation_steps_per_replica !=
+              gradient_accumulation_steps_per_replica)
 
         if need_to_rerun:
           if self._is_pipelined():
             self._compiled_pipeline_train_iterations = pipeline_iterations
-            self._compiled_pipeline_gradient_accumulation_steps = \
-              gradient_accumulation_steps
+            self._compiled_pipeline_gradient_accumulation_steps_per_replica = \
+              gradient_accumulation_steps_per_replica
             self._ipu_train_function = self._make_pipeline_ipu_train_function(
-                pipeline_iterations, gradient_accumulation_steps)
+                pipeline_iterations, gradient_accumulation_steps_per_replica)
           else:
-            if gradient_accumulation_steps > 1:
+            if gradient_accumulation_steps_per_replica > 1:
               self._ipu_train_function = \
                 self._make_single_ipu_train_function_with_gradient_accumulation(
-                    gradient_accumulation_steps)
+                    gradient_accumulation_steps_per_replica)
             else:
               self._ipu_train_function = self._make_single_ipu_train_function()
-            self._compiled_gradient_accumulation_steps = \
-              gradient_accumulation_steps
+            self._compiled_gradient_accumulation_steps_per_replica = \
+              gradient_accumulation_steps_per_replica
 
       return self._ipu_train_function
 
@@ -653,18 +656,21 @@ class ModelExtension(base_layer.KerasExtension):
 
   @trackable.no_automatic_dependency_tracking
   def _set_gradient_accumulation_options_impl(
-      self, gradient_accumulation_steps, experimental_normalize_gradients,
+      self, gradient_accumulation_steps_per_replica,
+      experimental_normalize_gradients,
       gradient_accumulation_optimizer_kwargs):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
-    if gradient_accumulation_steps is not None:
-      if not isinstance(gradient_accumulation_steps,
-                        int) or gradient_accumulation_steps < 1:
+    if gradient_accumulation_steps_per_replica is not None:
+      if not isinstance(gradient_accumulation_steps_per_replica,
+                        int) or gradient_accumulation_steps_per_replica < 1:
         raise ValueError(
-            "Expected `gradient_accumulation_steps` to be a positive integer, "
-            "but got {} instead.".format(gradient_accumulation_steps))
-      self._gradient_accumulation_steps = gradient_accumulation_steps
+            "Expected `gradient_accumulation_steps_per_replica` to be a "
+            "positive integer, but got {} instead.".format(
+                gradient_accumulation_steps_per_replica))
+      self._gradient_accumulation_steps_per_replica = \
+        gradient_accumulation_steps_per_replica
       reset_extension = True
 
     if experimental_normalize_gradients:
@@ -687,8 +693,8 @@ class ModelExtension(base_layer.KerasExtension):
       if "num_mini_batches" in gradient_accumulation_optimizer_kwargs:
         raise ValueError("Found `num_mini_batches` key in "
                          "`gradient_accumulation_optimizer_kwargs`. Set the "
-                         "`gradient_accumulation_steps` argument to "
-                         "`set_gradient_accumulation_options` instead.")
+                         "`gradient_accumulation_steps_per_replica` argument "
+                         "to `set_gradient_accumulation_options` instead.")
 
       self._gradient_accumulation_optimizer_kwargs = \
         gradient_accumulation_optimizer_kwargs
@@ -699,19 +705,22 @@ class ModelExtension(base_layer.KerasExtension):
 
   @trackable.no_automatic_dependency_tracking
   def _set_pipelining_options_impl(
-      self, pipelining_gradient_accumulation_steps, pipelining_device_mapping,
-      accumulate_outfeed, experimental_normalize_gradients, pipelining_kwargs):
+      self, pipelining_gradient_accumulation_steps_per_replica,
+      pipelining_device_mapping, accumulate_outfeed,
+      experimental_normalize_gradients, pipelining_kwargs):
     # The extension might need to be reset if any of the values are set.
     reset_extension = False
 
-    if pipelining_gradient_accumulation_steps is not None:
-      if not isinstance(pipelining_gradient_accumulation_steps,
-                        int) or pipelining_gradient_accumulation_steps < 1:
-        raise ValueError("Expected `gradient_accumulation_steps` to be a "
-                         "positive integer, but got {} instead.".format(
-                             pipelining_gradient_accumulation_steps))
-      self._pipelining_gradient_accumulation_steps = \
-        pipelining_gradient_accumulation_steps
+    if pipelining_gradient_accumulation_steps_per_replica is not None:
+      if not isinstance(
+          pipelining_gradient_accumulation_steps_per_replica,
+          int) or pipelining_gradient_accumulation_steps_per_replica < 1:
+        raise ValueError(
+            "Expected `gradient_accumulation_steps_per_replica` to be a "
+            "positive integer, but got {} instead.".format(
+                pipelining_gradient_accumulation_steps_per_replica))
+      self._pipelining_gradient_accumulation_steps_per_replica = \
+        pipelining_gradient_accumulation_steps_per_replica
       reset_extension = True
 
     if pipelining_device_mapping is not None:
@@ -735,7 +744,8 @@ class ModelExtension(base_layer.KerasExtension):
         raise TypeError("`pipelining_kwargs` must be a dictionary.")
 
       explicit_args = {
-          "gradient_accumulation_count": "gradient_accumulation_steps",
+          "gradient_accumulation_count":
+          "gradient_accumulation_steps_per_replica",
           "device_mapping": "device_mapping",
           "accumulate_outfeed": "accumulate_outfeed"
       }
@@ -775,7 +785,8 @@ class ModelExtension(base_layer.KerasExtension):
     """Returns any configuration required to serialize this base class."""
     config = dict()
 
-    config["gradient_accumulation_steps"] = self._gradient_accumulation_steps
+    config["gradient_accumulation_steps_per_replica"] = \
+          self._gradient_accumulation_steps_per_replica
     config["experimental_gradient_accumulation_normalize_gradients"] = \
       self._experimental_gradient_accumulation_normalize_gradients
     config["experimental_pipelining_normalize_gradients"] = \
@@ -788,8 +799,8 @@ class ModelExtension(base_layer.KerasExtension):
           "you will need to call `set_gradient_accumulation_options` again if "
           "the model is restored.".format(self.name))
 
-    config["pipelining_gradient_accumulation_steps"] = \
-      self._pipelining_gradient_accumulation_steps
+    config["pipelining_gradient_accumulation_steps_per_replica"] = \
+      self._pipelining_gradient_accumulation_steps_per_replica
     config["pipelining_device_mapping"] = self._pipelining_device_mapping
     config["pipelining_accumulate_outfeed"] = \
       self._pipelining_accumulate_outfeed
@@ -805,12 +816,12 @@ class ModelExtension(base_layer.KerasExtension):
 
   @trackable.no_automatic_dependency_tracking
   def _from_base_config(self, config):
-    self._gradient_accumulation_steps = config.get(
-        "gradient_accumulation_steps", None)
+    self._gradient_accumulation_steps_per_replica = config.get(
+        "gradient_accumulation_steps_per_replica", None)
     self._experimental_gradient_accumulation_normalize_gradients = config.get(
         "experimental_gradient_accumulation_normalize_gradients", None)
-    self._pipelining_gradient_accumulation_steps = config.get(
-        "pipelining_gradient_accumulation_steps", None)
+    self._pipelining_gradient_accumulation_steps_per_replica = config.get(
+        "pipelining_gradient_accumulation_steps_per_replica", None)
     self._pipelining_device_mapping = config.get("pipelining_device_mapping",
                                                  None)
     self._pipelining_accumulate_outfeed = config.get(
@@ -913,7 +924,7 @@ class ModelExtension(base_layer.KerasExtension):
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
         gradient_accumulation_steps_per_replica = \
-          self._gradient_accumulation_steps_per_replica(
+          self._verify_and_get_gradient_accumulation_steps_per_replica(
               inferred_steps, original_steps_per_execution_value,
               steps_per_execution_value)
 

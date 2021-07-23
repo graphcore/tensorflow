@@ -275,8 +275,9 @@ ENTRY e {
 TEST_F(VariablesOffloadAndPartitionTest, OffloadVariable) {
   std::string hlo = GetHlo(THREESTATE_ON);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -309,8 +310,9 @@ TEST_F(VariablesOffloadAndPartitionTest,
   std::string hlo = GetHlo(THREESTATE_ON, THREESTATE_OFF, THREESTATE_UNDEFINED,
                            THREESTATE_OFF);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -359,8 +361,9 @@ TEST_F(VariablesOffloadAndPartitionTest, OffloadPipelineVariablesNoPartition) {
   std::string hlo =
       GetHlo(THREESTATE_ON, THREESTATE_OFF, THREESTATE_ON, THREESTATE_OFF);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -403,8 +406,9 @@ TEST_F(VariablesOffloadAndPartitionTest,
       THREESTATE_ON, THREESTATE_OFF, THREESTATE_UNDEFINED, THREESTATE_OFF,
       PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, 4);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -487,8 +491,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -577,8 +582,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3, 4});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3, 4});
+  config.set_resource_input_initialized({true, true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -654,9 +660,10 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
-  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
+  config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
 
@@ -669,8 +676,9 @@ ENTRY e {
 TEST_F(VariablesOffloadAndPartitionTest, DisabledByDevice) {
   std::string hlo = GetHlo(THREESTATE_ON);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -686,8 +694,9 @@ TEST_F(VariablesOffloadAndPartitionTest, DisabledByDevice) {
 TEST_F(VariablesOffloadAndPartitionTest, DisabledByDeviceDefaultConfig) {
   std::string hlo = GetHlo(THREESTATE_UNDEFINED);
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -776,8 +785,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -955,8 +965,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1016,8 +1027,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1108,8 +1120,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1234,8 +1247,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1357,8 +1371,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1475,8 +1490,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1568,8 +1584,9 @@ ENTRY e {
 }
 )";
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));

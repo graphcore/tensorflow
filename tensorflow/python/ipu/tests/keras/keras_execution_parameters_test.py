@@ -112,9 +112,11 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
           RuntimeError,
           r"The model has been configured to use gradient accumulation for "
           r"training, however the current `steps_per_execution` value \(set to "
-          r"8\) is not divisible by `gradient_accumulation_steps` \(set to "
-          r"3\)"):
-        m.set_gradient_accumulation_options(gradient_accumulation_steps=3)
+          r"8\) is not divisible by `gradient_accumulation_steps_per_replica "
+          r"\* number of replicas` \(`gradient_accumulation_steps_per_replica` "
+          r"is set to 3 and there are 1 replicas\)"):
+        m.set_gradient_accumulation_options(
+            gradient_accumulation_steps_per_replica=3)
         m.fit(test_dataset(length=8))
 
       with self.assertRaisesRegex(
@@ -122,8 +124,11 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
           r"The model has been configured to use gradient accumulation for "
           r"training, however the current `steps_per_execution` value \(set to "
           r"7 - truncated from 8 due to 7 steps per epoch\) is not divisible "
-          r"by `gradient_accumulation_steps` \(set to 3\)"):
-        m.set_gradient_accumulation_options(gradient_accumulation_steps=3)
+          r"by `gradient_accumulation_steps_per_replica \* number of replicas` "
+          r"\(`gradient_accumulation_steps_per_replica` is set to 3 and there "
+          r"are 1 replicas\)"):
+        m.set_gradient_accumulation_options(
+            gradient_accumulation_steps_per_replica=3)
         m.fit(test_dataset(length=7))
 
   @parameterized.parameters([simple_sequential_model, simple_functional_model])
@@ -142,13 +147,13 @@ class KerasModelExecutionParametersTest(test_util.TensorFlowTestCase,
 
       with self.assertRaisesRegex(
           RuntimeError,
-          "Currently `gradient_accumulation_steps` is set to 4 and the "
-          "current IPU system configuration and model configuration means "
-          "that your Keras model will automatically execute in a "
-          "data-parallel fashion across 8 replicas. However the number of "
-          "replicas needs to divide `gradient_accumulation_steps`. Either "
-          "make sure that `gradient_accumulation_steps` is a multiple of 8"):
-        m.set_gradient_accumulation_options(gradient_accumulation_steps=4)
+          r"The model has been configured to use gradient accumulation for "
+          r"training, however the current `steps_per_execution` value \(set to "
+          r"64\) is not divisible by `gradient_accumulation_steps_per_replica "
+          r"\* number of replicas` \(`gradient_accumulation_steps_per_replica` "
+          r"is set to 3 and there are 8 replicas\)"):
+        m.set_gradient_accumulation_options(
+            gradient_accumulation_steps_per_replica=3)
         m.fit(test_dataset(length=64))
 
 

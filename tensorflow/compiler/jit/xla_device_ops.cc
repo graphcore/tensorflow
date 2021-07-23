@@ -66,8 +66,33 @@ void XlaAssignVariableOp::Compute(OpKernelContext* context) {
           "Trying to assign variable with wrong dtype. Expected ",
           DataTypeString(variable->tensor()->dtype()), " got ",
           DataTypeString(dtype_)));
+
+  const bool is_ipu = DeviceType(static_cast<Device*>(context->device())
+                                     ->attributes()
+                                     .device_type()) == "IPU";
+  if (is_ipu) {
+    // With IPU the above comment does not apply as the IPU executor tries to
+    // keep variables on the device and update variables - we therefore need to
+    // copy the value via the host (XLA to XLA is not supported).
+    DeviceContext* device_context = context->op_device_context();
+    Device* device = static_cast<Device*>(context->device());
+    Allocator* allocator = context->device()->GetAllocator({});
+
+    // Create a host value and copy to it.
+    Tensor host_value(value.dtype(), value.shape());
+    OP_REQUIRES_OK(context,
+                   device_context->CopyDeviceTensorToCPUSync(
+                       &value, /*tensor_name=*/"", device, &host_value));
+    // Copy from the host value to a new on device tensor.
+    Tensor value_copy(allocator, value.dtype(), value.shape());
+    OP_REQUIRES_OK(context, device_context->CopyCPUTensorToDeviceSync(
+                                &host_value, device, &value_copy));
+
+    *variable->tensor() = value_copy;
+  } else {
+    *variable->tensor() = value;
+  }
   variable->is_initialized = true;
-  *variable->tensor() = value;
 }
 
 }  // namespace tensorflow

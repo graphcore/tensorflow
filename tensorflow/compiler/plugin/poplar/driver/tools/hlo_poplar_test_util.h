@@ -35,6 +35,7 @@ struct HloPoplarTestUtil {
                                                        int minibatches = 1);
   static std::string GetFullRemoteLoadHloString(int n, int m,
                                                 int minibatches = 1);
+  static std::string GetBroadcastHloString(int n, int minibatches = 1);
 };
 
 }  // namespace poplarplugin

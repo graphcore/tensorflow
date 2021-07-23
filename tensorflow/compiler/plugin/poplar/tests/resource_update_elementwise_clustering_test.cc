@@ -195,8 +195,9 @@ TEST_P(ResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   auto param = GetParam();
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(param.GetHlo(), config));
@@ -385,8 +386,9 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestSameCluster) {
   )";
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({4});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -486,8 +488,9 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestDifferentCluster) {
   )";
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({4});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));

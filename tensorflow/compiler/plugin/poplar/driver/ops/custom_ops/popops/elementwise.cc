@@ -170,13 +170,14 @@ StatusOr<poplar::Tensor> BroadcastImplicitNaryOutputTensor(
   // of a scalar.
   if (!PoplarShapeMatchesXLAShape(output, output_shape)) {
     const HloInstruction* root = inst->fused_expression_root();
-    CHECK(absl::c_all_of(root->operands(), [](const HloInstruction* operand) {
-      return operand->opcode() == HloOpcode::kBroadcast &&
-             ShapeUtil::ElementsIn(operand->operand(0)->shape()) == 1;
-    })) << "Cannot broadcast elementwise output.";
-    TF_ASSIGN_OR_RETURN(
-        output,
-        BroadcastTensor(output.reshape({}), output_shape, /*dimensions=*/{}));
+    if (absl::c_all_of(root->operands(), [](const HloInstruction* operand) {
+          return operand->opcode() == HloOpcode::kBroadcast &&
+                 ShapeUtil::ElementsIn(operand->operand(0)->shape()) == 1;
+        })) {
+      TF_ASSIGN_OR_RETURN(
+          output,
+          BroadcastTensor(output.reshape({}), output_shape, /*dimensions=*/{}));
+    }
   }
   return output;
 }

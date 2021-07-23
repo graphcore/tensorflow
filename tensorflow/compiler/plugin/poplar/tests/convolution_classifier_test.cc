@@ -173,12 +173,7 @@ _cluster_1  {
   ROOT tuple.19.98 = (f16[4], f16[5,5,64,4], f16[64], f16[7,7,4,64]) tuple(subtract.19.65, subtract.19.71, subtract.19.85, subtract.19.89)
 }
   )";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3, 4, 5});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -377,11 +372,7 @@ ENTRY in {
 }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3, 4, 5});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -581,11 +572,7 @@ ENTRY in {
 }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3, 4, 5});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -702,11 +689,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
   }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2});
-  config.set_resource_input_count(1);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -814,11 +797,7 @@ ENTRY cluster_1 {
 
 )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3});
-  config.set_resource_input_count(2);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -949,11 +928,7 @@ ENTRY in {
 }
 )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3});
-  config.set_resource_input_count(2);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1085,11 +1060,7 @@ ENTRY in {
 }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({2, 3});
-  config.set_resource_input_count(2);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1164,11 +1135,7 @@ ENTRY cluster_9 {
 }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1408,11 +1375,7 @@ ENTRY cluster {
 }
   )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1586,11 +1549,7 @@ ENTRY cluster {
 }
 )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1744,11 +1703,7 @@ ENTRY cluster {
 }
 )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1917,11 +1872,7 @@ ENTRY cluster {
 }
 )";
 
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({});
-  config.set_resource_input_count(4);
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 

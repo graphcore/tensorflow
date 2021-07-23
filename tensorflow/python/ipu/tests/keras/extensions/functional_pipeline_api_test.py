@@ -290,9 +290,9 @@ class FunctionalPipelineApiTest(test.TestCase):
 
       with self.assertRaisesRegex(
           ValueError,
-          "Expected `gradient_accumulation_steps` to be a positive integer, "
-          "but got -1 instead"):
-        m.set_pipelining_options(gradient_accumulation_steps=-1)
+          "Expected `gradient_accumulation_steps_per_replica` to be a positive "
+          "integer, but got -1 instead"):
+        m.set_pipelining_options(gradient_accumulation_steps_per_replica=-1)
 
       with self.assertRaisesRegex(
           ValueError, "Expected `device_mapping` to be a list of integers"):
@@ -301,7 +301,7 @@ class FunctionalPipelineApiTest(test.TestCase):
       with self.assertRaisesRegex(
           ValueError,
           "Found `gradient_accumulation_count` key in `pipelining_kwargs`. Set "
-          "the `gradient_accumulation_steps` argument to "
+          "the `gradient_accumulation_steps_per_replica` argument to "
           "`set_pipelining_options` instead."):
         m.set_pipelining_options(gradient_accumulation_count=10)
 
@@ -317,7 +317,7 @@ class FunctionalPipelineApiTest(test.TestCase):
           "This argument is not compatible with Keras"):
         m.set_pipelining_options(batch_serialization_iterations=10)
 
-      m.set_pipelining_options(gradient_accumulation_steps=10,
+      m.set_pipelining_options(gradient_accumulation_steps_per_replica=10,
                                device_mapping=[4, 3, 2, 1, 0],
                                accumulate_outfeed=True,
                                experimental_normalize_gradients=True)
@@ -326,7 +326,9 @@ class FunctionalPipelineApiTest(test.TestCase):
         save_path = os.path.join(tmp, "model")
         m.save(save_path)
         m = models.load_model(save_path)
-        self.assertEqual(m._pipelining_gradient_accumulation_steps, 10)  # pylint: disable=protected-access
+        self.assertEqual(
+            m._pipelining_gradient_accumulation_steps_per_replica,  # pylint: disable=protected-access
+            10)
         self.assertEqual(m._pipelining_device_mapping, [4, 3, 2, 1, 0])  # pylint: disable=protected-access
         self.assertEqual(m._pipelining_accumulate_outfeed, True)  # pylint: disable=protected-access
         self.assertEqual(m._experimental_pipelining_normalize_gradients, True)  # pylint: disable=protected-access

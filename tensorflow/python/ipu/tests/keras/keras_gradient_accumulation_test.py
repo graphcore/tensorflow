@@ -90,6 +90,8 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
 
     batch_size = 12
     gradient_accumulation_steps = 16
+    gradient_accumulation_steps_per_replica = (gradient_accumulation_steps //
+                                               replication_factor)
     steps_per_epoch = 64
     epochs = 2
 
@@ -110,7 +112,8 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
                 loss=keras.losses.SparseCategoricalCrossentropy(),
                 steps_per_execution=gradient_accumulation_steps * 2)
       m.set_gradient_accumulation_options(
-          gradient_accumulation_steps=gradient_accumulation_steps,
+          gradient_accumulation_steps_per_replica=
+          gradient_accumulation_steps_per_replica,
           experimental_normalize_gradients=True)
       m.fit(get_mnist_dataset(batch_size),
             steps_per_epoch=steps_per_epoch,
@@ -125,8 +128,8 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
         m.save(save_path)
         m = keras.models.load_model(save_path)
         self.assertEqual(
-            m._gradient_accumulation_steps,  # pylint: disable=protected-access
-            gradient_accumulation_steps)
+            m._gradient_accumulation_steps_per_replica,  # pylint: disable=protected-access
+            gradient_accumulation_steps_per_replica)
         self.assertEqual(
             m._experimental_gradient_accumulation_normalize_gradients, True)  # pylint: disable=protected-access
         self.assertFalse(m._gradient_accumulation_optimizer_kwargs)  # pylint: disable=protected-access

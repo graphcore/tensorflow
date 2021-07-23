@@ -67,7 +67,7 @@ class KerasPipelineRecomputationTest(test.TestCase):
       # Checkpoints require Grouped/Seq and RecomputeAndBackpropagateInterleaved
       m = keras.Model(inputs=input_layer, outputs=x)
       m.set_pipelining_options(
-          gradient_accumulation_steps=4,
+          gradient_accumulation_steps_per_replica=4,
           pipeline_schedule=ipu.ops.pipelining_ops.PipelineSchedule.Grouped,
           recomputation_mode=ipu.ops.pipelining_ops.RecomputationMode.
           RecomputeAndBackpropagateInterleaved)

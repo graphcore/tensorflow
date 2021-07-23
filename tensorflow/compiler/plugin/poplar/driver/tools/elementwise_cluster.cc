@@ -77,6 +77,16 @@ bool IsAllGather(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::AllGather)(inst);
 }
 
+// TODO(T42325): It's possible to remove this check and edge case all together
+// if all broadcast will be sunk through elementwise ops.
+bool IsImplicitOpWithAllScalarArguments(const HloInstruction* inst) {
+  return IsPopOpsFusion(inst, "implicit_") &&
+         !ShapeUtil::IsScalar(inst->shape()) &&
+         absl::c_all_of(inst->operands(), [](const HloInstruction* op) {
+           return ShapeUtil::IsScalar(op->shape());
+         });
+}
+
 bool ValidClusterInput(const HloInstruction* inst,
                        const ElementwiseClusterValidator& validator) {
   return validator.IsValidInput(inst) || IsWideConstant(inst) ||
@@ -201,6 +211,10 @@ bool ElementwiseCluster::CanCluster(
   // This is explicit because constants are reported as elementwise.
   // Constant scalars are allowed as inputs though.
   if (inst->IsConstant()) {
+    return false;
+  }
+
+  if (IsImplicitOpWithAllScalarArguments(inst)) {
     return false;
   }
 

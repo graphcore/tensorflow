@@ -202,44 +202,46 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
   def set_gradient_accumulation_options(
       self,
-      gradient_accumulation_steps=None,
+      gradient_accumulation_steps_per_replica=None,
       experimental_normalize_gradients=None,
       **gradient_accumulation_optimizer_kwargs):
     # pylint:disable=line-too-long
     """Sets the gradient accumulation options for non-pipelined models which are
     to be used when training a model.
 
-    When set, and `gradient_accumulation_steps > 1`, the optimizer which the
-    current model has been compiled with is wrapped in
+    When set, and `gradient_accumulation_steps_per_replica > 1`, the optimizer
+    which the current model has been compiled with is wrapped in
     :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`.
-    This means that instead of performing the weight update for every step,
-    gradients across multiple steps are accumulated. After
-    `gradient_accumulation_steps` steps have been processed, the accumulated
-    gradients are used to compute the weight update.
+    This means that each replica will accumulate the gradients for
+    `gradient_accumulation_steps_per_replica` steps, these accumulated gradients
+    are then all-reduced across the replicas and the weight update is performed.
 
     Gradient Accumulation allows us to simulate bigger batch sizes. For example
-    if we have a model of batch size 16 and we accumulate the gradients for 4
-    steps, this simulates an input batch of size 64.
-
-    When training a data-parallel model, enabling gradient accumulation also
-    reduces the communication overhead as the all-reduce of gradients is now
-    performed every `gradient_accumulation_steps` steps instead of every step.
+    if we have a model where each step is of batch size 16 and we set
+    `gradient_accumulation_steps_per_replica=4` and there is single replica in
+    the system, this simulates an input batch of size 64.
+    If we have a model where each step is of batch size 16 and we set
+    `gradient_accumulation_steps_per_replica=4` and there are 4 replicas in
+    the system, this simulates an input batch of size 256.
 
     See the :ref:`gradient-accumulation` section in the documention for more
     details.
 
+    The value of `gradient_accumulation_steps_per_replica` has no effect when
+    using `evaluate()` or `predict()`.
+
     Args:
-      gradient_accumulation_steps: An integer which indicates the number of
-        steps the gradients will be accumulated for. This value needs to divide
-        the `steps_per_execution` value the model has been compiled with and
-        also be divisible by the replication factor if the model is running
-        in a data-parallel fashion. This value is saved/loaded when the model
-        is saved/loaded.
+      gradient_accumulation_steps_per_replica: An integer which indicates the
+        number of steps the gradients will be accumulated for in each replica.
+        This value multiplied by the number of replicas needs to divide the
+        `steps_per_execution` value the model has been compiled with. This value
+        is saved/loaded when the model is saved/loaded.
       experimental_normalize_gradients: If set to `True`, the gradients for each
-        step are first scaled by `1/gradient_accumulation_steps` before being
-        added to the gradient accumulation buffer. Note that this option is
-        experimental and the behavior might change in future releases. This
-        value is saved/loaded when the model is saved/loaded.
+        step are first scaled by
+        `1/(gradient_accumulation_steps_per_replica * number of replicas)`
+        before being added to the gradient accumulation buffer. Note that this
+        option is experimental and the behavior might change in future releases.
+        This value is saved/loaded when the model is saved/loaded.
       gradient_accumulation_optimizer_kwargs: All remaining keyword arguments
         are forwarded to
         :class:`~tensorflow.python.ipu.optimizers.GradientAccumulationOptimizerV2`.
@@ -251,11 +253,12 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
     """
     # pylint:enable=line-too-long
     self._set_gradient_accumulation_options_impl(
-        gradient_accumulation_steps, experimental_normalize_gradients,
+        gradient_accumulation_steps_per_replica,
+        experimental_normalize_gradients,
         gradient_accumulation_optimizer_kwargs)
 
   def set_pipelining_options(self,
-                             gradient_accumulation_steps=None,
+                             gradient_accumulation_steps_per_replica=None,
                              device_mapping=None,
                              accumulate_outfeed=None,
                              experimental_normalize_gradients=None,
@@ -263,35 +266,39 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
     """Sets the pipelining options, including gradient accumulation options,
     for pipelined models.
 
-    Before training a pipelined model, `gradient_accumulation_steps` argument
-    needs to be set as pipelined models always perform gradient accumulation
-    when training. Setting `gradient_accumulation_steps > 1` means that instead
-    of performing the weight update for every step, gradients across multiple
-    steps are accumulated. After `gradient_accumulation_steps` steps have been
-    processed, the accumulated gradients are used to compute the weight update.
+    Before training a pipelined model, `gradient_accumulation_steps_per_replica`
+    argument needs to be set as pipelined models always perform gradient
+    accumulation when training. Setting
+    `gradient_accumulation_steps_per_replica > 1` means that each replica will
+    accumulate the gradients for `gradient_accumulation_steps_per_replica`
+    steps, these accumulated gradients are then all-reduced across the replicas
+    and the weight update is performed.
 
     Gradient Accumulation allows us to simulate bigger batch sizes. For example
-    if we have a model of batch size 16 and we accumulate the gradients for 4
-    steps, this simulates an input batch of size 64.
+    if we have a model where each step is of batch size 16 and we set
+    `gradient_accumulation_steps_per_replica=4` and there is single replica in
+    the system, this simulates an input batch of size 64.
+    If we have a model where each step is of batch size 16 and we set
+    `gradient_accumulation_steps_per_replica=4` and there are 4 replicas in
+    the system, this simulates an input batch of size 256.
 
     When training a data-parallel model, enabling gradient accumulation also
     reduces the communication overhead as the all-reduce of gradients is now
-    performed every `gradient_accumulation_steps` steps instead of every step.
+    performed after each replica has performed
+    `gradient_accumulation_steps_per_replica` steps instead of after each step.
 
     See the :ref:`gradient-accumulation` section in the documention for more
     details.
 
-    The value of `gradient_accumulation_steps` has no effect when using
-    `evaluate()` or `predict().
+    The value of `gradient_accumulation_steps_per_replica` has no effect when
+    using `evaluate()` or `predict()`.
 
     Args:
-      gradient_accumulation_steps: An integer which indicates the number of
-        steps the gradients will be accumulated for. This value needs to divide
-        the `steps_per_execution` value the model has been compiled with and
-        also be divisible by the replication factor if the model is running
-        in a data-parallel fashion. This value is also constrained on the
-        pipelining schedule used. This value is saved/loaded when the model
-        is saved/loaded.
+      gradient_accumulation_steps_per_replica: An integer which indicates the
+        number of steps the gradients will be accumulated for in each replica.
+        This value multiplied by the number of replicas needs to divide the
+        `steps_per_execution` value the model has been compiled with. This value
+        is saved/loaded when the model is saved/loaded.
       device_mapping: If provided, a list of length equal to the number of
         pipeline stages assigned in this model. An element at index `i` in the
         list represents which IPU the `i`'th pipeline stage should reside on.
@@ -303,24 +310,25 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
         instead be accumulated when they're available and enqueued at the end of
         pipeline execution, reducing the amount of host <-> device
         communication. When used with training, the accumulated metrics are
-        normalised `gradient_accumulation_steps`. When used with evaluation, the
-        accumulated metrics are normalised by `steps_per_epoch`. This option is
-        ignored when doing prediction. When using `accumulate_outfeed`, model
-        callbacks will be called with the same data for the batches which the
-        data was accumulated for. This value is saved/loaded when the model is
-        saved/loaded.
+        normalised by `gradient_accumulation_steps_per_replica`. When used with
+        evaluation, the accumulated metrics are normalised by `steps_per_epoch`.
+        This option is ignored when doing prediction. When using
+        `accumulate_outfeed`, model callbacks will be called with the same data
+        for the batches which the data was accumulated for. This value is
+        saved/loaded when the model is saved/loaded.
       experimental_normalize_gradients: If set to `True`, the gradients for each
-        step are first scaled by `1/gradient_accumulation_steps` before being
-        added to the gradient accumulation buffer. Note that this option is
-        experimental and the behavior might change in future releases. This
-        value is saved/loaded when the model is saved/loaded.
+        step are first scaled by
+        `1/(gradient_accumulation_steps_per_replica * number of replicas)`
+        before being added to the gradient accumulation buffer. Note that this
+        option is experimental and the behavior might change in future releases.
+        This value is saved/loaded when the model is saved/loaded.
       pipelining_kwargs: All remaining keyword arguments are forwarded to
         :func:`~tensorflow.python.ipu.pipelining_ops.pipeline`. Note that this
         dictionary is not serializable, which means that when the model is
         being saved, these values are not saved. When restoring/loading a model,
         please call `set_pipelining_options` again.
     """
-    self._set_pipelining_options_impl(gradient_accumulation_steps,
+    self._set_pipelining_options_impl(gradient_accumulation_steps_per_replica,
                                       device_mapping, accumulate_outfeed,
                                       experimental_normalize_gradients,
                                       pipelining_kwargs)

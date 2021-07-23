@@ -240,8 +240,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
   )";
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({4});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -356,8 +357,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
       absl::StrFormat(hlo_format, ThreeState_Name(replica_partition));
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({2});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -549,8 +551,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
       absl::StrFormat(hlo_format, ThreeState_Name(replica_partition));
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({2});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -740,8 +743,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
       absl::StrFormat(hlo_format, ThreeState_Name(replica_partition));
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -999,8 +1003,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
   auto param = GetParam();
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(
       auto module,
@@ -1230,8 +1235,9 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringTest, DoTest) {
 
   static constexpr int replication_factor = 2;
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(4);
-  config.set_input_mapping({0, 1, 2, 3});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
   config.set_resource_update_to_input_index({0, 1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(param.hlo, config));
@@ -1357,8 +1363,9 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   const int64 global_replication_factor = 8;
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   config.set_replica_count(global_replication_factor);
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -1495,8 +1502,9 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   )";
 
   auto config = GetModuleConfigForTest();
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1});
+  config.set_resource_input_initialized({true, true});
   config.set_resource_update_to_input_index({0, 1});
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
@@ -1543,6 +1551,33 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   EXPECT_THAT(all_reduce->replica_groups().size(), 1);
   EXPECT_THAT(all_reduce->replica_groups()[0].replica_ids(),
               ::testing::ElementsAre(0));
+}
+
+TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
+  static constexpr int replication_factor = 2;
+  auto config = GetModuleConfigForTest();
+  config.set_argument_input_indices({});
+  config.set_resource_input_indices({0, 1, 2, 3});
+  config.set_resource_input_initialized({true, true, true, true});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  const std::string hlo(tu::GetBroadcastHloString(100));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  TF_ASSERT_OK_AND_ASSIGN(bool custom_op_replaced,
+                          CustomOpReplacer().Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool offloaded,
+      VariablesOffloadAndPartition(annotations, true, 0, replication_factor)
+          .Run(module.get()));
+  EXPECT_TRUE(offloaded);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool changed,
+      ReplicatedResourceUpdateElementwiseClustering(replication_factor)
+          .Run(module.get()));
+  EXPECT_FALSE(changed);
 }
 
 }  // namespace

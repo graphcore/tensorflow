@@ -49,9 +49,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -87,7 +85,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 4}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 4}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({2, 16, 16, 4}, 3.0f);
@@ -117,9 +115,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -157,7 +153,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 1, 4}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 5, 4}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 5, 4}, 3.0f);
@@ -187,9 +183,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -227,7 +221,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 3.0f);
@@ -260,9 +254,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -302,7 +294,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({1, 16, 16, 1}, 3.0f);
@@ -336,9 +328,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -381,7 +371,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({5}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({2}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({2}, 3.0f);
@@ -418,9 +408,7 @@ ENTRY c1 {
 }
 )";
 
-  auto config = GetModuleConfigForTest();
-  config.set_resource_update_to_input_index({0});
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -465,7 +453,7 @@ ENTRY c1 {
 
   {
     // Excute and compare to CPU.
-    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo);
     auto p0 = LiteralUtil::CreateFullWithDescendingLayout({5}, 1.0f);
     auto p1 = LiteralUtil::CreateFullWithDescendingLayout({2}, 2.0f);
     auto p2 = LiteralUtil::CreateFullWithDescendingLayout({2}, 3.0f);
