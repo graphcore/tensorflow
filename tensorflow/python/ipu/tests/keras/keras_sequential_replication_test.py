@@ -72,6 +72,11 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.run_v2_only
   def testCompareMnistPredictionsWithCpu(self):
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 2
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
     def model_fn():
       layers = [
           keras.layers.Flatten(),
@@ -111,29 +116,45 @@ class IPUSequentialReplicatedTest(test_util.TensorFlowTestCase):
                   optimizer=keras.optimizer_v2.gradient_descent.SGD(),
                   steps_per_execution=8)
     model.fit(dataset, epochs=2, steps_per_epoch=2000)
-    tmpdir = TemporaryDirectory()
-    model_file = tmpdir.name + "/weights.hd5"
-    model.save(model_file)
 
-    # Predict on CPU
+    # Predict on CPU.
     cpu_predictions = model.predict(predict_ds, steps=16)
 
-    # Predict on IPU with replication
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 2
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
+    with TemporaryDirectory() as tmpdir:
+      # Test saving weights.
+      weights_file = tmpdir + "/weights.hd5"
+      model.save_weights(weights_file)
 
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      model = keras.models.load_model(model_file)
-      self.assertIsInstance(
-          model, ipu_keras.extensions.model_extensions.ModelExtension)
-      model.compile(steps_per_execution=8)
-      ipu_predictions = model.predict(predict_ds, steps=16)
+      # Predict on IPU with replication.
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        ipu_model = keras.Sequential(model_fn())
+        ipu_model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
+                          metrics=['accuracy'],
+                          optimizer=keras.optimizer_v2.gradient_descent.SGD(),
+                          steps_per_execution=8)
+        ipu_model.load_weights(weights_file).expect_partial()
+        ipu_predictions = ipu_model.predict(predict_ds, steps=16)
 
-    # compare predictions
-    self.assertAllClose(cpu_predictions, ipu_predictions)
+      # Compare predictions.
+      self.assertAllClose(cpu_predictions, ipu_predictions)
+
+    with TemporaryDirectory() as tmpdir:
+      # Test saving model.
+      model_file = tmpdir + "/model"
+      model.save(model_file)
+
+      # Predict on IPU with replication.
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        ipu_model = keras.models.load_model(model_file)
+        self.assertIsInstance(
+            ipu_model, ipu_keras.extensions.model_extensions.ModelExtension)
+        ipu_model.compile(steps_per_execution=8)
+        ipu_predictions = ipu_model.predict(predict_ds, steps=16)
+
+      # compare predictions
+      self.assertAllClose(cpu_predictions, ipu_predictions)
 
 
 if __name__ == "__main__":
