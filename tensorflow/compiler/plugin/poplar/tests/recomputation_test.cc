@@ -189,7 +189,6 @@ const std::string hlo_string = R"(
 TEST_F(NormInputRecomputationTest, RecomputeInput) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
@@ -234,7 +233,6 @@ TEST_F(NormInputRecomputationTest, RecomputeInput) {
 TEST_F(NormInputRecomputationTest, RecomputeInputOff) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
@@ -377,7 +375,6 @@ fusion.5 = f32[1,1,2,2]{3,2,1,0} fusion(f32[1,1,2,2]{3,2,1,0} %arg6.7, f32[1,4,4
 TEST_F(NormInputRecomputationTest, RecomputeRelu) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string_relu, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
@@ -440,7 +437,6 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
 TEST_F(NormInputRecomputationTest, RecomputeReluOff) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
-  config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string_relu, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();

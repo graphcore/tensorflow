@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/jit/xla_device_ops.h"
+#include "absl/synchronization/notification.h"
 
 #include <memory>
 
@@ -64,8 +65,51 @@ void XlaAssignVariableOp::Compute(OpKernelContext* context) {
                   "Trying to assign variable with wrong dtype. Expected ",
                   DataTypeString(variable->tensor()->dtype()), " got ",
                   DataTypeString(dtype_)));
-  variable->is_initialized = true;
-  *variable->tensor() = value;
+
+  const bool is_ipu = DeviceType(static_cast<Device*>(context->device())
+                                     ->attributes()
+                                     .device_type()) == "IPU";
+  if (is_ipu) {
+    // With IPU the above comment does not apply as the IPU executor tries to
+    // keep variables on the device and update variables - we therefore need to
+    // copy the value via the host (XLA to XLA is not supported).
+    DeviceContext* device_context = context->op_device_context();
+    Device* device = static_cast<Device*>(context->device());
+    Allocator* allocator = context->device()->GetAllocator({});
+
+    // Create a host value and copy to it.
+    Tensor host_value(value.dtype(), value.shape());
+    {
+      Status status;
+      absl::Notification done;
+      device_context->CopyDeviceTensorToCPU(&value, /*tensor_name=*/"", device,
+                                            &host_value,
+                                            [&status, &done](const Status& s) {
+                                              status = s;
+                                              done.Notify();
+                                            });
+      done.WaitForNotification();
+      OP_REQUIRES_OK(context, status);
+    }
+    // Copy from the host value to a new on device tensor.
+    Tensor value_copy(allocator, value.dtype(), value.shape());
+    {
+      Status status;
+      absl::Notification done;
+      device_context->CopyCPUTensorToDevice(&host_value, device, &value_copy,
+                                            [&status, &done](const Status& s) {
+                                              status = s;
+                                              done.Notify();
+                                            },
+                                            /*sync_dst_compute=*/true);
+      done.WaitForNotification();
+      OP_REQUIRES_OK(context, status);
+    }
+
+    *variable->tensor() = value_copy;
+  } else {
+    *variable->tensor() = value;
+  }
 }
 
 }  // namespace tensorflow

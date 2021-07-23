@@ -46,9 +46,10 @@ void HloHash::HashModule() {
 
   tensorflow::SerializeToStringDeterministic(proto, &proto_str_);
   hash_ = hash_util::hash(
-      proto_str_, module_->config().argument_count(),
-      module_->config().resource_input_count(),
-      absl::StrJoin(module_->config().input_mapping(), ","),
+      proto_str_,
+      absl::StrJoin(module_->config().argument_input_indices(), ","),
+      absl::StrJoin(module_->config().resource_input_indices(), ","),
+      absl::StrJoin(module_->config().resource_input_initialized(), ","),
       absl::StrJoin(module_->config().resource_update_to_input_index(), ","));
   performed_hash_ = true;
 }
