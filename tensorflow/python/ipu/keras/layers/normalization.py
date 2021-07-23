@@ -24,11 +24,11 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
 
-# We implement all three algorithms through a common generic group norm algorithm.
 class GroupNormalization(Layer):
   """Group normalization layer optimized for running on the IPU.
 
@@ -59,6 +59,10 @@ class GroupNormalization(Layer):
     trainable: Boolean, if `True` the variables will be marked as trainable.
     name: Optional name for the layer.
   """
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self,
                dtype=dtypes.float32,
                groups=2,
@@ -213,6 +217,10 @@ class InstanceNormalization(GroupNormalization):
     gamma_initializer: Initializer for the gamma weight.
     name: Optional name for the layer.
   """
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self,
                dtype=dtypes.float32,
                channels_axis=-1,
@@ -271,6 +279,10 @@ class LayerNormalization(GroupNormalization):
     trainable: Boolean, if `True` the variables will be marked as trainable.
     name: Optional name for the layer.
   """
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self,
                dtype=dtypes.float32,
                axis=-1,

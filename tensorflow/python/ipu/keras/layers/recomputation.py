@@ -19,6 +19,7 @@ Recomputation IPU Keras layers
 
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.util import deprecation
 
 
 class RecomputationCheckpoint(Layer):
@@ -39,6 +40,10 @@ class RecomputationCheckpoint(Layer):
   `RecomputationMode.RecomputeThenBackpropagate` pipelining
   recomputation mode.
   """
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
     self.built = False

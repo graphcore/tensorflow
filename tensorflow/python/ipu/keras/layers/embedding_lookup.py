@@ -25,6 +25,7 @@ from tensorflow.python.keras import initializers
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
+from tensorflow.python.util import deprecation
 
 
 class Embedding(Layer):
@@ -47,6 +48,10 @@ class Embedding(Layer):
   """
 
   # pylint: disable=useless-super-delegation
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self,
                input_dim,
                output_dim,

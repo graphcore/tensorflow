@@ -71,6 +71,15 @@ profiles can be captured for a single model, if it is separated into different P
 The subdirectories are created using the following format ``tf_report__<iso_date>__<pid>``
 and the cluster name can be read from the ``frameworks.json`` file in each subdirectory.
 
+IPU Keras Layers deprecation in TensorFlow 1.15
+'''''''''''''''''''''''''''''''''''''''''''''''
+
+IPU Keras layers (``AssumeEqualAcrossReplicas``, ``Dropout``, ``Embedding``,
+``GroupNormalization``, ``InstanceNormalization``, ``LayerNormalization``,
+``RecomputationCheckpoint``, ``PopnnLSTM`` and ``PopnnGRU``) are deprecated and
+will be removed in the next release. If you require Keras support please migrate
+your model to TensorFlow 2 which has full Keras support for IPU.
+
 Release 2.1
 ~~~~~~~~~~~
 
