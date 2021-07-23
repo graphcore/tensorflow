@@ -19,6 +19,7 @@ import numpy as np
 from tensorflow.python import keras
 from tensorflow.python.keras.layers import recurrent_v2
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
@@ -254,6 +255,21 @@ class IpuLstmTest(test.TestCase):
 
     ipu_result = layer_ipu(x, training=True)
     self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.run_v2_only
+  def test_weight_type(self):
+    layer_ipu = ipu.layers.PopnnLSTM(num_hidden)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float32 for w in layer_ipu.weights))
+
+    layer_ipu = ipu.layers.PopnnLSTM(num_hidden, dtype=dtypes.float16)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+
+    keras.backend.set_floatx('float16')
+    layer_ipu = ipu.layers.PopnnLSTM(num_hidden)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
 
 
 def _getGRULayer(keras_layer=None,
@@ -500,6 +516,21 @@ class IpuGruTest(test.TestCase):
 
     self.assertAllClose(results_ipu, results_cpu)
     self.assertAllClose(weights_ipu, weights_cpu)
+
+  @test_util.run_v2_only
+  def test_weight_type(self):
+    layer_ipu = ipu.layers.PopnnGRU(num_hidden)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float32 for w in layer_ipu.weights))
+
+    layer_ipu = ipu.layers.PopnnGRU(num_hidden, dtype=dtypes.float16)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+
+    keras.backend.set_floatx('float16')
+    layer_ipu = ipu.layers.PopnnGRU(num_hidden)
+    layer_ipu.build((batch_size, timesteps, num_input))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
 
 
 if __name__ == '__main__':

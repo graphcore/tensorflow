@@ -17,6 +17,7 @@
 import numpy as np
 
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import dtypes
 from tensorflow.python.platform import test
 from tensorflow.python import ipu
 from tensorflow.python import keras
@@ -178,6 +179,20 @@ class GroupNorm(test.TestCase):
                       reduction_axes=[2, 3, 4],
                       groups=2)
 
+  def testDtype(self):
+    layer = ipu.layers.GroupNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float32 for w in layer.weights))
+
+    layer = ipu.layers.GroupNormalization(dtype=dtypes.float16)
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
+    keras.backend.set_floatx('float16')
+    layer = ipu.layers.GroupNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
 
 class LayerTest(test.TestCase):
   def doTest(self,
@@ -293,6 +308,20 @@ class LayerTest(test.TestCase):
     # Specify axes with negative values.
     self.doComparisonTest(input_shape, axis=[-1])
 
+  def testDtype(self):
+    layer = ipu.layers.LayerNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float32 for w in layer.weights))
+
+    layer = ipu.layers.LayerNormalization(dtype=dtypes.float16)
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
+    keras.backend.set_floatx('float16')
+    layer = ipu.layers.LayerNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
 
 class InstanceTest(test.TestCase):
   def doTest(self,
@@ -387,6 +416,20 @@ class InstanceTest(test.TestCase):
 
   def testOutput5D_NCXXX(self):
     self.doTest([4, 4, 4, 10, 4], channels_axis=1, reduction_axes=[2, 3, 4])
+
+  def testDtype(self):
+    layer = ipu.layers.InstanceNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float32 for w in layer.weights))
+
+    layer = ipu.layers.InstanceNormalization(dtype=dtypes.float16)
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
+
+    keras.backend.set_floatx('float16')
+    layer = ipu.layers.InstanceNormalization()
+    layer.build((1, 1, 1, 2))
+    self.assertTrue(all(w.dtype == dtypes.float16 for w in layer.weights))
 
 
 if __name__ == '__main__':
