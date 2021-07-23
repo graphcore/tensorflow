@@ -483,10 +483,11 @@ class IPUModelModelTest(test.TestCase):
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse', steps_per_execution=2)
 
-      # Check that the callback is called for each step.
+      # Check that the callback is called for every two steps due to
+      # `steps_per_execution`.
       cb = BatchCallbackCounter()
       m.fit(test_dataset(length=96), callbacks=[cb])
-      self.assertEqual(cb.count(), 96)
+      self.assertEqual(cb.count(), 48)
 
   @test_util.run_v2_only
   def testFitTwice(self):

@@ -205,8 +205,8 @@ class IPUPipelineTest(test.TestCase):
       # Fit the weights to the dataset
       m.fit(test_dataset(length=96), callbacks=[cb])
 
-      # Should be called at the end of each batch.
-      self.assertEqual(cb.count(), 96)
+      # Should be called 96 / 16 times
+      self.assertEqual(cb.count(), 6)
 
   @test_util.run_v2_only
   def testFitTwice(self):
