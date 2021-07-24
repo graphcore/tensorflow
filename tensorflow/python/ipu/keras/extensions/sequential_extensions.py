@@ -20,6 +20,7 @@ import copy
 
 from tensorflow.python.ipu.keras.extensions import model_extensions
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.keras.engine import sequential
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training.tracking import base as trackable
 
@@ -446,3 +447,6 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
       self._pipeline_maximum_stage = self._pipeline_stage_assignment[
           -1].pipeline_stage
     return self._pipeline_maximum_stage
+
+  def _call_function_overridden(self):
+    return self.call.__func__ != sequential.Sequential.call

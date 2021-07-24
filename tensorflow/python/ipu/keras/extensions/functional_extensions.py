@@ -21,6 +21,7 @@ import copy
 from tensorflow.python.distribute import distribution_strategy_context as ds_context
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras.extensions import model_extensions
+from tensorflow.python.keras.engine import functional
 from tensorflow.python.training.tracking import base as trackable
 
 
@@ -547,3 +548,6 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
         self._pipeline_maximum_stage = max(self._pipeline_maximum_stage,
                                            assignment.pipeline_stage)
     return self._pipeline_maximum_stage
+
+  def _call_function_overridden(self):
+    return self.call.__func__ != functional.Functional.call
