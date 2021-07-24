@@ -19,13 +19,41 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
+#include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
+
+#include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-using ReplicaIdenticalInstructionTest = ParameterizedHloTestFixture;
+// Test fixtures for creating flattened HLO, which is what
+// the ReplicaIdenticalDataflowAnalysis class expects.
+struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
+  ::testing::AssertionResult SetUpHloFlattenedModule(const std::string& hlo,
+                                                     int64 replica_count = 1) {
+    auto module_setup_result =
+        HloTestFixture::SetUpHloModule(hlo, replica_count);
+    if (module_setup_result == ::testing::AssertionSuccess()) {
+      FlattenCallGraph flatten_call_graph;
+      flatten_call_graph.Run(hlo_module_);
+    }
+
+    return module_setup_result;
+  }
+};
+
+struct ParameterizedReplicaDataflowAnalysisTest
+    : ParameterizedHloTestFixture<ReplicaIdenticalDataflowAnalysisTest> {
+  void SetUp() override {
+    ASSERT_TRUE(
+        SetUpHloFlattenedModule(GetParam().hlo, GetParam().replica_count));
+  }
+};
+
+using ReplicaIdenticalInstructionTest =
+    ParameterizedReplicaDataflowAnalysisTest;
 
 static const HloTestCase parameters_are_replica_identical = {"parameters", R"(
 HloModule test
@@ -103,19 +131,19 @@ TEST_P(ReplicaIdenticalInstructionTest,
   // for all hlo being tested.
   custom_op_replacer.Run(hlo_module_);
 
-  auto* root = FindRootInstruction();
-  ASSERT_TRUE(root);
-
-  ReplicaIdenticalDataflowAnalysis analysis(root);
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 
   // The root should be replica identical since all the other instructions in
   // the computation that contribute to it are as well.
+  auto* root = FindRootInstruction();
   TF_ASSERT_OK_AND_ASSIGN(bool is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(root));
   ASSERT_TRUE(is_identical);
 }
 
-using ReplicaDifferingInstructionTest = ParameterizedHloTestFixture;
+using ReplicaDifferingInstructionTest =
+    ParameterizedReplicaDataflowAnalysisTest;
 
 static const HloTestCase infeed_is_replica_differing = {"infeed", R"(
 HloModule test
@@ -173,6 +201,20 @@ ENTRY test {
   ROOT differing_root = f32[8] add(identical2, rng_normal)
 }
 )"};
+static const HloTestCase conditional_is_replica_differing = {"conditional", R"(
+HloModule test
+identical_func {
+  ROOT x = f32[] parameter(0)
+}
+
+ENTRY test {
+  identical0 = pred[] constant(0)
+  identical1 = f32[] parameter(0)
+  identical2 = f32[] parameter(1)
+  conditional = f32[] conditional(identical0, identical1, identical2), true_computation=identical_func, false_computation=identical_func
+  ROOT differing_root = f32[] add(identical2, conditional)
+}
+)"};
 TEST_P(ReplicaDifferingInstructionTest,
        UsingNonReplicaIndenticalInstructionsMakesConsumersNonIdentical) {
   CustomOpReplacer custom_op_replacer;
@@ -180,20 +222,19 @@ TEST_P(ReplicaDifferingInstructionTest,
   // for all hlo being tested.
   custom_op_replacer.Run(hlo_module_);
 
-  auto* root = FindRootInstruction();
-  ASSERT_TRUE(root);
-
-  ReplicaIdenticalDataflowAnalysis analysis(root);
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 
   // The root should not be replica identical since there are instructions in
   // the graph which are not. Although sub-values of the root shape could still
   // be identical.
+  auto* root = FindRootInstruction();
   TF_ASSERT_OK_AND_ASSIGN(bool is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(root));
   ASSERT_FALSE(is_identical);
 }
 
-using ReplicaValueCategoryGTETest = ParameterizedHloTestFixture;
+using ReplicaValueCategoryGTETest = ParameterizedReplicaDataflowAnalysisTest;
 
 static const HloTestCase get_differing_element = {"get_tuple_differing", R"(
 HloModule test
@@ -216,11 +257,11 @@ ENTRY test {
 }
 )"};
 TEST_P(ReplicaValueCategoryGTETest, GetTupleElementIsIdenticalIfTupleIndexIs) {
-  auto* gte = FindRootInstruction();
-  ASSERT_TRUE(gte);
-  auto tuple = gte->mutable_operand(0);
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 
-  ReplicaIdenticalDataflowAnalysis analysis(gte);
+  auto* gte = FindRootInstruction();
+  auto tuple = gte->mutable_operand(0);
 
   TF_ASSERT_OK_AND_ASSIGN(
       bool tuple_value_is_identical,
@@ -231,7 +272,8 @@ TEST_P(ReplicaValueCategoryGTETest, GetTupleElementIsIdenticalIfTupleIndexIs) {
   ASSERT_EQ(gte_is_identical, tuple_value_is_identical);
 }
 
-using ReplicaValueCategoryTupleForwardingTest = ParameterizedHloTestFixture;
+using ReplicaValueCategoryTupleForwardingTest =
+    ParameterizedReplicaDataflowAnalysisTest;
 
 static const HloTestCase simple_tuple_forwarding = {"simple_tuple", R"(
 HloModule test
@@ -269,13 +311,12 @@ ENTRY test {
                                                     /*replica_count=*/4};
 TEST_P(ReplicaValueCategoryTupleForwardingTest,
        TupleForwardsCategoryOfOperands) {
-  auto* tuple = FindRootInstruction();
-  ASSERT_TRUE(tuple);
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 
+  auto* tuple = FindRootInstruction();
   auto leaf_shapes = ShapeUtil::GetLeafShapes(tuple->shape());
   ASSERT_EQ(leaf_shapes.size(), 3);
-
-  ReplicaIdenticalDataflowAnalysis analysis(tuple);
 
   // Each of the leaf values of the tuple correspond to the value of a leaf
   // instruction in the HLO.
@@ -296,8 +337,8 @@ TEST_P(ReplicaValueCategoryTupleForwardingTest,
   ASSERT_EQ(leaf2_category, ValueReplicaCategory::Identical);
 }
 
-using ReplicaValueCategoryTupleTest = HloTestFixture;
-using ReplicaValueCategoryTupleOutputTest = ParameterizedHloTestFixture;
+using ReplicaValueCategoryTupleOutputTest =
+    ParameterizedReplicaDataflowAnalysisTest;
 
 static const HloTestCase identical_tuple_output = {"identical_tuple", R"(
 HloModule test
@@ -317,11 +358,10 @@ ENTRY test {
 }
 )"};
 TEST_P(ReplicaValueCategoryTupleOutputTest, ValueIsIdenticalIfSubShapesAre) {
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
   auto* tuple = FindRootInstruction();
-  ASSERT_TRUE(tuple);
-
-  ReplicaIdenticalDataflowAnalysis analysis(tuple);
-
   TF_ASSERT_OK_AND_ASSIGN(bool tuple_elem0_is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(tuple, {0}));
   TF_ASSERT_OK_AND_ASSIGN(bool tuple_elem1_is_identical,
@@ -335,7 +375,6 @@ TEST_P(ReplicaValueCategoryTupleOutputTest, ValueIsIdenticalIfSubShapesAre) {
   ASSERT_EQ(tuple_is_identical, identical_sub_shapes);
 }
 
-using ReplicaIdenticalDataflowAnalysisTest = HloTestFixture;
 const char* multi_computation_hlo = R"(
 HloModule test
 add {
@@ -350,12 +389,10 @@ ENTRY test {
 }
 )";
 TEST_F(ReplicaIdenticalDataflowAnalysisTest, UnvisitedInstructionErrors) {
-  ASSERT_TRUE(SetUpHloModule(multi_computation_hlo));
+  ASSERT_TRUE(SetUpHloFlattenedModule(multi_computation_hlo));
 
-  auto* root = FindRootInstruction();
-  ASSERT_TRUE(root);
-
-  ReplicaIdenticalDataflowAnalysis analysis(root);
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 
   const auto status_or_value_category =
       analysis.ValueCategory(FindInstruction(hlo_module_, "x"));
@@ -364,6 +401,218 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, UnvisitedInstructionErrors) {
   const auto status_or_identical = analysis.IsValueIdenticalAcrossReplicas(
       FindInstruction(hlo_module_, "y"));
   ASSERT_FALSE(status_or_identical.ok());
+}
+
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, CanOverrideValueCategory) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(multi_computation_hlo));
+
+  auto* root = FindRootInstruction();
+
+  ValuesIdenticalAcrossReplicasVisitor visitor;
+  root->Accept(&visitor);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto original_value_category,
+                          visitor.ValueCategory(root, RootShapeIndex()));
+
+  ValuesIdenticalAcrossReplicasVisitor visitor_with_override(
+      {{root,
+        ValueCategoryTree(root->shape(), ValueReplicaCategory::Differing)}});
+  root->Accept(&visitor_with_override);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto override_value_category,
+      visitor_with_override.ValueCategory(root, RootShapeIndex()));
+  ASSERT_EQ(override_value_category, ValueReplicaCategory::Differing);
+  ASSERT_NE(override_value_category, original_value_category);
+}
+
+const char* paramless_callables_hlo = R"(
+HloModule test
+identical_func {
+  x = f32[] constant(1)
+  y = f32[] constant(2)
+  ROOT identical_root = f32[] add(x, y)
+}
+
+differing_func {
+  constant = f32[] constant(2)
+  rng = f32[] rng(constant, constant), distribution=rng_uniform
+  ROOT differing_root = f32[] add(constant, rng)
+}
+
+ENTRY test {
+  identical_call = f32[] call(), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  differing_call = f32[] call(), to_apply=differing_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  ROOT tuple = (f32[], f32[], f32[]) tuple(identical_call, differing_call)
+}
+)";
+TEST_F(ReplicaIdenticalDataflowAnalysisTest,
+       ParamlessCallHasCategoryOfCalledComputation) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(paramless_callables_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  auto* identical_call = FindInstruction(hlo_module_, "identical_call");
+  auto* differing_call = FindInstruction(hlo_module_, "differing_call");
+  ASSERT_TRUE(identical_call);
+  ASSERT_TRUE(differing_call);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto identical_call_category,
+                          analysis.ValueCategory(identical_call));
+  TF_ASSERT_OK_AND_ASSIGN(auto differing_call_category,
+                          analysis.ValueCategory(differing_call));
+
+  ASSERT_EQ(identical_call_category, ValueReplicaCategory::Identical);
+  ASSERT_EQ(differing_call_category, ValueReplicaCategory::Differing);
+}
+
+const char* calls_with_mixed_params_hlo = R"(
+HloModule test
+identical_func {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
+ENTRY test {
+  identical0 = f32[] parameter(0)
+  identical1 = f32[] constant(3)
+  identical_call0 = f32[] call(identical0, identical1), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  constant = f32[] constant(2)
+  differing0 = f32[] rng(constant, constant), distribution=rng_uniform
+  differing1 = f32[] rng(constant, constant), distribution=rng_uniform
+
+  differing_call0 = f32[] call(differing0, differing1), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+  mixed_call0 = f32[] call(identical0, differing1), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  ROOT tuple = (f32[], f32[], f32[]) tuple(identical_call0, differing_call0, mixed_call0)
+}
+)";
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableCategoryDependsOnParams) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(calls_with_mixed_params_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  auto* identical_call0 = FindInstruction(hlo_module_, "identical_call0");
+  auto* differing_call0 = FindInstruction(hlo_module_, "differing_call0");
+  auto* mixed_call0 = FindInstruction(hlo_module_, "mixed_call0");
+  ASSERT_TRUE(identical_call0);
+  ASSERT_TRUE(differing_call0);
+  ASSERT_TRUE(mixed_call0);
+
+  // Since the function being called is replica identical the value category of
+  // the caller should just depend on the params it passes in.
+  TF_ASSERT_OK_AND_ASSIGN(auto call_with_identical_params_category,
+                          analysis.ValueCategory(identical_call0));
+  TF_ASSERT_OK_AND_ASSIGN(auto call_with_differing_params_category,
+                          analysis.ValueCategory(differing_call0));
+  TF_ASSERT_OK_AND_ASSIGN(auto call_with_mixed_params_category,
+                          analysis.ValueCategory(mixed_call0));
+
+  ASSERT_EQ(call_with_identical_params_category,
+            ValueReplicaCategory::Identical);
+  ASSERT_EQ(call_with_differing_params_category,
+            ValueReplicaCategory::Differing);
+  ASSERT_EQ(call_with_mixed_params_category, ValueReplicaCategory::Differing);
+}
+
+const char* chained_calls_hlo = R"(
+HloModule test
+identical_func {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT flipped_tuple = (f32[], f32[]) tuple(y, x)
+}
+
+intermediate_func {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT call = (f32[], f32[]) call(x, y), to_apply=identical_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+}
+
+ENTRY test {
+  identical0 = f32[] parameter(0)
+
+  constant = f32[] constant(2)
+  differing0 = f32[] rng(constant, constant), distribution=rng_uniform
+
+  ROOT call = (f32[], f32[]) call(identical0, differing0), to_apply=intermediate_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+}
+)";
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableVisitedWithParams) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(chained_calls_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  auto* root = FindRootInstruction();
+  // Since the function being called is replica identical the categories of
+  // the callers output values depend on the params its called with.
+  TF_ASSERT_OK_AND_ASSIGN(auto differing0_param_category,
+                          analysis.ValueCategory(root, {0}));
+  TF_ASSERT_OK_AND_ASSIGN(auto identical0_param_category,
+                          analysis.ValueCategory(root, {1}));
+
+  ASSERT_EQ(differing0_param_category, ValueReplicaCategory::Differing);
+  ASSERT_EQ(identical0_param_category, ValueReplicaCategory::Identical);
+}
+
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, CanQuerySubComputations) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(chained_calls_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  auto* flipped_tuple = FindInstruction(hlo_module_, "flipped_tuple");
+
+  TF_ASSERT_OK_AND_ASSIGN(auto differing0_param_category,
+                          analysis.ValueCategory(flipped_tuple, {0}));
+  TF_ASSERT_OK_AND_ASSIGN(auto identical0_param_category,
+                          analysis.ValueCategory(flipped_tuple, {1}));
+
+  ASSERT_EQ(differing0_param_category, ValueReplicaCategory::Differing);
+  ASSERT_EQ(identical0_param_category, ValueReplicaCategory::Identical);
+}
+
+const char* unflattened_hlo = R"(
+HloModule test
+func {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
+ENTRY test {
+  param0 = f32[] parameter(0)
+  param1 = f32[] parameter(1)
+  call1 = f32[] call(param0, param1), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  param2 = f32[] parameter(2)
+  constant = f32[] constant(2)
+  call2 = f32[] call(param2, constant), to_apply=func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
+
+  ROOT tuple = (f32[], f32[]) tuple(call1, call2)
+}
+)";
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, RequiresFlattenedHLO) {
+  ASSERT_TRUE(SetUpHloModule(unflattened_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+
+  // Since the HLO graph isn't flattened at this point
+  // we should get an error when running the analysis
+  const auto analysis_status = analysis.Run(hlo_module_);
+  ASSERT_FALSE(analysis_status.ok());
+
+  FlattenCallGraph flatten_call_graph;
+  flatten_call_graph.Run(hlo_module_);
+
+  // After flattening it should work as usual
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -382,7 +631,8 @@ INSTANTIATE_TEST_SUITE_P(
                       partial_all_reduce_is_replica_differing,
                       partial_all_gather_is_replica_differing,
                       uniform_rng_is_replica_differing,
-                      normal_rng_is_replica_differing),
+                      normal_rng_is_replica_differing,
+                      conditional_is_replica_differing),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,

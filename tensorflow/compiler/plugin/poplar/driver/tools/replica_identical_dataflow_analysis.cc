@@ -19,7 +19,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/core/lib/core/errors.h"
 
@@ -46,6 +48,15 @@ std::ostream& operator<<(std::ostream& stream,
   return stream;
 }
 
+ValuesIdenticalAcrossReplicasVisitor::ValuesIdenticalAcrossReplicasVisitor(
+    const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+        category_overrides)
+    : value_category_mapping_(category_overrides) {
+  // We don't want to visit instructions with an overide since that will negate
+  // the effect of having an override
+  MarkOverridesAsVisited(category_overrides);
+}
+
 StatusOr<ValueReplicaCategory>
 ValuesIdenticalAcrossReplicasVisitor::ValueCategory(
     const HloInstruction* inst, const ShapeIndex& value_index) const {
@@ -67,6 +78,17 @@ Status ValuesIdenticalAcrossReplicasVisitor::DefaultAction(
     const HloInstruction* inst) {
   return SetAllInstructionValuesToIdenticalOrDiffering(
       inst, AllOperandsIdentical(inst));
+}
+
+Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
+    const HloInstruction* inst) {
+  auto* comp = inst->to_apply();
+
+  if (IsFunction(inst)) {
+    return SetAllInstructionValuesToMatchComputationRoot(inst, comp);
+  }
+
+  return SetAllInstructionValuesToDiffering(inst);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
@@ -138,6 +160,47 @@ bool ValuesIdenticalAcrossReplicasVisitor::AllOperandsIdentical(
   return all_operands_identical;
 }
 
+Status ValuesIdenticalAcrossReplicasVisitor::
+    SetAllInstructionValuesToMatchComputationRoot(const HloInstruction* caller,
+                                                  const HloComputation* comp) {
+  // To determine the value categories of a particular call we run the visitor
+  // with a set of overrides so that the categories of the computations
+  // parameters are the same as the callers operands. This should produce the
+  // same result as if the computations parameters were replaced with the
+  // callers operands but without the overhead of creating a new
+  // module/computation etc.
+  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
+      parameter_overrides;
+
+  auto& params = comp->parameter_instructions();
+  CHECK_EQ(params.size(), caller->operand_count());
+
+  for (auto i = 0u; i < params.size(); ++i) {
+    parameter_overrides[params[i]] =
+        value_category_mapping_.at(caller->operand(i));
+  }
+
+  ValuesIdenticalAcrossReplicasVisitor comp_visitor(parameter_overrides);
+  comp->Accept(&comp_visitor);
+
+  // Note that even though comp->root_instruction is already in
+  // value_category_mapping_ we can't assign it from that since
+  // absl::flat_hash_map does not have reference stability, so the reference we
+  // try to copy from gets invalidated if value_category_mapping_ has to be
+  // reallocated.
+  value_category_mapping_[caller] =
+      comp_visitor.value_category_mapping_.at(comp->root_instruction());
+
+  // Since the caller is part of a flattened module we get a unique computation
+  // per caller, so we can just move across the sub visitor instructions without
+  // worrying about collisions.
+  value_category_mapping_.insert(
+      std::make_move_iterator(comp_visitor.value_category_mapping_.begin()),
+      std::make_move_iterator(comp_visitor.value_category_mapping_.end()));
+
+  return Status::OK();
+}
+
 Status ValuesIdenticalAcrossReplicasVisitor::SetAllInstructionValuesToIdentical(
     const HloInstruction* inst) {
   return SetAllInstructionValuesToIdenticalOrDiffering(inst,
@@ -168,9 +231,24 @@ void ValuesIdenticalAcrossReplicasVisitor::
   *value_category_mapping_[inst].mutable_element(value_index) = category;
 }
 
-ReplicaIdenticalDataflowAnalysis::ReplicaIdenticalDataflowAnalysis(
-    const HloInstruction* root_inst) {
-  root_inst->Accept(&value_category_visitor_);
+void ValuesIdenticalAcrossReplicasVisitor::MarkOverridesAsVisited(
+    const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+        category_overrides) {
+  for (auto& item : category_overrides) {
+    auto* inst = item.first;
+    SetVisitState(inst->unique_id(), kVisited);
+  }
+}
+
+Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
+  auto module_call_graph = CallGraph::Build(module);
+  if (module_call_graph->IsFlattened()) {
+    auto* entry_computation = module->entry_computation();
+    return entry_computation->Accept(&value_category_visitor_);
+  }
+
+  return FailedPrecondition(
+      "Expected the call graph of the module to be flat.");
 }
 
 StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(

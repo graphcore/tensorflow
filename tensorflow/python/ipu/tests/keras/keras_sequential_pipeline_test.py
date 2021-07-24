@@ -168,6 +168,7 @@ class IPUSequentialPipelineTest(test.TestCase):
 
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     gradient_accumulation_steps_per_replica = 8
+    class_weight = {0: 0.0, 1: 0.1, 2: 0.9}
 
     # Run on CPU - simulate gradient accumulation by just using a bigger batch
     # size but less steps per epoch.
@@ -175,7 +176,8 @@ class IPUSequentialPipelineTest(test.TestCase):
     m.compile('sgd', loss='mse')
     m.fit(test_dataset(length=96,
                        batch_size=gradient_accumulation_steps_per_replica),
-          epochs=2)
+          epochs=2,
+          class_weight=class_weight)
     cpu_weights = m.weights
 
     with strategy.scope():
@@ -183,7 +185,7 @@ class IPUSequentialPipelineTest(test.TestCase):
       m.set_pipelining_options(gradient_accumulation_steps_per_replica=8,
                                experimental_normalize_gradients=True)
       m.compile('sgd', loss='mse', steps_per_execution=16)
-      m.fit(test_dataset(length=96), epochs=2)
+      m.fit(test_dataset(length=96), epochs=2, class_weight=class_weight)
       ipu_weights = m.weights
     self.assertAllClose(cpu_weights, ipu_weights)
 
@@ -208,8 +210,8 @@ class IPUSequentialPipelineTest(test.TestCase):
       # Fit the weights to the dataset
       m.fit(test_dataset(length=96), callbacks=[cb])
 
-      # Should be called at the end of each batch.
-      self.assertEqual(cb.count(), 96)
+      # Should be called 96 / 16 times
+      self.assertEqual(cb.count(), 6)
 
   @test_util.run_v2_only
   def testFitTwice(self):

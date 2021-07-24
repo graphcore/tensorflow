@@ -3685,6 +3685,32 @@ TEST_F(PoplarAlgebraicSimplifierTest, TrivialDynamicUpdateSlice) {
                                          m::Parameter(), m::Parameter())));
 }
 
+// Test that dynamic-update-slice with a scalar broadcast becomes a pad.
+TEST_F(PoplarAlgebraicSimplifierTest, DynamicUpdateSliceOfBroadcastToPad) {
+  const char* hlo_string = R"(
+HloModule AddBroadcastZeroWithDynamicSlice
+
+ENTRY AddBroadcastZeroWithDynamicSlice {
+  param0 = f32[1800,12,512]{2,1,0} parameter(0)
+  constant = f32[] constant(0)
+  broadcast = f32[1800,12,512]{2,1,0} broadcast(constant), dimensions={}
+  param1 = f32[1,12,512]{2,1,0} parameter(1)
+  constant.1 = s32[] constant(0)
+  dynamic-update-slice = f32[1800,12,512]{2,1,0} dynamic-update-slice(broadcast, param1, constant.1, constant.1, constant.1)
+  ROOT add = f32[1800,12,512]{2,1,0} add(param0, dynamic-update-slice)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  VLOG(2) << "Before rewrite dus->pad\n" << module->ToString();
+  PoplarAlgebraicSimplifier simplifier;
+  ASSERT_TRUE(simplifier.Run(module.get()).ValueOrDie());
+  VLOG(2) << "After rewrite dus->pad\n" << module->ToString();
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root->opcode(), HloOpcode::kAdd);
+  EXPECT_THAT(root->operand(1)->opcode(), HloOpcode::kPad);
+}
+
 // Test that two consecutive broadcasts can be merged to one.
 TEST_F(PoplarAlgebraicSimplifierTest, MergeBroadcasts) {
   auto m = CreateNewVerifiedModule();

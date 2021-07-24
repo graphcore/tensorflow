@@ -100,6 +100,10 @@ class ResourceUpdateElementwiseClustering : public HloModulePass {
   virtual ClusterOutlinePolicy GetClusterOutlinePolicy(
       const ElementwiseCluster& cluster) const;
 
+  virtual Status UpdateClusterBackendConfig(
+      const ElementwiseCluster& cluster,
+      PoplarBackendConfig& backend_config) const;
+
  private:
   StatusOr<bool> RewriteCall(HloModule* module, HloInstruction* call,
                              const absl::flat_hash_set<const HloComputation*>&

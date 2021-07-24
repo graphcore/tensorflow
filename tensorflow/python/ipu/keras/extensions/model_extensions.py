@@ -270,19 +270,56 @@ class ModelExtension(base_layer.KerasExtension):
     self._ipu_predict_function = ipu_predict_function
     return functions
 
-  def _get_output_iterator(self, outfeed_queue, replication_factor,
-                           num_steps_per_replica):
-    """Returns an iterator which is to be used for accessing output data
-    consumed by the callbacks.
-
-    When using synthetic data, creates an iterator which will return the right
-    number of steps of data. If not synthetic it will just return the outfeed
-    queue.
-    """
+  def _get_last_batch_results(self, outfeed_queue, replication_factor):
+    """Returns the last batch from the outfeed queue (handling replication) if
+    synthetic data is not used, otherwise returns a batch of zeros."""
     if self._use_synthetic_data:
-      return _SyntheticDataGenerator(outfeed_queue, replication_factor,
-                                     num_steps_per_replica)
-    return outfeed_queue
+      shapes = outfeed_queue._flat_shapes  # pylint: disable=protected-access
+      dtypes = outfeed_queue._flat_types  # pylint: disable=protected-access
+      flat_buffers = [
+          array_ops.zeros(shape, dtype)
+          for shape, dtype in zip(shapes, dtypes)
+      ]
+      return nest.pack_sequence_as(
+          outfeed_queue._structure,  # pylint: disable=protected-access
+          flat_buffers)
+
+    results = outfeed_queue.dequeue()
+    results = nest.map_structure(lambda x: x[-1], results)
+    if replication_factor > 1:
+      results = nest.map_structure(lambda x: x[-1], results)
+
+    return results
+
+  def _get_all_batch_results(self, outfeed_queue, replication_factor,
+                             num_steps):
+    """Returns all the batches of data from the outfeed queue (if synthetic data
+    is not used, otherwise returns batches of zeros."""
+
+    if self._use_synthetic_data:
+      shapes = outfeed_queue._flat_shapes  # pylint: disable=protected-access
+      if num_steps > 1:
+        shapes = [[shape[0] * num_steps] + shape[1:] for shape in shapes]
+      dtypes = outfeed_queue._flat_types  # pylint: disable=protected-access
+      flat_buffers = [
+          array_ops.zeros(shape, dtype)
+          for shape, dtype in zip(shapes, dtypes)
+      ]
+      return nest.pack_sequence_as(
+          outfeed_queue._structure,  # pylint: disable=protected-access
+          flat_buffers)
+
+    results = outfeed_queue.dequeue()
+
+    def merge_fn(x):
+      # Merge the steps, batches (and replication) dimensions.
+      flat_shape = [x.shape[0] * x.shape[1]] + x.shape[2:]
+      if replication_factor > 1:
+        flat_shape = [flat_shape[0] * flat_shape[1]] + flat_shape[2:]
+
+      return array_ops.reshape(x, flat_shape)
+
+    return nest.map_structure(merge_fn, results)
 
   def _make_single_ipu_train_function(self):
     @def_function.function(experimental_compile=True)
@@ -936,11 +973,6 @@ class ModelExtension(base_layer.KerasExtension):
         self._log_steps_per_execution_warning(steps_per_execution_value,
                                               steps_per_execution_per_replica)
 
-        # When outputs are accumulated we need to repeat the same data multiple
-        # times to make sure each callback gets data.
-        accumulation_factor = (gradient_accumulation_steps_per_replica
-                               if self._pipelining_accumulate_outfeed else 1)
-
         self.reset_metrics()
         callbacks.on_epoch_begin(epoch)
 
@@ -951,28 +983,19 @@ class ModelExtension(base_layer.KerasExtension):
                            step_num=step,
                            batch_size=batch_size,
                            _r=1):
+
+            callbacks.on_train_batch_begin(step)
             self.distribute_strategy.run(train_function,
                                          args=(steps_per_execution_per_replica,
                                                iterator, outfeed))
             self._train_counter.assign_add(steps_per_execution_value)
+            data = self._get_last_batch_results(outfeed, replication_factor)
 
-            output_iterator = self._get_output_iterator(
-                outfeed, replication_factor, steps_per_execution_per_replica)
-
-            current_step = step
-            for replica_data in output_iterator:
-              for data in _iterate_over_replica_results(
-                  replica_data, replication_factor, accumulation_factor):
-                callbacks.on_train_batch_begin(current_step)
-                # Due to outfeed masking, when pipelined results are wrapped in
-                # a list from the outfeed.
-                logs = data[0] if self._is_pipelined() else data
-                training_module.write_scalar_summaries(logs, step=current_step)
-                callbacks.on_train_batch_end(current_step, logs)
-                current_step += 1
-
-              if current_step == (end_step + 1):
-                break
+            # Due to outfeed masking, when pipelined results are wrapped in
+            # a list from the outfeed.
+            logs = data[0] if self._is_pipelined() else data
+            training_module.write_scalar_summaries(logs, step=end_step)
+            callbacks.on_train_batch_end(end_step, logs)
 
           if self.stop_training:
             break
@@ -1115,25 +1138,15 @@ class ModelExtension(base_layer.KerasExtension):
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
           with trace.Trace('test', step_num=step, _r=1):
+            callbacks.on_test_batch_begin(step)
             self.distribute_strategy.run(test_function,
                                          args=(steps_per_execution_per_replica,
                                                iterator, outfeed))
             self._test_counter.assign_add(steps_per_execution_value)
-
-            output_iterator = self._get_output_iterator(
-                outfeed, replication_factor, steps_per_execution_per_replica)
-            current_step = step
-            for replica_data in output_iterator:
-              for data in _iterate_over_replica_results(
-                  replica_data, replication_factor, accumulation_factor):
-                callbacks.on_test_batch_begin(current_step)
-                # Due to accumulating, the outfeed is nested.
-                logs = data[0] if accumulation_factor > 1 else data
-                callbacks.on_test_batch_end(current_step, logs)
-                current_step += 1
-
-              if current_step == (end_step + 1):
-                break
+            data = self._get_last_batch_results(outfeed, replication_factor)
+            # Due to accumulating, the outfeed is nested.
+            logs = data[0] if accumulation_factor > 1 else data
+            callbacks.on_test_batch_end(end_step, logs)
 
       logs = tf_utils.to_numpy_or_python_type(logs)
       callbacks.on_test_end(logs=logs)
@@ -1222,35 +1235,24 @@ class ModelExtension(base_layer.KerasExtension):
 
         for step in data_handler.steps():
           end_step = step + data_handler.step_increment
+          callbacks.on_predict_batch_begin(step)
           self.distribute_strategy.run(predict_function,
                                        args=(steps_per_execution_per_replica,
                                              iterator, outfeed))
           self._predict_counter.assign_add(steps_per_execution_value)
 
-          output_iterator = self._get_output_iterator(
-              outfeed, replication_factor, steps_per_execution_per_replica)
+          batch_outputs = self._get_all_batch_results(
+              outfeed, replication_factor, steps_per_execution_value)
+          if outputs is None:
+            outputs = nest.map_structure(lambda batch_output: [batch_output],
+                                         batch_outputs)
+          else:
+            nest.map_structure_up_to(
+                batch_outputs,
+                lambda output, batch_output: output.append(batch_output),
+                outputs, batch_outputs)
 
-          current_step = step
-          for replica_data in output_iterator:
-            for data in _iterate_over_replica_results(replica_data,
-                                                      replication_factor):
-              callbacks.on_predict_batch_begin(current_step)
-              batch_outputs = data
-              if outputs is None:
-                outputs = nest.map_structure(
-                    lambda batch_output: [batch_output], batch_outputs)
-              else:
-                nest.map_structure_up_to(
-                    batch_outputs,
-                    lambda output, batch_output: output.append(batch_output),
-                    outputs, batch_outputs)
-
-              callbacks.on_predict_batch_end(current_step,
-                                             {'outputs': batch_outputs})
-              current_step += 1
-
-            if current_step == (end_step + 1):
-              break
+          callbacks.on_predict_batch_end(end_step, {'outputs': batch_outputs})
 
       if batch_outputs is None:
         raise ValueError('Expect x to be a non-empty array or dataset.')
@@ -1276,46 +1278,3 @@ class ModelExtension(base_layer.KerasExtension):
   def _get_pipeline_maximum_pipeline_stage(self):
     """Returns the maximum pipeline stage assignment"""
     raise NotImplementedError
-
-
-class _SyntheticDataGenerator(collections_abc.Iterator):
-  """An iterator for generating synthetic data."""
-  def __init__(self, outfeed_queue, replication_factor, num_steps):
-    shapes = outfeed_queue._flat_shapes  # pylint: disable=protected-access
-    dtypes = outfeed_queue._flat_types  # pylint: disable=protected-access
-    if replication_factor > 1:
-      shapes = [[replication_factor] + shape.as_list() for shape in shapes]
-    flat_buffers = [
-        array_ops.zeros(shape, dtype) for shape, dtype in zip(shapes, dtypes)
-    ]
-    self._dummy_data = nest.pack_sequence_as(
-        outfeed_queue._structure,  # pylint: disable=protected-access
-        flat_buffers)
-    self._num_steps = num_steps
-    self._step = 0
-
-  def __iter__(self):
-    return self
-
-  def __next__(self):
-    if self._step == self._num_steps:
-      raise StopIteration
-    self._step += 1
-    return self._dummy_data
-
-
-def _iterate_over_replica_results(data,
-                                  replication_factor,
-                                  accumulation_factor=1):
-  """Function which slices out the per replica results."""
-  if replication_factor == 1:
-    for _ in range(accumulation_factor):
-      yield data
-    return
-
-  # Each tensor has an extra dimension
-  flat_data = nest.flatten(data)
-  for i in range(replication_factor):
-    x = nest.pack_sequence_as(data, [t[i] for t in flat_data])
-    for _ in range(accumulation_factor):
-      yield x

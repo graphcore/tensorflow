@@ -19,11 +19,9 @@ Normalization Keras layers
 from functools import reduce
 import operator
 
-from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import smart_cond
 from tensorflow.python.ipu.keras.layers import ipu_layer
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ops import array_ops
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -41,7 +39,6 @@ class GroupNormalization(ipu_layer.IPULayer):
   https://arxiv.org/abs/1803.08494.
 
   Arguments:
-    dtype: The data type for the trainable weights.
     groups: The number of groups to use in the normalization.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
@@ -58,10 +55,8 @@ class GroupNormalization(ipu_layer.IPULayer):
       things this will mean that using pre-trained weights would not be possible
       if not produced with this unconventional implementation.
     trainable: Boolean, if `True` the variables will be marked as trainable.
-    name: Optional name for the layer.
   """
   def __init__(self,
-               dtype=dtypes.float32,
                groups=2,
                channels_axis=-1,
                center=True,
@@ -71,8 +66,8 @@ class GroupNormalization(ipu_layer.IPULayer):
                gamma_initializer=None,
                strided_channel_grouping=True,
                trainable=True,
-               name=None):
-    super().__init__(dtype=dtype, name=name)
+               **kwargs):
+    super().__init__(**kwargs)
 
     self.groups = groups
     self.channels_axis = channels_axis
@@ -209,7 +204,6 @@ class InstanceNormalization(GroupNormalization):
   https://arxiv.org/abs/1607.08022.
 
   Arguments:
-    dtype: The data type for the trainable weights.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
     center: If True, add offset of `beta` to normalized tensor.
@@ -219,10 +213,8 @@ class InstanceNormalization(GroupNormalization):
     epsilon: Small float added to variance to avoid dividing by zero.
     beta_initializer: Initializer for the beta weight.
     gamma_initializer: Initializer for the gamma weight.
-    name: Optional name for the layer.
   """
   def __init__(self,
-               dtype=dtypes.float32,
                channels_axis=-1,
                center=True,
                scale=True,
@@ -230,9 +222,8 @@ class InstanceNormalization(GroupNormalization):
                beta_initializer=None,
                gamma_initializer=None,
                trainable=True,
-               name=None):
+               **kwargs):
     super().__init__(
-        dtype=dtype,
         # We set this in the build function, once we know what the shape is.
         groups=0,
         channels_axis=channels_axis,
@@ -242,7 +233,7 @@ class InstanceNormalization(GroupNormalization):
         beta_initializer=beta_initializer,
         gamma_initializer=gamma_initializer,
         trainable=trainable,
-        name=name)
+        **kwargs)
 
   # pylint: disable=useless-super-delegation
   def build(self, input_shape):
@@ -283,10 +274,8 @@ class LayerNormalization(GroupNormalization):
     beta_constraint: Optional constraint for the beta weight.
     gamma_constraint: Optional constraint for the gamma weight.
     trainable: Boolean, if `True` the variables will be marked as trainable.
-    name: Optional name for the layer.
   """
   def __init__(self,
-               dtype=dtypes.float32,
                axis=-1,
                epsilon=1e-3,
                center=True,
@@ -298,7 +287,6 @@ class LayerNormalization(GroupNormalization):
                beta_constraint=None,
                gamma_constraint=None,
                trainable=True,
-               name=None,
                **kwargs):
     if isinstance(axis, (list, tuple)):
       self.axis = axis[:]
@@ -309,8 +297,7 @@ class LayerNormalization(GroupNormalization):
                        'argument \'axis\', but received instead: %s' % axis)
 
     channels_axis = -1
-    super().__init__(dtype=dtype,
-                     groups=1,
+    super().__init__(groups=1,
                      channels_axis=channels_axis,
                      center=center,
                      scale=scale,
@@ -318,7 +305,7 @@ class LayerNormalization(GroupNormalization):
                      beta_initializer=beta_initializer,
                      gamma_initializer=gamma_initializer,
                      trainable=trainable,
-                     name=name)
+                     **kwargs)
 
     self._check_unsupported(beta_regularizer, "beta_regularizer")
     self._check_unsupported(gamma_regularizer, "gamma_regularizer")

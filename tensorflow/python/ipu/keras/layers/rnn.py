@@ -63,14 +63,13 @@ class _PopnnRNN(ipu_layer.IPULayer):
                kernel_initializer=None,
                recurrent_initializer=None,
                bias_initializer=None,
-               dtype=dtypes.float32,
                dropout=0.,
                return_state=False,
                return_sequences=False,
                time_major=False,
                stateful=False,
                **kwargs):
-    super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
+    super(_PopnnRNN, self).__init__(**kwargs)
 
     activation = op_util.get_activation_name(activation)
     recurrent_activation = op_util.get_activation_name(recurrent_activation)
@@ -86,12 +85,13 @@ class _PopnnRNN(ipu_layer.IPULayer):
                        "recurrent activation. Acceptable value are " +
                        ACCEPTED_RECURRENT_ACTIVATIONS_STR)
 
-    if dtype not in [dtypes.float16, dtypes.float32]:
-      raise ValueError("Only support float16, float32, provided %s" % dtype)
+    self._plain_dtype = dtypes.as_dtype(self.dtype or K.floatx())
+    if self._plain_dtype not in [dtypes.float16, dtypes.float32]:
+      raise ValueError("Only support float16, float32, provided %s" %
+                       self._plain_dtype)
     # Layer self.dtype is type name, the original DType object is kept here.
     self._activation = activation
     self._recurrent_activation = recurrent_activation
-    self._plain_dtype = dtype
     self._partials_dtype = partials_dtype
     self._num_units = num_units
     self._kernel_initializer = kernel_initializer
@@ -507,7 +507,7 @@ class PopnnLSTM(_PopnnRNN):
     if training is None:
       training = K.learning_phase()
 
-    dtype = self.dtype
+    dtype = self._plain_dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
 
     if len(inputs.shape) != 3:
@@ -844,7 +844,7 @@ class PopnnGRU(_PopnnRNN):
     if training is None:
       training = K.learning_phase()
 
-    dtype = self.dtype
+    dtype = self._plain_dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
 
     if len(inputs.shape) != 3:

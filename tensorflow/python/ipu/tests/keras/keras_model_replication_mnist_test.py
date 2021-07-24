@@ -21,14 +21,19 @@ from tensorflow.python.data.ops.dataset_ops import DatasetV2
 from tensorflow.python import keras
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
-from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu import ipu_strategy
+from tensorflow.python.ipu import keras as ipu_keras
 
 
 class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
   @tu.test_uses_ipus(num_ipus=4)
   @test_util.run_v2_only
   def testCompareMnistPredictionsWithCpu(self):
+    cfg = IPUConfig()
+    cfg.auto_select_ipus = 4
+    tu.add_hw_ci_connection_options(cfg)
+    cfg.configure_ipu_system()
+
     def model_fn():
       input_layer = keras.layers.Input(shape=(28, 28, 1),
                                        dtype='float32',
@@ -70,35 +75,45 @@ class IPUModelReplicatedMnistTest(test_util.TensorFlowTestCase):
                   optimizer=keras.optimizer_v2.gradient_descent.SGD(),
                   steps_per_execution=4)
     model.fit(dataset, epochs=2, steps_per_epoch=2000)
-    tmpdir = TemporaryDirectory()
-    weights_file = tmpdir.name + "/weights.hd5"
-    model.save_weights(weights_file)
 
-    # Predict on CPU
+    # Predict on CPU.
     cpu_predictions = model.predict(predict_ds, steps=12)
 
-    # Predict on IPU with replication
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 4
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
+    with TemporaryDirectory() as tmpdir:
+      # Test saving weights.
+      weights_file = tmpdir + "/weights.hd5"
+      model.save_weights(weights_file)
 
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      model = keras.Model(*model_fn())
-      model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
-                    metrics=['accuracy'],
-                    optimizer=keras.optimizer_v2.gradient_descent.SGD(),
-                    steps_per_execution=4)
-      model.load_weights(weights_file).expect_partial()
-      ipu_predictions = model.predict(predict_ds, steps=12)
+      # Predict on IPU with replication.
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        ipu_model = keras.Model(*model_fn())
+        ipu_model.compile(loss=keras.losses.SparseCategoricalCrossentropy(),
+                          metrics=['accuracy'],
+                          optimizer=keras.optimizer_v2.gradient_descent.SGD(),
+                          steps_per_execution=4)
+        ipu_model.load_weights(weights_file).expect_partial()
+        ipu_predictions = ipu_model.predict(predict_ds, steps=12)
 
-    # compare predictions
-    self.assertEqual(cpu_predictions.shape, ipu_predictions.shape)
-    num_different = np.sum(
-        np.argmax(cpu_predictions, axis=1) != np.argmax(ipu_predictions,
-                                                        axis=1))
-    self.assertEqual(0, num_different)
+      # Compare predictions.
+      self.assertAllClose(cpu_predictions, ipu_predictions)
+
+    with TemporaryDirectory() as tmpdir:
+      # Test saving model.
+      model_file = tmpdir + "/model"
+      model.save(model_file)
+
+      # Predict on IPU with replication
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        ipu_model = keras.models.load_model(model_file)
+        self.assertIsInstance(
+            ipu_model, ipu_keras.extensions.model_extensions.ModelExtension)
+        ipu_model.compile(steps_per_execution=4)
+        ipu_predictions = ipu_model.predict(predict_ds, steps=12)
+
+      # compare predictions
+      self.assertAllClose(cpu_predictions, ipu_predictions)
 
 
 if __name__ == "__main__":

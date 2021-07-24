@@ -17,7 +17,8 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_REPLICA_IDENTICAL_DATAFLOW_ANALYSIS_H_
 
 #include <ostream>
-#include <unordered_map>
+
+#include "absl/container/flat_hash_map.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -35,11 +36,18 @@ enum class ValueReplicaCategory { Unknown = 0, Identical, Differing };
 std::ostream& operator<<(std::ostream& stream,
                          const ValueReplicaCategory& category);
 
-// Visitor for traversing a computation to determine the values of each
-// instruction that will be identical across replicas.
+using ValueCategoryTree = ShapeTree<ValueReplicaCategory>;
+
+// Visitor for traversing a module to determine which values of each
+// instruction will be identical across replicas.
+// Expects calls to be flattened.
 class ValuesIdenticalAcrossReplicasVisitor
     : public ConstDfsHloVisitorWithDefault {
  public:
+  explicit ValuesIdenticalAcrossReplicasVisitor(
+      const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+          category_overrides = {});
+
   // Return the ValueReplicaCategory for the given instruction/value_index or an
   // error if the instruction has not already been visited.
   StatusOr<ValueReplicaCategory> ValueCategory(
@@ -47,6 +55,7 @@ class ValuesIdenticalAcrossReplicasVisitor
 
   Status DefaultAction(const HloInstruction* inst) override;
 
+  Status HandleCall(const HloInstruction* inst) override;
   Status HandleCustomCall(const HloInstruction* inst) override;
   Status HandleAllReduce(const HloInstruction* inst) override;
   Status HandleFusion(const HloInstruction* inst) override;
@@ -68,18 +77,22 @@ class ValuesIdenticalAcrossReplicasVisitor
     return SetAllInstructionValuesToDiffering(inst);         \
   }
 
+  // Since we can't determine which branch of the conditional we'll be taking
+  // we mark it as differing.
+  HandleAsReplicaDiffering(Conditional);
   HandleAsReplicaDiffering(Infeed);
   HandleAsReplicaDiffering(Rng);
 
   // TODO(T41162): Add support for loops/computations.
-  HandleAsReplicaDiffering(Call);
-  HandleAsReplicaDiffering(Conditional);
   HandleAsReplicaDiffering(While);
 
 #undef HandleAsReplicaDiffering
 
  private:
   bool AllOperandsIdentical(const HloInstruction* inst) const;
+
+  Status SetAllInstructionValuesToMatchComputationRoot(
+      const HloInstruction* inst, const HloComputation* comp);
 
   Status SetAllInstructionValuesToIdentical(const HloInstruction* inst);
   Status SetAllInstructionValuesToDiffering(const HloInstruction* inst);
@@ -90,16 +103,20 @@ class ValuesIdenticalAcrossReplicasVisitor
                                                 const ShapeIndex& value_index,
                                                 bool identical);
 
-  using ValueCategoryTree = ShapeTree<ValueReplicaCategory>;
-  std::unordered_map<const HloInstruction*, ValueCategoryTree>
+  void MarkOverridesAsVisited(
+      const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
+          category_overrides);
+
+  absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>
       value_category_mapping_;
 };
 
-// Analyse the computation from the given root instruction to find values
-// which are identical across replicas.
+// Analyse the given HloModule to find values which are identical
+// across replicas.
 class ReplicaIdenticalDataflowAnalysis {
  public:
-  explicit ReplicaIdenticalDataflowAnalysis(const HloInstruction* root_inst);
+  // Run the analysis. Requires that `module` be flattened.
+  Status Run(const HloModule* module);
 
   StatusOr<ValueReplicaCategory> ValueCategory(
       const HloInstruction* inst,

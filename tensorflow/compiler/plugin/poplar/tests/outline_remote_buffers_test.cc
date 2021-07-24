@@ -162,6 +162,53 @@ ENTRY main {
   return hlo;
 }
 
+std::string GetElementwiseClusterHlo(int64 n = 0, int64 replication_factor = 1,
+                                     int64 shard_size = 0) {
+  std::string hlo = R"(
+HloModule module
+
+comp_0 {
+  c0_param_0 = f32[$N] parameter(0)
+  c0_param_1 = f32[$RN] parameter(1)
+  c0_param_2 = f32[$RN] parameter(2)
+  c0_param_3 = f32[$RN] parameter(3)
+  c0_add = f32[$RN] add(c0_param_2, c0_param_1)
+  c0_subtract = f32[$RN] subtract(c0_param_2, c0_param_1)
+  ROOT c0_t = (f32[$N], f32[$RN], f32[$RN]) tuple(c0_param_0, c0_add, c0_subtract)
+}
+
+ENTRY main {
+  param_0 = f32[$N] parameter(0)
+  param_1 = f32[$N] parameter(1)
+  param_2 = f32[$N] parameter(2)
+  param_3 = f32[$N] parameter(3)
+
+  load_0 = f32[$RN] custom-call(param_0), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_1 = f32[$RN] custom-call(param_1), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+  load_2 = f32[$RN] custom-call(param_2), custom_call_target="RemoteParameterLoad", backend_config="{\"replication_factor\":$R}\n"
+
+  c0 = (f32[$N], f32[$RN], f32[$RN]) call(param_3, load_0, load_1, load_2), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"Function\",\"functionConfig\":{\"keepInputLayouts\":true,\"uniqueSharding\":true,\"partitionedElementwiseCluster\":true}}}"
+  c0_gte0 = f32[$N] get-tuple-element(c0), index=0
+  c0_gte1 = f32[$RN] get-tuple-element(c0), index=1
+  c0_gte2 = f32[$RN] get-tuple-element(c0), index=2
+
+  new_param_0 = f32[$N] custom-call(param_0, c0_gte1), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
+  new_param_1 = f32[$N] custom-call(param_1, c0_gte2), custom_call_target="RemoteParameterStore", backend_config="{\"replication_factor\":$R}\n"
+
+  ROOT t = (f32[$N], f32[$N], f32[$N], f32[$N], f32[$RN], f32[$RN]) tuple(new_param_0, new_param_1)
+}
+)";
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$RN", shard_size ? std::to_string(shard_size) : std::string(),
+      true);
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$R", std::to_string(replication_factor), true);
+  hlo = tensorflow::str_util::StringReplace(
+      hlo, "$N", n ? std::to_string(n) : std::string(), true);
+
+  return hlo;
+}
+
 TEST_F(OutlineRemoteBuffersTest, TestGetFunctions) {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(GetValidHlo()));
@@ -479,6 +526,33 @@ TEST_F(OutlineRemoteBuffersTest, TestOutlineWithPermutation) {
     EXPECT_TRUE(Match(load0_0, m::CustomCall(m::Parameter(0))));
     EXPECT_TRUE(Match(load0_1, m::CustomCall(m::Parameter(1))));
   }
+}
+
+TEST_F(OutlineRemoteBuffersTest, TestElementwiseCluster) {
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(GetElementwiseClusterHlo()));
+
+  ASSERT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  auto all_functions =
+      OutlineRemoteBuffers::GetFunctionsForOutlining(module.get());
+  EXPECT_EQ(all_functions.size(), 1);
+
+  auto functions = *std::begin(all_functions)->second;
+  EXPECT_EQ(functions.size(), 1);
+
+  auto function = *std::begin(functions);
+  RemoteBufferInputsOutputsInfos rbioi(function);
+  EXPECT_EQ(rbioi.GetNumModifiedLoadStores(), 2);
+  EXPECT_EQ(rbioi.GetNumUnmodifiedLoads(), 1);
+  EXPECT_THAT(rbioi.GetInputsOldToNewPermutation(),
+              ::testing::ElementsAre(3, 0, 1, 2));
+  EXPECT_THAT(rbioi.GetInputsNewToOldPermutation(),
+              ::testing::ElementsAre(1, 2, 3, 0));
+
+  EXPECT_THAT(rbioi.GetOutputsOldToNewPermutation(),
+              ::testing::ElementsAre(2, 0, 1));
+  EXPECT_THAT(rbioi.GetOutputsNewToOldPermutation(),
+              ::testing::ElementsAre(1, 2, 0));
 }
 
 }  // namespace
