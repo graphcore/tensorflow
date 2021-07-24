@@ -129,11 +129,17 @@ class AutoReportDirTest(xla_test.XLATestCase):
         sess.run(run_graph_op, {x: np.full((2, 2), 10)})
 
       # Make sure there's exactly one report directory with the right name
-      repdirs = find_files_by_substring(os.getcwd(), "tommyFlowers")
-      self.assertTrue(repdirs)
+      rootdirs = find_files_by_substring(os.getcwd(), "tommyFlowers")
+      self.assertTrue(rootdirs)
+      self.assertTrue(len(rootdirs) == 1)
+      rootdir = rootdirs[0]
 
-      self.assertTrue(len(repdirs) == 1)
+      # for each report directory - must be at least 1
+      repdirs = find_files_by_substring(rootdir, REPORT_DIR_PREFIX)
+      self.assertTrue(repdirs)
+      self.assertTrue(len(repdirs) >= 1)
       repdir = repdirs[0]
+
       # Make sure there's a JSON framework.json in it
       framework_file = find_files_by_substring(repdir, "framework.json")
       self.assertTrue(framework_file)

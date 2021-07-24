@@ -345,17 +345,7 @@ StatusOr<HloInstruction*> ResourceUpdateElementwiseClustering::OutlineCluster(
   // Set call to be a function.
   auto backend_config =
       call->backend_config<PoplarBackendConfig>().ValueOrDie();
-  auto* call_config = backend_config.mutable_call_config();
-  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
-  auto* function_config = call_config->mutable_function_config();
-  // Because inputs will be dynamically sliced, keep the non-sliced layouts at
-  // the callsite - this means any rearrangement will only be done once inside
-  // of the call rather than at every callsite.
-  function_config->set_keep_input_layouts(true);
-  // Make sure that all inputs are copied to a single device with the most
-  // parameters before the function call - in a resource update this will allow
-  // copies of all hyper parameters to be scheduled earlier.
-  function_config->set_unique_sharding(true);
+  TF_RETURN_IF_ERROR(UpdateClusterBackendConfig(cluster, backend_config));
   TF_RETURN_IF_ERROR(call->set_backend_config(backend_config));
 
   // Connect up all the users of the cluster output.
@@ -381,6 +371,23 @@ ClusterOutlinePolicy
 ResourceUpdateElementwiseClustering::GetClusterOutlinePolicy(
     const ElementwiseCluster& cluster) const {
   return ClusterOutlinePolicy::OutlineNonUnique;
+}
+
+Status ResourceUpdateElementwiseClustering::UpdateClusterBackendConfig(
+    const ElementwiseCluster& cluster,
+    PoplarBackendConfig& backend_config) const {
+  auto* call_config = backend_config.mutable_call_config();
+  call_config->set_type(PoplarBackendConfig::CallConfig::Function);
+  auto* function_config = call_config->mutable_function_config();
+  // Because inputs will be dynamically sliced, keep the non-sliced layouts at
+  // the callsite - this means any rearrangement will only be done once inside
+  // of the call rather than at every callsite.
+  function_config->set_keep_input_layouts(true);
+  // Make sure that all inputs are copied to a single device with the most
+  // parameters before the function call - in a resource update this will allow
+  // copies of all hyper parameters to be scheduled earlier.
+  function_config->set_unique_sharding(true);
+  return Status::OK();
 }
 
 StatusOr<bool> ResourceUpdateElementwiseClustering::RewriteCall(

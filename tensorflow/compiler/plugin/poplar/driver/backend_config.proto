@@ -173,6 +173,7 @@ message PoplarBackendConfig {
       bool unique_sharding = 2;
       int64 num_modified_remote_buffer_inputs = 3;
       int64 num_unmodified_remote_buffer_inputs = 4;
+      bool partitioned_elementwise_cluster = 5;
     }
 
     message ResourceUpdateConfig {

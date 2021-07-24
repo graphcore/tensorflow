@@ -488,6 +488,11 @@ ThreeState GetResourceUpdatePartitionOffloadedVariables(
       .partition_offloaded_variables();
 }
 
+bool GetFunctionPartitionedElementwiseCluster(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().function_config().partitioned_elementwise_cluster();
+}
+
 bool GetFunctionKeepInputLayouts(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().function_config().keep_input_layouts();

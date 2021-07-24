@@ -19,6 +19,7 @@ Assume Equal Across Replicas IPU Keras layer
 
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.util import deprecation
 
 
 class AssumeEqualAcrossReplicas(Layer):
@@ -44,6 +45,10 @@ class AssumeEqualAcrossReplicas(Layer):
       or operated on inplace. This is needed when using
       `AssumeEqualAcrossReplicas` with tensor slices.
   """
+  @deprecation.deprecated(
+      None,
+      "Please move your model to TensorFlow 2 which has full Keras support for "
+      "IPU.")
   def __init__(self, inplace=False, **kwargs):
     super().__init__(**kwargs)
     self._inplace = inplace

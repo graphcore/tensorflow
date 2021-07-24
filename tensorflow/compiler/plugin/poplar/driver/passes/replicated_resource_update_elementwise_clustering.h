@@ -70,6 +70,10 @@ class ReplicatedResourceUpdateElementwiseClustering final
   ClusterOutlinePolicy GetClusterOutlinePolicy(
       const ElementwiseCluster& cluster) const override;
 
+  Status UpdateClusterBackendConfig(
+      const ElementwiseCluster& cluster,
+      PoplarBackendConfig& backend_config) const override;
+
  private:
   uint32 partition_replication_factor_;
   uint32 global_replication_factor_;

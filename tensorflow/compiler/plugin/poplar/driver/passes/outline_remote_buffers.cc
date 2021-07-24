@@ -424,7 +424,8 @@ StatusOr<bool> OutlineIntoFunctions(const Functions& functions) {
 namespace {
 bool ShouldOutlineFunctions(const Functions& functions) {
   // Do not outline if the function only appears once.
-  if (functions.size() == 1) {
+  if (functions.size() == 1 &&
+      !GetFunctionPartitionedElementwiseCluster(*functions.begin())) {
     return false;
   }
 
