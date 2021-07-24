@@ -1891,6 +1891,25 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "keras_asynchronous_callbacks_test",
+    size = "large",
+    srcs = ["tests/keras/keras_asynchronous_callbacks_test.py"],
+    shard_count = 6,
+    tags = ["hw_poplar_test"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1926,6 +1945,7 @@ test_suite(
         "ipu_strategy_replicated_test",
         "ipu_strategy_test",
         "iteration_counter_test",
+        "keras_asynchronous_callbacks_test",
         "keras_ctc_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",

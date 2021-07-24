@@ -201,6 +201,25 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
             "pipeline_stage_assignment", [])
     ]
 
+  def set_asynchronous_callbacks(self, asynchronous=False):
+    """Sets the asynchronous callbacks options when calling `fit()`, `evaluate()`
+    and `predict()`.
+
+    When running `fit()`, `evaluate()` and `predict()` the callbacks the model
+    is configured with are executed after `steps_per_execution` have executed.
+    Enabling asynchronous callbacks means that the callbacks are invoked after
+    every step, even when `steps_per_execution > 1`. This can reduce the latency
+    of receiving per step results and metrics at a cost of an extra thread
+    running in the background of the application.
+    Note that this option is ignored for the `fit()` and `evaluate()` when
+    running a pipelined model and `accumulate_outfeed=True` (configured via
+    `set_pipelining_options`).
+
+    Args:
+      asynchronous: Whether asynchronous callbacks should be enabled.
+    """
+    self._set_asynchronous_callbacks_impl(asynchronous)
+
   def set_gradient_accumulation_options(
       self,
       gradient_accumulation_steps_per_replica=None,
