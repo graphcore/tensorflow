@@ -110,7 +110,7 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
 
   def experimental_run_v2(self, *args, **kwargs):
     raise RuntimeError(
-      "`experimental_run_v2` has been deleted. Use `run` instead.")
+        "`experimental_run_v2` has been deleted. Use `run` instead.")
 
   @property
   def _device_ordinal(self):
@@ -150,6 +150,10 @@ class IPUStrategyV1(distribute_lib.StrategyV1):
         instance.__class__ = cls.__class__(cls.__name__, (cls, extension), {})
         extension.__init__(instance)
         break
+
+  @property
+  def supports_loss_scaling(self):
+    return True
 
 
 def _get_variable_creator_initial_value(device, **kwargs):

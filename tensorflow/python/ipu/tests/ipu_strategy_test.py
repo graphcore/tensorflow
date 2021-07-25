@@ -34,6 +34,8 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.keras.mixed_precision import loss_scale_optimizer
+from tensorflow.python.keras.optimizer_v2 import gradient_descent
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
@@ -617,6 +619,13 @@ class IPUStrategyV1Test(test_util.TensorFlowTestCase, parameterized.TestCase):
         return x
 
       self.assertAllClose(strategy.run(step_fn, args=(iterator,)), 6.)
+
+  @test_util.run_v2_only
+  def test_loss_scale_optimizer_supported(self):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      # No exception raised.
+      loss_scale_optimizer.LossScaleOptimizer(gradient_descent.SGD())
 
 
 if __name__ == "__main__":
