@@ -19,6 +19,7 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras import extensions
 from tensorflow.python.eager import def_function
 from tensorflow.python.keras.engine import base_layer
+from tensorflow.python.keras.engine import functional
 from tensorflow.python.keras.engine import sequential
 from tensorflow.python.keras.engine import training as training_module
 from tensorflow.python.keras import layers
@@ -142,6 +143,164 @@ class KerasExtensionsTest(test.TestCase):
       model = MyModel(inputs, outputs)
       self.assertIsInstance(
           model, extensions.functional_extensions.FunctionalExtension)
+
+  @test_util.run_v2_only
+  def testModelOverrides(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      class MakeFunctionsOverrideModel(functional.Functional):
+        def make_train_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_train_function(*args, **kwargs)
+
+        def make_test_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_test_function(*args, **kwargs)
+
+        def make_predict_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_predict_function(*args, **kwargs)
+
+      inputs = layers.Input(shape=(1,))
+      outputs = layers.Dense(1)(inputs)
+      model = MakeFunctionsOverrideModel(inputs, outputs)
+      model.compile(loss='mse')
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_train_function`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_test_function`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_predict_function`"):
+        model.predict([1.], batch_size=1)
+
+      class StepFunctionsOverrideModel(functional.Functional):
+        def train_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().train_step(*args, **kwargs)
+
+        def test_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().test_step(*args, **kwargs)
+
+        def predict_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().predict_step(*args, **kwargs)
+
+      inputs = layers.Input(shape=(1,))
+      outputs = layers.Dense(1)(inputs)
+      model = StepFunctionsOverrideModel(inputs, outputs)
+      model.compile(loss='mse')
+      assignments = model.get_pipeline_stage_assignment()
+      for assignment in assignments:
+        assignment.pipeline_stage = 0
+      model.set_pipeline_stage_assignment(assignments)
+      model.set_pipelining_options(gradient_accumulation_steps_per_replica=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `train_step`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `test_step`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `predict_step`"):
+        model.predict([1.], batch_size=1)
+      model.reset_pipeline_stage_assignment()
+      model.compile(steps_per_execution=2)
+      model.set_gradient_accumulation_options(
+          gradient_accumulation_steps_per_replica=2)
+      with self.assertRaisesRegex(RuntimeError, "The function `train_step`"):
+        model.fit([[1.], [1.]], [[1.], [1.]], batch_size=1)
+
+      class CallOverrideModel(functional.Functional):
+        def call(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().call(*args, **kwargs)
+
+      inputs = layers.Input(shape=(1,))
+      outputs = layers.Dense(1)(inputs)
+      model = CallOverrideModel(inputs, outputs)
+      model.compile(loss='mse')
+      assignments = model.get_pipeline_stage_assignment()
+      for assignment in assignments:
+        assignment.pipeline_stage = 0
+      model.set_pipeline_stage_assignment(assignments)
+      model.set_pipelining_options(gradient_accumulation_steps_per_replica=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.predict([1.], batch_size=1)
+
+  @test_util.run_v2_only
+  def testSequential(self):
+    cfg = config.IPUConfig()
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+
+      class MakeFunctionsOverrideModel(sequential.Sequential):
+        def make_train_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_train_function(*args, **kwargs)
+
+        def make_test_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_test_function(*args, **kwargs)
+
+        def make_predict_function(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().make_predict_function(*args, **kwargs)
+
+      model = MakeFunctionsOverrideModel([layers.Dense(1)])
+      model.compile(loss='mse')
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_train_function`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_test_function`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError,
+                                  "The function `make_predict_function`"):
+        model.predict([1.], batch_size=1)
+
+      class StepFunctionsOverrideModel(sequential.Sequential):
+        def train_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().train_step(*args, **kwargs)
+
+        def test_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().test_step(*args, **kwargs)
+
+        def predict_step(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().predict_step(*args, **kwargs)
+
+      model = StepFunctionsOverrideModel([layers.Dense(1)])
+      model.compile(loss='mse')
+      model.set_pipeline_stage_assignment([0])
+      model.set_pipelining_options(gradient_accumulation_steps_per_replica=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `train_step`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `test_step`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `predict_step`"):
+        model.predict([1.], batch_size=1)
+      model.reset_pipeline_stage_assignment()
+      model.compile(steps_per_execution=2)
+      model.set_gradient_accumulation_options(
+          gradient_accumulation_steps_per_replica=2)
+      with self.assertRaisesRegex(RuntimeError, "The function `train_step`"):
+        model.fit([[1.], [1.]], [[1.], [1.]], batch_size=1)
+
+      class CallOverrideModel(sequential.Sequential):
+        def call(self, *args, **kwargs):  # pylint: disable=useless-super-delegation,arguments-differ
+          return super().call(*args, **kwargs)
+
+      model = CallOverrideModel([layers.Dense(1)])
+      model.compile(loss='mse')
+      model.set_pipeline_stage_assignment([0])
+      model.set_pipelining_options(gradient_accumulation_steps_per_replica=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.fit([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.evaluate([1.], [1.], batch_size=1)
+      with self.assertRaisesRegex(RuntimeError, "The function `call`"):
+        model.predict([1.], batch_size=1)
 
 
 if __name__ == '__main__':

@@ -626,7 +626,25 @@ class ModelExtension(base_layer.KerasExtension):
               gradient_accumulation_steps_per_replica)
 
         if need_to_rerun:
+          if self._make_train_function_overridden():
+            raise RuntimeError(
+                "The function `make_train_function` for the model {} has been "
+                "overridden. This is not supported when using Keras within an "
+                "IPUStrategy. Either remove the override from your model "
+                "definition or set `enable_keras_extensions=False` when "
+                "creating the IPUStrategy.".format(self.name))
+
           if self._is_pipelined():
+            if self._call_function_overridden():
+              raise RuntimeError(
+                  "The function `call` for the model {} has been overridden. "
+                  "This is not supported for pipelined Keras models.".format(
+                      self.name))
+            if self._train_step_overridden():
+              raise RuntimeError(
+                  "The function `train_step` for the model {} has been "
+                  "overridden. This is not supported for pipelined Keras "
+                  "models.".format(self.name))
             self._compiled_pipeline_train_iterations = pipeline_iterations
             self._compiled_pipeline_gradient_accumulation_steps_per_replica = \
               gradient_accumulation_steps_per_replica
@@ -634,6 +652,11 @@ class ModelExtension(base_layer.KerasExtension):
                 pipeline_iterations, gradient_accumulation_steps_per_replica)
           else:
             if gradient_accumulation_steps_per_replica > 1:
+              if self._train_step_overridden():
+                raise RuntimeError(
+                    "The function `train_step` for the model {} has been "
+                    "overridden. This is not supported for Keras models with "
+                    "gradient accumulation enabled.".format(self.name))
               self._ipu_train_function = \
                 self._make_single_ipu_train_function_with_gradient_accumulation(
                     gradient_accumulation_steps_per_replica)
@@ -657,7 +680,25 @@ class ModelExtension(base_layer.KerasExtension):
                            pipeline_iterations)
 
         if need_to_rerun:
+          if self._make_test_function_overridden():
+            raise RuntimeError(
+                "The function `make_test_function` for the model {} has been "
+                "overridden. This is not supported when using Keras within an "
+                "IPUStrategy. Either remove the override from your model "
+                "definition or set `enable_keras_extensions=False` when "
+                "creating the IPUStrategy.".format(self.name))
+
           if self._is_pipelined():
+            if self._call_function_overridden():
+              raise RuntimeError(
+                  "The function `call` for the model {} has been overridden. "
+                  "This is not supported for pipelined Keras models.".format(
+                      self.name))
+            if self._test_step_overridden():
+              raise RuntimeError(
+                  "The function `test_step` for the model {} has been "
+                  "overridden. This is not supported for pipelined Keras "
+                  "models.".format(self.name))
             self._compiled_pipeline_test_iterations = pipeline_iterations
             self._ipu_test_function = self._make_pipeline_ipu_test_function(
                 pipeline_iterations)
@@ -679,7 +720,25 @@ class ModelExtension(base_layer.KerasExtension):
                            pipeline_iterations)
 
         if need_to_rerun:
+          if self._make_predict_function_overridden():
+            raise RuntimeError(
+                "The function `make_predict_function` for the model {} has "
+                "been overridden. This is not supported when using Keras "
+                "within an IPUStrategy. Either remove the override from your "
+                "model definition or set `enable_keras_extensions=False` when "
+                "creating the IPUStrategy.".format(self.name))
+
           if self._is_pipelined():
+            if self._call_function_overridden():
+              raise RuntimeError(
+                  "The function `call` for the model {} has been overridden. "
+                  "This is not supported for pipelined Keras models.".format(
+                      self.name))
+            if self._predict_step_overridden():
+              raise RuntimeError(
+                  "The function `predict_step` for the model {} has been "
+                  "overridden. This is not supported for pipelined Keras "
+                  "models.".format(self.name))
             self._compiled_pipeline_predict_iterations = pipeline_iterations
             self._ipu_predict_function = \
               self._make_pipeline_ipu_predict_function(pipeline_iterations)
@@ -1278,3 +1337,28 @@ class ModelExtension(base_layer.KerasExtension):
   def _get_pipeline_maximum_pipeline_stage(self):
     """Returns the maximum pipeline stage assignment"""
     raise NotImplementedError
+
+  def _call_function_overridden(self):
+    """Returns whether call() has been overridden"""
+    raise NotImplementedError
+
+  def _train_step_overridden(self):
+    return self.train_step.__func__ != training_module.Model.train_step
+
+  def _make_train_function_overridden(self):
+    return (self.make_train_function.__func__ !=
+            training_module.Model.make_train_function)
+
+  def _test_step_overridden(self):
+    return self.test_step.__func__ != training_module.Model.test_step
+
+  def _make_test_function_overridden(self):
+    return (self.make_test_function.__func__ !=
+            training_module.Model.make_test_function)
+
+  def _predict_step_overridden(self):
+    return self.predict_step.__func__ != training_module.Model.predict_step
+
+  def _make_predict_function_overridden(self):
+    return (self.make_predict_function.__func__ !=
+            training_module.Model.make_predict_function)
