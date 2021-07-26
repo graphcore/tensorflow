@@ -500,6 +500,28 @@ Status CheckLoopOpaqueAliasing(CompilerResources& res,
   return Status::OK();
 }
 
+namespace {
+bool HasSmallGradientAccumulation(const HloInstruction* inst) {
+  // Find a resource update instruction.
+  const auto insts = inst->to_apply()->instructions();
+  auto itr = absl::c_find_if(insts, IsResourceUpdate);
+
+  // If there isn't a resource update, then there isn't a small gradient
+  // accumulation loop.
+  if (itr == insts.end()) {
+    return false;
+  }
+
+  // There is a gradient accumulation loop, so test its iteration count.
+  if (GetResourceUpdateBatchesToAccumulate(*itr) > 1) {
+    return false;
+  }
+
+  // We found a resource update and the gradient accumulation count was small.
+  return true;
+}
+}  // namespace
+
 StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
     CompilerResources& res, const HloInstruction* inst,
     const DeferredArgRBVectors& inputs,
@@ -514,7 +536,15 @@ StatusOr<std::unique_ptr<RepeatLoopVisitor>> CreateLoopVisitor(
   // then create an overlapping repeat visitor.
   TF_ASSIGN_OR_RETURN(bool has_io_tile_inst,
                       ComputationHasIoTileInstructions(inst->to_apply()));
-  if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst) {
+
+  // We can't overlap the IO on a loop with too few iterations.
+  const int64 repeat_count = GetRepeatLoopCount(inst);
+
+  // We also can't overlap small gradient accumulation factors.
+  const bool small_gradient_accumulation = HasSmallGradientAccumulation(inst);
+
+  if (SingleIPUComputation(inst->to_apply()) && has_io_tile_inst &&
+      repeat_count > 1 && !small_gradient_accumulation) {
     return {absl::make_unique<RepeatLoopOverlapIOVisitor>(
         res, inputs, description, reallocate_inputs_info, debug_name_and_id)};
   } else {
