@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <cstring>
 #include <fstream>
 #include <utility>
 #include <vector>
@@ -23,6 +24,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+const std::array<uint8, 8> MAGIC_STRING{0x6e, 0x76, 0x64, 0x61,
+                                        0xf0, 0x9f, 0x96, 0x95};
+
 Status PoplarExecutableBinaryFile::Write(
     const std::string& file_name,
     const ::tensorflow::protobuf::MessageLite& proto,
@@ -31,6 +35,9 @@ Status PoplarExecutableBinaryFile::Write(
   if (!file) {
     return InternalErrorStrCat("Failed to open file for writing: ", file_name);
   }
+
+  file.write(reinterpret_cast<const char*>(MAGIC_STRING.data()),
+             MAGIC_STRING.size());
 
   std::string serialized;
   proto.AppendToString(&serialized);
@@ -63,6 +70,20 @@ StatusOr<poplar::Executable> PoplarExecutableBinaryFile::Read(
   auto file = absl::make_unique<std::ifstream>(file_name, std::ios::binary);
   const std::string error_prefix =
       absl::StrCat("[Deserialize][File: ", file_name, "] ");
+
+  std::array<uint8, MAGIC_STRING.size()> magic_string;
+  if (!file->read(reinterpret_cast<char*>(magic_string.data()),
+                  magic_string.size())) {
+    return InternalErrorStrCat(
+        error_prefix, "Corrupted - Cannot read the executable magic number.");
+  }
+
+  if (memcmp(magic_string.data(), MAGIC_STRING.data(), MAGIC_STRING.size()) !=
+      0) {
+    return InternalErrorStrCat(
+        error_prefix,
+        "Corrupted - Magic string does not contain expected value.");
+  }
 
   // Read the protobuf metadata length.
   std::array<uint8, 8> proto_length_bytes;
