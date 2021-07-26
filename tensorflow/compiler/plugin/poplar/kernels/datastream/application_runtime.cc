@@ -120,6 +120,28 @@ struct IOItem {
   TensorShape shape;
 };
 
+void VerifyExecutable(PoplarExecutableProto& executable_proto) {
+  CHECK(executable_proto.infeeds().size() == 1)
+      << "Embedded runtime only supports executables with a single infeed";
+  CHECK(executable_proto.outfeeds().size() == 1)
+      << "Embedded runtime only supports executables with a single outfeed";
+
+  CHECK(executable_proto.sends().size() == 0)
+      << "Embedded runtime does not support executables with sends";
+  CHECK(executable_proto.recvs().size() == 0)
+      << "Embedded runtime does not support executables with recvs";
+
+  CHECK(executable_proto.lookups().size() == 0)
+      << "Embedded runtime does not support executables with host embeddings";
+  CHECK(executable_proto.updates().size() == 0)
+      << "Embedded runtime does not support executables with host embeddings";
+  CHECK(executable_proto.notifications().size() == 0)
+      << "Embedded runtime does not support executables with host embeddings";
+
+  CHECK(executable_proto.remote_parameters().size() == 0)
+      << "Embedded runtime does not support executables with remote parameters";
+}
+
 class IOConfig {
  public:
   using IOGroup = absl::flat_hash_map<std::string, IOItem>;
@@ -333,6 +355,7 @@ class ApplicationRuntime : public OpKernel {
 
       auto& io_config = resources_.IOCfg();
       io_config.ParsePoplarExecutableProto(proto);
+      VerifyExecutable(proto);
 
       auto engine = absl::make_unique<poplar::Engine>(std::move(executable));
       engine->load(device);
