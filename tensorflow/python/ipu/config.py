@@ -229,11 +229,19 @@ def _get_docstring_above_AST_node(filename, node):
   then this function will retrieve the "A statement that adds 3 to 4" docstring.
   If there is no such docstring, "No description provided" is returned.
   """
-  # Find the docstring by looking for the AST node for the line above the
-  # assigning statement. We have to use the AST node since the docstring
-  # could be over a number of source lines.
+  # Find the docstring by looking for the first line above the assigning
+  # statement with AST nodes associated to it. We have to use the AST node since
+  # the docstring could be over a number of source lines and depending on
+  # Python version it could be defined at the first or last line of the doc
+  # string.
   source_index = _get_source_index(filename)
-  nodes = source_index.get(node.lineno - 1, [])
+
+  nodes = []
+  for line_number in reversed(range(0, node.lineno)):
+    if line_number in source_index:
+      nodes = source_index[line_number]
+      break
+
   # (Docstrings are Exprs with a Str in them in AST)
   if len(nodes) == 2 and isinstance(nodes[0], ast.Expr) and isinstance(
       nodes[0].value, ast.Str):
