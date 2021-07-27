@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status.h"
 
 namespace xla {
+class HloDataflowAnalysis;
 class HloInstruction;
 namespace poplarplugin {
 std::string GetReplicatedParameterLoadFusionName();
@@ -43,6 +44,10 @@ int64 PartitionedElementCountPerReplica(int64 element_count,
 std::size_t PartitionedByteCountPerReplica(std::size_t byte_count,
                                            PrimitiveType element_type,
                                            int64 partition_replication_factor);
+
+StatusOr<int64> GetRemoteBufferEntryParameterNumber(const HloInstruction* inst);
+StatusOr<int64> GetRemoteBufferEntryParameterNumber(
+    const HloDataflowAnalysis& dfa, const HloInstruction* inst);
 
 }  // namespace poplarplugin
 }  // namespace xla
