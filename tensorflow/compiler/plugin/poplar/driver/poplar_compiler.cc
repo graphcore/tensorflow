@@ -1220,6 +1220,15 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
 
+  const int64 num_IPUs = target.getNumIPUs();
+  const std::string target_type = poplar::toString(target.getTargetType());
+  const std::string target_arch =
+      target.getTargetType() == poplar::TargetType::IPU
+          ? target.getTargetArchString()
+          : "";
+  const bool gateway_mode = target.getGatewayMode();
+  const bool supports_remote_buffers = poplar_executor->SupportsRemoteBuffers();
+
   resources.progress_bar->Start();
 
   {
@@ -1739,11 +1748,33 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           poplar::OptionFlags options_to_serialize =
               poplar_executor->GetReportExecutionFlags();
 
+          auto& annotations = resources.annotations;
+
           TF_RETURN_IF_ERROR(PoplarExecutableCore::Serialize(
-              filenames, exec, resources.annotations, replication_factor,
-              options_to_serialize, logging_cycle_count,
-              resources.streams_indices.GetAssignedIds(),
-              resources.streams_indices.CheckpointFeedsOrder()));
+              filenames, exec, options_to_serialize,
+              PoplarExecutableInfo{
+                  num_IPUs,
+                  target_type,
+                  target_arch,
+                  gateway_mode,
+                  supports_remote_buffers,
+                  replication_factor,
+                  annotations.infeed_infos,
+                  annotations.outfeed_infos,
+                  annotations.send_infos,
+                  annotations.recv_infos,
+                  annotations.host_embedding_lookup_infos,
+                  annotations.host_embedding_update_infos,
+                  annotations.host_embedding_notify_infos,
+                  annotations.remote_parameter_infos,
+                  annotations.entry_input_infos,
+                  annotations.feed_input_infos,
+                  annotations.entry_output_infos,
+                  annotations.feed_output_infos,
+                  logging_cycle_count,
+                  resources.streams_indices.GetAssignedIds(),
+                  resources.streams_indices.CheckpointFeedsOrder(),
+              }));
 
           if (in_precompile_mode) {
             LOG(INFO) << "A pre-compiled Poplar program has been saved to "
@@ -1806,7 +1837,13 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
           std::move(resources.annotations.stream_infos),
           std::move(resources.annotations.stream_meta_infos),
           PoplarExecutableInfo{
-              replication_factor, std::move(resources.annotations.infeed_infos),
+              num_IPUs,
+              target_type,
+              target_arch,
+              gateway_mode,
+              supports_remote_buffers,
+              replication_factor,
+              std::move(resources.annotations.infeed_infos),
               std::move(resources.annotations.outfeed_infos),
               std::move(resources.annotations.send_infos),
               std::move(resources.annotations.recv_infos),
@@ -1818,7 +1855,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               std::move(resources.annotations.feed_input_infos),
               std::move(resources.annotations.entry_output_infos),
               std::move(resources.annotations.feed_output_infos),
-              logging_cycle_count, resources.streams_indices.GetAssignedIds(),
+              logging_cycle_count,
+              resources.streams_indices.GetAssignedIds(),
               resources.streams_indices.CheckpointFeedsOrder()});
 
   return executable_core;

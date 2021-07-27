@@ -101,12 +101,49 @@ namespace {
 const char APPLICATION_RUNTIME_RESOURCE_CONTAINER[] =
     "ApplicationRuntimeResourceContainer";
 
-poplar::Device GetIpuDevice(int64 replication_factor = 1) {
+bool ParsePoplarTargetType(const std::string target_type_string,
+                           poplar::TargetType& target_type) {
+  if (target_type_string == "IPU") {
+    target_type = poplar::TargetType::IPU;
+    return true;
+  } else if (target_type_string == "IPU_MODEL") {
+    target_type = poplar::TargetType::IPU_MODEL;
+    return true;
+  } else if (target_type_string == "CPU") {
+    target_type = poplar::TargetType::CPU;
+    return true;
+  }
+  return false;
+}
+
+StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
+                                      const std::string target_arch_string,
+                                      const int64 num_IPUs,
+                                      const bool gateway_mode,
+                                      const bool supports_remote_buffers) {
   poplar::DeviceManager manager = poplar::DeviceManager::createDeviceManager();
   auto devices =
-      manager.getDevices(poplar::TargetType::IPU, replication_factor);
-  std::size_t device_idx =
-      PoplarExecutor::AttachToPoplarDevice(devices, 0, true).ValueOrDie();
+      manager.getDevices(target_type, num_IPUs,
+                         {{"gatewayMode", gateway_mode ? "true" : "false"}});
+  TF_ASSIGN_OR_RETURN(std::size_t device_idx,
+                      PoplarExecutor::AttachToPoplarDevice(devices, 0, true));
+
+  if (supports_remote_buffers && !devices[device_idx].supportsRemoteBuffers()) {
+    return errors::InvalidArgument(
+        "The compiled TensorFlow executable requires remote buffer support, "
+        "but it is not available on "
+        "this device");
+  }
+
+  const auto& device_target_arch_string =
+      devices[device_idx].getTarget().getTargetArchString();
+  if (device_target_arch_string != target_arch_string) {
+    return errors::InvalidArgument(absl::StrFormat(
+        "The target architecture for the compiled executable (%s) does not "
+        "match device's target architure (%s)",
+        target_arch_string, device_target_arch_string));
+  }
+
   return std::move(devices[device_idx]);
 }
 
@@ -148,7 +185,7 @@ class IOConfig {
   IOConfig() = default;
 
   void ParsePoplarExecutableProto(PoplarExecutableProto& executable_proto) {
-    ParseSignature(executable_proto.signature());
+    ParseSignature(executable_proto.embedded_runtime_config().signature());
   }
 
   const IOGroup& GetInputs() const { return inputs_; }
@@ -347,11 +384,22 @@ class ApplicationRuntime : public OpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("engine_name", &engine_name_));
 
     if (!GetEngines().contains(engine_name_)) {
-      auto device = GetIpuDevice();
-
       PoplarExecutableProto proto;
       poplar::Executable executable =
           PoplarExecutableBinaryFile::Read(filename_, &proto).ValueOrDie();
+
+      auto& ertc = proto.embedded_runtime_config();
+      const std::string target_type_string = ertc.target_type();
+      poplar::TargetType target_type;
+      OP_REQUIRES(ctx, ParsePoplarTargetType(target_type_string, target_type),
+                  errors::InvalidArgument(absl::StrFormat(
+                      "Invalid target type %s", target_type_string)));
+
+      auto status_or_device =
+          GetIpuDevice(target_type, ertc.target_arch(), ertc.num_ipus(),
+                       ertc.gateway_mode(), ertc.supports_remote_buffers());
+      OP_REQUIRES_OK(ctx, status_or_device.status());
+      auto& device = status_or_device.ValueOrDie();
 
       auto& io_config = resources_.IOCfg();
       io_config.ParsePoplarExecutableProto(proto);
