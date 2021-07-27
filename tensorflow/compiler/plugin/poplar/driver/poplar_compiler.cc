@@ -601,9 +601,11 @@ void setFpBehaviour(poplar::Graph& graph,
                     const IpuOptions::FloatingPointBehaviour& fp_control,
                     poplar::program::Sequence& seq) {
   if (graph.getTarget().getTargetType() == poplar::TargetType::IPU) {
+    const auto esr =
+        fp_control.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
     poplar::FloatingPointBehaviour fp_behaviour(
-        fp_control.inv(), fp_control.div0(), fp_control.oflo(),
-        fp_control.esr(), fp_control.nanoo());
+        fp_control.inv(), fp_control.div0(), fp_control.oflo(), esr,
+        fp_control.nanoo());
     poplar::setFloatingPointBehaviour(graph, seq, fp_behaviour,
                                       "setFpBehaviour");
   } else {
