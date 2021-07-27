@@ -65,6 +65,37 @@ class InfeedOutfeedOverlapTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
+  def testSingleInfeedSingleRepeatNonTuple(self):
+    cfg = ipu.config.IPUConfig()
+    cfg.ipu_model.compile_ipu_code = False
+    cfg.io_tiles.num_io_tiles = 32
+    cfg.io_tiles.place_ops_on_io_tiles = True
+    cfg.configure_ipu_system()
+
+    dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
+
+    def body(v, x):
+      v = v + x
+      return v
+
+    def my_net(v):
+      r = ipu.loops.repeat(1, body, (v), infeed_queue)
+      return r
+
+    with ops.device('cpu'):
+      v = array_ops.placeholder(np.float32, [4, 4])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      result = sess.run(res, {v: np.ones([4, 4], np.float32)})
+      self.assertAllClose(result[0], np.broadcast_to(1, [4, 4]))
+
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
     cfg = ipu.config.IPUConfig()
     cfg.ipu_model.compile_ipu_code = False
