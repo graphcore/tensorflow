@@ -40,6 +40,12 @@ struct CompilerAnnotations;
 struct CompilerResources;
 
 struct PoplarExecutableInfo {
+  int64 num_IPUs;
+  std::string target_type;
+  std::string target_arch;
+  bool gateway_mode;
+  bool supports_remote_buffers;
+
   uint32 replication_factor;
   CanonicalInfeedInfos infeed_infos;
   CanonicalOutfeedInfos outfeed_infos;
@@ -152,12 +158,8 @@ class PoplarExecutableCore {
 
   static Status Serialize(const ModuleFilenames& filenames,
                           const poplar::Executable& executable,
-                          const CompilerAnnotations& annotations,
-                          uint32 replication_count,
                           const poplar::OptionFlags& opts,
-                          bool logging_cycle_count,
-                          const VerifiedStreamsIndices::KeyIdMappings& mappings,
-                          const std::vector<string>& checkpoint_feeds_order);
+                          const PoplarExecutableInfo& info);
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,

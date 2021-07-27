@@ -75,6 +75,18 @@ message Signature {
   repeated Output streamed_outputs = 4;
 }
 
+message EmbeddedRuntimeConfig {
+  // The functional signature of the poplar executable.
+  Signature signature = 1;
+
+  // Information about runtime used to compile executable
+  int64 num_IPUs = 2;
+  string target_type = 3;
+  string target_arch = 4;
+  bool gateway_mode = 5;
+  bool supports_remote_buffers = 6;
+}
+
 message PoplarExecutableProto {
 
   // The number of replicas
@@ -104,6 +116,5 @@ message PoplarExecutableProto {
 
   bool logging_cycle_count = 13;
 
-  // The functional signature of the poplar executable.
-  Signature signature = 14;
+  EmbeddedRuntimeConfig embedded_runtime_config = 14;
 };
