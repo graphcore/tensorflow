@@ -3473,6 +3473,20 @@ xla_test(
 )
 
 xla_test(
+    name = "offloading_util_test",
+    srcs = ["tests/offloading_util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":poplar_test_base",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "opaque_handling_test",
     srcs = ["tests/opaque_handling_test.cc"],
     backends = ["poplar"],
@@ -5421,6 +5435,7 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
+        "offloading_util_test",
         "opaque_handling_test",
         "outline_remote_buffers_test",
         "outside_compilation_scope_test",
