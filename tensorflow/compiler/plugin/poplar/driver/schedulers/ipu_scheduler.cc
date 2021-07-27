@@ -70,6 +70,32 @@ StatusOr<HloSchedule> IpuScheduleModule(
 
   return std::move(schedule);
 }
+
+/*
+ * The scheduler is run for each computation, while the alias analysis is
+ * performed for the whole module. This cache allows re-using the analysis
+ * across the computations to save time. It assumes that the module is not
+ * modified while in use.
+ */
+class AliasAnalysisCache {
+ public:
+  using Container =
+      absl::flat_hash_map<const HloModule*, std::unique_ptr<HloAliasAnalysis>>;
+
+  const HloAliasAnalysis& FindOrRun(const HloModule* module) {
+    const auto it = cache_.lazy_emplace(
+        module, [module](const Container::constructor& ctor) {
+          auto result = HloAliasAnalysis::Run(module);
+          TF_CHECK_OK(result.status());
+          ctor(module, std::move(result.ValueOrDie()));
+        });
+    return *it->second;
+  }
+
+ private:
+  Container cache_;
+};
+
 }  // namespace
 
 IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
@@ -108,14 +134,15 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
   }
 
   return IpuSchedulerAlgorithm{
-      [algorithms](
+      [algorithms,
+       alias_analysis_cache = std::make_shared<AliasAnalysisCache>()](
           HloComputation* computation,
           const TuplePointsToAnalysis& tuple_points_to_analysis,
           const LogicalBuffer::SizeFunction& size_function,
           const absl::flat_hash_map<const HloComputation*, int64>&
               memory_by_computation) -> StatusOr<HloInstructionSequence> {
-        TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,
-                            HloAliasAnalysis::Run(computation->parent()));
+        const HloAliasAnalysis& alias_analysis =
+            alias_analysis_cache->FindOrRun(computation->parent());
 
         struct ScheduleResult {
           int64 schedule_memory;
@@ -141,7 +168,7 @@ StatusOr<IpuSchedulerAlgorithm> BestIpuSchedule(
           // TODO(T9494): Replace the heap simulator.
           TF_ASSIGN_OR_RETURN(const int64 schedule_memory,
                               HeapSimulator::MinimumMemoryForComputation(
-                                  *computation, schedule, *alias_analysis,
+                                  *computation, schedule, alias_analysis,
                                   size_function, &memory_by_computation));
 
           VLOG(2) << "Scheduler " << algorithm.name
