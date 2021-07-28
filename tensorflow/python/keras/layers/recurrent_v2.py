@@ -33,6 +33,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.layers import recurrent
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import gen_cudnn_rnn_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -446,7 +447,7 @@ class GRU(recurrent.DropoutRNNCellMixin, recurrent.GRU):
 
     # TODO(b/156447398) Investigate why the cuDNN kernel kernel fails with
     # ragged inputs.
-    if is_ragged_input or not self._could_use_gpu_kernel:
+    if is_ragged_input or not self._could_use_gpu_kernel or _inside_xla():
       kwargs = {'training': training}
       self._maybe_reset_cell_dropout_mask(self.cell)
 
@@ -1164,7 +1165,7 @@ class LSTM(recurrent.DropoutRNNCellMixin, recurrent.LSTM):
 
     # TODO(b/156447398) Investigate why the cuDNN kernel kernel fails with
     # ragged inputs.
-    if is_ragged_input or not self._could_use_gpu_kernel:
+    if is_ragged_input or not self._could_use_gpu_kernel or _inside_xla():
       # Fall back to use the normal LSTM.
       kwargs = {'training': training}
       self._maybe_reset_cell_dropout_mask(self.cell)
@@ -1765,3 +1766,7 @@ def _read_variable_value(v):
   if isinstance(v, variables.Variable):
     return v.read_value()
   return v
+
+def _inside_xla():
+  return (not context.executing_eagerly() and
+          control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()))
