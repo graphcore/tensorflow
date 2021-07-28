@@ -630,6 +630,13 @@ StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
         value, kNumIoTilesMaxValue);
   }
 
+  // Round up the number of IO tiles to the next even number.
+  if (value % 2) {
+    LOG(INFO) << "Rounding the number of IO tiles up from " << value
+              << " to the next even number " << value + 1 << ".";
+    return value + 1;
+  }
+
   return value;
 }
 
@@ -667,13 +674,6 @@ absl::optional<Tilesets> PartitionTiles(const poplar::Graph& main_graph,
   }
 
   CHECK_LT(num_io_tiles, num_tiles_per_ipu);
-
-  // Round up the number of IO tiles to the next even number.
-  if (num_io_tiles % 2) {
-    LOG(INFO) << "Rounding the number of IO tiles up from " << num_io_tiles
-              << " to the next even number " << num_io_tiles + 1 << ".";
-    num_io_tiles = num_io_tiles + 1;
-  }
 
   const auto num_compute_tiles = num_tiles_per_ipu - num_io_tiles;
 
