@@ -20,6 +20,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -116,10 +117,23 @@ class AllocationFinder : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
-                     absl::optional<std::vector<int64>>);
+  bool CanInferTarget(const TensorLocation& src,
+                      const HloInstruction* tgt) const;
+  bool IsInferredTargetCompatible(const TensorLocation& src,
+                                  const TensorTarget& inferred_target) const;
 
-  int64 GetAllocationPriority(const TensorTarget& inst) const;
+  TensorTarget InferTarget(
+      int64 index, const absl::optional<std::vector<int64>>& permutation,
+      const TensorTarget& tgt_tensor_target,
+      std::vector<const HloInstruction*>& path) const;
+
+  void FindAllocation(const TensorLocation& location, const Shape& shape);
+
+  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
+                     absl::optional<std::vector<int64>>,
+                     std::vector<const HloInstruction*>&);
+
+  int64 GetAllocationPriority(const TensorTarget& target) const;
 
   // Should return true when target 'a' should be used over 'b'
   bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b) const;
@@ -127,10 +141,12 @@ class AllocationFinder : public HloModulePass {
                                  const TensorTarget& b) const;
 
   void AddTensorTarget(const TensorLocation& source,
-                       const TensorTarget& tensor_target);
+                       const TensorTarget& new_target);
 
-  std::vector<const HloInstruction*> path;
   std::unique_ptr<CallGraph> call_graph;
+
+  // The set of TensorLocations which allocation finding has been completed for.
+  absl::flat_hash_set<TensorLocation> completed;
 
   const CompilerAnnotations& annotations;
   TensorAllocationMap& tensor_allocation_map;
