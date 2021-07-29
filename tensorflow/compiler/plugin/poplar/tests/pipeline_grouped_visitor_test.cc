@@ -137,8 +137,10 @@ _stage_0_bw {
   ROOT t = (f32[]) tuple(result), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
+
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
@@ -147,6 +149,12 @@ ENTRY pipeline {
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   ROOT d = (f32[]) call(gte_c), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -164,7 +172,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -175,6 +186,8 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
+
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -190,11 +203,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -288,8 +305,9 @@ _stage_0_bw {
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
@@ -298,6 +316,12 @@ ENTRY pipeline {
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   ROOT d = () call(gte_c), sharding={{maximal device=0}}, to_apply=_stage_0_bw, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -315,7 +339,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -326,6 +353,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -341,11 +369,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -415,8 +447,9 @@ _stage_0_bw {
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
@@ -426,6 +459,12 @@ ENTRY pipeline {
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -443,7 +482,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -454,6 +496,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -471,11 +514,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -550,8 +597,9 @@ _stage_0_bw {
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[2] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = ((f32[2], f32[4], f32[2], f32[2])) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = (f32[2], f32[4], f32[2], f32[2]) get-tuple-element(a0), index=0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"isInplace\":true}"
@@ -561,6 +609,12 @@ ENTRY pipeline {
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[2] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[2] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -578,7 +632,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -589,6 +646,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -606,11 +664,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -679,8 +741,9 @@ _stage_0_bw {
   ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
@@ -690,6 +753,12 @@ ENTRY pipeline {
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}
   ROOT d = (f32[]) call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -707,7 +776,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -718,6 +790,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -735,11 +808,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -856,8 +933,9 @@ _stage_0_bw {
   ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=1}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
@@ -872,6 +950,12 @@ ENTRY pipeline {
   e0 = (f32[]) call(gte_d, b1), to_apply=_stage_1_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_e = f32[] get-tuple-element(e0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
   ROOT d = (f32[]) call(gte_e, a1), to_apply=_stage_0_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(12), sharding={maximal device=0}
+  ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(4, 4);
@@ -889,7 +973,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -900,6 +987,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -933,11 +1021,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 12);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -1058,8 +1150,9 @@ _stage_0_bw {
   ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=1}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
@@ -1072,6 +1165,12 @@ ENTRY pipeline {
   e0 = (f32[]) call(gte_d), to_apply=_stage_1_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_e = f32[] get-tuple-element(e0), index=0, sharding={maximal device=0}
   ROOT d = (f32[]) call(gte_e), to_apply=_stage_0_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(12), sharding={maximal device=0}
+  ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(4, 4);
@@ -1089,7 +1188,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -1100,6 +1202,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -1125,11 +1228,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 12);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
@@ -1265,8 +1372,9 @@ _stage_0_bw {
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
-ENTRY pipeline {
+pipeline {
   arg = f32[] parameter(0), sharding={maximal device=0}
+  grad_acc = s32[] parameter(1), sharding={maximal device=0}
 
   a0 = (f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[2] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
@@ -1276,6 +1384,12 @@ ENTRY pipeline {
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_c = f32[2] get-tuple-element(c0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   ROOT d = () call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+}
+
+ENTRY main {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+  const_2 = s32[] constant(4), sharding={maximal device=0}
+  ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Grouped\"}}}"
 }
 )";
   auto device = createIpuModel(2, 4);
@@ -1293,7 +1407,10 @@ ENTRY pipeline {
   HloTrivialScheduler scheduler;
   EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
 
-  auto entry_computation = module->entry_computation();
+  auto pipeline_call_computation = module->entry_computation();
+  auto entry_computation =
+      pipeline_call_computation->GetInstructionWithName("p")
+          ->called_computations()[0];
 
   // Count the number of stages
   const auto stage_count = absl::c_count_if(
@@ -1304,6 +1421,7 @@ ENTRY pipeline {
   // Assign each instruction in the pipeline to a stage
   const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
+      {entry_computation->GetInstructionWithName("grad_acc"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("gte_a"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -1321,11 +1439,15 @@ ENTRY pipeline {
 
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
+  auto grad_acc_placeholder =
+      resources->main_graph->addConstant(poplar::INT, {}, 8);
+  resources->main_graph->setTileMapping(grad_acc_placeholder, 0);
 
   ParallelPipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}},
+      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}},
+                           {TensorOrRemoteBuffer{grad_acc_placeholder}}},
       HloInstructionDescription(entry_computation->root_instruction()),
       "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));

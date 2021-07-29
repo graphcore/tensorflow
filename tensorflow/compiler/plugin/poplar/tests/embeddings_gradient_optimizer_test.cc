@@ -158,7 +158,7 @@ std::string GetPipelineTemplateHloString() {
     %arg0 = $DT[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $DT[$E]    parameter(2), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
-    ROOT %call.1 = $DT[$R,$E] call(%arg0, %arg1, %arg2), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"gradientAccumulationCount\":\"$BN\",\"repeatCount\":\"2\",\"batchSerializationIterations\":\"$BI\",\"schedule\":\"Interleaved\"}}}"
+    ROOT %call.1 = $DT[$R,$E] call(%arg0, %arg1, %arg2), to_apply=%Pipeline, frontend_attributes={CALL_CONFIG_TYPE="Pipeline"}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"$BI\",\"schedule\":\"Interleaved\"}}}"
     }
     )";
 }

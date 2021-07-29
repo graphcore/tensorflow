@@ -20,6 +20,7 @@ Pipelining operators
 
 from enum import Enum, IntEnum
 from google.protobuf import json_format
+import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
@@ -27,6 +28,7 @@ from tensorflow.compiler.plugin.poplar.driver import threestate_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.eager import backprop
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -677,10 +679,17 @@ def pipeline(computational_stages,
     An `Operation` that executes the pipeline.
 
   """
+
   name = name if name else "pipeline"
 
   if not gradient_accumulation_count:
     raise ValueError("gradient_accumulation_count must be specified.")
+
+  if isinstance(gradient_accumulation_count, int):
+    if gradient_accumulation_count < 0:
+      raise ValueError("gradient_accumulation_count must be >= 0.")
+    if gradient_accumulation_count > np.iinfo(np.int32).max:
+      raise ValueError("gradient_accumulation_count must be < max int32.")
 
   # Ensure inputs is a list, without casting inputs to a boolean. Casting
   # a tf.Tensor to a boolean will be interpreted as an operation in the
@@ -1062,14 +1071,18 @@ def pipeline(computational_stages,
           " of the pipeline." % (str(e)))
     # pylint: enable=protected-access
 
+    gradient_accumulation_count = math_ops.cast(
+        ops.convert_to_tensor(gradient_accumulation_count,
+                              dtype_hint=dtypes.int32), dtypes.int32)
+
     # Create the pipeline and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
       output = gen_functional_ops.pipeline(
           captured_args,
+          gradient_accumulation_count,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
-          gradient_accumulation_count=gradient_accumulation_count,
           batch_serialization_iterations=batch_serialization_iterations,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
