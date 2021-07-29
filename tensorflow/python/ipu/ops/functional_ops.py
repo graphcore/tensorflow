@@ -112,7 +112,8 @@ def _compile_function(func,
                       args,
                       scope,
                       control_outputs,
-                      allow_external_captures=False):
+                      allow_external_captures=False,
+                      capture_by_value=None):
   parent_graph = ops.get_default_graph()
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
@@ -145,7 +146,8 @@ def _compile_function(func,
       func_name,
       func_wrapper,
       captured_args, {},
-      add_control_dependencies=add_control_dependencies)
+      add_control_dependencies=add_control_dependencies,
+      capture_by_value=capture_by_value)
 
   # Add the external captures (resources) to arguments.
   for t in func_graph.external_captures:
