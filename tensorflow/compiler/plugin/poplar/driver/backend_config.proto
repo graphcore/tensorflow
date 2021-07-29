@@ -154,15 +154,15 @@ message PoplarBackendConfig {
         Recompute_and_backpropagate_interleaved = 2;
       }
 
-      int64 gradient_accumulation_count = 1;
-      int64 batch_serialization_iterations = 2;
-      int64 repeat_count = 3;
-      Schedule schedule = 4;
-      ThreeState offload_activations = 5;
-      ThreeState offload_gradient_accumulation_buffers = 6;
-      ThreeState partition_variables = 7;
-      ThreeState offload_variables = 8;
-      RecomputationMode recomputation_mode = 9;
+      int64 batch_serialization_iterations = 1;
+      int64 repeat_count = 2;
+      Schedule schedule = 3;
+      ThreeState offload_activations = 4;
+      ThreeState offload_gradient_accumulation_buffers = 5;
+      ThreeState partition_variables = 6;
+      ThreeState offload_variables = 7;
+      RecomputationMode recomputation_mode = 8;
+      int64 gradient_accumulation_index = 9;
     }
 
     message CallConfig {

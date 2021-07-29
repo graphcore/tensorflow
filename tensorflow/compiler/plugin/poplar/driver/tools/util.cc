@@ -432,9 +432,20 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().repeat_count();
 }
 
-int64 GetGradientAccumulationCount(const HloInstruction* inst) {
+absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+  DCHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().pipeline_config().gradient_accumulation_count();
+  int64 index =
+      cfg.call_config().pipeline_config().gradient_accumulation_index();
+  DCHECK(index < inst->operands().size());
+  const auto& gradient_accumulation_operand = inst->operand(index);
+  if (!gradient_accumulation_operand->IsConstant()) {
+    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
+    return absl::nullopt;
+  }
+  auto value =
+      LiteralScalarToNativeType<int>(gradient_accumulation_operand->literal());
+  return absl::optional<int64>(value.ValueOrDie());
 }
 
 int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {

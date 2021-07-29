@@ -184,7 +184,6 @@ class PipelineOp : public XlaOpKernel {
         AttrMember(CALL_CONFIG_TYPE,
                    PoplarBackendConfig_CallConfig_Type_Name(
                        PoplarBackendConfig::CallConfig::Pipeline)),
-        AttrMember(GRADIENT_ACCUMULATION_COUNT, gradient_accumulation_count_),
         AttrMember(PIPELINE_BATCH_SERIALIZATION_ITERATIONS,
                    batch_serialization_iterations_),
         AttrMember(PIPELINE_REPEAT_COUNT, repeat_count_),
@@ -195,7 +194,8 @@ class PipelineOp : public XlaOpKernel {
                    offload_gradient_accumulation_buffers_),
         AttrMember(PARTITION_VARIABLES, replicated_weight_sharding_),
         AttrMember(OFFLOAD_VARIABLES, offload_weights_),
-        AttrMember(RECOMPUTATION_MODE, recomputation_mode_)};
+        AttrMember(RECOMPUTATION_MODE, recomputation_mode_),
+        AttrMember("GradientAccumulationOperandIndex", ctx->num_inputs() - 1)};
 
     util::SetInstructionFrontEndAttributes(ctx, builder, outputs,
                                            std::move(attributes));
@@ -218,14 +218,21 @@ class PipelineOp : public XlaOpKernel {
     std::vector<xla::XlaOp> inner_outputs(inputs.size());
     // First handle cases 1 and 2.
     for (size_t input_idx = 0; input_idx != inputs.size(); ++input_idx) {
-      auto param = xla::Parameter(cb.get(), input_idx,
-                                  result.xla_input_shapes[input_idx],
+      auto param_shape = input_idx != inputs.size() - 1
+                             ? result.xla_input_shapes[input_idx]
+                             : xla::ShapeUtil::MakeShape(xla::S32, {});
+      auto param = xla::Parameter(cb.get(), input_idx, param_shape,
                                   absl::StrCat("input/", input_idx));
       inner_inputs[input_idx] = param;
       inner_outputs[input_idx] = param;
     }
-    // Call the computation which is wrapped.
-    auto inner_call = xla::Call(cb.get(), *result.computation, inner_inputs);
+
+    // First handle cases 1 and 2.
+    // Call the computation which is wrapped (but not passing the final
+    // operand).
+    auto inner_call =
+        xla::Call(cb.get(), *result.computation,
+                  absl::MakeSpan(inner_inputs.data(), inner_inputs.size() - 1));
     // Now go through any resource updates and add necessary GTEs and handle
     // case 3.
     for (size_t i = 0; i < result.resource_updates.size(); ++i) {
@@ -274,8 +281,6 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("gradient_accumulation_count",
-                                     &gradient_accumulation_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("batch_serialization_iterations",
                                      &batch_serialization_iterations_));
     OP_REQUIRES_OK(ctx,
@@ -301,6 +306,7 @@ class PipelineOp : public XlaOpKernel {
         poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
+    DCHECK_EQ(arguments.size(), ctx->num_inputs() - 1);
 
     VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
@@ -321,6 +327,7 @@ class PipelineOp : public XlaOpKernel {
         poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
     OP_REQUIRES_OK(ctx, inputs_or.status());
     std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
+    inputs.emplace_back(ctx->Input(ctx->num_inputs() - 1));
 
     auto wrapped_pipeline = CreateInnerPipeline(ctx, inputs, result);
     OP_REQUIRES_OK(ctx, wrapped_pipeline.status());
@@ -337,7 +344,6 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 gradient_accumulation_count_;
   int64 batch_serialization_iterations_;
   int64 repeat_count_;
   int64 schedule_;
