@@ -1556,6 +1556,45 @@ class ModelExtension(base_layer.KerasExtension):
   def reset_pipeline_stage_assignment(self):
     raise NotImplementedError
 
+  def print_pipeline_stage_assignment_summary(self,
+                                              line_length=None,
+                                              print_fn=None):
+    raise NotImplementedError
+
+  def _print_pipeline_stage_assignment_summary_impl(self, print_assignment_fn,
+                                                    headers, column_widths,
+                                                    line_length, print_fn):
+    """Implementation function for the print_pipeline_stage_assignment_summary.
+    """
+    print_fn = print_fn if print_fn else print
+    assignments = self.get_pipeline_stage_assignment()
+
+    positions = [int(line_length * p) for p in column_widths]
+
+    def print_row(fields):
+      assert len(fields) == len(positions)
+      line = ''
+      for i, field in enumerate(fields):
+        if i > 0:
+          line = line[:-1] + ' '
+        line += str(field)
+        line = line[:positions[i]]
+        line += ' ' * (positions[i] - len(line))
+      print_fn(line)
+
+    print_fn('Model: "{}"'.format(self.name))
+    print_fn('_' * line_length)
+    print_row(headers)
+    print_fn('=' * line_length)
+
+    for i, assignment in enumerate(assignments):
+      print_assignment_fn(assignment, print_row)
+
+      if i == len(assignments) - 1:
+        print_fn('=' * line_length)
+      else:
+        print_fn('_' * line_length)
+
   def _get_pipeline_maximum_pipeline_stage(self):
     """Returns the maximum pipeline stage assignment"""
     raise NotImplementedError

@@ -23,6 +23,7 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ipu.keras.extensions import model_extensions
 from tensorflow.python.keras.engine import functional
 from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.util import nest
 
 
 class PipelineStage(object):
@@ -557,6 +558,53 @@ class FunctionalExtension(model_extensions.ModelExtension):  # pylint: disable=a
 
     # Pipelining has changed therefore functions need to be recompiled.
     self._reset_ipu_extension()
+
+  def print_pipeline_stage_assignment_summary(self,
+                                              line_length=None,
+                                              print_fn=None):
+    """Prints a summary of the pipeline stage assignment of the model.
+
+    Arguments:
+        line_length: Total length of printed lines (e.g. set this to adapt the
+          display to different terminal window sizes).
+        print_fn: Print function to use. It will be called on each line of the
+          summary. You can set it to a custom function in order to capture the
+          string summary. It defaults to `print` (prints to stdout).
+    """
+    line_length = line_length or 89
+
+    def print_assignment_fn(assignment, print_row):
+      layer = assignment.layer
+      node_index = str(assignment.node_index)
+      inbound_layers = nest.flatten(assignment.inbound_layers)
+      pipeline_stage = str(assignment.pipeline_stage)
+
+      name = layer.name
+      input_layer_names = [l.name for l in inbound_layers]
+
+      cls_name = layer.__class__.__name__
+      if not input_layer_names:
+        first_input = ''
+      else:
+        first_input = input_layer_names[0]
+
+      fields = [
+          name + ' (' + cls_name + ') (' + node_index + ')', first_input,
+          pipeline_stage
+      ]
+      print_row(fields)
+
+      # Print other inputs on the new line.
+      if len(input_layer_names) > 1:
+        for i in range(1, len(input_layer_names)):
+          fields = ['', input_layer_names[i], '']
+          print_row(fields)
+
+    headers = ['Layer (type) (node index)', 'Input Layers', 'Pipeline Stage']
+    column_widths = [.4, .8, 1.]
+    self._print_pipeline_stage_assignment_summary_impl(print_assignment_fn,
+                                                       headers, column_widths,
+                                                       line_length, print_fn)
 
   @trackable.no_automatic_dependency_tracking
   def _get_pipeline_maximum_pipeline_stage(self):

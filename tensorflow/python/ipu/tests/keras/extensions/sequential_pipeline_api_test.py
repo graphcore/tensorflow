@@ -246,6 +246,41 @@ class SequentialPipelineApiTest(test.TestCase):
         self.assertEqual(m._pipelining_accumulate_outfeed, True)  # pylint: disable=protected-access
         self.assertEqual(m._experimental_pipelining_normalize_gradients, True)  # pylint: disable=protected-access
 
+  def testPrintPipelineStageSummary(self):
+    cfg = config.IPUConfig()
+
+    cfg.auto_select_ipus = 1
+    cfg.configure_ipu_system()
+
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      m = sequential.Sequential([layers.Flatten(), layers.Dense(4)])
+
+      strings = []
+
+      def print_fn(x):
+        strings.append(x)
+
+      m.print_pipeline_stage_assignment_summary(line_length=65,
+                                                print_fn=print_fn)
+
+      # pylint: disable=line-too-long
+      self.assertEqual(strings[0], 'Model: "sequential"')
+      self.assertEqual(strings[1], '_' * 65)
+      self.assertEqual(
+          strings[2],
+          'Layer (type)                    Pipeline Stage                   ')
+      self.assertEqual(strings[3], '=' * 65)
+      self.assertEqual(
+          strings[4],
+          'flatten (Flatten)               None                             ')
+      self.assertEqual(strings[5], '_' * 65)
+      self.assertEqual(
+          strings[6],
+          'dense (Dense)                   None                             ')
+      self.assertEqual(strings[7], '=' * 65)
+      # pylint: enable=line-too-long
+
 
 if __name__ == '__main__':
   test.main()

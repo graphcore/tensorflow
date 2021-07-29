@@ -459,6 +459,36 @@ class SequentialExtension(model_extensions.ModelExtension):  # pylint: disable=a
     # Pipelining has changed therefore functions need to be recompiled.
     self._reset_ipu_extension()
 
+  def print_pipeline_stage_assignment_summary(self,
+                                              line_length=None,
+                                              print_fn=None):
+    """Prints a summary of the pipeline stage assignment of the model.
+
+    Arguments:
+        line_length: Total length of printed lines (e.g. set this to adapt the
+          display to different terminal window sizes).
+        print_fn: Print function to use. It will be called on each line of the
+          summary. You can set it to a custom function in order to capture the
+          string summary. It defaults to `print` (prints to stdout).
+    """
+    line_length = line_length or 60
+
+    def print_assignment_fn(assignment, print_row):
+      layer = assignment.layer
+      pipeline_stage = str(assignment.pipeline_stage)
+
+      name = layer.name
+      cls_name = layer.__class__.__name__
+
+      fields = [name + ' (' + cls_name + ')', pipeline_stage]
+      print_row(fields)
+
+    headers = ['Layer (type)', 'Pipeline Stage']
+    column_widths = [.5, 1.]
+    self._print_pipeline_stage_assignment_summary_impl(print_assignment_fn,
+                                                       headers, column_widths,
+                                                       line_length, print_fn)
+
   @trackable.no_automatic_dependency_tracking
   def _get_pipeline_maximum_pipeline_stage(self):
     assert self._is_pipelined()
