@@ -463,7 +463,10 @@ class FuncGraph(ops.Graph):
             compat.as_bytes(op_type), 1, uncaptured_inputs, attr_list,
             context.context())
       else:
-        op = ops.get_default_graph()._create_op_internal(  # pylint: disable=protected-access
+        # Make sure the name is unique in the outer graph.
+        outer_graph = ops.get_default_graph()
+        name = outer_graph.unique_name(name)
+        op = outer_graph._create_op_internal(  # pylint: disable=protected-access
             op_type,
             uncaptured_inputs,
             dtypes,

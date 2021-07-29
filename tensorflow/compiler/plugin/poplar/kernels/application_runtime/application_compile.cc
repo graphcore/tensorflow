@@ -1,0 +1,162 @@
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+#include "tensorflow/compiler/jit/kernels/xla_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
+#include "tensorflow/compiler/tf2xla/xla_compiler.h"
+#include "tensorflow/compiler/xla/client/client_library.h"
+#include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/framework/function.h"
+#include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/lib/core/status.h"
+
+namespace tensorflow {
+
+namespace {
+
+Status BuildCompilationCache(OpKernelContext* ctx, se::Platform* platform,
+                             XlaCompilationCache** out_cache) {
+  xla::LocalClientOptions client_options;
+  client_options.set_platform(platform);
+  client_options.set_intra_op_parallelism_threads(
+      ctx->device()->tensorflow_cpu_worker_threads()->num_threads);
+  TF_ASSIGN_OR_RETURN(
+      auto* client, xla::ClientLibrary::GetOrCreateLocalClient(client_options));
+  const XlaOpRegistry::DeviceRegistration* registration;
+  if (!XlaOpRegistry::GetCompilationDevice("IPU", &registration)) {
+    return errors::InvalidArgument("No JIT device registered for IPU");
+  }
+
+  *out_cache = new XlaCompilationCache(
+      client, DeviceType(registration->compilation_device_name));
+  return Status::OK();
+}
+
+xla::StatusOr<xla::LocalExecutable*> CompileExecutable(
+    OpKernelContext* ctx, const NameAttrList& function, se::Platform* platform,
+    absl::Span<const int> resources, absl::Span<const int> constants) {
+  auto* resource_manager = ctx->resource_manager();
+  if (!resource_manager) {
+    return errors::Internal("Resource manager not found");
+  }
+
+  XlaCompilationCache* cache;
+  TF_RETURN_IF_ERROR(resource_manager->LookupOrCreate<XlaCompilationCache>(
+      resource_manager->default_container(), "ipu_application_compile_cache",
+      &cache, [&](XlaCompilationCache** cache) {
+        return BuildCompilationCache(ctx, platform, cache);
+      }));
+  core::ScopedUnref cache_ref(cache);
+
+  std::map<int, OptionalTensor> variables;
+  TF_RETURN_IF_ERROR(SnapshotResourceVariables(ctx, resources, &variables));
+
+  const auto* function_library = ctx->function_library();
+  if (!function_library) {
+    return errors::Internal("Function library not found");
+  }
+
+  const auto* flib_def = function_library->GetFunctionLibraryDefinition();
+  const auto* func_def = CHECK_NOTNULL(flib_def)->Find(function.name());
+  if (!func_def) {
+    return errors::Internal("Function not found: " + function.name());
+  }
+
+  VLOG(1) << "Compiling function: " << DebugString(*func_def);
+
+  XlaCompiler::Options options;
+  options.client = cache->client();
+  options.device_type = cache->device_type();
+  options.flib_def = flib_def;
+  options.graph_def_version = function_library->graph_def_version();
+
+  se::TfAllocatorAdapter tf_allocator_adapter(ctx->device()->GetAllocator({}),
+                                              platform);
+  options.device_allocator = &tf_allocator_adapter;
+
+  std::map<int, Tensor> constant_args;
+  for (int i : constants) {
+    CHECK(constant_args.emplace(i, ctx->input(i)).second) << "Duplicate: " << i;
+  }
+
+  XlaCompiler::CompileOptions compile_options;
+  compile_options.is_entry_computation = true;
+  compile_options.resolve_compile_time_constants = true;
+  compile_options.always_return_tuple = false;
+
+  std::vector<XlaCompiler::Argument> arguments;
+  TF_RETURN_IF_ERROR(XlaComputationLaunchContext::BuildXlaCompilerArguments(
+      constant_args, variables, ctx, &arguments));
+
+  const XlaCompiler::CompilationResult* compilation_result;
+  xla::LocalExecutable* executable;
+  TF_RETURN_IF_ERROR(cache->Compile(options, function, arguments,
+                                    compile_options,
+                                    XlaCompilationCache::CompileMode::kStrict,
+                                    &compilation_result, &executable));
+  return executable;
+}
+
+}  // namespace
+
+class IPUApplicationCompile : public OpKernel {
+ public:
+  explicit IPUApplicationCompile(OpKernelConstruction* ctx) : OpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("function", &function_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("resource_indices", &resource_indices_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("constant_indices", &constant_indices_));
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("executable_output_path", &executable_output_path_));
+  }
+
+  void Compute(OpKernelContext* ctx) {
+    auto platform_or_status =
+        se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES_OK(ctx, platform_or_status.status());
+    auto* platform = platform_or_status.ValueOrDie();
+
+    auto executable_or_status = CompileExecutable(
+        ctx, function_, platform, resource_indices_, constant_indices_);
+    OP_REQUIRES_OK(ctx, executable_or_status.status());
+
+    auto* poplar_executable =
+        dynamic_cast<xla::poplarplugin::PoplarExecutable*>(
+            executable_or_status.ValueOrDie()->executable());
+    OP_REQUIRES(ctx, poplar_executable != nullptr,
+                errors::Internal("Missing Poplar executable"));
+
+    OP_REQUIRES_OK(ctx, poplar_executable->Serialize(executable_output_path_));
+    ctx->set_output(0, Tensor(executable_output_path_));
+  }
+
+ private:
+  NameAttrList function_;
+  std::string executable_output_path_;
+  std::vector<int> constant_indices_;
+  std::vector<int> resource_indices_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(IPUApplicationCompile);
+};
+
+// We register the op both for CPU and IPU to make it easier to use, as we then
+// can handle any colocation requirements from variables etc. The function will
+// be compiled for IPU regardless of the device placement of the op itself.
+REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_CPU),
+                        IPUApplicationCompile);
+REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_XLA_IPU),
+                        IPUApplicationCompile);
+
+}  // namespace tensorflow
