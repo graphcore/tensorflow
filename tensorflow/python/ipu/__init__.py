@@ -20,6 +20,7 @@ Operations and utilities related to the Graphcore IPU
 # pylint: disable=wildcard-import,unused-import
 from tensorflow.python.ipu.ops import all_to_all_op
 from tensorflow.python.ipu.ops import all_to_all_op_grad
+from tensorflow.python.ipu.ops import application_compile_op
 from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import cross_replica_ops_grad

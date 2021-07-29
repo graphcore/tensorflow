@@ -15,7 +15,6 @@
 
 import os
 import tempfile
-import subprocess
 from functools import partial
 from absl.testing import parameterized
 import numpy as np
@@ -31,12 +30,14 @@ from tensorflow.python.ops import metrics
 from tensorflow.python.ops import nn, nn_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.platform import googletest
-from tensorflow.python.platform import test
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
-from tensorflow.python.ipu import utils, ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.ipu import ipu_compiler, scopes, loops, ipu_infeed_queue, ipu_outfeed_queue
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import rand_ops
+from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.ops import application_compile_op
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python.training import momentum
 from tensorflow.python.keras.datasets import mnist
@@ -128,7 +129,7 @@ def loop_builder(iterations, builder_func, infeed):
   return loops.repeat(iterations, builder_func, [], infeed)
 
 
-def run_model():
+def run_and_export_model(poplar_exec_output_path):
   # Use Keras to get the dataset:
   (x_train, y_train), (x_test, y_test) = mnist.load_data()
   x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -206,6 +207,11 @@ def run_model():
     train_loop = ipu_compiler.compile(bound_train_loop, inputs=[])
     test_loop = ipu_compiler.compile(bound_test_loop, inputs=[])
 
+  compile_op = application_compile_op.experimental_application_compile_op(
+      bound_test_loop,
+      output_path=poplar_exec_output_path,
+      freeze_variables=True)
+
   # Initialisers should go on the CPU:
   with ops.device("cpu"):
     metrics_vars = ops.get_collection(ops.GraphKeys.LOCAL_VARIABLES,
@@ -215,9 +221,10 @@ def run_model():
     saver = train.Saver()
 
   # Setup and acquire an IPU device:
-  config = utils.create_ipu_config()
-  config = utils.auto_select_ipus(config, 1)
-  utils.configure_ipu_system(config)
+  cfg = IPUConfig()
+  cfg.auto_select_ipus = 1
+  tu.add_hw_ci_connection_options(cfg)
+  cfg.configure_ipu_system()
 
   # These allow us to retrieve the results of IPU feeds:
   dequeue_train_outfeed = outfeed_train_queue.dequeue()
@@ -273,54 +280,24 @@ def run_model():
                      images=x_test_flat,
                      labels=out_labels)
 
+    print(f"  Compiling and exporting...")
+    sess.run(compile_op)
+
     return mnist_ref
 
 
 class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testApplicationRuntime(self):
-    poplar_flags = os.environ.get('TF_POPLAR_FLAGS', '')
-    poplar_flags += f' --executable_cache_path={tmp_dir}'
+    poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
 
-    with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
-      print('Running MNIST example')
-      mnist_ref = run_model()
-      print('Example done')
-
-    ret = subprocess.run(['/bin/ls', '-At', f'{tmp_dir}/'],
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
-                         encoding='utf-8')
-
-    poplar_exec_filepath = f'{tmp_dir}/{ret.stdout.strip().split()[0]}'
+    print('Running MNIST example')
+    mnist_ref = run_and_export_model(poplar_exec_filepath)
+    print('Example done')
 
     print('Running MNIST through embedded runtime')
-
-    input_descs = [
-        ('XLA_Args/d1/bias', [L1_SIZE], dtypes.float32),  #0
-        ('XLA_Args/d1/weight', [IMG_SIZE, L1_SIZE], dtypes.float32),  #1
-        ('XLA_Args/d2/bias', [L2_SIZE], dtypes.float32),  #2
-        ('XLA_Args/d2/weight', [L1_SIZE, L2_SIZE], dtypes.float32),  #3
-        ('XLA_Args/metrics_1/accuracy/count', [], dtypes.float32),  #4
-        ('XLA_Args/metrics_1/accuracy/total', [], dtypes.float32),  #5
-    ]
-
-    input_placeholders = []
-    for name, shape, dtype in input_descs:
-      input_ph = array_ops.placeholder(dtype, shape=shape, name=name)
-      input_placeholders.append(input_ph)
-
-    inputs = [None] * 6
-    inputs[0] = mnist_ref['d1_bias']
-    inputs[1] = mnist_ref['d1_weight']
-    inputs[2] = mnist_ref['d2_bias']
-    inputs[3] = mnist_ref['d2_weight']
-    inputs[4] = np.float32(0)
-    inputs[5] = np.float32(0)
-
-    inputs = tuple(inputs)
-    input_placeholders = tuple(input_placeholders)
 
     images = array_ops.placeholder(dtypes.float32,
                                    shape=[BATCH_SIZE, IMG_SIZE],
@@ -341,9 +318,7 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
         engine_name = f'mnist_engine_{i}'
 
         run_app = gen_application_runtime.application_runtime(
-            inputs=inputs,
-            filename=poplar_exec_filepath,
-            engine_name=engine_name)
+            inputs=[], filename=poplar_exec_filepath, engine_name=engine_name)
 
         with ops.control_dependencies([run_app]):
           infeeds = (images,)
@@ -353,13 +328,7 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
           session.run(variables.global_variables_initializer())
           for j in range(NUM_TEST_ITERATIONS):
             images_host = images_all[j, :, :]
-
-            results = session.run(result,
-                                  feed_dict={
-                                      infeeds: (images_host,),
-                                      input_placeholders: inputs,
-                                  })
-
+            results = session.run(result, feed_dict={infeeds: (images_host,)})
             labels_all[j, :] = results[0]
 
     self.assertAllClose(labels_ref, labels_all)

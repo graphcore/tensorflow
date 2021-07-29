@@ -13,6 +13,7 @@ load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod", "poprun
 py_library(
     name = "ipu_ops_lib",
     srcs = [
+        "ops/application_compile_op.py",
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
@@ -292,10 +293,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "application_compile_test",
+    size = "large",
+    srcs = ["tests/application_compile_test.py"],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "application_runtime_test",
     size = "large",
     srcs = ["tests/application_runtime_test.py"],
     shard_count = 4,
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1913,6 +1926,8 @@ tf_py_test(
 test_suite(
     name = "all_tests",
     tests = [
+        "application_compile_test",
+        "application_runtime_test",
         "assume_equal_test",
         "candidate_sampler_test",
         "config_test",

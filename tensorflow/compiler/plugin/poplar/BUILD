@@ -956,7 +956,8 @@ cc_library(
 cc_library(
     name = "kernels",
     srcs = [
-        "kernels/datastream/application_runtime.cc",
+        "kernels/application_runtime/application_compile.cc",
+        "kernels/application_runtime/application_runtime.cc",
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
@@ -1016,6 +1017,7 @@ cc_library(
         ":driver",
         ":xla_util",
         "//tensorflow/compiler/jit:xla_device",
+        "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -1372,7 +1374,10 @@ tf_custom_op_py_library(
 
 cc_library(
     name = "application_runtime",
-    srcs = ["ops/datastream/application_runtime.cc"],
+    srcs = [
+        "ops/application_runtime/application_compile.cc",
+        "ops/application_runtime/application_runtime.cc",
+    ],
     deps = [
         "//tensorflow/core:framework",
     ],
