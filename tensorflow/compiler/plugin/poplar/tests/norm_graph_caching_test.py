@@ -555,8 +555,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       self.assertAllClose(r[0], np.full(r[0].shape, 2))
 
     report = pva.openReport(report_helper.find_report())
-    self.assert_total_tile_memory(report, 1510562)
-    self.assert_max_tile_memory(report, 1383)
+    self.assert_total_tile_memory(report, 1621154, tolerance=0.2)
+    self.assert_max_tile_memory(report, 1483, tolerance=0.2)
     # Would fail if there were two batch norms in the graph
     ok = [
         '__seed*',
