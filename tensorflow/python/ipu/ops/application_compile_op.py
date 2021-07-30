@@ -84,7 +84,7 @@ def experimental_application_compile_op(func,
     xla_context = control_flow_ops.XLAControlFlowContext()
     try:
       xla_context.Enter()
-      func_graph, captured_args = _compile_function(
+      func_graph, captured_args, _ = _compile_function(
           wrapped_func,
           inputs,
           scope, [],
