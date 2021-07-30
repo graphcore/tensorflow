@@ -20,6 +20,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 
 #include <condition_variable>
+#include <gcl/CollectiveBalancedReorder.hpp>
 #include <list>
 #include <map>
 #include <memory>
@@ -140,12 +141,15 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
     absl::optional<ArgHandle> input_handle;
     absl::optional<ArgHandle> output_handle;
+    absl::optional<gcl::CollectiveBalancedHostRearrangement> host_rearrangement;
     ConversionFn output_convertor;
     std::vector<char> converted_data;
     char* data;
 
     explicit TensorControl(size_t size_);
     ~TensorControl();
+
+    std::size_t GetRemoteBufferSize() const;
 
     TF_DISALLOW_COPY_AND_ASSIGN(TensorControl);
   };
@@ -436,8 +440,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool FloatingPointBehaviourFlagsSet() const {
     const IpuOptions::FloatingPointBehaviour& flags = FloatingPointBehaviour();
-    return flags.inv() || flags.div0() || flags.oflo() || flags.esr() ||
-           flags.nanoo();
+    const auto esr =
+        flags.esr() == StochasticRoundingBehaviour::StochasticRounding_On;
+    return flags.inv() || flags.div0() || flags.oflo() || esr || flags.nanoo();
   }
 
   const IpuOptions::VerifiedTransfers& VerifiedTransfers() const {

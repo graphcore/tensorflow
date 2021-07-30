@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tracepoint.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
+#include "tensorflow/core/public/version.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -74,6 +75,17 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
                                poplar::OptionFlags* engine_options) {
   PoplarExecutableInfo info;
 
+  auto& ertc = proto.embedded_runtime_config();
+  info.num_IPUs = ertc.num_ipus();
+  info.target_type = ertc.target_type();
+  info.target_arch = ertc.target_arch();
+  info.gateway_mode = ertc.gateway_mode();
+  info.supports_remote_buffers = ertc.supports_remote_buffers();
+
+  info.tf_major_version = proto.tf_major_version();
+  info.tf_minor_version = proto.tf_minor_version();
+  info.tf_git_version = proto.tf_git_version();
+
   info.replication_factor = proto.replication_factor();
 
   for (const auto& infeed : proto.infeeds()) {
@@ -114,11 +126,30 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   }
 
   for (const auto& remote_parameter : proto.remote_parameters()) {
+    absl::optional<RemoteParameterHostRearrangement> host_rearrangement;
+    if (remote_parameter.has_host_rearrangement()) {
+      host_rearrangement.emplace();
+      host_rearrangement->replication_factor =
+          remote_parameter.host_rearrangement().replication_factor();
+      host_rearrangement->total_elements_per_replica =
+          remote_parameter.host_rearrangement().total_elements_per_replica();
+      auto& gathered_to_ref_slices =
+          remote_parameter.host_rearrangement().gathered_to_ref_slices();
+      host_rearrangement->gathered_to_ref_slice.reserve(
+          gathered_to_ref_slices.size());
+      for (const auto& slice : gathered_to_ref_slices) {
+        host_rearrangement->gathered_to_ref_slice.emplace_back(slice.begin(),
+                                                               slice.end());
+      }
+      auto& elementMap = remote_parameter.host_rearrangement().element_map();
+      host_rearrangement->element_map.assign(
+          elementMap.data(), elementMap.data() + elementMap.size());
+    }
     info.remote_parameter_infos.emplace(RemoteParameterInfo{
         remote_parameter.parameter_number(),
         remote_parameter.is_replica_partitioned(),
         remote_parameter.buffer_name(), remote_parameter.buffer_offset(),
-        remote_parameter.num_merged()});
+        remote_parameter.num_merged(), std::move(host_rearrangement)});
   }
 
   info.logging_cycle_count = proto.logging_cycle_count();
@@ -146,6 +177,17 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
                               const poplar::OptionFlags& poplar_options = {}) {
   PoplarExecutableProto proto;
+
+  auto ertc = proto.mutable_embedded_runtime_config();
+  ertc->set_num_ipus(info.num_IPUs);
+  ertc->set_target_type(info.target_type);
+  ertc->set_target_arch(info.target_arch);
+  ertc->set_gateway_mode(info.gateway_mode);
+  ertc->set_supports_remote_buffers(info.supports_remote_buffers);
+
+  proto.set_tf_major_version(info.tf_major_version);
+  proto.set_tf_minor_version(info.tf_minor_version);
+  proto.set_tf_git_version(info.tf_git_version);
 
   proto.set_replication_factor(info.replication_factor);
 
@@ -208,6 +250,22 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
     remote_parameter->set_buffer_name(remote_parameter_info.buffer_name);
     remote_parameter->set_buffer_offset(remote_parameter_info.buffer_offset);
     remote_parameter->set_num_merged(remote_parameter_info.num_merged);
+    if (remote_parameter_info.host_rearrangement) {
+      auto* host_rearrangement = remote_parameter->mutable_host_rearrangement();
+      host_rearrangement->set_replication_factor(
+          remote_parameter_info.host_rearrangement->replication_factor);
+      host_rearrangement->set_total_elements_per_replica(
+          remote_parameter_info.host_rearrangement->total_elements_per_replica);
+      for (auto& slice :
+           remote_parameter_info.host_rearrangement->gathered_to_ref_slice) {
+        auto* interval = host_rearrangement->add_gathered_to_ref_slices();
+        interval->set_begin(slice.first);
+        interval->set_end(slice.second);
+      }
+      auto& element_map = remote_parameter_info.host_rearrangement->element_map;
+      *host_rearrangement->mutable_element_map() = {element_map.begin(),
+                                                    element_map.end()};
+    }
   }
 
   for (const auto& key_id_mapping : info.key_id_mappings) {
@@ -226,7 +284,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
 
   // Items that don't need deserialising.
   for (const auto& input_info : info.entry_input_infos) {
-    auto input = proto.mutable_signature()->add_inputs();
+    auto input = ertc->mutable_signature()->add_inputs();
     input->set_name(input_info.name);
     input->set_handle(input_info.handle);
     input->set_argument(input_info.argument);
@@ -235,7 +293,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& streamed_input_info : info.feed_input_infos) {
-    auto input = proto.mutable_signature()->add_streamed_inputs();
+    auto input = ertc->mutable_signature()->add_streamed_inputs();
     input->set_name(streamed_input_info.name);
     input->set_handle(streamed_input_info.handle);
     input->set_argument(streamed_input_info.argument);
@@ -244,7 +302,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& output_info : info.entry_output_infos) {
-    auto output = proto.mutable_signature()->add_outputs();
+    auto output = ertc->mutable_signature()->add_outputs();
     output->set_name(output_info.name);
     output->set_handle(output_info.handle);
     output->set_tuple_index(output_info.tuple_index);
@@ -252,7 +310,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   }
 
   for (const auto& streamed_output_info : info.feed_output_infos) {
-    auto output = proto.mutable_signature()->add_streamed_outputs();
+    auto output = ertc->mutable_signature()->add_streamed_outputs();
     output->set_name(streamed_output_info.name);
     output->set_handle(streamed_output_info.handle);
     output->set_tuple_index(streamed_output_info.tuple_index);
@@ -319,32 +377,10 @@ PoplarExecutableCore::Deserialize(
 
 /*static*/ Status PoplarExecutableCore::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
-    const CompilerAnnotations& annotations, uint32 replication_count,
-    const poplar::OptionFlags& opts, bool logging_cycle_count,
-    const VerifiedStreamsIndices::KeyIdMappings& mappings,
-    const std::vector<string>& checkpoint_feeds_order) {
+    const poplar::OptionFlags& opts, const PoplarExecutableInfo& info) {
   TENSORFLOW_TRACEPOINT();
 
-  const PoplarExecutableProto proto = ToProto(
-      PoplarExecutableInfo{
-          replication_count,
-          annotations.infeed_infos,
-          annotations.outfeed_infos,
-          annotations.send_infos,
-          annotations.recv_infos,
-          annotations.host_embedding_lookup_infos,
-          annotations.host_embedding_update_infos,
-          annotations.host_embedding_notify_infos,
-          annotations.remote_parameter_infos,
-          annotations.entry_input_infos,
-          annotations.feed_input_infos,
-          annotations.entry_output_infos,
-          annotations.feed_output_infos,
-          logging_cycle_count,
-          mappings,
-          checkpoint_feeds_order,
-      },
-      opts);
+  const PoplarExecutableProto proto = ToProto(info, opts);
 
   return PoplarExecutableBinaryFile::Write(
       filenames.CachedExecutableFilename(), proto,

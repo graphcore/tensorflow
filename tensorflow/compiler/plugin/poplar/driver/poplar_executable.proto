@@ -25,12 +25,25 @@ message HostEmbeddingConfig {
   ShapeProto activations_shape = 4;
 }
 
+message CollectiveBalancedRefSlice {
+  int64 begin = 1;
+  int64 end = 2;
+}
+
+message CollectiveBalancedHostRearrangement {
+  int64 total_elements_per_replica = 1;
+  int64 replication_factor = 2;
+  repeated CollectiveBalancedRefSlice gathered_to_ref_slices = 3;
+  repeated uint32 element_map = 4 [packed = true];
+}
+
 message RemoteParameterConfig {
   int64 parameter_number = 1;
   bool is_replica_partitioned = 2;
   string buffer_name = 3;
   int64 buffer_offset = 4;
   int64 num_merged = 5;
+  CollectiveBalancedHostRearrangement host_rearrangement = 6;
 }
 
 message KeyIdMapping {
@@ -62,6 +75,18 @@ message Signature {
   repeated Output streamed_outputs = 4;
 }
 
+message EmbeddedRuntimeConfig {
+  // The functional signature of the poplar executable.
+  Signature signature = 1;
+
+  // Information about runtime used to compile executable
+  int64 num_IPUs = 2;
+  string target_type = 3;
+  string target_arch = 4;
+  bool gateway_mode = 5;
+  bool supports_remote_buffers = 6;
+}
+
 message PoplarExecutableProto {
 
   // The number of replicas
@@ -91,6 +116,9 @@ message PoplarExecutableProto {
 
   bool logging_cycle_count = 13;
 
-  // The functional signature of the poplar executable.
-  Signature signature = 14;
+  EmbeddedRuntimeConfig embedded_runtime_config = 14;
+
+  uint32 tf_major_version = 15;
+  uint32 tf_minor_version = 16;
+  string tf_git_version = 17;
 };
