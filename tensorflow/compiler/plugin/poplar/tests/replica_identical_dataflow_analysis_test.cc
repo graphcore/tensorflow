@@ -37,8 +37,10 @@ namespace {
 // Test fixtures for creating flattened HLO, which is what
 // the ReplicaIdenticalDataflowAnalysis class expects.
 struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
-  ::testing::AssertionResult SetUpHloFlattenedModule(const std::string& hlo) {
-    auto module_setup_result = HloTestFixture::SetUpHloModule(hlo);
+  ::testing::AssertionResult SetUpHloFlattenedModule(const std::string& hlo,
+                                                     int64 replica_count = 1) {
+    auto module_setup_result =
+        HloTestFixture::SetUpHloModule(hlo, replica_count);
     if (module_setup_result == ::testing::AssertionSuccess()) {
       FlattenCallGraph flatten_call_graph;
       flatten_call_graph.Run(hlo_module_);
@@ -51,7 +53,8 @@ struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
 struct ParameterizedReplicaDataflowAnalysisTest
     : ParameterizedHloTestFixture<ReplicaIdenticalDataflowAnalysisTest> {
   void SetUp() override {
-    ASSERT_TRUE(SetUpHloFlattenedModule(GetParam().hlo));
+    ASSERT_TRUE(
+        SetUpHloFlattenedModule(GetParam().hlo, GetParam().replica_count));
   }
 };
 
@@ -226,7 +229,8 @@ ENTRY test {
   partial_all_reduce = f32[4] all-reduce(identical0), to_apply=add, replica_groups={{0, 2}, {1, 3}}
   ROOT differing_root = f32[4] add(identical0, partial_all_reduce)
 }
-)"};
+)",
+                                               /*replica_count=*/4};
 static const HloTestCase partial_all_gather = {"partial_all_gather", R"(
 HloModule test
 ENTRY test {
@@ -449,7 +453,8 @@ ENTRY test {
    differing0 = f32[1, 2] all-reduce(identical0), to_apply=add, replica_groups={{0, 2}, {1, 3}}
    ROOT tuple = (f32[1, 2], f32[1, 2], f32[1, 2]) tuple(identical0, differing0, identical1)
 }
-)"};
+)",
+                                                    /*replica_count=*/4};
 static const HloTestCase nested_tuple_forwarding = {"nested_tuple", R"(
 HloModule test
 add {
@@ -466,7 +471,8 @@ ENTRY test {
    tuple1 = (f32[1, 2], f32[1, 2], f32[1, 2]) tuple(identical0, differing0, identical1)
    ROOT nested_tuple = ((f32[1, 2], f32[1, 2], f32[1, 2])) tuple(tuple1)
 }
-)"};
+)",
+                                                    /*replica_count=*/4};
 TEST_P(ReplicaValueCategoryTupleForwardingTest,
        TupleForwardsCategoryOfOperands) {
   ReplicaIdenticalDataflowAnalysis analysis;
