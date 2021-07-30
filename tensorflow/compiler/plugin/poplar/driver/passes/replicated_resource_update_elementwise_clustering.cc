@@ -288,7 +288,7 @@ ReplicatedResourceUpdateElementwiseClustering::AddClusterInput(
         builder->AddInstruction(HloInstruction::CreateAllReduce(
             scatter->shape(), std::vector<HloInstruction*>{scatter},
             sum_reduction, orthogonal_groups.ToXlaReplicaGroups(),
-            /*constrain_layout=*/true,
+            /*constrain_layout=*/false,
             /*channel_id=*/absl::nullopt, /*use_global_device_ids=*/false));
 
     context->MapInstruction(cluster_input, all_reduce);
