@@ -2276,7 +2276,7 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
             shape=[300, 300],
             dtype=dtypes.float16,
             initializer=init_ops.ones_initializer())
-        return embedding_ops.embedding_lookup(table, indices)
+        return array_ops.gather(table, indices)
 
     def identity(*args):
       return args

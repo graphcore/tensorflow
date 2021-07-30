@@ -170,16 +170,19 @@ def _get_gradients_for_function(op, *grads):
     fwd_op._set_shape_list_attr("output_shapes", func_graph.output_shapes)
     fwd_op._add_outputs([t.dtype for t in extra_func_outputs],
                         [t.shape for t in extra_func_outputs])
+    # pylint: enable=protected-access
 
   func_grad_inputs = _resolve_grad_inputs(func_graph, func_grad_graph, op)
-  # pylint: enable=protected-access
-  return func_grad_graph, func_grad_inputs
+  constant_outputs = functional_ops._get_constant_outputs(  # pylint: disable=protected-access
+      func_grad_graph, func_grad_inputs)
+  return func_grad_graph, func_grad_inputs, constant_outputs
 
 
 @ops.RegisterGradient("Function")
 def _function_grad(op, *grads):
   """The gradient of a Function op."""
-  func_grad_graph, func_grad_inputs = _get_gradients_for_function(op, *grads)
+  func_grad_graph, func_grad_inputs, constant_outputs = \
+    _get_gradients_for_function(op, *grads)
   outputs = gen_functional_ops.function(
       func_grad_inputs,
       to_apply=util.create_new_tf_function(func_grad_graph),
@@ -188,6 +191,7 @@ def _function_grad(op, *grads):
       unique_sharding=op.get_attr("unique_sharding"),
       keep_input_layouts=True)
 
+  outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
   return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
       func_grad_graph.structured_outputs, outputs)
 

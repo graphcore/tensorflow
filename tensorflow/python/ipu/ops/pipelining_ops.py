@@ -1021,7 +1021,8 @@ def pipeline(computational_stages,
             resource_update_ops.append(enqueue)
 
       with ops.name_scope(name + "/WU") as scope:
-        func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+        func_graph, captured_args, constant_outputs = \
+          functional_ops._compile_function(  # pylint: disable=protected-access
             resource_update_, [], scope, resource_update_ops, True)
 
       # Create the pipeline resource update stage and lower the function into XLA.
@@ -1035,6 +1036,7 @@ def pipeline(computational_stages,
             replicated_optimizer_state_sharding=
             replicated_optimizer_state_sharding,
             num_batches_to_accumulate=gradient_accumulation_count)
+        outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
@@ -1053,7 +1055,7 @@ def pipeline(computational_stages,
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
     try:
-      func_graph, captured_args = functional_ops._compile_function(
+      func_graph, captured_args, _ = functional_ops._compile_function(
           _pipeline, inputs, scope, control_outputs)
     except functional_ops._InvalidCaptureException as e:
       raise ValueError(
@@ -1212,7 +1214,8 @@ def _pipeline_stage(func,
   with ops.name_scope(name) as scope:
     # pylint: disable=protected-access
     try:
-      func_graph, captured_args = functional_ops._compile_function(
+      func_graph, captured_args, constant_outputs = \
+        functional_ops._compile_function(
           gradient_override_wrapper, args, scope, control_outputs)
     except functional_ops._InvalidCaptureException as e:
       raise ValueError(
@@ -1233,6 +1236,7 @@ def _pipeline_stage(func,
     if isinstance(outputs, ops.Operation):
       return outputs
 
+    outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
     return functional_ops._pack_sequence_as(  # pylint: disable=protected-access
         func_graph.structured_outputs, outputs)
 

@@ -21,11 +21,14 @@ Functional operators
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import tensor_util
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.util import nest
 
 
@@ -75,7 +78,7 @@ def outlined_function(func=None,
     def func_wrapper(*args):
       args = _convert_to_list(args)
       with ops.name_scope(name) as scope:
-        func_graph, captured_args = _compile_function(
+        func_graph, captured_args, constant_outputs = _compile_function(
             inner_func, args, scope, [], allow_external_captures=True)
 
         with ops.control_dependencies(list(func_graph.control_captures)):
@@ -87,6 +90,7 @@ def outlined_function(func=None,
               unique_sharding=unique_sharding,
               keep_input_layouts=keep_input_layouts,
               name=name)
+          outputs = _replace_outputs(outputs, constant_outputs)
 
           # pack_sequence_as requires a list of Tensors, but the gen_ operation
           # returns an Operation under some circumstances (probably when that
@@ -169,7 +173,8 @@ def _compile_function(func,
     op._set_shape_list_attr("_xla_inferred_shapes", output_shapes)
     # pylint: enable=protected-access
 
-  return func_graph, captured_args
+  constant_outputs = _get_constant_outputs(func_graph, captured_args)
+  return func_graph, captured_args, constant_outputs
 
 
 def _pack_sequence_as(structured_outputs, op_outputs):
@@ -203,3 +208,48 @@ def _convert_to_list(xs):
   if not isinstance(xs, (list, tuple)):
     return [xs]
   return list(xs)
+
+
+def _get_constant_outputs(func_graph, func_inputs):
+  """Get constant outputs for a functional graph.
+
+  Get constant outputs in order to propagate them in the XLA graph. This
+  includes `VariableShape` operation which needs to return a constant."""
+  if not func_graph.outputs:
+    return None
+
+  def get_output_info(output):
+    while output.op.type == "Identity":
+      output = output.op.inputs[0]
+    if constant_op.is_constant(output):
+      # Propagate constants.
+      return constant_op.constant(tensor_util.constant_value(output),
+                                  dtype=output.dtype)
+
+    if output.op.type == "VariableShape":
+      # Propagate variable shapes.
+      # Find the variable inside the function and its inputs index.
+      var = output.op.inputs[0]
+      assert var.dtype == dtypes.resource
+      index = [
+          i for i, v in enumerate(func_graph.inputs)
+          if v.dtype == dtypes.resource and v is var
+      ]
+      assert len(index) == 1
+      # Get the input variable.
+      outter_var = func_inputs[index[0]]
+      return resource_variable_ops.variable_shape(outter_var,
+                                                  out_type=output.dtype)
+    return None
+
+  return [get_output_info(x) for x in nest.flatten(func_graph.outputs)]
+
+
+def _replace_outputs(outputs, to_replace_with):
+  flat_outputs = nest.flatten(outputs)
+  flat_to_replace_with = nest.flatten(to_replace_with)
+  assert len(flat_outputs) == len(flat_to_replace_with)
+  flat_outputs = [
+      x if y is None else y for x, y in zip(flat_outputs, flat_to_replace_with)
+  ]
+  return nest.pack_sequence_as(outputs, flat_outputs)

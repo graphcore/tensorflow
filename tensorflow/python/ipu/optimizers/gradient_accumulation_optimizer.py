@@ -137,7 +137,8 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
                                   replicated_optimizer_state_sharding,
                                   num_mini_batches):
     with ops.name_scope(name + "/WU") as scope:
-      func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+      func_graph, captured_args, constant_outputs = \
+        functional_ops._compile_function(  # pylint: disable=protected-access
           resource_update_, [], scope, apply_grad_ops, True)
 
     # Create the resource update and lower the function into XLA.
@@ -151,6 +152,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
           replicated_optimizer_state_sharding=
           replicated_optimizer_state_sharding,
           num_batches_to_accumulate=num_mini_batches)
+      outputs = functional_ops._replace_outputs(outputs, constant_outputs)  # pylint: disable=protected-access
 
     return outputs
 
