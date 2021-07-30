@@ -191,9 +191,10 @@ struct OptimisationPlan {
   Shape accum_grads_shape;
   Shape accum_indices_shape;
 
-  static absl::optional<OptimisationPlan> Build(
-      HloInstruction* grad_create, HloInstruction* grad_add,
-      HloInstruction* grad_sink_inst) {
+  static absl::optional<OptimisationPlan> Build(HloInstruction* grad_create,
+                                                HloInstruction* grad_add,
+                                                HloInstruction* grad_sink_inst,
+                                                const int32 mini_batches_num) {
     auto grad_sink = Cast<HloGradientAccumulatorSink>(grad_sink_inst);
     auto multi_update_add =
         Cast<HloMultiUpdateInstruction>(grad_add->mutable_operand(1));
@@ -209,7 +210,7 @@ struct OptimisationPlan {
     VLOG(2) << "Indices argument: " << indices->ToString();
     VLOG(2) << "Gradients argument: " << grads->ToString();
     auto row_num = grad_sink->shape().dimensions(0);
-    auto mini_batches_num = grad_sink->MiniBatchesToAccumulate();
+
     auto mini_batch_size = grads_shape.dimensions(0);
     auto row_size = grads_shape.dimensions(1);
     VLOG(2) << "Mini batches: " << mini_batches_num
@@ -405,11 +406,9 @@ StatusOr<HloComputation*> ReplaceAccumulatorCaller(
   }
 
   auto accum_grads_sink = CreateGradientAccumulatorSink(
-      {grads_update_gte ? grads_update_gte.get() : grads_update.get()},
-      plan.mini_batches_num);
+      {grads_update_gte ? grads_update_gte.get() : grads_update.get()});
   auto accum_indices_sink = CreateGradientAccumulatorSink(
-      {indices_update_gte ? indices_update_gte.get() : indices_update.get()},
-      plan.mini_batches_num);
+      {indices_update_gte ? indices_update_gte.get() : indices_update.get()});
 
   ReplaceInstruction(
       grad_repl, resource_update,
@@ -448,6 +447,8 @@ StatusOr<bool> ReplaceGradientAccumulator(HloModule* module,
   // Rewriting operands to resource update function by replacing
   // old sink argument with grad/indices sinks.
   auto resource_update = grad_sink->users()[0];
+  const int32 num_mini_batches =
+      GetResourceUpdateBatchesToAccumulate(resource_update);
 
   // Find index of old sink in resource update function arguments and
   // erase it.
@@ -465,7 +466,8 @@ StatusOr<bool> ReplaceGradientAccumulator(HloModule* module,
   auto indices = multi_update_add->mutable_operand(1);
   auto grads = multi_update_add->mutable_operand(2);
 
-  auto plan_opt = OptimisationPlan::Build(grad_create, grad_add, grad_sink);
+  auto plan_opt = OptimisationPlan::Build(grad_create, grad_add, grad_sink,
+                                          num_mini_batches);
   if (!plan_opt) {
     return false;
   }
@@ -630,7 +632,9 @@ StatusOr<bool> ReplacePipelineGradientAccumulator(
     HloInstruction* multi_update_add, HloInstruction* grad_sink,
     HloInstruction* grad_sink_gte, HloInstruction* pipeline_stage,
     HloInstruction* resource_update) {
-  auto plan_opt = OptimisationPlan::Build(grad_create, grad_add, grad_sink);
+  auto plan_opt = OptimisationPlan::Build(
+      grad_create, grad_add, grad_sink,
+      GetResourceUpdateBatchesToAccumulate(resource_update));
   if (!plan_opt) {
     return false;
   }

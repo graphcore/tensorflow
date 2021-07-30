@@ -636,7 +636,8 @@ StatusOr<bool> PipelineFixer::FixConstantGradients(
     HloInstruction* rhs = sink_input->mutable_operand(1);
     VLOG(3) << "Replacing an accumulated constant gradient with a constant.";
     const int32 multiplier =
-        sink->MiniBatchesToAccumulate() * batch_serialization_iterations;
+        GetResourceUpdateBatchesToAccumulate(resource_update) *
+        batch_serialization_iterations;
     // Create the constant for the gradient accumulation.
     Literal literal(ShapeUtil::MakeShape(S32, operand->shape().dimensions()));
     literal.PopulateWithValue(multiplier);
