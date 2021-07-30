@@ -115,8 +115,8 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         'Mean/reduce', 'Mean/multiply', 'add*/add*/Add', 'add_*/fusion/Op/Add'
     ]
     self.assert_all_compute_sets_and_list(report, ok)
-    self.assert_max_tile_memory(report, 8824)
-    self.assert_always_live_memory(report, 169636)
+    self.assert_max_tile_memory(report, 8956, tolerance=0.2)
+    self.assert_always_live_memory(report, 280212, tolerance=0.2)
 
   def testCheckMaxTileSizePadding(self):
     cfg = IPUConfig()
