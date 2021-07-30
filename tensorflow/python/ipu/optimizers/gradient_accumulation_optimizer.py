@@ -127,8 +127,7 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
       # Add the gradients to the accumulator.
       accumulator = gen_poputil_ops.gradient_accumulator_add(accumulator, grad)
       # Sink the accumulators.
-      grad = gen_poputil_ops.gradient_accumulator_sink(
-          accumulator, num_mini_batches=num_mini_batches)
+      grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
       return (grad, var)
 
   @staticmethod

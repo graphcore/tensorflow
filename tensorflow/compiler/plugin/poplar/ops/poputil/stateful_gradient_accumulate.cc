@@ -63,7 +63,6 @@ REGISTER_OP("GradientAccumulatorSink")
     .Input("input: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32}")
-    .Attr("num_mini_batches: int")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
