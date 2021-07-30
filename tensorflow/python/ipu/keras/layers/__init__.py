@@ -21,6 +21,7 @@ from tensorflow.python.ipu.keras.layers.assume_equal_across_replicas import Assu
 from tensorflow.python.ipu.keras.layers.ctc import CTCInferenceLayer
 from tensorflow.python.ipu.keras.layers.ctc import CTCPredictionsLayer
 from tensorflow.python.ipu.keras.layers.dropout import Dropout
+from tensorflow.python.ipu.keras.layers.effective_transformer import EffectiveTransformer
 from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm, InstanceNorm, LayerNorm
 from tensorflow.python.ipu.keras.layers.normalization import GroupNormalization, InstanceNormalization, LayerNormalization

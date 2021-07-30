@@ -126,6 +126,7 @@ py_library(
         "keras/layers/assume_equal_across_replicas.py",
         "keras/layers/ctc.py",
         "keras/layers/dropout.py",
+        "keras/layers/effective_transformer.py",
         "keras/layers/embedding_lookup.py",
         "keras/layers/ipu_layer.py",
         "keras/layers/math.py",
@@ -534,6 +535,18 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras",
+        "//third_party/py/numpy",
+    ],
+)
+
+tf_py_test(
+    name = "keras_effective_transformer_test",
+    size = "large",
+    srcs = ["tests/keras/keras_effective_transformer_test.py"],
+    shard_count = 12,
+    deps = [
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
         "//third_party/py/numpy",
     ],
 )
@@ -1963,6 +1976,7 @@ test_suite(
         "keras_asynchronous_callbacks_test",
         "keras_ctc_test",
         "keras_dropout_test",
+        "keras_effective_transformer_test",
         "keras_embedding_lookup_test",
         "keras_execution_parameters_test",
         "keras_functional_model_test",
