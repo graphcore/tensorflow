@@ -37,8 +37,11 @@ namespace poplarplugin {
 
 // Common types/utilities for writing HLO based tests
 struct HloTestFixture : HloTestBase {
-  ::testing::AssertionResult SetUpHloModule(const std::string& hlo) {
-    auto module = ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest());
+  ::testing::AssertionResult SetUpHloModule(const std::string& hlo,
+                                            int64 replica_count = 1) {
+    auto config = GetModuleConfigForTest();
+    config.set_replica_count(replica_count);
+    auto module = ParseAndReturnVerifiedModule(hlo, config);
     if (module.ok()) {
       hlo_module_owner_ = std::move(module.ValueOrDie());
       hlo_module_ = hlo_module_owner_.get();
@@ -64,8 +67,14 @@ struct HloTestFixture : HloTestBase {
 };
 
 struct HloTestCase {
+  HloTestCase(const std::string& name, const std::string& hlo)
+      : name(name), hlo(hlo), replica_count(1) {}
+  HloTestCase(const std::string& name, const std::string& hlo,
+              int64 replica_count)
+      : name(name), hlo(hlo), replica_count(replica_count) {}
   std::string name;
   std::string hlo;
+  int64 replica_count;
 };
 
 std::ostream& operator<<(std::ostream& stream, const HloTestCase& test_case) {
@@ -77,7 +86,9 @@ template <class Base = HloTestFixture>
 struct ParameterizedHloTestFixture
     : Base,
       ::testing::WithParamInterface<HloTestCase> {
-  void SetUp() override { ASSERT_TRUE(Base::SetUpHloModule(GetParam().hlo)); }
+  void SetUp() override {
+    ASSERT_TRUE(Base::SetUpHloModule(GetParam().hlo, GetParam().replica_count));
+  }
 };
 
 // Utility for setting the name of parameterized tests from the
