@@ -61,6 +61,7 @@ class ValuesIdenticalAcrossReplicasVisitor
   Status HandleFusion(const HloInstruction* inst) override;
   Status HandleGetTupleElement(const HloInstruction* inst) override;
   Status HandleTuple(const HloInstruction* inst) override;
+  Status HandleTupleSelect(const HloInstruction* inst) override;
   Status HandleWhile(const HloInstruction* inst) override;
 
 #define HandleAsReplicaIdentical(TYPE)                       \
@@ -85,7 +86,7 @@ class ValuesIdenticalAcrossReplicasVisitor
 
  private:
   Status HandleRepeatLoop(const HloInstruction* call,
-                          const HloComputation* body);
+                          const HloComputation* body, int64 repeat_count);
 
   // Visit a HloComputation using a specific value category for each of its
   // parameters, returning the value categories of the root instruction and
