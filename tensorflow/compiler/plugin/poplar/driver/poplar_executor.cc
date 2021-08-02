@@ -2042,6 +2042,9 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       static_cast<int64>(ipu_.Target().getIpuLinkConfiguration()));
   target_hash.push_back(ipu_.Target().getIpuLinkDomainSize());
   target_hash.push_back(static_cast<int64>(ipu_.Target().getIpuLinkTopology()));
+  target_hash.push_back(ipu_.Target().getGatewayMode());
+  target_hash.push_back(ipu_.Target().getGatewayMultiReadServiceTable());
+
   if (ipu_.Target().getTargetType() == poplar::TargetType::IPU) {
     target_hash.push_back(
         std::hash<string>()(ipu_.Target().getTargetArchString()));
