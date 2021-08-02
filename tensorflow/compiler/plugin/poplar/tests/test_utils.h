@@ -37,6 +37,8 @@ namespace poplarplugin {
 
 // Common types/utilities for writing HLO based tests
 struct HloTestFixture : HloTestBase {
+  using HloTestBase::HloTestBase;
+
   ::testing::AssertionResult SetUpHloModule(const std::string& hlo,
                                             int64 replica_count = 1) {
     auto config = GetModuleConfigForTest();
