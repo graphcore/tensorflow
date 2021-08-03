@@ -87,10 +87,9 @@ class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
     ok = [
         'embedding_lookup/multi-slice/output/multiSlice/*',
         '__seed/set/setMasterSeed',
-        'host-exchange-local-copy-',
     ]
     # pylint: enable=line-too-long
-    self.assert_all_compute_sets_and_list(report, ok)
+    self.assert_compute_sets_contain_list(report, ok)
 
 
 if __name__ == "__main__":
