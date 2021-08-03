@@ -172,6 +172,7 @@ cc_library(
     srcs = [
         "driver/invariant_passes/no_control_deps_checker.cc",
         "driver/invariant_passes/resource_update_checker.cc",
+        "driver/passes/add_stochastic_rounding_options.cc",
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/add_block_recompute.cc",
@@ -218,6 +219,7 @@ cc_library(
         "driver/passes/io_tiles_placer.cc",
         "driver/passes/lift_recompute_suggestion.cc",
         "driver/passes/lower_frontend_attributes.cc",
+        "driver/passes/mark_replica_identical_instructions.cc",
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
         "driver/passes/multi_conv_fixer.cc",
@@ -373,6 +375,7 @@ cc_library(
         "driver/invariant_passes/no_control_deps_checker.h",
         "driver/invariant_passes/resource_update_checker.h",
         "driver/passes/add_block_recompute.h",
+        "driver/passes/add_stochastic_rounding_options.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
         "driver/passes/apply_recompute_suggestion.h",
@@ -418,6 +421,7 @@ cc_library(
         "driver/passes/io_tiles_placer.h",
         "driver/passes/lift_recompute_suggestion.h",
         "driver/passes/lower_frontend_attributes.h",
+        "driver/passes/mark_replica_identical_instructions.h",
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
         "driver/passes/multi_conv_fixer.h",
@@ -1526,6 +1530,38 @@ cc_library(
     ],
     deps = [
         "//tensorflow/compiler/xla:array3d",
+    ],
+)
+
+xla_test(
+    name = "add_stochastic_rounding_options_test",
+    srcs = ["tests/add_stochastic_rounding_options_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
+    name = "mark_replica_identical_instructions_test",
+    srcs = ["tests/mark_replica_identical_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
     ],
 )
 

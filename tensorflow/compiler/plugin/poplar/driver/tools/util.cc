@@ -597,6 +597,18 @@ bool IsLoweredInplace(const HloInstruction* inst) {
   return backend_config.is_inplace();
 }
 
+void MarkInstructionAsReplicaIdentical(HloInstruction* inst,
+                                       bool replica_identical) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  cfg.set_is_replica_identical(replica_identical);
+  TF_CHECK_OK(inst->set_backend_config(cfg));
+}
+
+bool IsInstructionReplicaIdentical(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.is_replica_identical();
+}
+
 absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
     const HloComputation* comp) {
   absl::flat_hash_set<const HloInstruction*> result;
