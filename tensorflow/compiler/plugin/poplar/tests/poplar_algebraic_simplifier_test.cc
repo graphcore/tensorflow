@@ -5779,6 +5779,29 @@ ENTRY main {
   EXPECT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, SimplifyAllReduceNormaliseAllReduce) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum {
+      y = f32[] parameter(1)
+      x = f32[] parameter(0), control-predecessors={y}
+      ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
+    }
+
+    ENTRY main {
+      arg0 = f32[1000] parameter(0)
+      all-reduce0 = f32[1000] all-reduce(arg0), to_apply=sum
+      normalise = f32[1000] custom-call(all-reduce0), custom_call_target="ReplicationNormalise"
+      ROOT all-reduce1 = f32[1000] all-reduce(normalise), to_apply=sum
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(CustomOpReplacer().Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::AllReduce(m::Parameter(0))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
