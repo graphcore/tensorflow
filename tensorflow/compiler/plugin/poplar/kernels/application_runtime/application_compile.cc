@@ -99,7 +99,8 @@ xla::StatusOr<xla::LocalExecutable*> CompileExecutable(
   TF_ASSIGN_OR_RETURN(
       std::vector<XlaCompiler::Argument> arguments,
       XlaComputationLaunchContext::BuildXlaCompilerArguments(
-          constants, inputs, variable_infos, mangled_input_names));
+          constants, inputs, variable_infos,
+          static_cast<Device*>(ctx->device()), mangled_input_names));
 
   const XlaCompiler::CompilationResult* compilation_result;
   xla::LocalExecutable* executable;

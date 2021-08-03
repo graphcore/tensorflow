@@ -139,6 +139,7 @@ XlaCompilationCache::BuildSignature(
   for (const XlaCompiler::Argument& arg : args) {
     switch (arg.kind) {
       case XlaCompiler::Argument::kConstant:
+      case XlaCompiler::Argument::kConstantResource:
         signature.arg_values.push_back(arg.constant_value);
         break;
       case XlaCompiler::Argument::kParameter:
@@ -488,6 +489,7 @@ Status XlaCompilationCache::CompileImpl(
           argument_input_indices.push_back(i);
           break;
         }
+        case XlaCompiler::Argument::kConstantResource:
         case XlaCompiler::Argument::kResource: {
           resource_input_indices.push_back(i);
           resource_input_initialized.push_back(arg.initialized);
