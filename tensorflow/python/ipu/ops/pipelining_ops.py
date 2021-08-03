@@ -831,8 +831,7 @@ def pipeline(computational_stages,
           acc = gen_poputil_ops.gradient_accumulator_create_from_shape(
               shape=tensor.shape, output_type=dtype)
           acc = gen_poputil_ops.gradient_accumulator_add(acc, tensor)
-          sink = gen_poputil_ops.gradient_accumulator_sink(
-              acc, num_mini_batches=gradient_accumulation_count)
+          sink = gen_poputil_ops.gradient_accumulator_sink(acc)
           outfeed_sinks.append(sink)
 
     # Build all of the forward stage computations.
@@ -916,8 +915,7 @@ def pipeline(computational_stages,
             accumulator = gen_poputil_ops.gradient_accumulator_add(
                 accumulator, grad)
             # Sink the accumulators.
-            grad = gen_poputil_ops.gradient_accumulator_sink(
-                accumulator, num_mini_batches=gradient_accumulation_count)
+            grad = gen_poputil_ops.gradient_accumulator_sink(accumulator)
         # Use the accumulated gradients.
         accumulated_grads_and_vars.append((grad, var))
     elif not isinstance(outputs, ops.Operation) and accumulate_outfeed:

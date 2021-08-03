@@ -378,10 +378,9 @@ std::unique_ptr<HloInstruction> CreateGradientAccumulatorAdd(
 }
 
 HloGradientAccumulatorSink::HloGradientAccumulatorSink(
-    absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
+    absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(operands[0]->shape(), operands,
-                           PoplarOp::GradientAccumulatorSink, num_mini_batches),
-      num_mini_batches_(num_mini_batches) {}
+                           PoplarOp::GradientAccumulatorSink) {}
 
 absl::flat_hash_set<int64> HloGradientAccumulatorSink::AllocatingIndices()
     const {
@@ -421,23 +420,18 @@ std::unique_ptr<HloInstruction>
 HloGradientAccumulatorSink::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return absl::make_unique<HloGradientAccumulatorSink>(new_operands,
-                                                       num_mini_batches_);
+  return absl::make_unique<HloGradientAccumulatorSink>(new_operands);
 }
 
 std::vector<std::string>
 HloGradientAccumulatorSink::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  std::vector<std::string> attributes;
-  attributes.push_back("num_mini_batches=" + std::to_string(num_mini_batches_));
-
-  return attributes;
+  return std::vector<std::string>();
 }
 
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorSink(
-    absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
-  return absl::make_unique<HloGradientAccumulatorSink>(operands,
-                                                       num_mini_batches);
+    absl::Span<HloInstruction* const> operands) {
+  return absl::make_unique<HloGradientAccumulatorSink>(operands);
 }
 
 namespace {
@@ -526,11 +520,7 @@ static HloPoplarInstructionFactory gradient_accumulator_add_factory(
 StatusOr<std::unique_ptr<HloInstruction>> HloGradientAccumulatorSinkFactoryFunc(
     HloCustomCallInstruction* call) {
   auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  // Get the attribute values
-  TF_ASSIGN_OR_RETURN(int32 num_mini_batches,
-                      attribute_map.GetAttributeAsInt("num_mini_batches"));
-
-  return CreateGradientAccumulatorSink(call->operands(), num_mini_batches);
+  return CreateGradientAccumulatorSink(call->operands());
 }
 
 static HloPoplarInstructionFactory gradient_accumulator_sink_factory(
