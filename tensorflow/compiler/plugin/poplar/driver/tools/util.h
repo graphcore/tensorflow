@@ -220,6 +220,13 @@ void MakeUsedNotInplace(HloInstruction* inst);
 // Check whether this instruction is configured to be used inplace.
 bool IsLoweredInplace(const HloInstruction* inst);
 
+// Configure the backend config of the instruction to indicate whether its
+// replica identical or not.
+void MarkInstructionAsReplicaIdentical(HloInstruction*, bool);
+// Check whether this instruction is configured to be replica
+// identical.
+bool IsInstructionReplicaIdentical(const HloInstruction*);
+
 // Get all the inplace instructions in a computation.
 absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
     const HloComputation* comp);

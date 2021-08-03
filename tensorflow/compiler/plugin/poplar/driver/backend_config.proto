@@ -217,4 +217,12 @@ message PoplarBackendConfig {
 
   // The tile subset that should be used by this instruction.
   Tileset tileset = 10;
+
+  // Tag that says whether an instruction produces
+  // a value thats identical across replicas.
+  bool is_replica_identical = 11;
+
+  // TF config option for setting the Poplar `deterministicWorkers`
+  // option.
+  ThreeState deterministic_workers = 12;
 };
