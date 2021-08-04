@@ -26,14 +26,15 @@ from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import math_ops
+from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.ipu.keras.optimizers import CrossReplicaOptimizer
-from tensorflow.python.ipu.keras.optimizers import MapGradientOptimizer
+from tensorflow.python.ipu.keras.optimizers import MapGradientOptimizerInvertedChaining as MGOIC
 from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 from tensorflow.python.framework.constant_op import constant as tf_constant
 from tensorflow.python.ipu.keras.optimizers import GradientAccumulationOptimizer
 
 v0 = 5
-data_init = 2
+data_init = 2.0
 
 
 def create_model(optimizer, steps_per_execution=None):
@@ -62,17 +63,14 @@ def map_fn_add(grad, _):
   return math_ops.add(grad, h)
 
 
-def map_fn_divide(grad, _):
-  h = tf_constant([2.0])
-  return math_ops.divide(grad, h)
-
-
 nipus = 2
 x = np.full((128, 1), data_init, np.single)
 y = np.full((128, 1), data_init, np.single)
 learning_rate = 0.1
 original_optimizer = keras.optimizer_v2.gradient_descent.SGD(
     learning_rate=learning_rate)
+
+v1_original_optimizer = GradientDescentOptimizer(learning_rate)
 
 
 class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
@@ -111,50 +109,50 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
                   batch_size=nipus * batch_size)
     self.assertEqual(m.get_weights(), cpu_model.get_weights())
 
-  @unittest.skip("T42094 - MapGradientOptimizer needs fixing.")
   @test_util.run_v2_only
   def testMapGradientOptimizer(self):
-    quad_optimizer = IpuOptimizer(
-        MapGradientOptimizer(original_optimizer, map_fn_quadratic))
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 1
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = create_model(quad_optimizer)
-      m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
+    for quad_optimizer in [
+        IpuOptimizer(MGOIC(original_optimizer, map_fn_quadratic)),
+        MGOIC(original_optimizer, map_fn_quadratic)
+    ]:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        m = create_model(quad_optimizer)
+        m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
 
-    grad = (2 * data_init * ((v0 * data_init) - (data_init)))
-    expected = v0 - (learning_rate * (grad**2))
-    self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
+        grad = (2 * data_init * ((v0 * data_init) - (data_init)))
+        expected = v0 - (learning_rate * (grad**2))
+        self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
 
-  @unittest.skip("T42094 - MapGradientOptimizer needs fixing.")
   @test_util.run_v2_only
   def testMapGradientOptimizerNested(self):
-    quad_optimizer = MapGradientOptimizer(
-        MapGradientOptimizer(original_optimizer, map_fn_quadratic), map_fn_add)
+    for quad_optimizer in [
+        MGOIC(MGOIC(original_optimizer, map_fn_add), map_fn_quadratic)
+    ]:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+      strategy = ipu_strategy.IPUStrategyV1()
+      with strategy.scope():
+        m = create_model(quad_optimizer)
+        m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
 
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 1
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = create_model(quad_optimizer)
-      m.fit(x=x, y=y, steps_per_epoch=1, epochs=1, batch_size=1)
-
-      grad = (2 * data_init * ((v0 * data_init) - (data_init)))
-      expected = v0 - (learning_rate * ((grad**2) + 10))
-      self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
+        grad = (2 * data_init * ((v0 * data_init) - (data_init)))
+        expected = v0 - (learning_rate * ((grad**2) + 10))
+        self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
 
   @unittest.skip("T42094 - MapGradientOptimizer needs fixing.")
   @tu.test_uses_ipus(num_ipus=nipus, allow_ipu_model=False)
   @test_util.run_v2_only
   def testMappedAndCross(self):
     # test that _keras optimizer wrapper still works with default optimizers
-    add_optimizer = CrossReplicaOptimizer(
-        MapGradientOptimizer(original_optimizer, map_fn_add))
+    add_optimizer = CrossReplicaOptimizer(MGOIC(original_optimizer,
+                                                map_fn_add))
 
     cfg = IPUConfig()
     cfg.auto_select_ipus = nipus
@@ -169,33 +167,6 @@ class KerasV2OptimizersTest(test_util.TensorFlowTestCase):
       #expected = v0 - (learning_rate * (grad + 10))
       # re enable when T36442 is fixed
       #self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
-
-  @unittest.skip("T42094 - MapGradientOptimizer needs fixing.")
-  @test_util.run_v2_only
-  def testGradientAccumulation(self):
-
-    no_acc = GradientAccumulationOptimizer(original_optimizer, 1)
-    acc = GradientAccumulationOptimizer(original_optimizer, 10)
-
-    self.assertIsInstance(no_acc, keras.optimizer_v2.gradient_descent.SGD)
-    self.assertIsInstance(acc, GradientAccumulationOptimizer)
-    self.assertFalse(isinstance(no_acc, GradientAccumulationOptimizer))
-    self.assertFalse(isinstance(acc, keras.optimizer_v2.gradient_descent.SGD))
-
-    cfg = IPUConfig()
-    cfg.auto_select_ipus = 1
-    tu.add_hw_ci_connection_options(cfg)
-    cfg.configure_ipu_system()
-    strategy = ipu_strategy.IPUStrategyV1()
-    with strategy.scope():
-      m = create_model(GradientAccumulationOptimizer(
-          MapGradientOptimizer(original_optimizer, map_fn_divide), 2),
-                       steps_per_execution=2)
-      m.fit(x=x, y=y, steps_per_epoch=2, epochs=1, batch_size=1)
-
-      grad = (2 * data_init * ((v0 * data_init) - (data_init)))
-      expected = v0 - (learning_rate * grad)
-      self.assertAllCloseAccordingToType(self.get_model_weight(m), expected)
 
 
 if __name__ == "__main__":

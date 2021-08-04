@@ -47,7 +47,8 @@ class GradientAccumulationOptimizer(IpuOptimizer):
                dtype=None,
                name="GradientAccumulationOptimizer"):
     """
-    Construct a GradientAccumulationOptimizer.
+    Construct a GradientAccumulationOptimizer. Note this doesn't divide
+    by the number of mini-batches.
 
     Args:
       opt: An existing optimizer to encapsulate.
@@ -85,48 +86,6 @@ class GradientAccumulationOptimizer(IpuOptimizer):
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizer".
     """
-
-    if num_mini_batches < 1:
-      raise ValueError("num mini batches must be >= 1")
-
-    IpuOptimizer.__init__(self, opt, name=name)
-    self._num_mini_batches = num_mini_batches
-    self._offload_weight_update_variables = self.bool_to_three_state(
-        offload_weight_update_variables,
-        threestate_pb2.ThreeState.Name(threestate_pb2.THREESTATE_UNDEFINED))
-    self._replicated_optimizer_state_sharding = self.bool_to_three_state(
-        replicated_optimizer_state_sharding,
-        self._offload_weight_update_variables)
-    self._dtype = dtype
-
-  def _resource_apply_dense(self, grad, handle, apply_state):
-    """Apply gradient to variable referenced by `handle`.
-
-    Args:
-      grad: The gradient to be applied.
-      handle: A handle to the variable to apply the gradient to.
-      apply_state: State passed down to wrapped optimzier's apply functions.
-    Returns:
-      The updated variable.
-    """
-    (acc_grad,
-     acc_var) = GradientAccumulationOptimizerV2.create_accumulated_grads(
-         grad, handle, self._dtype, self._num_mini_batches)
-
-    # Create an explicit function call for the apply gradients - note that we
-    # allow external captures here.
-    apply_grad_ops = []
-
-    def resource_update_():
-      updated_var = self._opt._resource_apply_dense(  # pylint: disable=protected-access
-          acc_grad, acc_var, apply_state)
-      if updated_var is not None:
-        apply_grad_ops.append(updated_var)
-
-    return GradientAccumulationOptimizerV2.apply_gradient_accumulation(
-        resource_update_,
-        self._opt._name,  # pylint: disable=protected-access
-        apply_grad_ops,
-        self._offload_weight_update_variables,
-        self._replicated_optimizer_state_sharding,
-        self._num_mini_batches)
+    raise NotImplementedError("""Cannot use v2 optimizer. Have to use
+                GradientAccumulationOptimizerV2 instead (found in 
+                tensorflow.python.ipu.optimizers)""")

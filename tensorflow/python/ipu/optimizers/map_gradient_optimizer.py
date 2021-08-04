@@ -100,3 +100,21 @@ class MapGradientOptimizer(IpuOptimizer):
                                                        x[1].value()), x[1])
                       for x in grads_and_vars]
     return grads_and_vars
+
+
+class _MapGradientOptimizerInvertedChaining(IpuOptimizer):
+  def __init__(self,
+               wrapped_optimizer,
+               gradient_mapping_function,
+               name="MapGradientOptimizerInvertedChaining"):
+    super(_MapGradientOptimizerInvertedChaining,
+          self).__init__(wrapped_optimizer, name=name)
+    self._gradient_mapping_function = gradient_mapping_function
+
+  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+    grads_and_vars = [(self._gradient_mapping_function(x[0],
+                                                       x[1].value()), x[1])
+                      for x in grads_and_vars]
+    return self._opt.apply_gradients(grads_and_vars,
+                                     global_step=global_step,
+                                     name=None)

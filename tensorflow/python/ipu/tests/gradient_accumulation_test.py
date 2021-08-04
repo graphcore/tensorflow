@@ -80,8 +80,8 @@ def _gradient_accumulation_loop(test_wrapper,
           opt = gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
               optimizer_fn(), num_batches_to_accumulate)
         else:
-          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(
-              optimizer_fn(), num_batches_to_accumulate)
+          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
+              optimizer_fn(), num_batches_to_accumulate, False)
         outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
         outs.append(enqueue_op)
         outs.append(opt.minimize(loss))

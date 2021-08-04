@@ -22,10 +22,7 @@ from tensorflow.python.ipu.keras.optimizers import IpuOptimizer
 
 class MapGradientOptimizer(IpuOptimizer):
   """
-  Apply a function to gradients before they are applied to the variables.
-
-  If wrapping multiple MapGradientOptimizers, inner map functions will be
-  applied first.
+  Removed, please use MapGradientOptimizerInvertedChaining.
   """
   def __init__(self,
                opt,
@@ -40,17 +37,47 @@ class MapGradientOptimizer(IpuOptimizer):
              Mapping functions should be of form fn(grad, var) and return
              the updated gradient.
     """
-    super(MapGradientOptimizer, self).__init__(opt, name=name)
-    self._gradient_mapping_function = gradient_mapping_function
+    raise NotImplementedError(
+        "Use MapGradientOptimizerInvertedChaining instead")
 
-  def preprocess_gradients(self, grad, var):
+
+class MapGradientOptimizerInvertedChaining(IpuOptimizer):
+  """
+  Apply a function to gradients before they are applied to the variables.
+
+  If wrapping multiple optimizers then the outer mapping
+  functions will be applied first  (this is
+  the opposite way to `MapGradientOptimizer`).
+  If used with `MapGradientOptimizer` wrapper then
+  the `MapGradientOptimziers` will always be applied first.
+  """
+  def __init__(self,
+               opt,
+               gradient_mapping_function,
+               name="MapGradientOptimizerInvertedChaining"):
     """
-    Apply the gradient mapping function to the gradient.
+    Construct a MapGradientOptimizerInvertedChaining.
 
     Args:
-      grad: The gradient to apply function to.
-      var: The variable gradient corresponds to.
+      opt: The optimizer to be wrapped.
+      gradient_mapping_function: The function to be applied to the gradients.
+              Mapping functions should be of the form fn(grad, var) and return
+              the updated gradient.
     """
-    (grad, var) = super(MapGradientOptimizer,
-                        self).preprocess_gradients(grad, var)
-    return (self._gradient_mapping_function(grad, var), var)
+    super(MapGradientOptimizerInvertedChaining, self).__init__(opt, name=name)
+    self._gradient_mapping_function = gradient_mapping_function
+
+  def _resource_apply_dense(self, grad, handle, apply_state):
+    """Apply gradient to variable referenced by `handle`.
+
+    Args:
+      grad: The gradient to be applied.
+      handle: A handle to the variable to apply the gradient to.
+      apply_state: State passed down to the wrapped
+                   optimzier's apply functions.
+    Returns:
+      The updated variable.
+    """
+    mapped_grad = self._gradient_mapping_function(grad, handle)
+    return self._opt._resource_apply_dense(  # pylint: disable=protected-access
+        mapped_grad, handle, apply_state)
