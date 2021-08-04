@@ -1386,6 +1386,30 @@ class _ConvolutionConfig(_ConfigBase):
     _poplar_options_to_protobuf(self.poplar_options, pb.convolution_options)
 
 
+class _SliceConfig(_ConfigBase):
+  def __init__(self):
+    """
+    Set the PopLibs slice options for the session. Must be a dictionary of valid
+    PopLibs slice options. See `embedding::plan` in the PopLibs API reference
+    for the full list of options. The options will be passed to multiSlice,
+    multiUpdate, and multiUpdateAdd poplibs calls. These are most commonly
+    generated when using embeddings.
+
+    Of note is the "availableMemoryProportion" flag, which indicates the
+    proportion of tile memory to be made available as temporary memory for
+    slice operations (float between 0 and 1.0). Less temporary memory will
+    generally result in a slice operation that takes more cycles to complete.
+    However, because always live memory (such as control code and vertex state)
+    is not tracked when planning it, a slice operation using less temporary
+    memory may use more memory overall, due to an increase of always live
+    memory.
+    """
+    self.poplar_options = {}
+
+  def _to_protobuf(self, pb):
+    _poplar_options_to_protobuf(self.poplar_options, pb.slice_options)
+
+
 class _PoolingConfig(_ConfigBase):
   def __init__(self):
     """
@@ -1963,6 +1987,10 @@ class IPUConfig(_ConfigBase):
     IPU devices.
     """
     self.device_connection = _IPUDeviceConnectionConfig()
+    """
+    Sub-category containing configuration options that affect slice operations.
+    """
+    self.slices = _SliceConfig()
     """
     Sub-category containing experimental configuration options that may be
     changed or removed with short or no notice.

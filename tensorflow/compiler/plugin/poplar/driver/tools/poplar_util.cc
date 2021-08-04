@@ -401,6 +401,19 @@ StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
   return opts;
 }
 
+StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
+                                                     CompilerResources& res) {
+  poplar::OptionFlags opts = res.default_slice_options;
+
+  // Set the options from the backend config.
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  for (const auto& opt : poplar_backend_config.slice_options()) {
+    opts.set(opt.option(), opt.value());
+  }
+  return opts;
+}
+
 Status SetPartialsTypeIfPresent(
     const PoplarBackendConfig& poplar_backend_config,
     poplar::OptionFlags& option_flags) {

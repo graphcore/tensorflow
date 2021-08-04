@@ -284,11 +284,15 @@ class PipelineStageOptions:
   A helper class which can be used to configure Poplar compilation options (such
   as 'availableMemoryProportion') inside a pipeline forward, backward and weight
   update stage. This will override the global options set by the
-  :ref:`convolution poplar options <convolutions.poplar_options>` and
-  :ref:`matmul poplar options <matmuls.poplar_options>` in the
+  :ref:`convolution poplar options <convolutions.poplar_options>`,
+  :ref:`matmul poplar options <matmuls.poplar_options>`, and
+  :ref:`slice poplar options <slices.poplar_options>` in the
   :py:class:`~tensorflow.python.ipu.config.IPUConfig.`.
   """
-  def __init__(self, convolution_options=None, matmul_options=None):
+  def __init__(self,
+               convolution_options=None,
+               matmul_options=None,
+               slice_options=None):
     """Creates an PipelineStageOptions object.
 
     Args:
@@ -296,6 +300,8 @@ class PipelineStageOptions:
         all the convolution operations in the stage.
       matmul_options: If provided, a dictionary of Poplar option flags for
         all the matmul operations in the stage.
+      slice_options: If provided, a dictionary of Poplar option flags for
+        all the slice operations in the stage.
       loss: The loss which is passed to the optimizer.
     """
 
@@ -309,6 +315,10 @@ class PipelineStageOptions:
       raise TypeError(
           "PipelineStageOptions.matmul_options must be dictionary.")
 
+    slice_options = slice_options if slice_options else {}
+    if not isinstance(slice_options, dict):
+      raise TypeError("PipelineStageOptions.slice_options must be dictionary.")
+
     # Add the values from the dicts into the proto.
     self._proto = pipeline_config_pb2.PipelineStagePoplarConfig()
     for (option_name, value) in convolution_options.items():
@@ -318,6 +328,11 @@ class PipelineStageOptions:
 
     for (option_name, value) in matmul_options.items():
       opt = self._proto.matmul_options.add()
+      opt.option = option_name
+      opt.value = value
+
+    for (option_name, value) in slice_options.items():
+      opt = self._proto.slice_options.add()
       opt.option = option_name
       opt.value = value
 

@@ -215,14 +215,17 @@ message PoplarBackendConfig {
   // Flags to be used by the matmul.
   repeated PoplarOptionFlag matmul_options = 9;
 
+  // Flags to be used by the slice operation.
+  repeated PoplarOptionFlag slice_options = 10;
+
   // The tile subset that should be used by this instruction.
-  Tileset tileset = 10;
+  Tileset tileset = 11;
 
   // Tag that says whether an instruction produces
   // a value thats identical across replicas.
-  bool is_replica_identical = 11;
+  bool is_replica_identical = 12;
 
   // TF config option for setting the Poplar `deterministicWorkers`
   // option.
-  ThreeState deterministic_workers = 12;
+  ThreeState deterministic_workers = 13;
 };

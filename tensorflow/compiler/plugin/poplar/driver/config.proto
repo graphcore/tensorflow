@@ -314,4 +314,7 @@ message IpuOptions {
   double io_tile_available_memory_proportion = 43;
 
   bool auto_assign_report_subdirectories = 44;
+
+  // Options controlling the configuration of slice operations.
+  repeated PoplarOptionFlag slice_options = 45;
 };

@@ -476,6 +476,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags GetPoolingOptions() const { return pooling_options_; }
 
+  poplar::OptionFlags GetSliceOptions() const { return slice_options_; }
+
   bool UseVerifiedTransfers() const {
     return current_config_.verified_transfers().enabled();
   }
@@ -1021,6 +1023,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags matmul_options_;
 
   poplar::OptionFlags pooling_options_;
+
+  poplar::OptionFlags slice_options_;
 
   poplar::OptionFlags graph_options_;
 
