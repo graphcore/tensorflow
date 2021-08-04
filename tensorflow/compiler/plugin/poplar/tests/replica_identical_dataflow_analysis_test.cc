@@ -15,11 +15,15 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "absl/strings/substitute.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/replica_identical_dataflow_analysis.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/tests/test_utils.h"
 
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
+#include "tensorflow/compiler/xla/service/platform_util.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -34,9 +38,21 @@ namespace {
     ASSERT_EQ(category, EXPECTED_CATEGORY);                      \
   }
 
+se::Platform* GetPlatform(const std::string& name) {
+  auto result = PlatformUtil::GetPlatform(name);
+  TF_CHECK_OK(result.status()) << "Could not get " << name << " platform";
+  return result.ValueOrDie();
+}
+
 // Test fixtures for creating flattened HLO, which is what
 // the ReplicaIdenticalDataflowAnalysis class expects.
 struct ReplicaIdenticalDataflowAnalysisTest : HloTestFixture {
+  ReplicaIdenticalDataflowAnalysisTest()
+      :  // Using the platform constructor to remove noisy platform messages
+         // from the test output
+        HloTestFixture(/*test platform*/ GetPlatform("Poplar"),
+                       /*reference platform*/ GetPlatform("interpreter")) {}
+
   ::testing::AssertionResult SetUpHloFlattenedModule(const std::string& hlo,
                                                      int64 replica_count = 1) {
     auto module_setup_result =
@@ -75,16 +91,6 @@ ENTRY test {
    const1 = f32[] constant(0)
    const2 = f32[] constant(4)
    ROOT identical_root = f32[] multiply(const1, const2)
-}
-)"};
-static const HloTestCase simple_consume_identical_instrs = {"consumers", R"(
-HloModule test
-ENTRY test {
-   identical0 = f32[] parameter(0)
-   identical1 = f32[] parameter(1)
-   consumer0 = f32[1, 1, 2, 4]  broadcast(f32[] identical0), dimensions={}, backend_config="{}"
-   consumer1 = f32[1, 1, 2, 4]  broadcast(f32[] identical1), dimensions={}, backend_config="{}"
-   ROOT identical_root = f32[1,1,2,4] add(consumer0, consumer1)
 }
 )"};
 static const HloTestCase simple_wide_const = {"wide_const", R"(
@@ -163,8 +169,8 @@ ENTRY test {
   ROOT identical_root = s32[] add(identical0, loop_count)
 }
 )"};
-static const HloTestCase array_conditional_with_identical_branches = {
-    "array_conditional_with_identical_branches", R"(
+static const HloTestCase conditional_with_identical_branches_and_pred = {
+    "conditional_with_identical_branches_and_pred", R"(
 HloModule test
 cond_false {
   x = f32[] parameter(0)
@@ -186,7 +192,88 @@ ENTRY test {
   ROOT identical_root = f32[] add(identical_true_param, conditional)
 }
 )"};
-TEST_P(ReplicaIdenticalInstructionTest, UsingReplicaIdenticalInstructions) {
+static const HloTestCase simple_pipeline = {"simple_pipeline", R"(
+HloModule test
+stage_0_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,42]) tuple(x, x)
+}
+
+stage_1_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2]) tuple(x)
+}
+
+stage_0_bwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2]) tuple(x)
+}
+
+resource_update {
+ x = f32[1,4,4,2] parameter(0)
+ y = f32[1,4,4,2] parameter(1)
+ ROOT xy = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, y)
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=-1}
+  pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+
+  pipeline_stage_bwd = (f32[1,4,4,2]) call(pipeline_stage_1_i0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=1}
+  pipeline_stage_bwd_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_bwd), index=0
+
+  updated_params = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_i0, pipeline_stage_bwd_i0), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  updated_param0 = f32[1,4,4,2] get-tuple-element(updated_params), index=0
+  updated_param1 = f32[1,4,4,2] get-tuple-element(updated_params), index=1
+
+  gradient_accumulation_count = s32[] parameter(2)
+
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2], s32[]) tuple(updated_param0, updated_param1, gradient_accumulation_count)
+}
+
+ENTRY test {
+  input0 = f32[1,4,4,2] parameter(0)
+  input1 = f32[1,4,4,2] parameter(1)
+  gradient_accumulation_count = s32[] constant(8)
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], s32[]) call(input0, input1, gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"4\"}}}"
+}
+)"};
+static const HloTestCase simple_select = {"simple_select", R"(
+HloModule test
+
+ENTRY test {
+  identical_pred = pred[] parameter(0)
+  identical_on_value = f32[] parameter(1)
+  identical_off_value = f32[] parameter(2)
+  select = f32[] select(identical_pred, identical_on_value, identical_off_value)
+  ROOT identical_root = f32[] add(identical_on_value, select)
+}
+)"};
+static const HloTestCase simple_tuple_select = {"simple_tuple_select", R"(
+HloModule test
+
+ENTRY test {
+  identical_pred = pred[] parameter(0)
+  identical_on_value = (f32[]) parameter(1)
+  identical_off_value = (f32[]) parameter(2)
+  ROOT select = (f32[]) tuple-select(identical_pred, identical_on_value, identical_off_value)
+}
+)"};
+static const HloTestCase compare_with_identical_operands = {
+    "compare_with_identical_operands", R"(
+HloModule test
+
+ENTRY test {
+  identical0 = s32[] parameter(0)
+  constant = s32[] constant(10)
+  ROOT compare = pred[] compare(identical0, constant), direction=LT
+}
+)"};
+TEST_P(ReplicaIdenticalInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
   // for all hlo being tested.
@@ -358,7 +445,7 @@ ENTRY test {
   ROOT differing_root = s32[] add(identical0, loop_count)
 }
 )"};
-static const HloTestCase while_With_differing_body = {"while_differing_body",
+static const HloTestCase while_with_differing_body = {"while_differing_body",
                                                       R"(
 HloModule test
 differing_body {
@@ -379,7 +466,134 @@ ENTRY test {
   ROOT differing_root = s32[] add(identical0, loop_count)
 }
 )"};
-TEST_P(ReplicaDifferingInstructionTest, UsingReplicaDifferingInstructions) {
+static const HloTestCase select_with_differing_pred = {
+    "select_with_differing_pred", R"(
+HloModule test
+
+ENTRY test {
+  after-all = token[] after-all()
+  infeed = (pred[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_pred = pred[] get-tuple-element((pred[], token[]) infeed), index=0
+
+  identical_on_value = f32[] parameter(0)
+  identical_off_value = f32[] parameter(1)
+  select = f32[] select(differing_pred, identical_on_value, identical_off_value)
+  ROOT differing_root = f32[] add(identical_on_value, select)
+}
+)"};
+static const HloTestCase select_with_differing_values = {
+    "select_with_differing_values", R"(
+HloModule test
+
+ENTRY test {
+  identical_pred = pred[] parameter(0)
+
+  constant = f32[] constant(1)
+  differing_on_value = f32[] rng(constant, constant), distribution=rng_uniform
+
+  identical_off_value = f32[] parameter(1)
+
+  select = f32[] select(identical_pred, differing_on_value, identical_off_value)
+  ROOT differing_root = f32[] add(identical_off_value, select)
+}
+)"};
+static const HloTestCase tuple_select_with_differing_pred = {
+    "tuple_select_with_differing_pred", R"(
+HloModule test
+
+ENTRY test {
+  after-all = token[] after-all()
+  infeed = (pred[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_pred = pred[] get-tuple-element((pred[], token[]) infeed), index=0
+
+  identical_on_value = (f32[]) parameter(0)
+  identical_off_value = (f32[]) parameter(1)
+  ROOT select = (f32[]) tuple-select(differing_pred, identical_on_value, identical_off_value)
+}
+)"};
+static const HloTestCase tuple_select_with_differing_values = {
+    "tuple_select_with_differing_values", R"(
+HloModule test
+
+ENTRY test {
+  identical_pred = pred[] parameter(0)
+
+  after-all = token[] after-all()
+  infeed = ((f32[]), token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_on_value = (f32[]) get-tuple-element(((f32[]), token[]) infeed), index=0
+
+  identical_off_value = (f32[]) parameter(1)
+  ROOT select = (f32[]) tuple-select(identical_pred, differing_on_value, identical_off_value)
+}
+)"};
+static const HloTestCase compare_with_differing_operands = {
+    "compare_with_differing_operands", R"(
+HloModule test
+
+ENTRY test {
+  after-all = token[] after-all()
+  infeed = (s32[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing0 = s32[] get-tuple-element(infeed), index=0
+  constant = s32[] constant(10)
+  ROOT compare = pred[] compare(differing0, constant), direction=LT
+}
+)"};
+static const HloTestCase pipeline_with_differing_gradient_accumulation_count = {
+    "pipeline_with_differing_gradient_accumulation_count", R"(
+HloModule test
+stage_0_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,42]) tuple(x, x)
+}
+
+stage_1_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2]) tuple(x)
+}
+
+stage_0_bwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2]) tuple(x)
+}
+
+resource_update {
+ x = f32[1,4,4,2] parameter(0)
+ y = f32[1,4,4,2] parameter(1)
+ ROOT xy = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, y)
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=-1}
+  pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+
+  pipeline_stage_bwd = (f32[1,4,4,2]) call(pipeline_stage_1_i0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=1}
+  pipeline_stage_bwd_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_bwd), index=0
+
+  updated_params = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_i0, pipeline_stage_bwd_i0), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  updated_param0 = f32[1,4,4,2] get-tuple-element(updated_params), index=0
+  updated_param1 = f32[1,4,4,2] get-tuple-element(updated_params), index=1
+
+  gradient_accumulation_count = s32[] parameter(2)
+
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2], s32[]) tuple(updated_param0, updated_param1, gradient_accumulation_count)
+}
+
+ENTRY test {
+  input0 = f32[1,4,4,2] parameter(0)
+  input1 = f32[1,4,4,2] parameter(1)
+
+  after-all = token[] after-all()
+  infeed = (s32[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_gradient_accumulation_count = s32[] get-tuple-element(infeed), index=0
+
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2], s32[]) call(input0, input1, differing_gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"4\"}}}"
+}
+)"};
+TEST_P(ReplicaDifferingInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
   // for all hlo being tested.
@@ -614,7 +828,7 @@ ENTRY test {
   ROOT tuple = (f32[], f32[], f32[]) tuple(identical_call, differing_call)
 }
 )";
-TEST_F(ReplicaIdenticalDataflowAnalysisTest, ParamlessCallCategory) {
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, ParamlessCallValueCategory) {
   ASSERT_TRUE(SetUpHloFlattenedModule(paramless_callables_hlo));
 
   ReplicaIdenticalDataflowAnalysis analysis;
@@ -656,7 +870,7 @@ ENTRY test {
   ROOT tuple = (f32[], f32[], f32[]) tuple(identical_call0, differing_call0, mixed_call0)
 }
 )";
-TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableCategoryDependsOnParams) {
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableValueCategory) {
   ASSERT_TRUE(SetUpHloFlattenedModule(calls_with_mixed_params_hlo));
 
   ReplicaIdenticalDataflowAnalysis analysis;
@@ -702,7 +916,7 @@ ENTRY test {
   ROOT call = (f32[], f32[]) call(identical0, differing0), to_apply=intermediate_func, backend_config="{\"callConfig\":{\"type\":\"Function\"}}"
 }
 )";
-TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableVisitedWithParams) {
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, ChainedCallsValueCategory) {
   ASSERT_TRUE(SetUpHloFlattenedModule(chained_calls_hlo));
 
   ReplicaIdenticalDataflowAnalysis analysis;
@@ -718,7 +932,7 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, CallableVisitedWithParams) {
                      ValueReplicaCategory::Identical);
 }
 
-const char* tuple_conditional_with_identical_branches = R"(
+const char* tuple_conditional_with_mixed_branches = R"(
 HloModule test
 cond_false {
   x = f32[] parameter(0)
@@ -748,8 +962,38 @@ ENTRY test {
 }
 )";
 TEST_F(ReplicaIdenticalDataflowAnalysisTest, TupleConditionalValueCategory) {
-  ASSERT_TRUE(
-      SetUpHloFlattenedModule(tuple_conditional_with_identical_branches));
+  ASSERT_TRUE(SetUpHloFlattenedModule(tuple_conditional_with_mixed_branches));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  // Only element1 is a replica identical value in both branches
+  // of our conditional, so its category should be identical and
+  // element0s differing.
+  auto* root = FindRootInstruction();
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {0}),
+                     ValueReplicaCategory::Differing);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {1}),
+                     ValueReplicaCategory::Identical);
+}
+const char* tuple_select_with_mixed_values = R"(
+HloModule test
+ENTRY test {
+  constant = f32[] constant(1)
+  differing0 = f32[] rng(constant, constant), distribution=rng_uniform
+
+  identical_pred = pred[] parameter(0)
+  identical0 = f32[] parameter(1)
+  identical1 = f32[] parameter(2)
+
+  mixed_on_value = (f32[], f32[], f32[]) tuple(differing0, identical0, identical1)
+  mixed_off_value = (f32[], f32[], f32[]) tuple(identical1, identical0, differing0)
+
+  ROOT select = (f32[], f32[], f32[]) tuple-select(identical_pred, mixed_on_value, mixed_off_value)
+}
+)";
+TEST_F(ReplicaIdenticalDataflowAnalysisTest, TupleSelectcValueCategory) {
+  ASSERT_TRUE(SetUpHloFlattenedModule(tuple_select_with_mixed_values));
 
   ReplicaIdenticalDataflowAnalysis analysis;
   TF_ASSERT_OK(analysis.Run(hlo_module_));
@@ -761,6 +1005,8 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, TupleConditionalValueCategory) {
                      ValueReplicaCategory::Differing);
   ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {1}),
                      ValueReplicaCategory::Identical);
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {2}),
+                     ValueReplicaCategory::Differing);
 }
 
 TEST_F(ReplicaIdenticalDataflowAnalysisTest, CanQuerySubComputations) {
@@ -849,6 +1095,10 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, WhileBodyValueCategory) {
   auto* while_body = hlo_module_->GetComputationWithName("body");
   ASSERT_TRUE(while_body);
   for (auto* instruction : while_body->instructions()) {
+    // The instruction bodies should all be differing since
+    // the while condition is, as this means that the body
+    // can be executed a different number of times by each
+    // replica.
     ASSERT_CATEGORY_EQ(analysis.ValueCategory(instruction),
                        ValueReplicaCategory::Differing);
   }
@@ -1033,7 +1283,9 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest,
                      ValueReplicaCategory::Differing);
 }
 
-const char* single_iteration_repeat = R"(
+using ReplicaValueCategoryRepeatTest = ParameterizedReplicaDataflowAnalysisTest;
+
+static const HloTestCase repeat_loop_template = {"repeat_loop_template", R"(
 HloModule test
 repeat {
   x = f32[] parameter(0)
@@ -1046,43 +1298,99 @@ repeat {
 ENTRY test {
   identical0 = f32[] parameter(0)
   identical1 = f32[] parameter(1)
-  ROOT loop_count = (f32[], f32[]) call(identical0, identical1), to_apply=repeat, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"1\"}}}"
+  ROOT loop_count = (f32[], f32[]) call(identical0, identical1), to_apply=repeat, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"$0\"}}}"
 }
-)";
-TEST_F(ReplicaIdenticalDataflowAnalysisTest,
-       SingleIterationRepeatValueCategory) {
-  ASSERT_TRUE(SetUpHloFlattenedModule(single_iteration_repeat));
+)"};
+static const HloTestCase repeat_pipeline_template = {"repeat_pipeline_template",
+                                                     R"(
+HloModule test
+stage_0_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  constant = f32[] constant(1)
+  differing0 = f32[1,4,4,2] rng(constant, constant), distribution=rng_uniform
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(x, differing0)
+}
+
+stage_1_fwd {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT tuple = (f32[1,4,4,2]) tuple(x)
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=-1}
+  pipeline_stage_0_i1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
+
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_1_i0, pipeline_stage_0_i1)
+}
+
+ENTRY test {
+  input0 = f32[1,4,4,2] parameter(0)
+  input1 = f32[1,4,4,2] parameter(1)
+  ROOT call = (f32[1,4,4,2], f32[1,4,4,2]) call(input0, input1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"$0\"}}}"
+}
+)"};
+TEST_P(ReplicaValueCategoryRepeatTest, SingleIterationRepeatValueCategory) {
+  auto repeat_template = GetParam().hlo;
+  auto single_iteration_hlo = absl::Substitute(repeat_template, "1");
+  ASSERT_TRUE(SetUpHloFlattenedModule(single_iteration_hlo));
 
   ReplicaIdenticalDataflowAnalysis analysis;
   TF_ASSERT_OK(analysis.Run(hlo_module_));
 
-  // Check that we're driving the repeat loop category from the initial
+  // Check that we're driving the call category from the initial
   // caller params (as we're only doing 1 repeat) and not the ROOT of the
-  // loop body, which we would do when iterating more than once.
+  // repeated body, which we would do when iterating more than once.
+  // Expects that the HLO be setup so that the value category of element
+  // 0 is identical when its generated with the caller params and differing
+  // otherwise.
   auto* root = FindRootInstruction();
   ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {0}),
                      ValueReplicaCategory::Identical);
 }
 
+TEST_P(ReplicaValueCategoryRepeatTest, MultiIterationRepeatValueCategory) {
+  auto repeat_template = GetParam().hlo;
+  auto multi_iteration_hlo = absl::Substitute(repeat_template, "4");
+  ASSERT_TRUE(SetUpHloFlattenedModule(multi_iteration_hlo));
+
+  ReplicaIdenticalDataflowAnalysis analysis;
+  TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  // Check that we're driving the call category from the repeated
+  // body. So the category comes from calling the body with the
+  // results of the previous iteration.
+  auto* root = FindRootInstruction();
+  ASSERT_CATEGORY_EQ(analysis.ValueCategory(root, {0}),
+                     ValueReplicaCategory::Differing);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaIdenticalInstructionTest,
-    ::testing::Values(simple_parameters, simple_constants,
-                      simple_consume_identical_instrs, simple_wide_const,
+    ::testing::Values(simple_parameters, simple_constants, simple_wide_const,
                       global_all_reduce, global_all_gather,
                       repeat_with_identical_io,
                       while_with_identical_body_and_condition,
-                      array_conditional_with_identical_branches),
+                      conditional_with_identical_branches_and_pred,
+                      simple_pipeline, simple_select, simple_tuple_select,
+                      compare_with_identical_operands),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaDifferingInstructionTest,
-    ::testing::Values(simple_infeed, partial_all_reduce, partial_all_gather,
-                      uniform_rng, normal_rng, conditional_with_differing_pred,
-                      conditional_with_differing_branches,
-                      repeat_with_differing_inputs,
-                      repeat_with_differing_outputs,
-                      while_with_differing_condition,
-                      while_With_differing_body),
+    ::testing::Values(
+        simple_infeed, partial_all_reduce, partial_all_gather, uniform_rng,
+        normal_rng, conditional_with_differing_pred,
+        conditional_with_differing_branches, repeat_with_differing_inputs,
+        repeat_with_differing_outputs, while_with_differing_condition,
+        while_with_differing_body, select_with_differing_pred,
+        select_with_differing_values, tuple_select_with_differing_pred,
+        tuple_select_with_differing_values, compare_with_differing_operands,
+        pipeline_with_differing_gradient_accumulation_count),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
@@ -1097,6 +1405,11 @@ INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
                                            differing_tuple_output),
                          HloTestCaseName);
 
+INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
+                         ReplicaValueCategoryRepeatTest,
+                         ::testing::Values(repeat_loop_template,
+                                           repeat_pipeline_template),
+                         HloTestCaseName);
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

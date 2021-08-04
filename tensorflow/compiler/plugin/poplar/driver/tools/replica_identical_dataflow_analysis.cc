@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -138,12 +139,22 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
     const HloInstruction* call) {
   HloComputation* comp = call->to_apply();
 
-  if (IsFunction(call)) {
+  if (IsFunction(call) || IsAnyPipelineStageOpOrResourceUpdate(call)) {
     TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
                         VisitSubComputation(comp, call));
     return Status::OK();
+  } else if (IsPipelineOp(call)) {
+    // Handle the pipeline like a repeat loop since it'll be
+    // invoked several times.
+    // A pipeline is only replica identical if its body and
+    // its `gradient_accumulation_count` instruction is. This
+    // instruction is passed as an operand to the body, so its
+    // value category will be encoded in the tuple result of the
+    // pipeline body. Which means that if its not identical then
+    // neither is the pipeline.
+    return HandleRepeatLoop(call, comp, GetPipelineRepeatCount(call));
   } else if (IsRepeatLoop(call)) {
-    return HandleRepeatLoop(call, comp);
+    return HandleRepeatLoop(call, comp, GetRepeatLoopCount(call));
   }
 
   return SetAllInstructionValuesToDiffering(call);
@@ -241,6 +252,28 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleTuple(
   return Status::OK();
 }
 
+Status ValuesIdenticalAcrossReplicasVisitor::HandleTupleSelect(
+    const HloInstruction* inst) {
+  // Since we don't know which tuple the select will return we can only
+  // say a value is identical if its in both on/off tuples and the pred
+  // is identical across replicas - so we get the same tuple across all
+  // replicas.
+  const bool sample_tuple_per_replica =
+      IsResultIdentical(value_category_mapping_.at(inst->operand(0)));
+  if (sample_tuple_per_replica) {
+    const ValueCategoryTree& on_value_categories =
+        value_category_mapping_.at(inst->operand(1));
+    const ValueCategoryTree& off_value_categories =
+        value_category_mapping_.at(inst->operand(2));
+
+    value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+        on_value_categories, off_value_categories);
+    return Status::OK();
+  }
+
+  return SetAllInstructionValuesToDiffering(inst);
+}
+
 Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
     const HloInstruction* inst) {
   HloComputation* while_condition = inst->while_condition();
@@ -302,10 +335,11 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
-    const HloInstruction* call, const HloComputation* body) {
-  CHECK_GT(GetRepeatLoopCount(call), 0);
+    const HloInstruction* call, const HloComputation* body,
+    int64 repeat_count) {
+  CHECK_GT(repeat_count, 0);
 
-  if (GetRepeatLoopCount(call) > 1) {
+  if (repeat_count > 1) {
     // To determine the value categories of a repeat body we need to run the
     // visitor twice, since the body is first run with initial values (set via
     // the calls operands) and then with the results from the previous call to
