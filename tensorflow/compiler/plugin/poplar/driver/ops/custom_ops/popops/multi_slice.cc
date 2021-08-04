@@ -102,10 +102,13 @@ class MultiSliceOp : public PoplarOpDef {
           poplar::program::Copy(original_input, input, false, {debug_info}));
     }
 
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                        GetSliceOptionsForInst(inst, res));
+
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, *plan, {}, {debug_info, "output"});
+        {1}, seq, *plan, opts, {debug_info, "output"});
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
     // Unflatten the output:
@@ -145,7 +148,8 @@ REGISTER_POPLAR_OP(MultiSlice, MultiSliceOp);
 
 enum class UpdateMode { Replace, Accumulate };
 Status MultiUpdateInternal(
-    poplar::Graph& graph, const popops::SlicePlan& plan, poplar::Tensor operand,
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    const popops::SlicePlan& plan, poplar::Tensor operand,
     const poplar::Tensor& indices, const poplar::Tensor& updates,
     poplar::program::Sequence& prog,
     const HloMultiUpdateInstruction* multi_update, UpdateMode mode,
@@ -169,19 +173,22 @@ Status MultiUpdateInternal(
                               serialization_factor);
   }
 
-  auto update_fn = [&graph, &plan, &operand, &debug_name_and_id, &mode, &scale](
-                       poplar::Tensor slice_indices,
-                       poplar::Tensor slice_updates,
-                       poplar::program::Sequence& seq) -> void {
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                      GetSliceOptionsForInst(inst, res));
+
+  auto update_fn = [&graph, &opts, &plan, &operand, &debug_name_and_id, &mode,
+                    &scale](poplar::Tensor slice_indices,
+                            poplar::Tensor slice_updates,
+                            poplar::program::Sequence& seq) -> void {
     slice_indices = slice_indices.reinterpret(poplar::UNSIGNED_INT);
     slice_updates = slice_updates.expand({1});
+
     if (mode == UpdateMode::Replace) {
       popops::multiUpdate(graph, operand, slice_updates, slice_indices, {0},
-                          {1}, seq, plan, poplar::OptionFlags(),
-                          {debug_name_and_id});
+                          {1}, seq, plan, opts, {debug_name_and_id});
     } else {
       popops::multiUpdateAdd(graph, operand, slice_updates, slice_indices,
-                             *scale, {0}, {1}, seq, plan, poplar::OptionFlags(),
+                             *scale, {0}, {1}, seq, plan, opts,
                              {debug_name_and_id});
     }
   };
@@ -280,8 +287,9 @@ class MultiUpdateOp : public PoplarOpDef {
                                      {debug_info}));
     }
     TF_RETURN_IF_ERROR(MultiUpdateInternal(
-        graph, *plan, plan_used ? operand : operand_reallocated, indices,
-        updates, prog, multi_update, UpdateMode::Replace, {debug_info}));
+        graph, res, inst, *plan, plan_used ? operand : operand_reallocated,
+        indices, updates, prog, multi_update, UpdateMode::Replace,
+        {debug_info}));
 
     if (!plan_used) {
       // Copy the results back into the original input tensor.
@@ -369,9 +377,9 @@ class MultiUpdateAddOp : public MultiUpdateOp {
                                      {debug_info}));
     }
     TF_RETURN_IF_ERROR(MultiUpdateInternal(
-        graph, *plan, plan_used ? operand : operand_reallocated, indices,
-        updates, prog, multi_update_add, UpdateMode::Accumulate, {debug_info},
-        scale));
+        graph, res, inst, *plan, plan_used ? operand : operand_reallocated,
+        indices, updates, prog, multi_update_add, UpdateMode::Accumulate,
+        {debug_info}, scale));
 
     if (!plan_used) {
       // Copy the results back into the original input tensor.

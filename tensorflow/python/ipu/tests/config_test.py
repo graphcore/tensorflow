@@ -723,6 +723,17 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     self.assertEqual(pb.convolution_options[1].option, 'C')
     self.assertEqual(pb.convolution_options[1].value, 'D')
 
+  def testSlicesPoplarOptions(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(len(pb.slice_options), 0)
+    cfg.slices.poplar_options = {'A': 'B', 'C': 'D'}
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.slice_options[0].option, 'A')
+    self.assertEqual(pb.slice_options[0].value, 'B')
+    self.assertEqual(pb.slice_options[1].option, 'C')
+    self.assertEqual(pb.slice_options[1].value, 'D')
+
   def testDeviceConnectionVersion(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()

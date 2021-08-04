@@ -1199,6 +1199,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   CompilerResources resources(
       module, information, poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
+      poplar_executor->GetSliceOptions(),
       poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphOutlining(),

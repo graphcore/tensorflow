@@ -46,6 +46,8 @@ Status LowerPipelineFrontendAttributesIntoStage(
           stage_config.convolution_options());
       poplar_backend_config.mutable_matmul_options()->CopyFrom(
           stage_config.matmul_options());
+      poplar_backend_config.mutable_slice_options()->CopyFrom(
+          stage_config.slice_options());
       TF_RETURN_IF_ERROR(inst->set_backend_config(poplar_backend_config));
     }
   }
