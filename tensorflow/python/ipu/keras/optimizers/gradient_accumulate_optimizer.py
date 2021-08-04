@@ -120,7 +120,8 @@ class GradientAccumulationOptimizer(IpuOptimizer):
     def resource_update_():
       updated_var = self._opt._resource_apply_dense(  # pylint: disable=protected-access
           acc_grad, acc_var, apply_state)
-      apply_grad_ops.append(updated_var)
+      if updated_var is not None:
+        apply_grad_ops.append(updated_var)
 
     return GradientAccumulationOptimizerV2.apply_gradient_accumulation(
         resource_update_,

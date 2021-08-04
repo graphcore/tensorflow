@@ -22,6 +22,7 @@ from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
+from tensorflow.python.training import gradient_descent
 
 
 def get_mnist_dataset(batch_size):
@@ -63,24 +64,28 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
   TESTCASES = [{
       "testcase_name": "sequential",
       "model_fn": simple_sequential_model,
-      "replication_factor": 1
+      "replication_factor": 1,
+      "optimizer": "sgd"
   }, {
       "testcase_name": "sequential_replicated",
       "model_fn": simple_sequential_model,
-      "replication_factor": 2
+      "replication_factor": 2,
+      "optimizer": "sgd"
   }, {
       "testcase_name": "functional",
       "model_fn": simple_functional_model,
-      "replication_factor": 1
+      "replication_factor": 1,
+      "optimizer": "sgd"
   }, {
       "testcase_name": "functional_replicated",
       "model_fn": simple_functional_model,
-      "replication_factor": 2
+      "replication_factor": 2,
+      "optimizer": gradient_descent.GradientDescentOptimizer(0.001)
   }]
 
   @parameterized.named_parameters(*TESTCASES)
   @test_util.run_v2_only
-  def testModels(self, model_fn, replication_factor):
+  def testModels(self, model_fn, replication_factor, optimizer):
     tu.skip_if_not_enough_ipus(self, replication_factor)
 
     cfg = ipu.config.IPUConfig()
@@ -98,8 +103,7 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
     # Run on CPU - simulate gradient accumulation by just using a bigger batch
     # size but less steps per epoch.
     m = model_fn()
-    m.compile(optimizer='sgd',
-              loss=keras.losses.SparseCategoricalCrossentropy())
+    m.compile(optimizer, loss=keras.losses.SparseCategoricalCrossentropy())
     m.fit(get_mnist_dataset(batch_size * gradient_accumulation_steps),
           steps_per_epoch=steps_per_epoch // gradient_accumulation_steps,
           epochs=epochs)
@@ -108,7 +112,7 @@ class KerasGradientAccumulationTest(test.TestCase, parameterized.TestCase):
     strategy = ipu.ipu_strategy.IPUStrategyV1()
     with strategy.scope():
       m = model_fn()
-      m.compile(optimizer='sgd',
+      m.compile(optimizer,
                 loss=keras.losses.SparseCategoricalCrossentropy(),
                 steps_per_execution=gradient_accumulation_steps * 2)
       m.set_gradient_accumulation_options(

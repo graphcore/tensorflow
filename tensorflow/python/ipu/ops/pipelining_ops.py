@@ -1016,7 +1016,7 @@ def pipeline(computational_stages,
           apply_grads = opt.apply_gradients(accumulated_grads_and_vars,
                                             *apply_gradients_args,
                                             **apply_gradients_kwargs)
-          if apply_grads:
+          if apply_grads is not None:
             resource_update_ops.append(apply_grads)
 
         # Enqueue any accumulated outfeed data
@@ -1024,7 +1024,7 @@ def pipeline(computational_stages,
           # Note: unpack if we're outfeeding loss.
           to_enqueue = outfeed_sinks[0] if outfeed_loss else outfeed_sinks
           enqueue = outfeed_queue.enqueue(to_enqueue)
-          if enqueue:
+          if enqueue is not None:
             resource_update_ops.append(enqueue)
 
       with ops.name_scope(name + "/WU") as scope:
