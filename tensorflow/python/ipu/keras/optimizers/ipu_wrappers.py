@@ -16,6 +16,7 @@
 Convenience wrappers for v2 optimizers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+from tensorflow.python.keras.optimizer_v1 import TFOptimizer
 from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 from tensorflow.python.training.optimizer import Optimizer
 
@@ -169,8 +170,12 @@ class _KerasOptimizerWrapper(Optimizer):
 
     v = var_list if not self._model else self._model.trainable_weights
 
-    grads = self._optimizer.get_gradients(loss, v)
-    grads_and_vars = zip(grads, v)
+    if isinstance(self._optimizer, TFOptimizer):
+      grads_and_vars = self._optimizer.get_grads(loss, v)
+    else:
+      grads = self._optimizer.get_gradients(loss, v)
+      grads_and_vars = zip(grads, v)
+
     return list(map(self.preprocess_gradients, grads_and_vars))
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
