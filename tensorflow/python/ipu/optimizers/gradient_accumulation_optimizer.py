@@ -187,7 +187,8 @@ class GradientAccumulationOptimizerV2(IpuOptimizer):  # pylint: disable=abstract
     def resource_update_():
       apply_grads = self._opt.apply_gradients(accumulated_grads_and_vars,
                                               global_step, name)
-      apply_grad_ops.append(apply_grads)
+      if apply_grads is not None:
+        apply_grad_ops.append(apply_grads)
 
     return self.apply_gradient_accumulation(
         resource_update_, self._opt.get_name(), apply_grad_ops,
