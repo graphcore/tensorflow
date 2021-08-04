@@ -1379,6 +1379,41 @@ class PipeliningTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       self.assertAllEqual(np.full((1, 8), 4), sess.run(outfed))
 
   @test_util.deprecated_graph_mode_only
+  def testConstantInput(self):
+
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        return 2 * x
+
+      def stage2(x):
+        return x + 1
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def my_net():
+        return pipelining_ops.pipeline([stage1, stage2, stage2, stage2],
+                                       gradient_accumulation_count=8,
+                                       inputs=[42.0],
+                                       outfeed_queue=outfeed_queue)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net)
+
+      cfg = IPUConfig()
+      cfg.ipu_model.compile_ipu_code = False
+      cfg.ipu_model.tiles_per_ipu = 2
+      cfg.auto_select_ipus = 4
+      cfg.configure_ipu_system()
+
+      outfed = outfeed_queue.dequeue()
+      sess.run(pipeline)
+
+      expected = np.ones(8, dtype=np.float32) * 2 * 42 + 3
+      actual = np.array(sess.run(outfed)).flatten()
+      self.assertAllEqual(expected, actual)
+
+  @test_util.deprecated_graph_mode_only
   def testOutfeedLossAccumulated(self):
     """ Tests accumulating the loss from the optimizer function. """
     cfg = IPUConfig()
