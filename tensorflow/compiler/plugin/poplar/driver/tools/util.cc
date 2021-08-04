@@ -433,11 +433,11 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
 }
 
 absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
-  DCHECK(IsPipelineOp(inst));
+  CHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   int64 index =
       cfg.call_config().pipeline_config().gradient_accumulation_index();
-  DCHECK(index < inst->operands().size());
+  CHECK_LT(index, inst->operands().size()) << inst->ToString();
   const auto& gradient_accumulation_operand = inst->operand(index);
   if (!gradient_accumulation_operand->IsConstant()) {
     LOG(FATAL) << "GradientAccumulationCount has to be a constant";
