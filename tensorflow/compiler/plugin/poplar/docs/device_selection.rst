@@ -386,3 +386,44 @@ have been targeted at the Poplar device. For example:
 
   # Creates a session with log_device_placement set to True.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+
+Error Handling
+~~~~~~~~~~~~~~
+
+The error and exception handling by TensorFlow is divided into two categories:
+
+* Poplar graph construction and compilation errors which occur during
+  construction and compilation of TensorFlow programs.
+* Poplar runtime errors which occur during the execution of the compiled
+  program.
+
+The following sections describe the actions you need to take when these errors
+occur.
+
+Construction and compilation errors
+...................................
+
+These errors are reported to the user using the TensorFlow Status error classes.
+The error messages contain information about why the error occurred and what
+action the user is required to take in order to stop the error from occurring.
+
+Runtime errors
+..............
+
+These errors and exceptions occur when running a Poplar program. The full list
+of all the exceptions and their meanings can be found in the Poplar
+documentation in the `Exceptions <https://docs.graphcore.ai/projects/poplar-api/en/latest/poplar_api.html#exceptions>`__
+section of the Poplar API reference manual.
+
+These runtime errors are handled in the following manner:
+
+* ``application_runtime_error`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution of a Poplar program.
+* ``recoverable_runtime_error`` with a recovery action ``poplar::RecoveryAction::IPU_RESET`` - a ``tensorflow.errors.InternalError`` error
+  is raised. The error message contains the reason why the error occurred. An
+  IPU reset will be performed before the next execution of a Poplar program.
+* All other runtime errors - the process executing the Poplar program is
+  terminated and the full error message is logged to the console. When these
+  errors occur manual intervention might be required before the system is
+  operational again. The error message might contain a required recovery action.

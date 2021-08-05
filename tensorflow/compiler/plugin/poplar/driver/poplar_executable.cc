@@ -446,7 +446,7 @@ Status ExportInternal(
     TF_RETURN_IF_ERROR(file->Append(json_metadata));
     TF_RETURN_IF_ERROR(file->Close());
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
+    return PoplarExceptionToTensorflowStatus("[Serialize]", e);
   }
   return Status::OK();
 }

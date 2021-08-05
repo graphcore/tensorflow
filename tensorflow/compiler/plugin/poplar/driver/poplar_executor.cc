@@ -2965,7 +2965,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
       TF_RETURN_IF_ERROR(ResetTensorControlState(tc));
     }
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Device to host] ", e);
+    return PoplarExceptionToTensorflowStatus("[Device to host]", e);
   }
   return Status::OK();
 }
@@ -3125,7 +3125,7 @@ Status PoplarExecutor::MoveHostToDevice() {
       tc->converted_data.clear();
     }
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Host to device] ", e);
+    return PoplarExceptionToTensorflowStatus("[Host to device]", e);
   }
 
   return Status::OK();
@@ -3596,6 +3596,11 @@ void PoplarExecutor::ExecuteEngine(se::DeviceMemoryBase* result_buffer,
   }
   current_status_ = ExecuteEngineImpl(result_buffer, executor, executable,
                                       args_map, allocator, args);
+  if (!current_status_.ok()) {
+    StopIOThreads();
+    TF_CHECK_OK(ResetOnDeviceBuffers());
+    current_engine_ = nullptr;
+  }
 }
 
 Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
@@ -3706,7 +3711,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
 
         executable.OnEngineLoaded();
       } catch (const std::exception& e) {
-        return PoplarExceptionToTensorflowStatus("[Load engine] ", e);
+        return PoplarExceptionToTensorflowStatus("[Load engine]", e);
       }
     }
 
@@ -3843,10 +3848,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
       // right format on the host
       PostProcessStreamedVariablesDeviceToHost();
     } catch (const std::exception& e) {
-      StopIOThreads();
-      TF_CHECK_OK(ResetOnDeviceBuffers());
-      current_engine_ = nullptr;
-      return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Execute engine]", e);
     }
 
     try {
@@ -3864,7 +3866,7 @@ Status PoplarExecutor::ExecuteEngineImpl(se::DeviceMemoryBase* result_buffer,
         AddExecuteEventRecord(executable.module().name());
       }
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Execute engine]", e);
     }
   }
 

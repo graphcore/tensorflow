@@ -440,7 +440,8 @@ class MultiConvTest(test_util.TensorFlowTestCase):
       session.run(variables.global_variables_initializer())
       with self.assertRaisesRegex(
           Exception,
-          r"\[Error\]\[Build graph\] Unrecognised option \'invalidFlag\'"):
+          r"\[Poplar\]\[Build graph\] invalid_option: Unrecognised option "
+          r"\'invalidFlag\'"):
         session.run(res, {x: np.ones(x.shape) for x in [a, b]})
 
 
