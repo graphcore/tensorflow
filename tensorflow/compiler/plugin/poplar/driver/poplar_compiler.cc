@@ -698,7 +698,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         poplar_target,
         poplar::replication_factor(resources.replication_factor));
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Create Graph] ", e);
+    return PoplarExceptionToTensorflowStatus("[Create Graph]", e);
   }
 
   if (resources.replication_factor > 1) {
@@ -1114,7 +1114,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
         } catch (const std::exception& e) {
           const std::string origin =
               "[Deserialize][File: " + filenames.CachedExecutableFilename() +
-              "] ";
+              "]";
           return PoplarExceptionToTensorflowStatus(origin, e);
         }
       }
@@ -1654,7 +1654,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       VLOG(1) << "End Poplar graph construction.";
       resources.progress_bar->MoveToNextStage();
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Build graph] ", e);
+      return PoplarExceptionToTensorflowStatus("[Build graph]", e);
     }
 
     poplar::program::Sequence main_program({}, {"MainProgram"});
@@ -1815,7 +1815,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {
-      return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
+      return PoplarExceptionToTensorflowStatus("[Compile engine]", e);
     }
 
     if (enable_trace_events && compile) {

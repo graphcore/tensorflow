@@ -215,76 +215,47 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
 
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,
                                          const std::exception& e) {
-  const std::string prefix = "[Error]" + origin;
-  /* NOTE: Reduce this list if/when Poplar errors are subclassed */
+  const std::string prefix = "[Poplar]" + origin + " ";
   try {
     std::rethrow_exception(std::current_exception());
-  } catch (const poplar::file_load_error& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::missing_perf_estimate& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::symbol_error& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::unknown_field& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::unknown_vertex_type& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::no_environment& e) {
-    return tensorflow::errors::NotFound(prefix, e.what());
-  } catch (const poplar::parse_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_option& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_machine_model& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::stream_connection_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::graph_cycle_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::invalid_tile_mapping& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::type_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::no_size_specified& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::profiling_disabled& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
-  } catch (const poplar::control_program_error& e) {
-    return tensorflow::errors::InvalidArgument(prefix, e.what());
+  } catch (const poplar::recoverable_runtime_error& e) {
+    auto runtime_error =
+        static_cast<const poplar::recoverable_runtime_error*>(&e);
+    // Recoverable runtime error with IPU_RESET action is handled by resetting
+    // the engine to nullptr, otherwise it's a fatal error.
+    if (runtime_error->getRecoveryAction() ==
+        poplar::RecoveryAction::IPU_RESET) {
+      return tensorflow::errors::Internal(
+          prefix, runtime_error->type, ": ", e.what(),
+          ". IPU will be reset the next time a program is executed.");
+    } else {
+      LOG(FATAL) << prefix << runtime_error->type << ": " << e.what()
+                 << " Recovery action required: "
+                 << poplar::toString(runtime_error->getRecoveryAction());
+    }
+  } catch (const poplar::application_runtime_error& e) {
+    // Application errors require an engine reset.
+    auto runtime_error =
+        static_cast<const poplar::application_runtime_error*>(&e);
+    return tensorflow::errors::Internal(prefix, runtime_error->type, ": ",
+                                        e.what());
   } catch (const poplar::runtime_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::overflow_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::tensor_io_state_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_connection_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_object_load_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_object_creation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_program_compilation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poputil::poplibs_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
+    auto runtime_error = static_cast<const poplar::runtime_error*>(&e);
+    // Default case for runtime errors which we can't recover from.
+    LOG(FATAL) << prefix << runtime_error->type << ": " << e.what();
   } catch (const poplar::link_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::stream_memory_allocation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::graph_memory_allocation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::tensor_creation_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::memory_elem_constraints_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
-  } catch (const poplar::index_error& e) {
-    return tensorflow::errors::OutOfRange(prefix, e.what());
+    auto link_error = static_cast<const poplar::link_error*>(&e);
+    return tensorflow::errors::Internal(prefix, link_error->type, ": ",
+                                        e.what(),
+                                        " Output: ", link_error->output);
   } catch (const poplar::poplar_error& e) {
-    return tensorflow::errors::Internal(prefix, e.what());
+    auto poplar_error = static_cast<const poplar::poplar_error*>(&e);
+    return tensorflow::errors::Internal(prefix, poplar_error->type, ": ",
+                                        e.what());
   } catch (const std::exception& e) {
   }
 
-  return tensorflow::errors::Unknown(prefix, e.what());
+  return tensorflow::errors::Unknown(e.what());
 }
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
