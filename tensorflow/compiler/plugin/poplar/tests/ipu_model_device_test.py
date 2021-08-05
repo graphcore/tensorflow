@@ -145,8 +145,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       cfg.configure_ipu_system()
 
       fd = {pa: np.zeros([480]), pb: np.zeros([480])}
-      with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                  "Unrecognised option"):
+      with self.assertRaisesRegex(errors.InternalError,
+                                  "invalid_option: Unrecognised"):
         sess.run(output, fd)
 
   def testNamedOperations(self):
