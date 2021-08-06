@@ -171,6 +171,20 @@ StatusOr<HloInstruction*> PreserveFrontendAttributesIfNeeded(
   return new_inst;
 }
 
+bool IsGlobalAllReduceWithSum(const HloInstruction* all_reduce) {
+  if (all_reduce->opcode() != HloOpcode::kAllReduce ||
+      !all_reduce->replica_groups().empty()) {
+    return false;
+  }
+  auto& called_computations = all_reduce->called_computations();
+  if (called_computations.size() != 1) {
+    return false;
+  }
+  const HloComputation* comp = called_computations.front();
+  return Match(comp->root_instruction(),
+               m::Add(m::Parameter(), m::Parameter()));
+}
+
 // AlgebraicSimplifierVisitor traverses the HLO computation and reduces certain
 // algebraic expressions to simplified forms. Note: This only supports
 // simplifications that simply look at the operands of an instruction. For the
@@ -182,6 +196,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
       : simplifier_(simplifier), enable_fast_math_(enable_fast_math) {}
 
   Status HandleAdd(HloInstruction* add) override;
+
+  Status HandleAllReduce(HloInstruction* all_reduce) override;
 
   Status HandleAnd(HloInstruction* logical_and) override;
 
@@ -3286,6 +3302,27 @@ Status AlgebraicSimplifierVisitor::HandleDynamicUpdateSlice(
   if (ShapeUtil::IsZeroElementArray(update->shape())) {
     return ReplaceInstruction(dynamic_update_slice,
                               dynamic_update_slice->mutable_operand(0));
+  }
+  return Status::OK();
+}
+
+Status AlgebraicSimplifierVisitor::HandleAllReduce(HloInstruction* all_reduce) {
+  /// Replace all-reduce(replication-normalise(all-reduce(arg))) with
+  /// all-reduce(arg)
+  if (all_reduce->operand_count() != 1 ||
+      !IsGlobalAllReduceWithSum(all_reduce)) {
+    return Status::OK();
+  }
+  HloInstruction* normalise = all_reduce->mutable_operand(0);
+  if (!pp::IsPoplarInstruction(PoplarOp::ReplicationNormalise, normalise) ||
+      normalise->operand_count() != 1) {
+    return Status::OK();
+  }
+  HloInstruction* top_all_reduce = normalise->mutable_operand(0);
+  if (top_all_reduce->opcode() == HloOpcode::kAllReduce &&
+      top_all_reduce->operand_count() == 1 &&
+      IsGlobalAllReduceWithSum(top_all_reduce)) {
+    return ReplaceInstruction(all_reduce, top_all_reduce);
   }
   return Status::OK();
 }

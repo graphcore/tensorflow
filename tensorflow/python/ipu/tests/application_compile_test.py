@@ -17,6 +17,7 @@ import os
 import tempfile
 import numpy as np
 
+from absl.testing import parameterized
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import dtypes
@@ -26,6 +27,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.config import DeviceConnectionType
 from tensorflow.python.ipu.config import IPUConfig
+from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.ops.application_compile_op import experimental_application_compile_op as application_compile_op
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
@@ -36,7 +38,8 @@ from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
 
-class TestApplicationCompile(test_util.TensorFlowTestCase):
+class TestApplicationCompile(test_util.TensorFlowTestCase,
+                             parameterized.TestCase):
   def setUp(self):
     super().setUp()
 
@@ -203,6 +206,39 @@ class TestApplicationCompile(test_util.TensorFlowTestCase):
         return loops.repeat(10, body, lr, infeed_queue)
 
       result = application_compile_op(my_net, inputs=[0.1])
+
+      sess.run(variables.global_variables_initializer())
+      compiled_path = sess.run(result)
+
+      self.assertGreater(os.path.getsize(compiled_path.decode()), 0)
+
+  @parameterized.named_parameters(("resources", False), ("constants", True))
+  @test_util.deprecated_graph_mode_only
+  def test_compile_pipeline(self, freeze_variables):
+    with session.Session() as sess:
+
+      dataset = dataset_ops.Dataset.from_tensor_slices((np.ones(
+          (10, 5), dtype=np.float32),))
+      dataset = dataset.batch(1, drop_remainder=True)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def stage1(offset, x):
+        return layers.Dense(5, activation="relu")(x) + offset
+
+      def stage2(x):
+        return layers.Dense(10, activation="softmax")(x)
+
+      def my_net():
+        return pipelining_ops.pipeline(computational_stages=[stage1, stage2],
+                                       gradient_accumulation_count=4,
+                                       infeed_queue=infeed_queue,
+                                       inputs=[42.0],
+                                       outfeed_queue=outfeed_queue,
+                                       device_mapping=[0, 0])
+
+      result = application_compile_op(my_net,
+                                      freeze_variables=freeze_variables)
 
       sess.run(variables.global_variables_initializer())
       compiled_path = sess.run(result)

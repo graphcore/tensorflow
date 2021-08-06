@@ -1969,6 +1969,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     pooling_options_.set(opt.option(), opt.value());
   }
 
+  for (const auto& opt : current_config_.slice_options()) {
+    slice_options_.set(opt.option(), opt.value());
+  }
+
   for (const auto& opt : current_config_.profiling().graph_options()) {
     graph_options_.set(opt.option(), opt.value());
   }

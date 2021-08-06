@@ -158,24 +158,27 @@ struct IOItem {
 };
 
 void VerifyExecutable(PoplarExecutableProto& executable_proto) {
-  CHECK(executable_proto.infeeds().size() == 1)
+  CHECK_EQ(executable_proto.replication_factor(), 1)
+      << "Embedded runtime does not support executables with a replication "
+         "factor greater than one.";
+  CHECK_EQ(executable_proto.infeeds().size(), 1)
       << "Embedded runtime only supports executables with a single infeed";
-  CHECK(executable_proto.outfeeds().size() == 1)
+  CHECK_EQ(executable_proto.outfeeds().size(), 1)
       << "Embedded runtime only supports executables with a single outfeed";
 
-  CHECK(executable_proto.sends().size() == 0)
+  CHECK_EQ(executable_proto.sends().size(), 0)
       << "Embedded runtime does not support executables with sends";
-  CHECK(executable_proto.recvs().size() == 0)
+  CHECK_EQ(executable_proto.recvs().size(), 0)
       << "Embedded runtime does not support executables with recvs";
 
-  CHECK(executable_proto.lookups().size() == 0)
+  CHECK_EQ(executable_proto.lookups().size(), 0)
       << "Embedded runtime does not support executables with host embeddings";
-  CHECK(executable_proto.updates().size() == 0)
+  CHECK_EQ(executable_proto.updates().size(), 0)
       << "Embedded runtime does not support executables with host embeddings";
-  CHECK(executable_proto.notifications().size() == 0)
+  CHECK_EQ(executable_proto.notifications().size(), 0)
       << "Embedded runtime does not support executables with host embeddings";
 
-  CHECK(executable_proto.remote_parameters().size() == 0)
+  CHECK_EQ(executable_proto.remote_parameters().size(), 0)
       << "Embedded runtime does not support executables with remote parameters";
 }
 

@@ -143,6 +143,9 @@ StatusOr<poplar::OptionFlags> GetCholeskyOptionsForInst(
 StatusOr<poplar::OptionFlags> GetTriangularSolveOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
 
+StatusOr<poplar::OptionFlags> GetSliceOptionsForInst(const HloInstruction* inst,
+                                                     CompilerResources& res);
+
 void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t,
                              const poplar::DebugNameAndId& debug_name_and_id);
 

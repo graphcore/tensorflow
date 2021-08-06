@@ -433,11 +433,11 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
 }
 
 absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
-  DCHECK(IsPipelineOp(inst));
+  CHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   int64 index =
       cfg.call_config().pipeline_config().gradient_accumulation_index();
-  DCHECK(index < inst->operands().size());
+  CHECK_LT(index, inst->operands().size()) << inst->ToString();
   const auto& gradient_accumulation_operand = inst->operand(index);
   if (!gradient_accumulation_operand->IsConstant()) {
     LOG(FATAL) << "GradientAccumulationCount has to be a constant";
@@ -595,6 +595,18 @@ bool IsLoweredInplace(const HloInstruction* inst) {
   auto backend_config =
       inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   return backend_config.is_inplace();
+}
+
+void MarkInstructionAsReplicaIdentical(HloInstruction* inst,
+                                       bool replica_identical) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  cfg.set_is_replica_identical(replica_identical);
+  TF_CHECK_OK(inst->set_backend_config(cfg));
+}
+
+bool IsInstructionReplicaIdentical(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.is_replica_identical();
 }
 
 absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(

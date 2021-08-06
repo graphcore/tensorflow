@@ -90,6 +90,8 @@ struct CompilerResources {
 
   const poplar::OptionFlags default_pooling_options;
 
+  const poplar::OptionFlags default_slice_options;
+
   bool use_verified_transfers;
 
   bool clear_matmul_pass_type;
@@ -188,7 +190,8 @@ struct CompilerResources {
       HloModule* module, const CompilerInformation& information,
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
-      const poplar::OptionFlags& pooling_options, bool verified_transfers,
+      const poplar::OptionFlags& pooling_options,
+      const poplar::OptionFlags& slice_options, bool verified_transfers,
       bool clear_matmul_pass_type, bool disable_graph_outlining,
       bool merge_infeed_io_copies, uint32 replication_factor,
       uint32 local_replication_factor, uint32 partition_replication_factor,
@@ -208,6 +211,7 @@ struct CompilerResources {
         default_conv_options(conv_options),
         default_matmul_options(matmul_options),
         default_pooling_options(pooling_options),
+        default_slice_options(slice_options),
         use_verified_transfers(verified_transfers),
         clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_outlining(disable_graph_outlining),
@@ -247,8 +251,9 @@ struct CompilerResources {
         module, information,
         /*conv_options=*/poplar::OptionFlags(),
         /*matmul_options=*/poplar::OptionFlags(),
-        /*pooling_options=*/poplar::OptionFlags(), /*verified_transfers=*/false,
-        /*clear_matmul_pass_type=*/false,
+        /*pooling_options=*/poplar::OptionFlags(),
+        /*slice_options=*/poplar::OptionFlags(),
+        /*verified_transfers=*/false, /*clear_matmul_pass_type=*/false,
         /*disable_graph_outlining=*/false, /*merge_infeed_io_copies=*/false,
         /*replication_factor=*/1, /*local_replication_factor=*/1,
         /*partition_replication_factor=*/1,

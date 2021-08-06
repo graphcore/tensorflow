@@ -9,6 +9,7 @@ package xla.poplarplugin;
 message PipelineStagePoplarConfig {
   repeated PoplarOptionFlag convolution_options = 1;
   repeated PoplarOptionFlag matmul_options = 2;
+  repeated PoplarOptionFlag slice_options = 3;
 };
 
 message PipelinePoplarConfig {

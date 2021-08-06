@@ -176,9 +176,10 @@ class ResourceUpdateOp : public XlaOpKernel {
 REGISTER_IPU_OP("ResourceUpdate", ResourceUpdateOp);
 
 class PipelineOp : public XlaOpKernel {
-  void SetInstructionFrontEndAttributes(XlaOpKernelContext* ctx,
-                                        xla::XlaBuilder* builder,
-                                        const xla::XlaOp& outputs) const {
+  void SetInstructionFrontEndAttributes(
+      XlaOpKernelContext* ctx, xla::XlaBuilder* builder,
+      const xla::XlaOp& outputs,
+      int gradient_accumulation_operand_index) const {
     using AttrMember = util::AttrMember;
     util::AttrMembers attributes = {
         AttrMember(CALL_CONFIG_TYPE,
@@ -195,7 +196,8 @@ class PipelineOp : public XlaOpKernel {
         AttrMember(PARTITION_VARIABLES, replicated_weight_sharding_),
         AttrMember(OFFLOAD_VARIABLES, offload_weights_),
         AttrMember(RECOMPUTATION_MODE, recomputation_mode_),
-        AttrMember("GradientAccumulationOperandIndex", ctx->num_inputs() - 1)};
+        AttrMember("GradientAccumulationOperandIndex",
+                   gradient_accumulation_operand_index)};
 
     util::SetInstructionFrontEndAttributes(ctx, builder, outputs,
                                            std::move(attributes));
@@ -306,7 +308,7 @@ class PipelineOp : public XlaOpKernel {
         poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
-    DCHECK_EQ(arguments.size(), ctx->num_inputs() - 1);
+    CHECK_EQ(arguments.size(), ctx->num_inputs() - 1);
 
     VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
@@ -327,6 +329,11 @@ class PipelineOp : public XlaOpKernel {
         poplarplugin::GetXlaInputs(ctx, arguments, result.input_mapping);
     OP_REQUIRES_OK(ctx, inputs_or.status());
     std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
+
+    // Add the gradient accumulation count as the last input. Note that the
+    // operand index is the XLA input index, and not the TF input index.
+    // These may differ when any of the TF inputs are constants.
+    const int gradient_accumulation_operand_index = inputs.size();
     inputs.emplace_back(ctx->Input(ctx->num_inputs() - 1));
 
     auto wrapped_pipeline = CreateInnerPipeline(ctx, inputs, result);
@@ -335,7 +342,8 @@ class PipelineOp : public XlaOpKernel {
     // Create the actual call.
     auto outputs = xla::Call(builder, wrapped_pipeline.ValueOrDie(), inputs);
 
-    SetInstructionFrontEndAttributes(ctx, builder, outputs);
+    SetInstructionFrontEndAttributes(ctx, builder, outputs,
+                                     gradient_accumulation_operand_index);
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     UpdateResources(result, ctx, outputs, arguments, builder);

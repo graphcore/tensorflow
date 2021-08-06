@@ -108,16 +108,24 @@ class _InvalidCaptureException(Exception):
   pass
 
 
+def _is_capturing_by_value(graph):
+  return (isinstance(graph, func_graph_module.FuncGraph)
+          and graph.capture_by_value)
+
+
 def _compile_function(func,
                       args,
                       scope,
                       control_outputs,
-                      allow_external_captures=False,
+                      allow_external_captures=None,
                       capture_by_value=None):
   parent_graph = ops.get_default_graph()
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
   add_control_dependencies = parent_graph._add_control_dependencies  # pylint: disable=protected-access
+
+  if allow_external_captures is None:
+    allow_external_captures = _is_capturing_by_value(parent_graph)
 
   # Functions inherit frontend attributes and the gradient override map from the
   # parent graph.
