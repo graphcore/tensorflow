@@ -21,11 +21,12 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.keras import layers as ipu_layers
 from tensorflow.python.ipu.ops.slicing_ops import sequence_slice
+from tensorflow.python.keras import activations
+from tensorflow.python.keras import initializers
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 
@@ -82,6 +83,14 @@ class EffectiveTransformer(Layer):
     output_activation: The activation function to use for the layer output.
     output_dropout_prob: Dropout probability applied to the layer output.
     layer_norm_output: Whether to apply Layer Normalisation to the output.
+    embedding_initializer: The initializer to be used for the QKV embeddings.
+      Default is 'glorot_uniform'.
+    embedding_bias_initializer: The initializer to be used for QKV embeddings
+      additive bias. Defaults to 'zeros'.
+    output_initializer: The initializer for the output layer. Defaults to
+      'glorot_uniform'.
+    output_bias_initializer: The initializer for the output layer additive
+      bias. Defaults to 'zeros'.
   """
   def __init__(self,
                output_layer_size,
@@ -95,6 +104,10 @@ class EffectiveTransformer(Layer):
                output_activation=None,
                output_dropout_prob=None,
                layer_norm_output=True,
+               embedding_initializer='glorot_uniform',
+               embedding_bias_initializer='zeros',
+               output_initializer='glorot_uniform',
+               output_bias_initializer='zeros',
                **kwargs):
     super().__init__(**kwargs)
     self.max_batch_size = max_batch_size
@@ -103,11 +116,16 @@ class EffectiveTransformer(Layer):
     self.num_attention_heads = num_attention_heads
     self.attention_head_size = attention_head_size
     self.sequences_per_iter = sequences_per_iter
-    self.qkv_activation = qkv_activation
+    self.qkv_activation = activations.get(qkv_activation)
     self.attention_dropout_prob = attention_dropout_prob
-    self.output_activation = output_activation
+    self.output_activation = activations.get(output_activation)
     self.output_dropout_prob = output_dropout_prob
     self.layer_norm_output = layer_norm_output
+    self.embedding_initializer = initializers.get(embedding_initializer)
+    self.embedding_bias_initializer = initializers.get(
+        embedding_bias_initializer)
+    self.output_initializer = initializers.get(output_initializer)
+    self.output_bias_initializer = initializers.get(output_bias_initializer)
 
     self.built = False
 
@@ -117,6 +135,19 @@ class EffectiveTransformer(Layer):
 
   # pylint: disable=arguments-differ
   def build(self, input_shapes):
+    """
+    Builds an `EffectiveTransformer` Layer with respect to the provided
+    `input_shapes`.
+
+    Args:
+      input_shapes: A list of Tensor shapes of length four or five. In the
+      case of four elements provided in `input_shapes`, the Tensor shapes
+      should correspond to the `from_sequences`, `from_sequence_lengths`,
+      `to_sequences` and `to_sequence_lengths` Tensor arguments to the
+      `call` method. In the case of five Tensor shapes provided in
+      `input_shapes`, the fifth element should correspond to the optional
+      `q_mask` input to the `call` method.
+    """
     if len(input_shapes) not in (4, 5):
       raise ValueError("EffectiveTransformer must be built with either "
                        "four or five input shapes.")
@@ -127,28 +158,31 @@ class EffectiveTransformer(Layer):
     self._q_layer = layers.Dense(
         qkv_dense_size,
         activation=self.qkv_activation,
-        kernel_initializer=init_ops.ones_initializer(),
+        kernel_initializer=self.embedding_initializer,
+        bias_initializer=self.embedding_bias_initializer,
         name='query_layer')
 
     # Key layer.
     self._k_layer = layers.Dense(
         qkv_dense_size,
         activation=self.qkv_activation,
-        kernel_initializer=init_ops.ones_initializer(),
+        kernel_initializer=self.embedding_initializer,
+        bias_initializer=self.embedding_bias_initializer,
         name='key_layer')
 
     # Value layer.
     self._v_layer = layers.Dense(
         qkv_dense_size,
         activation=self.qkv_activation,
-        kernel_initializer=init_ops.ones_initializer(),
+        kernel_initializer=self.embedding_initializer,
+        bias_initializer=self.embedding_bias_initializer,
         name='value_layer')
 
     # Add scale weights.
     if self.use_scale:
       self._scale = self.add_weight(name='scale',
                                     shape=(1),
-                                    initializer=init_ops.ones_initializer(),
+                                    initializer='ones',
                                     dtype=self.dtype,
                                     trainable=True)
 
@@ -160,7 +194,8 @@ class EffectiveTransformer(Layer):
     self._output_layer = layers.Dense(
         self.output_layer_size,
         activation=self.output_activation,
-        kernel_initializer=init_ops.ones_initializer(),
+        kernel_initializer=self.output_initializer,
+        bias_initializer=self.output_bias_initializer,
         name='output_layer')
 
     # Optionally, dropout can be applied to the output layer.
@@ -213,6 +248,21 @@ class EffectiveTransformer(Layer):
 
   # pylint: disable=arguments-differ
   def call(self, inputs, training=True):
+    """
+    Performs a single forward pass of an `EffectiveTransformer` layer instance.
+
+    As input, two sequence sets and their respective sequence lengths are
+    required. The two sets of sequences are referred to as the 'from'
+    sequences and 'to' sequences, referring to the computed attention
+    relationship. In the case that the 'from' and 'to' sequence sets are equal,
+    this layer will compute self-attention.
+
+    Args:
+      inputs: A list of input Tensors, of at least four elements containing
+      `from_sequences`, `from_sequence_lengths`, `to_sequences` and
+      `to_sequence_lengths`. Additionally, a fifth tensor `q_mask` for
+      attention head masking can be provided.
+    """
     if len(inputs) not in (4, 5):
       raise ValueError(
           "EffectiveTransformer must take either four or five inputs.")
@@ -284,16 +334,36 @@ class EffectiveTransformer(Layer):
 
   def get_config(self):
     config = {
-        'output_layer_size': self.output_layer_size,
-        'max_batch_size': self.max_batch_size,
-        'use_scale': self.use_scale,
-        'num_attention_heads': self.num_attention_heads,
-        'attention_head_size': self.attention_head_size,
-        'sequences_per_iter': self.sequences_per_iter,
-        'qkv_activation': self.qkv_activation,
-        'attention_dropout_prob': self.attention_dropout_prob,
-        'output_activation': self.output_activation,
-        'output_dropout_prob': self.output_dropout_prob
+        'output_layer_size':
+        self.output_layer_size,
+        'max_batch_size':
+        self.max_batch_size,
+        'use_scale':
+        self.use_scale,
+        'num_attention_heads':
+        self.num_attention_heads,
+        'attention_head_size':
+        self.attention_head_size,
+        'sequences_per_iter':
+        self.sequences_per_iter,
+        'qkv_activation':
+        activations.serialize(self.qkv_activation),
+        'attention_dropout_prob':
+        self.attention_dropout_prob,
+        'output_activation':
+        activations.serialize(self.output_activation),
+        'output_dropout_prob':
+        self.output_dropout_prob,
+        'layer_norm_output':
+        self.layer_norm_output,
+        'embedding_initializer':
+        initializers.serialize(self.embedding_initializer),
+        'embedding_bias_initializer':
+        initializers.serialize(self.embedding_bias_initializer),
+        'output_initializer':
+        initializers.serialize(self.output_initializer),
+        'output_bias_initializer':
+        initializers.serialize(self.output_bias_initializer)
     }
 
     base_config = super().get_config()

@@ -23,6 +23,7 @@ from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.framework import test_util
+from tensorflow.python.ops import init_ops
 from tensorflow.python.ipu.keras.layers.effective_transformer import EffectiveTransformer
 from tensorflow.python.platform import googletest
 
@@ -56,7 +57,7 @@ TEST_CASES = [{
     'use_scale': False,
     'q_mask': None,
     'attention_heads': 4,
-    'attention_head_size': 16
+    'attention_head_size': 16,
 }, {
     'testcase_name': "TestCase2",
     'output_layer_size': 12,
@@ -70,7 +71,7 @@ TEST_CASES = [{
     'use_scale': True,
     'q_mask': None,
     'attention_heads': 4,
-    'attention_head_size': 16
+    'attention_head_size': 16,
 }, {
     'testcase_name': "TestCase3",
     'output_layer_size': 12,
@@ -231,7 +232,9 @@ class IPUEffectiveTransformerLayerTest(test_util.TensorFlowTestCase,
           'use_scale': use_scale,
           'num_attention_heads': attention_heads,
           'attention_head_size': attention_head_size,
-          'sequences_per_iter': seq_per_iter
+          'sequences_per_iter': seq_per_iter,
+          'embedding_initializer': 'ones',
+          'output_initializer': 'ones'
       }
 
       # Build an Effective Transformer.
@@ -301,7 +304,9 @@ class IPUEffectiveTransformerLayerTest(test_util.TensorFlowTestCase,
           'use_scale': use_scale,
           'num_attention_heads': attention_heads,
           'attention_head_size': attention_head_size,
-          'sequences_per_iter': seq_per_iter
+          'sequences_per_iter': seq_per_iter,
+          'embedding_initializer': 'ones',
+          'output_initializer': 'ones'
       }
 
       # Build an Effective Transformer.
@@ -350,7 +355,9 @@ class IPUEffectiveTransformerLayerTest(test_util.TensorFlowTestCase,
           'use_scale': use_scale,
           'num_attention_heads': attention_heads,
           'attention_head_size': attention_head_size,
-          'sequences_per_iter': seq_per_iter
+          'sequences_per_iter': seq_per_iter,
+          'embedding_initializer': 'ones',
+          'output_initializer': 'ones'
       }
 
       # Build an Effective Transformer.
@@ -428,7 +435,9 @@ class IPUEffectiveTransformerLayerTest(test_util.TensorFlowTestCase,
           'use_scale': use_scale,
           'num_attention_heads': attention_heads,
           'attention_head_size': attention_head_size,
-          'sequences_per_iter': seq_per_iter
+          'sequences_per_iter': seq_per_iter,
+          'embedding_initializer': 'ones',
+          'output_initializer': 'ones'
       }
 
       # Build an Effective Transformer.
@@ -453,6 +462,48 @@ class IPUEffectiveTransformerLayerTest(test_util.TensorFlowTestCase,
       for l in losses:
         self.assertLess(l, last_loss)
         last_loss = l
+
+  @parameterized.named_parameters(*TEST_CASES)
+  def testSerialize(
+      self,
+      output_layer_size,
+      max_batch_size,
+      from_seq_lens,  # pylint: disable=unused-argument
+      to_seq_lens,  # pylint: disable=unused-argument
+      from_row_len,  # pylint: disable=unused-argument
+      to_row_len,  # pylint: disable=unused-argument
+      dtype,  # pylint: disable=unused-argument
+      seq_per_iter,
+      use_scale,
+      q_mask,  # pylint: disable=unused-argument
+      attention_heads,
+      attention_head_size):
+    strategy = ipu_strategy.IPUStrategyV1()
+    with strategy.scope():
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
+
+      transformer_kwargs = {
+          'output_layer_size': output_layer_size,
+          'max_batch_size': max_batch_size,
+          'use_scale': use_scale,
+          'num_attention_heads': attention_heads,
+          'attention_head_size': attention_head_size,
+          'sequences_per_iter': seq_per_iter,
+          'embedding_initializer': init_ops.ones_initializer(),
+          'output_initializer': init_ops.ones_initializer(),
+          'embedding_bias_initializer': init_ops.zeros_initializer(),
+          'output_bias_initializer': init_ops.zeros_initializer()
+      }
+
+      transformer = EffectiveTransformer(**transformer_kwargs)
+      transformer_config = transformer.get_config()
+
+      transformer_2 = EffectiveTransformer.from_config(transformer_config)
+      transformer_2_config = transformer_2.get_config()
+
+      self.assertEqual(transformer_config, transformer_2_config)
 
   @parameterized.named_parameters(*SEQUENCE_PADDING_TEST_CASES)
   def testSequenceUnpad(self, padded_sequence, unpadded_sequence,
