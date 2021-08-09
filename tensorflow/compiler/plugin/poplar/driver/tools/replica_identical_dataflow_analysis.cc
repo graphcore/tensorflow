@@ -34,12 +34,29 @@ bool IsResultIdentical(const ValueCategoryTree& tree) {
   return tree.element(RootShapeIndex()) == ValueReplicaCategory::Identical;
 }
 
+// Check whether shape is a wrapper around wrapped_shape.
+bool IsWrapperTuple(const Shape& shape, const Shape& wrapped_shape) {
+  if (shape.IsTuple() && ShapeUtil::TupleElementCount(shape) == 1) {
+    return ShapeUtil::GetTupleElementShape(shape, /*index*/ 0) == wrapped_shape;
+  }
+
+  return false;
+}
+
+bool IsVisitable(const CallGraph& call_graph,
+                 const HloComputation* computation) {
+  const auto& node = call_graph.GetNode(computation);
+  return node.context() != CallContext::kParallel;
+}
+
 // Create a new ValueCategoryTree whose nodes have
 // ValueReplicaCategory::Identity if the corresponding nodes in both lhs and rhs
 // are also identical.
 ValueCategoryTree MakeValuesIdenticalIfTreeElementsAre(
     const ValueCategoryTree& lhs, const ValueCategoryTree& rhs) {
-  CHECK_EQ(lhs.shape(), rhs.shape());
+  // We can ignore any layout differences since shape layouts are not used
+  // when lowering to Poplar.
+  CHECK(Shape::Equal().IgnoreLayout()(lhs.shape(), rhs.shape()));
 
   ValueCategoryTree merged_categories(lhs.shape(),
                                       ValueReplicaCategory::Differing);
@@ -129,6 +146,11 @@ ValuesIdenticalAcrossReplicasVisitor::ValueCategoryMapping() const {
   return value_category_mapping_;
 }
 
+bool ValuesIdenticalAcrossReplicasVisitor::Visited(
+    const HloComputation* comp) const {
+  return value_category_mapping_.contains(comp->root_instruction());
+}
+
 Status ValuesIdenticalAcrossReplicasVisitor::DefaultAction(
     const HloInstruction* inst) {
   return SetAllInstructionValuesToIdenticalOrDiffering(
@@ -162,36 +184,46 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleConditional(
     const HloInstruction* inst) {
-  const HloComputation* true_comp = inst->true_computation();
-  const HloComputation* false_comp = inst->false_computation();
+  const std::vector<HloComputation*>& branches = inst->branch_computations();
 
   // Since we don't know which branch will be taken we have to makes sure that
-  // any value we set as identical is identical in both branches and that the
+  // any value we set as identical is identical in all branches and that the
   // replicas will all take the same branch. This way if a value is identical we
   // know that it is regardless of the branch taken.
   const bool same_branch_per_replica =
       IsResultIdentical(value_category_mapping_.at(inst->operand(0)));
   if (same_branch_per_replica) {
+    CHECK(!branches.empty());
+
+    // Get the value categories for each branch and merge them together so
+    // that the only values that are identical are those that are identical
+    // in all branches.
     TF_ASSIGN_OR_RETURN(
-        const ValueCategoryTree true_branch_categories,
-        VisitSubComputation(true_comp,
+        value_category_mapping_[inst],
+        VisitSubComputation(branches[0],
                             value_category_mapping_.at(inst->operand(1))));
 
-    TF_ASSIGN_OR_RETURN(
-        const ValueCategoryTree false_branch_categories,
-        VisitSubComputation(false_comp,
-                            value_category_mapping_.at(inst->operand(2))));
+    for (auto branch_index = 1u; branch_index < branches.size();
+         ++branch_index) {
+      const HloComputation* branch = branches[branch_index];
+      const HloInstruction* branch_arg = inst->operand(branch_index + 1);
 
-    value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
-        true_branch_categories, false_branch_categories);
+      TF_ASSIGN_OR_RETURN(
+          const ValueCategoryTree branch_categories,
+          VisitSubComputation(branch, value_category_mapping_.at(branch_arg)));
+
+      value_category_mapping_[inst] = MakeValuesIdenticalIfTreeElementsAre(
+          branch_categories, value_category_mapping_[inst]);
+    }
     return Status::OK();
   }
 
   // If different replicas take different branches then some replicas will visit
   // true_comp and some false_comp, so the values will be differing across
   // replicas.
-  TF_RETURN_IF_ERROR(SetAllInstructionValuesToDiffering(true_comp));
-  TF_RETURN_IF_ERROR(SetAllInstructionValuesToDiffering(false_comp));
+  for (auto* branch : branches) {
+    TF_RETURN_IF_ERROR(SetAllInstructionValuesToDiffering(branch));
+  }
   return SetAllInstructionValuesToDiffering(inst);
 }
 
@@ -207,7 +239,7 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
                                                          gather_all_replicas);
   }
 
-  return SetAllInstructionValuesToDiffering(inst);
+  return DefaultAction(inst);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleAllReduce(
@@ -219,8 +251,11 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleAllReduce(
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleFusion(
     const HloInstruction* inst) {
-  return SetAllInstructionValuesToIdenticalOrDiffering(
-      inst, IsPopOpsFusion(inst, "wide_const"));
+  if (IsPopOpsFusion(inst, "wide_const")) {
+    return SetAllInstructionValuesToIdenticalOrDiffering(inst, true);
+  }
+
+  return DefaultAction(inst);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleGetTupleElement(
@@ -346,8 +381,23 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
     // body. Hence we run the visitor with the initial value categories given to
     // body and then with the value categories of that first iteration, which we
     // use as the actual categories.
-    TF_ASSIGN_OR_RETURN(const ValueCategoryTree body_iter0_categories,
+    TF_ASSIGN_OR_RETURN(ValueCategoryTree body_iter0_categories,
                         VisitSubComputation(body, call));
+
+    // If a repeat body has only a single parameter then its ROOT value can be
+    // one of two shapes. Either a single value that matches the shape of the
+    // parameter or a single value (of the correct shape) in a tuple. If
+    // its a wrapper then we need to unwrap it to get the correct
+    // ValueCategoryTree to use, otherwise we will have a shape mismatch.
+    const bool unwrap_root =
+        body->num_parameters() == 1 &&
+        IsWrapperTuple(body_iter0_categories.shape(),
+                       body->parameter_instruction(0)->shape());
+    if (unwrap_root) {
+      TF_ASSIGN_OR_RETURN(body_iter0_categories,
+                          body_iter0_categories.SubShapeTree({0}));
+    }
+
     TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
                         VisitSubComputation(body, body_iter0_categories));
   } else {
@@ -504,14 +554,30 @@ void ValuesIdenticalAcrossReplicasVisitor::MarkOverridesAsVisited(
 }
 
 Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
-  auto module_call_graph = CallGraph::Build(module);
-  if (module_call_graph->IsFlattened()) {
+  auto call_graph = CallGraph::Build(module);
+  if (call_graph->IsFlattened()) {
     auto* entry_computation = module->entry_computation();
-    return entry_computation->Accept(&value_category_visitor_);
+    TF_RETURN_IF_ERROR(entry_computation->Accept(&value_category_visitor_));
+
+    // Make sure all relevant subcomputations are visited.
+    for (auto* comp : module->computations()) {
+      const bool is_visitable =
+          !Analysed(comp) && IsVisitable(*call_graph, comp);
+      if (is_visitable) {
+        TF_RETURN_IF_ERROR(comp->Accept(&value_category_visitor_));
+      }
+    }
+
+    return Status::OK();
   }
 
   return FailedPrecondition(
       "Expected the call graph of the module to be flat.");
+}
+
+bool ReplicaIdenticalDataflowAnalysis::Analysed(
+    const HloComputation* comp) const {
+  return value_category_visitor_.Visited(comp);
 }
 
 StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(
@@ -527,7 +593,7 @@ StatusOr<ValueReplicaCategory> ReplicaIdenticalDataflowAnalysis::ValueCategory(
 
   return InternalErrorStrCat(
       "Value category for instruction '", inst->name(),
-      "' not found. Run the visitor on its computation to find its value "
+      "' not found. Run the visitor on its module to find its value "
       "category.");
 }
 

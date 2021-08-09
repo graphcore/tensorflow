@@ -52,6 +52,10 @@ class ValuesIdenticalAcrossReplicasVisitor
   const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
   ValueCategoryMapping() const;
 
+  // Return whether the given computation has already been
+  // visited.
+  bool Visited(const HloComputation* comp) const;
+
   Status DefaultAction(const HloInstruction* inst) override;
 
   Status HandleCall(const HloInstruction* inst) override;
@@ -134,6 +138,10 @@ class ReplicaIdenticalDataflowAnalysis {
  public:
   // Run the analysis. Requires that `module` be flattened.
   Status Run(const HloModule* module);
+
+  // Check whether or not the given comp, and as a result its
+  // instructions, have been analysed.
+  bool Analysed(const HloComputation* comp) const;
 
   // Return the ValueReplicaCategory for the given instruction/value_index
   // or an error if the instruction has not been analysed.
