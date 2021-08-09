@@ -31,10 +31,11 @@ message CollectiveBalancedRefSlice {
 }
 
 message CollectiveBalancedHostRearrangement {
-  int64 total_elements_per_replica = 1;
-  int64 replication_factor = 2;
-  repeated CollectiveBalancedRefSlice gathered_to_ref_slices = 3;
-  repeated uint32 element_map = 4 [packed = true];
+  int64 id = 1;
+  int64 total_elements_per_replica = 2;
+  int64 replication_factor = 3;
+  repeated CollectiveBalancedRefSlice gathered_to_ref_slices = 4;
+  repeated uint32 element_map = 5 [packed = true];
 }
 
 message RemoteParameterConfig {
@@ -43,7 +44,7 @@ message RemoteParameterConfig {
   string buffer_name = 3;
   int64 buffer_offset = 4;
   int64 num_merged = 5;
-  CollectiveBalancedHostRearrangement host_rearrangement = 6;
+  int64 host_rearrangement_id = 6;
 }
 
 message KeyIdMapping {
@@ -121,4 +122,6 @@ message PoplarExecutableProto {
   uint32 tf_major_version = 15;
   uint32 tf_minor_version = 16;
   string tf_git_version = 17;
+
+  repeated CollectiveBalancedHostRearrangement collective_balanced_host_rearrangements = 18;
 };

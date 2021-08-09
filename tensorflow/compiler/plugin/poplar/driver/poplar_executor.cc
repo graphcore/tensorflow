@@ -2299,28 +2299,20 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
     const Shape& shape = shapes[a];
     FlattenedDeviceMemoryList(bufs, shape, const_cast<void*>(args[a].opaque()),
                               input_info, remote_parameter_info);
+
+    const gcl::CollectiveBalancedHostRearrangement* host_rearrangement =
+        nullptr;
+    if (remote_parameter_info && remote_parameter_info->host_rearrangement_id) {
+      host_rearrangement =
+          executable.GetCollectiveBalanceReorderHostRerrangement(
+              remote_parameter_info->host_rearrangement_id);
+      CHECK_NOTNULL(host_rearrangement);
+    }
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef& input = bufs[i];
       auto input_handle = input_info.Handles().at(i);
       input.tc->element_type = shape.element_type();
-
-      if (remote_parameter_info && remote_parameter_info->host_rearrangement) {
-        auto& param_host_rearrangement =
-            *remote_parameter_info->host_rearrangement;
-        gcl::CollectiveBalancedHostRearrangement host_rearrangement;
-        host_rearrangement.replicationFactor =
-            param_host_rearrangement.replication_factor;
-        host_rearrangement.totalElementsPerReplica =
-            param_host_rearrangement.total_elements_per_replica;
-        host_rearrangement.gatheredToRefSlices.reserve(
-            param_host_rearrangement.gathered_to_ref_slice.size());
-        for (auto& slice : param_host_rearrangement.gathered_to_ref_slice) {
-          host_rearrangement.gatheredToRefSlices.emplace_back(slice.first,
-                                                              slice.second);
-        }
-        host_rearrangement.elementMap = param_host_rearrangement.element_map;
-        input.tc->host_rearrangement = std::move(host_rearrangement);
-      }
+      input.tc->host_rearrangement = host_rearrangement;
 
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
@@ -2887,7 +2879,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
                                                current_replication_factor_);
 
             std::vector<char> buffer;
-            const bool rearrange = tc->host_rearrangement.has_value();
+            const bool rearrange = tc->host_rearrangement != nullptr;
             if (rearrange) {
               buffer.resize(buffer_size);
             } else {
@@ -3031,7 +3023,7 @@ Status PoplarExecutor::MoveHostToDevice() {
                                                current_replication_factor_);
 
             std::vector<char> buffer;
-            const bool rearrange = tc->host_rearrangement.has_value();
+            const bool rearrange = tc->host_rearrangement != nullptr;
             if (rearrange) {
               CHECK_LE(tc->size, buffer_size);
               buffer.resize(buffer_size);
@@ -3083,7 +3075,7 @@ Status PoplarExecutor::MoveHostToDevice() {
               }
             }
           } else {
-            CHECK(!tc->host_rearrangement.has_value());
+            CHECK(!tc->host_rearrangement);
             for (int replica_id = 0; replica_id < current_replication_factor_;
                  ++replica_id) {
               current_engine_->copyToRemoteBuffer(buf, buffer_name,

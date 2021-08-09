@@ -548,6 +548,7 @@ Status AddMergedInfo(const GroupedInstructions& creators_to_merge,
         auto found_info = annotations.remote_parameter_infos.find(
             RemoteParameterInfo(inst->parameter_number()));
         CHECK(found_info != annotations.remote_parameter_infos.end());
+        CHECK_EQ(found_info->host_rearrangement_id, 0);
 
         const auto merged_info = RemoteParameterInfo(
             found_info->parameter_number, found_info->is_replica_partitioned,
