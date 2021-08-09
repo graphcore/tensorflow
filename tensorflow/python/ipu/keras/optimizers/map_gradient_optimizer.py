@@ -64,8 +64,8 @@ class MapGradientOptimizerInvertedChaining(IpuOptimizer):
               Mapping functions should be of the form fn(grad, var) and return
               the updated gradient.
     """
-    super(MapGradientOptimizerInvertedChaining, self).__init__(opt, name=name)
-    self._gradient_mapping_function = gradient_mapping_function
+    super().__init__(opt, name=name)
+    self.gradient_mapping_function = gradient_mapping_function
 
   def _resource_apply_dense(self, grad, handle, apply_state):
     """Apply gradient to variable referenced by `handle`.
@@ -74,10 +74,57 @@ class MapGradientOptimizerInvertedChaining(IpuOptimizer):
       grad: The gradient to be applied.
       handle: A handle to the variable to apply the gradient to.
       apply_state: State passed down to the wrapped
-                   optimzier's apply functions.
+                   optimizer's apply functions.
     Returns:
       The updated variable.
     """
     mapped_grad = self._gradient_mapping_function(grad, handle)
-    return self._opt._resource_apply_dense(  # pylint: disable=protected-access
-        mapped_grad, handle, apply_state)
+    return super()._resource_apply_dense(  # pylint: disable=protected-access
+        mapped_grad,
+        handle,
+        apply_state=apply_state)
+
+  def get_config(self):
+    """
+    Returns the config of the `MapGradientOptimizer` instance.
+    """
+    config = super().get_config()
+    config.update(
+        {'gradient_mapping_function': self.gradient_mapping_function})
+    return config
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    """Creates a `MapGradientOptimizer` from its config.
+
+    This method is the reverse of `get_config`,
+    capable of instantiating the same optimizer from the config
+    dictionary.
+
+    Arguments:
+        config: A Python dictionary, typically the output of get_config.
+        custom_objects: A Python dictionary mapping names to additional Python
+          objects used to create this optimizer, such as a function used for a
+          hyperparameter.
+
+    Returns:
+        A `MapGradientOptimizer` instance.
+    """
+    config = config.copy()
+    IpuOptimizer._verify_config(config)
+    inner_config = config.pop('inner_optimizer_config')
+    inner_type = config.pop('inner_optimizer_type')
+    inner_opt = inner_type(**inner_config)
+
+    return MapGradientOptimizerInvertedChaining(inner_opt, **config)
+
+  @property
+  def gradient_mapping_function(self):
+    return self._gradient_mapping_function
+
+  @gradient_mapping_function.setter
+  def gradient_mapping_function(self, f):
+    if not callable(f):
+      raise ValueError("gradient_mapping_function must be a callable.")
+
+    self._gradient_mapping_function = f

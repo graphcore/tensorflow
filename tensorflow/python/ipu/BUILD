@@ -138,7 +138,7 @@ py_library(
         "keras/model.py",
         "keras/optimizers/__init__.py",
         "keras/optimizers/cross_replica_optimizer.py",
-        "keras/optimizers/gradient_accumulate_optimizer.py",
+        "keras/optimizers/gradient_accumulation_optimizer.py",
         "keras/optimizers/ipu_wrappers.py",
         "keras/optimizers/map_gradient_optimizer.py",
         "keras/pipeline.py",
@@ -581,10 +581,10 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "keras_v2_optimizers",
+    name = "keras_v2_optimizers_test",
     size = "large",
-    srcs = ["tests/keras/keras_v2_optimizers.py"],
-    shard_count = 5,
+    srcs = ["tests/keras/keras_v2_optimizers_test.py"],
+    shard_count = 8,
     tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -1997,7 +1997,7 @@ test_suite(
         "keras_sequential_replication_test",
         "keras_sequential_test",
         "keras_synthetic_data_test",
-        "keras_v2_optimizers",
+        "keras_v2_optimizers_test",
         "map_gradient_optimizer_test",
         "math_layers_test",
         "math_ops_test",
