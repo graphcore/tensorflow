@@ -148,6 +148,24 @@ ENTRY test {
   ROOT identical_root = f32[] add(identical0, loop_count)
 }
 )"};
+static const HloTestCase repeat_single_element_tuple = {
+    "repeat_single_element_tuple", R"(
+HloModule test
+repeat {
+  x = f32[] parameter(0)
+  increment = f32[] constant(1)
+  count = f32[] add(x, increment)
+  ROOT tuple = (f32[]) tuple(count)
+}
+
+ENTRY test {
+  identical0 = f32[] parameter(0)
+  loop_tuple = (f32[]) call(identical0), to_apply=repeat, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"20\"}}}"
+  loop_count = f32[] get-tuple-element(loop_tuple), index=0
+  ROOT identical_root = f32[] add(identical0, loop_count)
+}
+)"};
+
 static const HloTestCase while_with_identical_body_and_condition = {
     "while_identical_body_and_condition", R"(
 HloModule test
@@ -190,6 +208,36 @@ ENTRY test {
   identical_false_param = f32[] parameter(2)
   conditional = f32[] conditional(identical_pred, identical_true_param, identical_false_param), true_computation=cond_true, false_computation=cond_false
   ROOT identical_root = f32[] add(identical_true_param, conditional)
+}
+)"};
+static const HloTestCase switch_with_identical_branches_and_index = {
+    "switch_with_identical_branches_and_index", R"(
+HloModule test
+branchA {
+  x = f32[] parameter(0)
+  increment = f32[] constant(1)
+  ROOT add = f32[] add(x, increment)
+}
+
+branchB {
+  x = f32[] parameter(0)
+  increment = f32[] constant(-1)
+  ROOT add = f32[] add(x, increment)
+}
+
+branchC {
+  x = f32[] parameter(0)
+  increment = f32[] constant(10)
+  ROOT add = f32[] add(x, increment)
+}
+
+ENTRY test {
+  identical_index = s32[] parameter(0)
+  identical_branchA_param = f32[] parameter(1)
+  identical_branchB_param = f32[] parameter(2)
+  identical_branchC_param = f32[] parameter(3)
+  conditional = f32[] conditional(identical_index, identical_branchA_param, identical_branchB_param, identical_branchC_param), branch_computations={branchA, branchB, branchC}
+  ROOT identical_root = f32[] add(identical_branchA_param, conditional)
 }
 )"};
 static const HloTestCase simple_pipeline = {"simple_pipeline", R"(
@@ -384,6 +432,69 @@ ENTRY test {
   identical2 = f32[] parameter(2)
   conditional = f32[] conditional(identical_pred, identical1, identical2), true_computation=cond_true, false_computation=cond_false
   ROOT differing_root = f32[] add(identical2, conditional)
+}
+)"};
+static const HloTestCase switch_with_differing_index = {
+    "switch_with_differing_index", R"(
+HloModule test
+branchA {
+  x = f32[] parameter(0)
+  increment = f32[] constant(1)
+  ROOT add = f32[] add(x, increment)
+}
+
+branchB {
+  x = f32[] parameter(0)
+  increment = f32[] constant(-1)
+  ROOT add = f32[] add(x, increment)
+}
+
+branchC {
+  x = f32[] parameter(0)
+  increment = f32[] constant(10)
+  ROOT add = f32[] add(x, increment)
+}
+
+ENTRY test {
+  after-all = token[] after-all()
+  infeed = (s32[], token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed1\"\002\001\001"
+  differing_index = s32[] get-tuple-element(infeed), index=0
+
+  identical_branchA_param = f32[] parameter(0)
+  identical_branchB_param = f32[] parameter(1)
+  identical_branchC_param = f32[] parameter(2)
+  conditional = f32[] conditional(differing_index, identical_branchA_param, identical_branchB_param, identical_branchC_param), branch_computations={branchA, branchB, branchC}
+  ROOT differing_root = f32[] add(identical_branchA_param, conditional)
+}
+)"};
+static const HloTestCase switch_with_differing_branches = {
+    "switch_with_differing_branches", R"(
+HloModule test
+branchA {
+  x = f32[] parameter(0)
+  increment = f32[] constant(1)
+  ROOT add = f32[] add(x, increment)
+}
+
+branchB {
+  x = f32[] parameter(0)
+  constant = f32[] constant(1)
+  ROOT differing = f32[] rng(constant, constant), distribution=rng_uniform
+}
+
+branchC {
+  x = f32[] parameter(0)
+  increment = f32[] constant(10)
+  ROOT add = f32[] add(x, increment)
+}
+
+ENTRY test {
+  identical_index = s32[] parameter(0)
+  identical_branchA_param = f32[] parameter(1)
+  identical_branchB_param = f32[] parameter(2)
+  identical_branchC_param = f32[] parameter(3)
+  conditional = f32[] conditional(identical_index, identical_branchA_param, identical_branchB_param, identical_branchC_param), branch_computations={branchA, branchB, branchC}
+  ROOT differing_root = f32[] add(identical_branchA_param, conditional)
 }
 )"};
 static const HloTestCase repeat_with_differing_inputs = {
@@ -1373,11 +1484,12 @@ INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaIdenticalInstructionTest,
     ::testing::Values(simple_parameters, simple_constants, simple_wide_const,
                       global_all_reduce, global_all_gather,
-                      repeat_with_identical_io,
+                      repeat_with_identical_io, repeat_single_element_tuple,
                       while_with_identical_body_and_condition,
                       conditional_with_identical_branches_and_pred,
                       simple_pipeline, simple_select, simple_tuple_select,
-                      compare_with_identical_operands),
+                      compare_with_identical_operands,
+                      switch_with_identical_branches_and_index),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1390,7 +1502,8 @@ INSTANTIATE_TEST_SUITE_P(
         while_with_differing_body, select_with_differing_pred,
         select_with_differing_values, tuple_select_with_differing_pred,
         tuple_select_with_differing_values, compare_with_differing_operands,
-        pipeline_with_differing_gradient_accumulation_count),
+        pipeline_with_differing_gradient_accumulation_count,
+        switch_with_differing_index, switch_with_differing_branches),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
