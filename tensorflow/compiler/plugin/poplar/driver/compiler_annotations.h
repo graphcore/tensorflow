@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
+#include <map>
 #include <set>
 #include <utility>
 #include <vector>
@@ -89,19 +90,19 @@ struct RemoteParameterHostRearrangement {
 struct RemoteParameterInfo {
   // Constructor used for lookups.
   explicit RemoteParameterInfo(int64 parameter_number)
-      : RemoteParameterInfo(parameter_number, false, "", 0, 0, {}) {}
+      : RemoteParameterInfo(parameter_number, false, "", 0, 0) {}
 
-  explicit RemoteParameterInfo(
-      int64 parameter_number, bool is_replica_partitioned,
-      const std::string& buffer_name, int64 buffer_offset, int64 num_merged,
-      const absl::optional<RemoteParameterHostRearrangement>&
-          host_rearrangement = absl::nullopt)
+  explicit RemoteParameterInfo(int64 parameter_number,
+                               bool is_replica_partitioned,
+                               const std::string& buffer_name,
+                               int64 buffer_offset, int64 num_merged,
+                               int64 host_rearrangement_id = 0)
       : parameter_number(parameter_number),
         is_replica_partitioned(is_replica_partitioned),
         buffer_name(buffer_name),
         buffer_offset(buffer_offset),
         num_merged(num_merged),
-        host_rearrangement(host_rearrangement) {}
+        host_rearrangement_id(host_rearrangement_id) {}
 
   RemoteParameterInfo() = delete;
 
@@ -110,7 +111,7 @@ struct RemoteParameterInfo {
   const std::string buffer_name;
   const int64 buffer_offset;
   const int64 num_merged;
-  absl::optional<RemoteParameterHostRearrangement> host_rearrangement;
+  const int64 host_rearrangement_id;
 
   bool operator<(const RemoteParameterInfo& other) const {
     return parameter_number < other.parameter_number;
@@ -142,6 +143,8 @@ struct OutputInfo {
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 using RemoteParameterInfos = std::set<RemoteParameterInfo>;
+using RemoteParameterHostRearrangements =
+    std::map<int64, RemoteParameterHostRearrangement>;
 using InputInfos = std::set<InputInfo>;
 using OutputInfos = std::set<OutputInfo>;
 
@@ -240,6 +243,7 @@ struct CompilerAnnotations {
   HostEmbeddingInfos host_embedding_notify_infos;
 
   RemoteParameterInfos remote_parameter_infos;
+  RemoteParameterHostRearrangements remote_parameter_host_rearrangements;
 
   std::unique_ptr<HloModule> flattened_module;
 

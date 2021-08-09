@@ -1774,6 +1774,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                   annotations.host_embedding_update_infos,
                   annotations.host_embedding_notify_infos,
                   annotations.remote_parameter_infos,
+                  annotations.remote_parameter_host_rearrangements,
                   annotations.entry_input_infos,
                   annotations.feed_input_infos,
                   annotations.entry_output_infos,
@@ -1861,6 +1862,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               std::move(resources.annotations.host_embedding_update_infos),
               std::move(resources.annotations.host_embedding_notify_infos),
               std::move(resources.annotations.remote_parameter_infos),
+              std::move(
+                  resources.annotations.remote_parameter_host_rearrangements),
               std::move(resources.annotations.entry_input_infos),
               std::move(resources.annotations.feed_input_infos),
               std::move(resources.annotations.entry_output_infos),
