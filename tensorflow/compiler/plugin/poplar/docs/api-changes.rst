@@ -63,7 +63,7 @@ The ``feed_name`` is now generated automatically internally.
 Change of output location for profiling information
 '''''''''''''''''''''''''''''''''''''''''''''''''''
 
-By default the profile information (``profile.pop`` & ``frameworks.json``) will now be output to a 
+By default the profile information (``profile.pop`` & ``frameworks.json``) will now be output to a
 subdirectory of the Poplar ``autoReport.directory``. If ``autoReport.directory`` is not set, it will be output to
 a subdirectory of the current working directory. This change means that mutliple
 profiles can be captured for a single model, if it is separated into different Poplar graphs.
@@ -79,6 +79,12 @@ IPU Keras layers (``AssumeEqualAcrossReplicas``, ``Dropout``, ``Embedding``,
 ``RecomputationCheckpoint``, ``PopnnLSTM`` and ``PopnnGRU``) are deprecated and
 will be removed in the next release. If you require Keras support please migrate
 your model to TensorFlow 2 which has full Keras support for IPU.
+
+Warning when epsilon value is too low
+'''''''''''''''''''''''''''''''''''''
+
+When the epsilon value given to ``instance_norm``, ``layer_norm`` or ``group_norm`` is less than 1.53e-5, a warning
+will show on the screen that explains the potential dangers and suggests to increase it.
 
 Release 2.1
 ~~~~~~~~~~~
