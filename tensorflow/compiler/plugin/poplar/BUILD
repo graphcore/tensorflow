@@ -4996,17 +4996,6 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
-    name = "logging_example_1",
-    size = "large",
-    srcs = ["docs/logging_example_1.py"],
-    enabled_backends = ["poplar"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
-    ],
-)
-
-tf_xla_py_test(
     name = "perf_training_example",
     size = "large",
     srcs = ["docs/perf_training_example.py"],
@@ -5426,6 +5415,149 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "targeting_tf2_example1",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "targeting_tf2_example2",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "targeting_tf2_example3",
+    size = "large",
+    srcs = ["docs/targeting_tf2_example3.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example1",
+    size = "large",
+    srcs = ["docs/keras_tf2_example1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example2",
+    size = "large",
+    srcs = ["docs/keras_tf2_example2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example3",
+    size = "large",
+    srcs = ["docs/keras_tf2_example3.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example4",
+    size = "large",
+    srcs = ["docs/keras_tf2_example4.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example5",
+    size = "large",
+    srcs = ["docs/keras_tf2_example5.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example6",
+    size = "large",
+    srcs = ["docs/keras_tf2_example6.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example7",
+    size = "large",
+    srcs = ["docs/keras_tf2_example7.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example8",
+    size = "large",
+    srcs = ["docs/keras_tf2_example8.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_tf2_example9",
+    size = "large",
+    srcs = ["docs/keras_tf2_example9.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "keras_porting_example",
+    size = "large",
+    srcs = ["docs/keras_porting_example.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "compile_cache_test",
     size = "large",
     srcs = ["tests/compile_cache_test.py"],
@@ -5697,10 +5829,22 @@ test_suite(
         "function_example2",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
-        "logging_example_1",
+        "keras_tf2_example1",
+        "keras_tf2_example2",
+        "keras_tf2_example3",
+        "keras_tf2_example4",
+        "keras_tf2_example5",
+        "keras_tf2_example6",
+        "keras_tf2_example7",
+        "keras_tf2_example8",
+        "keras_tf2_example9",
+        "keras_porting_example",
         "outfeed_example",
         "perf_training_example",
         "pre_compile_example_runner",
+        "targeting_tf2_example1",
+        "targeting_tf2_example2",
+        "targeting_tf2_example3",
         "tutorial_attributes_example",
         "tutorial_custom_codelet",
     ] + if_horovod(["distributed_training_horovod_example"]),

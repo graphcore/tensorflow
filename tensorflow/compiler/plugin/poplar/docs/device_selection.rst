@@ -5,24 +5,28 @@ The Poplar XLA devices are named ``/device:IPU:X``, where X is an integer which
 identifies that logical device. This can consist of one or more physical IPU
 devices, as described below.
 
-A Python context handler is available for setting up all appropriate scoping
-when you create the graph. This will place all operations built inside it on the
-chosen Poplar XLA device:
+An IPU-specific TensorFlow distribution strategy, the ``IPUStrategy``, is
+available for setting up all appropriate scoping when creating a model. The
+``IPUStrategy`` should always be used to target the Poplar XLA device.
 
-.. code-block:: python
+If you are using Keras, you must instantiate your Keras model inside of the
+strategy scope:
+
+.. literalinclude:: keras_tf2_example1.py
+  :language: python
   :linenos:
+  :start-at: strategy = ipu.ipu_strategy.IPUStrategy()
 
-  with ipu_scope("/device:IPU:0"):
-    xla_result = ipu.ipu_compiler.compile(my_net, [x_data, y_data, p_angle])
+If you are not using Keras, you must use the ``@tf.function`` annotation along
+with ``strategy.run``. This will cause all operations created by the Python
+function passed into ``strategy.run`` to be placed on the IPU system and
+compiled together into a single Poplar executable:
 
-For very simple graphs, it is sufficient to use the IPU scope to define the
-parts of the graph which will be compiled.  For most graphs, the function
-``ipu_compiler.compile()`` must be used.  This must be placed inside an IPU
-device scope.
-
-The function ``ipu_compiler.compile()`` will cause all operations created by
-the Python function passed into its first argument to be placed on the IPU
-system, and be compiled together into a single Poplar executable.
+.. literalinclude:: targeting_tf2_example1.py
+  :language: python
+  :linenos:
+  :start-at: a = tf.constant([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+  :end-at: c = strategy.run(matmul_fn, args=(a, b))
 
 Supported types
 ~~~~~~~~~~~~~~~
@@ -377,15 +381,9 @@ supported. For instance, ``JpegDecode``.
 
 Unsupported operations will cause the compilation to fail.
 
-By including
-``config=tf.ConfigProto(log_device_placement=True)`` as an argument to the
-creation of the session, you can check whether the operations in your graph
-have been targeted at the Poplar device. For example:
-
-.. code-block:: python
-
-  # Creates a session with log_device_placement set to True.
-  sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+By including ``tf.debugging.set_log_device_placement(true)`` in your script, you
+can check if the operations in your graph are targeting the Poplar XLA
+device.
 
 Error Handling
 ~~~~~~~~~~~~~~

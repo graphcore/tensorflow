@@ -15,10 +15,6 @@ chapter in the PopVision User Guide for more information. To enable
 time-based profiling of events, see the :ref:`Capturing Execution Information <{HelpTopic.CapturingData}>`
 chapter in the PopVision User Guide for more information.
 
-Profiling through the TensorFlow IPU configuration options has been deprecated
-and will be removed in a future release. Information about using this old API
-has been moved to :std:doc:`deprecated_profiling`.
-
 
 TensorFlow options for reporting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

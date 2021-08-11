@@ -244,8 +244,6 @@ By default the pipeline operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If you need to
 override this order, then you can use the ``device_mapping`` parameter.
 
-.. _gradient-accumulation:
-
 Concurrent pipeline stages
 __________________________
 
@@ -301,6 +299,8 @@ expected latency is lower than the serialised pipeline.
 
     Comparison of the same logical pipelines with concurrent stages (top) and
     without (bottom).
+
+.. _gradient-accumulation:
 
 Gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~
