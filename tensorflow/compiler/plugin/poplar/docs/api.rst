@@ -23,8 +23,14 @@ For example, this will not work:
   :members:
   :imported-members:
 
+.. note::
+
+  `tensorflow.python.ipu.ipu_strategy.IPUStrategy` is an alias of
+  :py:class:`tensorflow.python.ipu.ipu_strategy.IPUStrategyV1`.
+
 .. automodule:: tensorflow.python.ipu.ipu_strategy
   :members: IPUStrategyV1
+  :special-members: __init__
 
 .. Note: the headings of the following modules will be included
          as subsection headings. They need to be added before
@@ -137,20 +143,9 @@ Estimators
 Keras
 ^^^^^
 
-.. note::
-
-  `tensorflow.python.ipu.keras.SequentialPipelineModel` has been renamed to
-  :py:class:`tensorflow.python.ipu.keras.PipelineSequential` and will be removed
-  in a future version.
-
-.. automodule:: tensorflow.python.ipu.keras
-  :members: Model, Sequential, PipelineStage, PipelineModel, PipelineSequential
-  :imported-members: Model, Sequential, PipelineModel, PipelineStage, PipelineSequential
-  :special-members: __init__
-
-.. automodule:: tensorflow.python.ipu.keras.model
-  :members: IPUModel, IPUSequential
-  :special-members: __init__
+.. automodule:: tensorflow.python.ipu.keras.extensions
+  :members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
+  :imported-members: FunctionalExtension, PipelineStage, FunctionalLayerPipelineStageAssignment, SequentialExtension, SequentialLayerPipelineStageAssignment
 
 .. _keras-layers-api:
 
