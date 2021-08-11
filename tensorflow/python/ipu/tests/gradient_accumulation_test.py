@@ -14,6 +14,8 @@
 # =============================================================================
 
 import numpy as np
+from absl.testing import parameterized
+import pva
 from tensorflow.python.ipu.config import IPUConfig
 
 from tensorflow.keras import layers
@@ -59,7 +61,9 @@ def _gradient_accumulation_loop(test_wrapper,
                                 optimizer_fn,
                                 num_iterations=None,
                                 replication_factor=1,
-                                minimum_remote_tensor_size=128):
+                                minimum_remote_tensor_size=128,
+                                replicated_optimizer_state_sharding=False,
+                                assert_compute_sets_contain_list=None):
   g = ops.Graph()
 
   if num_iterations is None:
@@ -78,7 +82,9 @@ def _gradient_accumulation_loop(test_wrapper,
         enqueue_op = outfeed_queue.enqueue(loss)
         if replication_factor > 1:
           opt = gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
-              optimizer_fn(), num_batches_to_accumulate)
+              optimizer_fn(), num_batches_to_accumulate,
+              offload_weight_update_variables=replicated_optimizer_state_sharding or None,  # pylint: disable=line-too-long
+              replicated_optimizer_state_sharding=replicated_optimizer_state_sharding)  # pylint: disable=line-too-long
         else:
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizerV2(  # pylint: disable=line-too-long
               optimizer_fn(), num_batches_to_accumulate, False)
@@ -101,6 +107,9 @@ def _gradient_accumulation_loop(test_wrapper,
     profiling = utils.running_on_ipu_model()
 
     cfg = IPUConfig()
+    if assert_compute_sets_contain_list is not None:
+      report_helper = tu.ReportHelper()
+      report_helper.set_autoreport_options(cfg)
     cfg._profiling.enable_ipu_events = profiling  # pylint: disable=protected-access
     cfg.ipu_model.compile_ipu_code = True
     cfg.ipu_model.tiles_per_ipu = 128
@@ -112,8 +121,15 @@ def _gradient_accumulation_loop(test_wrapper,
 
     session.run(variables.global_variables_initializer())
     session.run(infeed_queue.initializer)
+    if assert_compute_sets_contain_list is not None:
+      report_helper.clear_reports()
     session.run(loop_ret, feed_dict=dict(zip(inputs, input_values)))
-    return session.run(outfeed_op)
+    r = session.run(outfeed_op)
+    if assert_compute_sets_contain_list is not None:
+      report = pva.openReport(report_helper.find_report())
+      test_wrapper.assert_compute_sets_contain_list(
+          report, assert_compute_sets_contain_list)
+    return r
 
 
 def _compare_to_cpu(test_wrapper,
@@ -125,7 +141,9 @@ def _compare_to_cpu(test_wrapper,
                     dataset_fn,
                     optimizer_fn,
                     replication_factor=1,
-                    minimum_remote_tensor_size=128):
+                    minimum_remote_tensor_size=128,
+                    replicated_optimizer_state_sharding=False,
+                    assert_compute_sets_contain_list=None):
 
   ga_losses = _gradient_accumulation_loop(
       test_wrapper,
@@ -137,7 +155,9 @@ def _compare_to_cpu(test_wrapper,
       dataset_fn,
       optimizer_fn,
       replication_factor=replication_factor,
-      minimum_remote_tensor_size=minimum_remote_tensor_size)
+      minimum_remote_tensor_size=minimum_remote_tensor_size,
+      replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
+      assert_compute_sets_contain_list=assert_compute_sets_contain_list)
 
   cpu_losses = pipelining_test_util.PipelineTester._cpu_with_grad_accum(  # pylint: disable=protected-access
       test_wrapper, [fwd_fn], inputs_fn, input_values, repeat_count,
@@ -147,7 +167,8 @@ def _compare_to_cpu(test_wrapper,
   test_wrapper.assertAllClose(cpu_losses, ga_losses)
 
 
-class GradientAccumulationTest(test_util.TensorFlowTestCase):
+class GradientAccumulationTest(test_util.TensorFlowTestCase,
+                               parameterized.TestCase):
   @tu.skip_on_hw
   @test_util.deprecated_graph_mode_only
   def testIterationsNotMultiple(self):
@@ -486,11 +507,11 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
     _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer_fn)
 
-  def _compare6(self, optimizer_fn):
-    dataset_size = 100
-    num_batches_to_accumulate = 10
+  def _compare6(self, optimizer_fn, replicated_optimizer_state_sharding=False):
+    dataset_size = 10
+    num_batches_to_accumulate = 4
     repeat_count = 2
-    embedding_size = 10
+    embedding_size = 4
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(dataset_size, shape=[4])
@@ -533,35 +554,50 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
                                                       labels=label))
       return loss
 
-    _compare_to_cpu(self,
-                    fwd_fn,
-                    lambda: [], [],
-                    repeat_count,
-                    num_batches_to_accumulate,
-                    dataset_fn,
-                    optimizer_fn,
-                    replication_factor=2,
-                    minimum_remote_tensor_size=0)
+    _compare_to_cpu(
+        self,
+        fwd_fn,
+        lambda: [], [],
+        repeat_count,
+        num_batches_to_accumulate,
+        dataset_fn,
+        optimizer_fn,
+        replication_factor=2,
+        minimum_remote_tensor_size=8,
+        replicated_optimizer_state_sharding=replicated_optimizer_state_sharding,
+        assert_compute_sets_contain_list=['/ReduceScatter/']
+        if replicated_optimizer_state_sharding else None)
 
+  @parameterized.parameters({'replicated_optimizer_state_sharding': False}, {
+      'replicated_optimizer_state_sharding': True,
+  })
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
-  def testCompare6Momentum(self):
-    self._compare6(lambda: momentum.MomentumOptimizer(0.01, 0.8))
+  def testCompare6Momentum(self, replicated_optimizer_state_sharding):
+    self._compare6(lambda: momentum.MomentumOptimizer(0.01, 0.8),
+                   replicated_optimizer_state_sharding)
 
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
   def testCompare6SDG(self):
     self._compare6(lambda: gradient_descent.GradientDescentOptimizer(0.01))
 
+  @parameterized.parameters({'replicated_optimizer_state_sharding': False}, {
+      'replicated_optimizer_state_sharding': True,
+  })
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
-  def testCompare6Adam(self):
-    self._compare6(lambda: adam.AdamOptimizer())  # pylint: disable=W0108
+  def testCompare6Adam(self, replicated_optimizer_state_sharding):
+    self._compare6(adam.AdamOptimizer, replicated_optimizer_state_sharding)
 
+  @parameterized.parameters({'replicated_optimizer_state_sharding': False}, {
+      'replicated_optimizer_state_sharding': True,
+  })
   @tu.test_uses_ipus(num_ipus=2)
   @test_util.deprecated_graph_mode_only
-  def testCompare6RMS(self):
-    self._compare6(lambda: rmsprop.RMSPropOptimizer(0.01))
+  def testCompare6RMS(self, replicated_optimizer_state_sharding):
+    self._compare6(lambda: rmsprop.RMSPropOptimizer(0.01),
+                   replicated_optimizer_state_sharding)
 
   @tu.test_may_use_ipus_or_model(num_ipus=1)
   @test_util.deprecated_graph_mode_only
