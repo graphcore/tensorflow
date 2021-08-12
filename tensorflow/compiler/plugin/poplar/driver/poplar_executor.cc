@@ -1094,13 +1094,13 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // replica for an infeed are dequeued every iteration - we therefore
       // only need to check if the first queue is full to know whether all the
       // queues are full.
-      if (VLOG_IS_ON(2)) {
+      if (VLOG_IS_ON(3)) {
         if (infeed_queues[0][0]->IsFull()) {
-          VLOG(2) << "Infeed queue is full.";
+          VLOG(3) << "Infeed queue is full.";
         }
 
         if (infeed_queues[0][0]->IsEmpty()) {
-          VLOG(2) << "Infeed queue is empty.";
+          VLOG(3) << "Infeed queue is empty.";
         }
       }
 
