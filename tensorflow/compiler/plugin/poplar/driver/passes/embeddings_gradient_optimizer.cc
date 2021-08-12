@@ -166,14 +166,17 @@ void AdjustGTEIndices(Replacements& replacements, HloInstruction* call,
   //  gte.1 = get-tuple-element call, index=1
   //  gte.2 = get-tuple-element call, index=2
   //  gte.3 = get-tuple-element call, index=3
-  // For instance, GTE with index of 1 has been removed by this pass, so we have
+  // GTE with index of 1 has been removed by this pass, so we have
   // adjust all GTEs with indices greater than 1
   //  gte.0 = get-tuple-element call, index=0 [ignored]
   //  gte.2 = get-tuple-element call, index=1 [index adjusted by -1]
   //  gte.3 = get-tuple-element call, index=2 [index adjusted by -1]
   // There should be no users other than GTE.
 
-  for (HloInstruction* gte : call->users()) {
+  // Copy users locally, because Clone will add newly created instruction to the
+  // users array.
+  auto call_users = call->users();
+  for (HloInstruction* gte : call_users) {
     CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
     if (gte->tuple_index() > removed_index) {
       auto clone = gte->Clone();
