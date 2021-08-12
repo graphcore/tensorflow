@@ -73,7 +73,7 @@ std::string GetTemplateHloString() {
   return R"(
     HloModule main
 
-    %WeightUpdate (arg0.31: $DT[$R,$E], arg1.32: $DT[$R,$E], arg2.33: $AT[$R,$E]) -> $DT[$R,$E] {
+    %WeightUpdate {
     %arg0 = $DT[$R,$E] parameter(0), metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $AT[$R,$E] parameter(2), metadata={op_name="XLA_Args/c"}, backend_config="{}"
@@ -82,7 +82,7 @@ std::string GetTemplateHloString() {
     ROOT %mul = $DT[$R,$E] subtract($DT[$R,$E] %arg1, $DT[$R,$E] %add), metadata={op_type="ResourceApplyMomentum" op_name="Mul"}, backend_config="{}"
     }
 
-    %RepeatLoopBody (arg0: $DT[$R,$E], arg1: $DT[$R,$E]) -> $DT[$R,$E] {
+    %RepeatLoopBody {
     %arg0 = $DT[$R,$E] parameter(0)
     %arg1 = $DT[$R,$E] parameter(1)
     %const.scale = $DT[] constant(0.1)
@@ -99,7 +99,7 @@ std::string GetTemplateHloString() {
     ROOT %call.1 = $DT[$R,$E] call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.4), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
-    ENTRY %main (arg0: $DT[$R,$E], arg1: $DT[$R,$E]) -> $DT[$R,$E] {
+    ENTRY %main {
     %arg0 = $DT[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
     ROOT %call.2 = $DT[$R,$E] call($DT[$R,$E] %arg1, $DT[$R,$E] %arg0), to_apply=%RepeatLoopBody, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"40\"}}}"
@@ -111,7 +111,7 @@ std::string GetPipelineTemplateHloString() {
   return R"(
     HloModule main
 
-    %WeightUpdate (arg0: $DT[$R,$E], arg1: $DT[$R,$E], arg2: $AT[$R,$E], arg3: $DT[$E]) -> $DT[$R,$E] {
+    %WeightUpdate {
     %arg0 = $DT[$R,$E] parameter(0), metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $AT[$R,$E] parameter(2), metadata={op_name="XLA_Args/c"}, backend_config="{}"
@@ -121,7 +121,7 @@ std::string GetPipelineTemplateHloString() {
     ROOT %mul = $DT[$R,$E] subtract($DT[$R,$E] %arg1, $DT[$R,$E] %add), metadata={op_type="ResourceApplyMomentum" op_name="Mul"}, backend_config="{}"
     }
 
-    %PipelineStage (arg0: $DT[$R,$E], arg1: $DT[$R,$E], arg2: $AT[$R,$E], arg3: $DT[$E]) -> ($AT[$R,$E], $DT[$E]) {
+    %PipelineStage {
     %arg0 = $DT[$R,$E] parameter(0), metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $AT[$R,$E] parameter(2), metadata={op_name="XLA_Args/c"}, backend_config="{}"
@@ -141,7 +141,7 @@ std::string GetPipelineTemplateHloString() {
     ROOT %tuple = ($AT[$R,$E], $DT[$E]) tuple(%custom-call.2, arg3)
     }
 
-    %Pipeline (arg0: $DT[$R,$E], arg1: $DT[$R,$E], arg2: $DT[$E]) -> $DT[$R,$E] {
+    %Pipeline {
     %arg0 = $DT[$R,$E] parameter(0)
     %arg1 = $DT[$R,$E] parameter(1)
     %arg2 = $DT[$E] parameter(2)
@@ -150,11 +150,16 @@ std::string GetPipelineTemplateHloString() {
     %call.1 = ($AT[$R,$E], $DT[$E]) call($DT[$R,$E] %arg0, $DT[$R,$E] %arg1, $AT[$R,$E] %custom-call.1, arg2), to_apply=%PipelineStage, frontend_attributes={CALL_CONFIG_TYPE="PipelineStageBackward"}, metadata={op_type="PipelineStageBackward" op_name="gradients/pipeline_stage_1/PipelineStage_grad/PipelineStageBackward"}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
     %get-tuple-element.1 = $AT[$R,$E] get-tuple-element(%call.1), index=0
     %get-tuple-element.2 = $DT[$E] get-tuple-element(%call.1), index=1
+    %get-tuple-element.dummy.3 = $DT[$E] get-tuple-element(%call.1), index=1
+    %get-tuple-element.dummy.4 = $DT[$E] get-tuple-element(%call.1), index=1
+    %get-tuple-element.dummy.5 = $DT[$E] get-tuple-element(%call.1), index=1
+    %get-tuple-element.dummy.6 = $DT[$E] get-tuple-element(%call.1), index=1
+    %get-tuple-element.dummy.7 = $DT[$E] get-tuple-element(%call.1), index=1
     %custom-call.2 = $AT[$R,$E] custom-call($AT[$R,$E] %get-tuple-element.1), custom_call_target="GradientAccumulatorSink", metadata={op_type="GradientAccumulatorSink" op_name="GradientAccumulatorSink"}, backend_config="{\"num_mini_batches\":$BN}"
     ROOT %call.2 = $DT[$R,$E] call(%arg0, %arg1, %custom-call.2, %get-tuple-element.2), to_apply=%WeightUpdate, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, metadata={op_type="ResourceUpdate" op_name="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"numBatchesToAccumulate\":\"$BN\",\"offloadVariables\":\"THREESTATE_ON\"}}}"
     }
 
-    ENTRY %main (arg0: $DT[$R,$E], arg1: $DT[$R,$E], arg2: $DT[$E]) -> $DT[$R,$E] {
+    ENTRY %main {
     %arg0 = $DT[$R,$E] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args/a"}, backend_config="{}"
     %arg1 = $DT[$R,$E] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
     %arg2 = $DT[$E]    parameter(2), parameter_replication={false}, metadata={op_name="XLA_Args/b"}, backend_config="{}"
