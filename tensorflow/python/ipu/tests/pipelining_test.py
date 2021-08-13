@@ -1151,7 +1151,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     with tu.ipu_session() as sess:
 
-      def stage1(x):
+      def stage1(_, x):
         with variable_scope.variable_scope("stage1", use_resource=True):
           w = variable_scope.get_variable(name="w", initializer=1.0)
           return w * x
@@ -1169,7 +1169,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def my_net(x):
         return pipelining_ops.pipeline([stage1, identity, identity, identity],
                                        gradient_accumulation_count=8,
-                                       inputs=[x],
+                                       inputs=[10, x],
                                        outfeed_queue=outfeed_queue,
                                        optimizer_function=optimizer_function,
                                        outfeed_loss=True)
