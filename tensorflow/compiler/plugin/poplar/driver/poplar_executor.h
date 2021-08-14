@@ -141,7 +141,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     absl::optional<RemoteParameterInfo> in_memory_remote_parameter_info;
     absl::optional<ArgHandle> input_handle;
     absl::optional<ArgHandle> output_handle;
-    absl::optional<gcl::CollectiveBalancedHostRearrangement> host_rearrangement;
+    const gcl::CollectiveBalancedHostRearrangement* host_rearrangement =
+        nullptr;
     ConversionFn output_convertor;
     std::vector<char> converted_data;
     char* data;

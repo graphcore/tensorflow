@@ -23,6 +23,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+
 #include "tensorflow/compiler/xla/service/executable.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_module_config.h"
@@ -32,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 
+#include <gcl/CollectiveBalancedReorder.hpp>
 #include <poplar/Engine.hpp>
 
 namespace xla {
@@ -57,6 +60,7 @@ struct PoplarExecutableInfo {
   HostEmbeddingInfos host_embedding_update_infos;
   HostEmbeddingInfos host_embedding_notify_infos;
   RemoteParameterInfos remote_parameter_infos;
+  RemoteParameterHostRearrangements remote_parameter_host_rearrangements;
   InputInfos entry_input_infos;
   InputInfos feed_input_infos;
   OutputInfos entry_output_infos;
@@ -65,6 +69,9 @@ struct PoplarExecutableInfo {
   VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
   std::vector<string> checkpoint_feeds_order;
 };
+
+using CollectiveBalanceReorderHostRerrangements =
+    absl::flat_hash_map<int64, gcl::CollectiveBalancedHostRearrangement>;
 
 class PoplarExecutableCore {
  public:
@@ -112,6 +119,17 @@ class PoplarExecutableCore {
 
   const RemoteParameterInfos& GetRemoteParameterInfos() const {
     return info_.remote_parameter_infos;
+  }
+
+  const RemoteParameterHostRearrangements&
+  GetRemoteParameterHostRearrangements() const {
+    return info_.remote_parameter_host_rearrangements;
+  }
+
+  const gcl::CollectiveBalancedHostRearrangement*
+  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+    auto it = cbr_host_rearrangements_.find(id);
+    return it != cbr_host_rearrangements_.end() ? &it->second : nullptr;
   }
 
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
@@ -197,6 +215,9 @@ class PoplarExecutableCore {
 
   // All the other info that is serialized.
   PoplarExecutableInfo info_;
+  CollectiveBalanceReorderHostRerrangements cbr_host_rearrangements_;
+
+  void PopulateCollectiveBalanceReorderHostRerrangements();
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutableCore);
 };
@@ -311,6 +332,11 @@ class PoplarExecutable : public Executable {
 
   Status Serialize(const std::string& filepath) const {
     return executable_core_->Serialize(filepath);
+  }
+
+  const gcl::CollectiveBalancedHostRearrangement*
+  GetCollectiveBalanceReorderHostRerrangement(int64 id) const {
+    return executable_core_->GetCollectiveBalanceReorderHostRerrangement(id);
   }
 
  private:
