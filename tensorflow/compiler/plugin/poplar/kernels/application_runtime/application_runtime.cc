@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <pthread.h>
 #include <chrono>
 #include <deque>
 #include <fstream>
@@ -23,7 +22,6 @@ limitations under the License.
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <thread>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/synchronization/notification.h"
@@ -98,22 +96,16 @@ using PoplarExecutableBinaryFile =
 namespace tensorflow {
 namespace {
 
-const char APPLICATION_RUNTIME_RESOURCE_CONTAINER[] =
-    "ApplicationRuntimeResourceContainer";
-
-bool ParsePoplarTargetType(const std::string target_type_string,
-                           poplar::TargetType& target_type) {
+StatusOr<poplar::TargetType> ParsePoplarTargetType(
+    const std::string& target_type_string) {
   if (target_type_string == "IPU") {
-    target_type = poplar::TargetType::IPU;
-    return true;
+    return poplar::TargetType::IPU;
   } else if (target_type_string == "IPU_MODEL") {
-    target_type = poplar::TargetType::IPU_MODEL;
-    return true;
+    return poplar::TargetType::IPU_MODEL;
   } else if (target_type_string == "CPU") {
-    target_type = poplar::TargetType::CPU;
-    return true;
+    return poplar::TargetType::CPU;
   }
-  return false;
+  return errors::InvalidArgument("Invalid target type ", target_type_string);
 }
 
 StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
@@ -121,6 +113,7 @@ StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
                                       const int64 num_IPUs,
                                       const bool gateway_mode,
                                       const bool supports_remote_buffers) {
+  VLOG(2) << "Getting a device.";
   poplar::DeviceManager manager = poplar::DeviceManager::createDeviceManager();
   auto devices =
       manager.getDevices(target_type, num_IPUs,
@@ -131,17 +124,16 @@ StatusOr<poplar::Device> GetIpuDevice(const poplar::TargetType target_type,
   if (supports_remote_buffers && !devices[device_idx].supportsRemoteBuffers()) {
     return errors::InvalidArgument(
         "The compiled TensorFlow executable requires remote buffer support, "
-        "but it is not available on "
-        "this device");
+        "but it is not available on this device");
   }
 
-  const auto& device_target_arch_string =
+  const std::string device_target_arch_string =
       devices[device_idx].getTarget().getTargetArchString();
   if (device_target_arch_string != target_arch_string) {
-    return errors::InvalidArgument(absl::StrFormat(
-        "The target architecture for the compiled executable (%s) does not "
-        "match device's target architure (%s)",
-        target_arch_string, device_target_arch_string));
+    return errors::InvalidArgument(
+        "The target architecture for the compiled executable (",
+        target_arch_string, ") does not match device's target architecture (",
+        device_target_arch_string, ").");
   }
 
   return std::move(devices[device_idx]);
@@ -283,9 +275,11 @@ class IOConfig {
   IOGroup outfeeds_;
 };
 
-class ApplicationRuntimeComm {
+class CommunicationManager {
  public:
-  ApplicationRuntimeComm() = default;
+  explicit CommunicationManager(PoplarExecutableProto& proto) {
+    io_config_.ParsePoplarExecutableProto(proto);
+  }
 
   void PushInputData(const std::string& name, tensorflow::Tensor tensor) {
     {
@@ -346,6 +340,8 @@ class ApplicationRuntimeComm {
 
   bool Exiting() const { return engine_exit_notification_.HasBeenNotified(); }
 
+  IOConfig& GetIOConfig() { return io_config_; }
+
  private:
   absl::Notification engine_exit_notification_;
 
@@ -359,23 +355,277 @@ class ApplicationRuntimeComm {
       GUARDED_BY(input_mutex_);
   absl::flat_hash_map<std::string, std::queue<std::function<void(void*)>>>
       output_queues_ GUARDED_BY(output_mutex_);
+
+  IOConfig io_config_;
 };
 
-class ApplicationRuntimeResources : public ResourceBase {
+class PrefetchCallback : public poplar::StreamCallback {
  public:
-  ApplicationRuntimeResources() = default;
+  PrefetchCallback(CommunicationManager* comm_mgr, const std::string& name)
+      : comm_mgr_(comm_mgr), name_(name) {}
 
-  std::string DebugString() const override {
-    return "ApplicationRuntimeResources";
+  poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    return poplar::StreamCallback::Result::NotAvailable;
   }
 
-  ApplicationRuntimeComm& Comm() { return comm_; }
+  void fetch(void* dest) noexcept override {
+    tensorflow::Tensor t = comm_mgr_->PopInputData(name_);
+    if (!comm_mgr_->Exiting()) {
+      auto buffer = tensorflow::DMAHelper::buffer(&t);
+      std::memcpy(dest, buffer->data(), buffer->size());
+    }
+  }
 
-  IOConfig& IOCfg() { return io_config_; }
+  void complete() noexcept override {}
 
  private:
-  ApplicationRuntimeComm comm_;
-  IOConfig io_config_;
+  CommunicationManager* comm_mgr_;
+  const std::string name_;
+};
+
+class EngineResource {
+ public:
+  EngineResource(const std::string& engine_name,
+                 poplar::Executable&& executable, poplar::Device&& device,
+                 PoplarExecutableProto& proto)
+      : engine_name_(engine_name),
+        device_(std::move(device)),
+        engine_(std::move(executable)),
+        communication_manager_(proto) {}
+
+  poplar::Engine& GetEngine() { return engine_; }
+
+  CommunicationManager& GetCommunicationManager() {
+    return communication_manager_;
+  }
+
+  IOConfig& GetIOConfig() { return GetCommunicationManager().GetIOConfig(); }
+
+  Status StartEngine(OpInputList& input_list) {
+    VLOG(2) << "Starting engine execution for " << engine_name_;
+
+    if (execute_thread_) {
+      return errors::Internal("Engine thread already exists for engine ",
+                              engine_name_);
+    }
+
+    // Get the status from the connection of streams.
+    Status connect_streams_status;
+
+    execute_thread_.reset(tensorflow::Env::Default()->StartThread(
+        tensorflow::ThreadOptions(), engine_name_ + "_execute_thread",
+        [&connect_streams_status, &input_list, this] {
+          engine_.load(device_);
+          connect_streams_status = ConnectStreams(input_list);
+          connect_streams_notification_.Notify();
+          if (!connect_streams_status.ok()) {
+            return;
+          }
+
+          VLOG(2) << "Engine loop starting.";
+          engine_.run(0);
+          do {
+            engine_.run(1);
+          } while (!communication_manager_.Exiting());
+        }));
+
+    // Wait for streams to be connected.
+    connect_streams_notification_.WaitForNotification();
+
+    return connect_streams_status;
+  }
+
+  // Populates the values for buffers which are not streamed every run
+  // operation.
+  Status PopulateAndConnectInputBuffers(OpInputList& input_list) {
+    VLOG(2) << "Populating the input buffers.";
+    // TODO(T41137): The assumption here is that the inputs are passed in the
+    // correct order.
+    auto& io_config = GetIOConfig();
+
+    for (auto& input_pair : io_config.GetInputs()) {
+      auto input = input_pair.first;
+      auto& io_item = input_pair.second;
+      tensorflow::Tensor t = input_list[io_item.argument];
+      if (io_item.shape != t.shape()) {
+        return errors::FailedPrecondition(
+            "Input tensor shape ", t.shape().DebugString(), " for input ",
+            io_item.handle, " does not match shape in signature (",
+            io_item.shape.DebugString(), ")");
+      }
+      auto tensor_buffer = tensorflow::DMAHelper::buffer(&t);
+      input_buffers_[io_item.argument] =
+          std::vector<unsigned char>(tensor_buffer->size());
+      auto& buffer = input_buffers_[io_item.argument];
+      std::memcpy(buffer.data(), tensor_buffer->data(), tensor_buffer->size());
+      engine_.connectStream(input, buffer.data());
+    }
+    return Status::OK();
+  }
+
+  Status ConnectStreams(OpInputList& input_list) {
+    VLOG(2) << "Connecting streams";
+
+    auto& io_config = GetIOConfig();
+
+    // Connect seed stream.
+    engine_.connectStreamToCallback("__seed_stream", [](void* ptr) {
+      static std::random_device rd;
+      xla::poplarplugin::IdenticalReplicaSeedGenerator generator(rd());
+      uint64 seed = generator.Get(0);
+      reinterpret_cast<uint64*>(ptr)[0] = seed;
+    });
+
+    // Handle the inputs which are only copied at the beginning.
+    TF_RETURN_IF_ERROR(PopulateAndConnectInputBuffers(input_list));
+
+    // Connect streamed inputs.
+    for (auto& infeed_pair : io_config.GetInfeeds()) {
+      std::string feed = infeed_pair.first;
+      engine_.connectStreamToCallback(
+          feed, /*replica_id=*/0,
+          absl::make_unique<PrefetchCallback>(&communication_manager_, feed));
+    }
+
+    // Connect streamed outputs.
+    for (auto& outfeed_pair : io_config.GetOutfeeds()) {
+      std::string feed = outfeed_pair.first;
+      engine_.connectStreamToCallback(feed, [feed, this](void* ptr) {
+        auto callback = communication_manager_.PopOutputCallback(feed);
+        if (!communication_manager_.Exiting()) {
+          callback(ptr);
+        }
+      });
+    }
+
+    return Status::OK();
+  }
+
+  void StopEngine() {
+    VLOG(2) << "Stopping engine execution for " << engine_name_;
+
+    if (!execute_thread_) {
+      LOG(FATAL) << "Trying to stop the engine " << engine_name_
+                 << " which is not running.";
+    }
+    communication_manager_.InitiateExit();
+  }
+
+ private:
+  std::string engine_name_;
+  poplar::Device device_;
+  poplar::Engine engine_;
+  CommunicationManager communication_manager_;
+  std::map<int64, std::vector<unsigned char>> input_buffers_;
+
+  // Make sure all Poplar/engine operations are performed in the same thread.
+  // This ensures that the streams are connected and input values copied before
+  // the start op finishes.
+  absl::Notification connect_streams_notification_;
+
+  // Thread which keeps running the engine until the communication manager is
+  // asked to exit.
+  // Note that the destructor blocks until the thread completes.
+  std::unique_ptr<tensorflow::Thread> execute_thread_;
+};
+
+// A singleton class which owns the engines and associated resources for the
+// execution.
+class EngineManager {
+ public:
+  static EngineManager& Instance() {
+    static EngineManager mgr;
+    return mgr;
+  }
+
+  virtual ~EngineManager() {
+    std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
+    try {
+      for (auto const& it : engine_resource_map_) {
+        it.second->StopEngine();
+      }
+    } catch (std::exception e) {
+    }
+  }
+
+  bool EngineExists(const std::string& engine_name) {
+    std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
+    return engine_resource_map_.contains(engine_name);
+  }
+
+  // Function which creates an engine if it already doesn't exist. If it
+  // doesn't exist, then it creates it.
+  Status CreateEngine(const std::string& engine_name,
+                      const std::string& executable_filename,
+                      OpInputList& input_list) {
+    std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
+    if (EngineExists(engine_name)) {
+      return Status::OK();
+    }
+
+    VLOG(2) << "Creating an engine.";
+    PoplarExecutableProto proto;
+    TF_ASSIGN_OR_RETURN(
+        poplar::Executable executable,
+        PoplarExecutableBinaryFile::Read(executable_filename, &proto));
+
+    // Check the the executable is compatible.
+    VerifyExecutable(proto);
+
+    // Check the versions.
+    if (proto.tf_major_version() != TF_MAJOR_VERSION ||
+        proto.tf_minor_version() != TF_MINOR_VERSION) {
+      return errors::InvalidArgument(
+          "TensorFlow version mismatch. Runtime version is ", TF_MAJOR_VERSION,
+          ".", TF_MINOR_VERSION, ", executable version is ",
+          proto.tf_major_version(), ".", proto.tf_minor_version(), ".");
+    }
+
+    if (proto.tf_git_version() != tf_git_version()) {
+      return errors::InvalidArgument(
+          "TensorFlow build version mismatch. Runtime version is ",
+          tf_git_version(), ", executable version is ", proto.tf_git_version(),
+          ".");
+    }
+
+    auto& erc = proto.embedded_runtime_config();
+
+    TF_ASSIGN_OR_RETURN(poplar::TargetType target_type,
+                        ParsePoplarTargetType(erc.target_type()));
+
+    // Create a device.
+    TF_ASSIGN_OR_RETURN(
+        auto device,
+        GetIpuDevice(target_type, erc.target_arch(), erc.num_ipus(),
+                     erc.gateway_mode(), erc.supports_remote_buffers()));
+
+    auto engine_resource = absl::make_unique<EngineResource>(
+        engine_name, std::move(executable), std::move(device), proto);
+
+    TF_RETURN_IF_ERROR(engine_resource->StartEngine(input_list));
+
+    // Only insert the engine into the map if it's successfully started.
+    engine_resource_map_.insert_or_assign(engine_name,
+                                          std::move(engine_resource));
+    return Status::OK();
+  }
+
+  StatusOr<EngineResource*> GetEngine(const std::string& engine_name) {
+    std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
+    if (!EngineExists(engine_name)) {
+      return errors::FailedPrecondition("Engine ", engine_name,
+                                        " does not exist.");
+    }
+    return engine_resource_map_.at(engine_name).get();
+  }
+
+ private:
+  // This is a singleton class.
+  EngineManager() = default;
+
+  std::recursive_mutex engine_resource_map_mutex_;
+  absl::flat_hash_map<std::string, std::unique_ptr<EngineResource>>
+      engine_resource_map_ GUARDED_BY(engine_resource_map_mutex_);
 };
 
 }  // namespace
@@ -385,187 +635,20 @@ class ApplicationRuntime : public OpKernel {
   explicit ApplicationRuntime(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("engine_name", &engine_name_));
-
-    if (!GetEngines().contains(engine_name_)) {
-      PoplarExecutableProto proto;
-      poplar::Executable executable =
-          PoplarExecutableBinaryFile::Read(filename_, &proto).ValueOrDie();
-
-      OP_REQUIRES(ctx,
-                  proto.tf_major_version() == TF_MAJOR_VERSION &&
-                      proto.tf_minor_version() == TF_MINOR_VERSION,
-                  errors::InvalidArgument(absl::StrFormat(
-                      "TF version mismatch. Runtime version is %u.%u, "
-                      "executable version is %u.%u",
-                      TF_MAJOR_VERSION, TF_MINOR_VERSION,
-                      proto.tf_major_version(), proto.tf_minor_version())));
-
-      OP_REQUIRES(ctx, proto.tf_git_version() == tf_git_version(),
-                  errors::InvalidArgument(absl::StrFormat(
-                      "TF build version mismatch. Runtime version is %s, "
-                      "executable version is %s",
-                      tf_git_version(), proto.tf_git_version())));
-
-      auto& ertc = proto.embedded_runtime_config();
-      const std::string target_type_string = ertc.target_type();
-      poplar::TargetType target_type;
-      OP_REQUIRES(ctx, ParsePoplarTargetType(target_type_string, target_type),
-                  errors::InvalidArgument(absl::StrFormat(
-                      "Invalid target type %s", target_type_string)));
-
-      auto status_or_device =
-          GetIpuDevice(target_type, ertc.target_arch(), ertc.num_ipus(),
-                       ertc.gateway_mode(), ertc.supports_remote_buffers());
-      OP_REQUIRES_OK(ctx, status_or_device.status());
-      auto& device = status_or_device.ValueOrDie();
-
-      auto& io_config = resources_.IOCfg();
-      io_config.ParsePoplarExecutableProto(proto);
-      VerifyExecutable(proto);
-
-      auto engine = absl::make_unique<poplar::Engine>(std::move(executable));
-      engine->load(device);
-
-      GetEngine(engine_name_) = std::move(engine);
-    }
   }
 
-  virtual ~ApplicationRuntime() {
-    if (GetEngineThreads().contains(engine_name_)) {
-      auto& thread = GetEngineThreads()[engine_name_];
-      if (thread.joinable()) {
-        auto& comm = resources_.Comm();
-        comm.InitiateExit();
-        thread.join();
-      }
-    }
-  }
+  void Compute(OpKernelContext* ctx) override {
+    OpInputList input_list;
+    ctx->input_list("inputs", &input_list);
+    auto& engine_mgr = EngineManager::Instance();
 
-  void Compute(OpKernelContext* context) override {
-    std::unique_lock<std::mutex> lk(compute_mutex_);
-
-    const std::string& e = engine_name_;
-
-    cacheInputBuffers(context);
-
-    auto res_mgr = context->resource_manager();
-    CHECK(res_mgr);
-
-    ApplicationRuntimeResources* resources;
-    TF_CHECK_OK(res_mgr->LookupOrCreate<ApplicationRuntimeResources>(
-        std::string(APPLICATION_RUNTIME_RESOURCE_CONTAINER), engine_name_,
-        &resources, [this](ApplicationRuntimeResources** resources) -> Status {
-          *resources = &resources_;
-          return Status::OK();
-        }));
-
-    if (!GetEngineThreads().contains(engine_name_)) {
-      GetEngineThreads()[engine_name_] =
-          std::thread([context, e, res_mgr, this]() {
-            ConnectStreams();
-            ApplicationRuntime::GetEngine(e)->run(0);
-
-            auto& comm = resources_.Comm();
-            do {
-              ApplicationRuntime::GetEngine(e)->run(1);
-            } while (!comm.Exiting());
-
-            TF_CHECK_OK(res_mgr->Delete<ApplicationRuntimeResources>(
-                APPLICATION_RUNTIME_RESOURCE_CONTAINER, engine_name_));
-          });
-    }
+    OP_REQUIRES_OK(
+        ctx, engine_mgr.CreateEngine(engine_name_, filename_, input_list));
   }
 
  private:
-  void cacheInputBuffers(OpKernelContext* context) {
-    auto& io_config = resources_.IOCfg();
-
-    OpInputList input_list;
-    context->input_list("inputs", &input_list);
-
-    for (auto& input_pair : io_config.GetInputs()) {
-      auto input = input_pair.first;
-      auto& io_item = input_pair.second;
-      tensorflow::Tensor t = input_list[io_item.argument];
-      CHECK(io_item.shape == t.shape())
-          << "Input tensor shape " << t.shape() << " for input "
-          << io_item.handle << " does not match shape in signature ("
-          << io_item.shape << ")\n";
-      auto tensor_buffer = tensorflow::DMAHelper::buffer(&t);
-      std::vector<unsigned char> buffer;
-      buffer.resize(tensor_buffer->size());
-      std::memcpy(buffer.data(), tensor_buffer->data(), tensor_buffer->size());
-      input_buffers_[io_item.argument] = std::move(buffer);
-    }
-  }
-
-  void ConnectStreams() {
-    auto& engine = GetEngines()[engine_name_];
-
-    auto& io_config = resources_.IOCfg();
-    auto& comm = resources_.Comm();
-
-    // Connect seed stream.
-    engine->connectStreamToCallback("__seed_stream", [](void* ptr) {
-      static std::random_device rd;
-      xla::poplarplugin::IdenticalReplicaSeedGenerator generator(rd());
-      uint64 seed = generator.Get(0);
-      reinterpret_cast<uint64*>(ptr)[0] = seed;
-    });
-
-    // Connect inputs. This is still hardcoded until this information
-    // is added to the executable.
-    for (auto& input_pair : io_config.GetInputs()) {
-      auto input = input_pair.first;
-      auto& io_item = input_pair.second;
-      engine->connectStream(input, input_buffers_[io_item.argument].data());
-    }
-
-    for (auto& infeed_pair : io_config.GetInfeeds()) {
-      std::string feed = infeed_pair.first;
-      auto& io_item = infeed_pair.second;
-      engine->connectStreamToCallback(
-          feed, [feed, io_item, &comm, this](void* ptr) {
-            tensorflow::Tensor t = comm.PopInputData(feed);
-            if (!comm.Exiting()) {
-              auto buffer = tensorflow::DMAHelper::buffer(&t);
-              std::memcpy(ptr, buffer->data(), buffer->size());
-            }
-          });
-    }
-
-    for (auto& outfeed_pair : io_config.GetOutfeeds()) {
-      std::string feed = outfeed_pair.first;
-      engine->connectStreamToCallback(feed, [feed, &comm, this](void* ptr) {
-        auto callback = comm.PopOutputCallback(feed);
-        if (!comm.Exiting()) {
-          callback(ptr);
-        }
-      });
-    }
-  }
-
-  static absl::flat_hash_map<std::string, std::unique_ptr<poplar::Engine>>&
-  GetEngines() {
-    static absl::flat_hash_map<std::string, std::unique_ptr<poplar::Engine>>
-        engines_;
-    return engines_;
-  }
-
-  static std::unique_ptr<poplar::Engine>& GetEngine(const std::string& name) {
-    return GetEngines()[name];
-  }
-
-  static absl::flat_hash_map<std::string, std::thread>& GetEngineThreads() {
-    static absl::flat_hash_map<std::string, std::thread> engine_threads_;
-    return engine_threads_;
-  }
-
   std::string filename_;
   std::string engine_name_;
-  ApplicationRuntimeResources resources_;
-  std::mutex compute_mutex_;
-  std::map<int64, std::vector<unsigned char>> input_buffers_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ApplicationRuntime);
 };
@@ -580,24 +663,21 @@ class ApplicationCall : public AsyncOpKernel {
     OP_REQUIRES_OK(context, context->GetAttr("engine_name", &engine_name_));
   }
 
-  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
-    ApplicationRuntimeResources* resources;
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
+    // Get the engine resource.
+    auto& engine_mgr = EngineManager::Instance();
+    auto status_or = engine_mgr.GetEngine(engine_name_);
+    OP_REQUIRES_OK_ASYNC(ctx, status_or.status(), done);
+    EngineResource* engine_resource = status_or.ValueOrDie();
 
-    auto res_mgr = context->resource_manager();
-    CHECK(res_mgr);
-    TF_CHECK_OK(res_mgr->Lookup(APPLICATION_RUNTIME_RESOURCE_CONTAINER,
-                                engine_name_, &resources));
-
-    auto& comm = resources->Comm();
-
-    OpInputList input_list;
-    context->input_list("inputs", &input_list);
+    auto& comm_mgr = engine_resource->GetCommunicationManager();
+    auto& io_config = engine_resource->GetIOConfig();
 
     OpInputList infeed_list;
-    context->input_list("infeeds", &infeed_list);
+    ctx->input_list("infeeds", &infeed_list);
 
     OpOutputList outfeed_list;
-    context->output_list("outfeeds", &outfeed_list);
+    ctx->output_list("outfeeds", &outfeed_list);
 
     int pushed_cb_count = 0;
     int processed_cb_count = 0;
@@ -605,19 +685,26 @@ class ApplicationCall : public AsyncOpKernel {
     std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
-    auto& io_config = resources->IOCfg();
+    auto check_shape = [](const IOItem& feed_params,
+                          const tensorflow::Tensor& t) -> Status {
+      if (feed_params.shape != t.shape()) {
+        return errors::FailedPrecondition(
+            "Input tensor shape ", t.shape().DebugString(), " for input ",
+            feed_params.handle, " does not match shape in signature (",
+            feed_params.shape.DebugString(), ")");
+      }
+      return Status::OK();
+    };
 
     for (auto& infeed_pair : io_config.GetInfeeds()) {
       std::string feed = infeed_pair.first;
       const IOItem& feed_params = infeed_pair.second;
 
       tensorflow::Tensor t = infeed_list[feed_params.tuple_index];
-      CHECK(feed_params.shape == t.shape())
-          << "Input tensor shape " << t.shape() << " for input "
-          << feed_params.handle << " does not match shape in signature ("
-          << feed_params.shape << ")\n";
+      OP_REQUIRES_OK_ASYNC(ctx, check_shape(feed_params, t), done);
 
-      comm.PushInputData(feed, std::move(infeed_list[feed_params.tuple_index]));
+      comm_mgr.PushInputData(feed,
+                             std::move(infeed_list[feed_params.tuple_index]));
     }
 
     for (auto& outfeed_pair : io_config.GetOutfeeds()) {
@@ -628,13 +715,11 @@ class ApplicationCall : public AsyncOpKernel {
 
       Tensor* output_tensor = nullptr;
       OP_REQUIRES_OK_ASYNC(
-          context, outfeed_list.allocate(i, feed_params.shape, &output_tensor),
-          [i]() {
-            LOG(FATAL) << "  Outfeed tensor allocation failed for tensor " << i;
-          });
+          ctx, outfeed_list.allocate(i, feed_params.shape, &output_tensor),
+          done);
 
       pushed_cb_count++;
-      comm.PushOutputCallback(
+      comm_mgr.PushOutputCallback(
           feed, [this, output_tensor, feed, &processed_cb_count,
                  &cb_processed](void* data) {
             auto buffer = tensorflow::DMAHelper::buffer(output_tensor);
