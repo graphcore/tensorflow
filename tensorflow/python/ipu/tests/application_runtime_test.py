@@ -31,6 +31,7 @@ from tensorflow.python.ops import metrics
 from tensorflow.python.ops import nn, nn_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -44,6 +45,7 @@ from tensorflow.python.training import momentum
 from tensorflow.python.keras.datasets import mnist
 from tensorflow.compat.v1 import train
 from tensorflow.python.ipu import embedded_runtime
+from tensorflow.python.ipu import pipelining_ops
 
 ops.disable_eager_execution()
 disable_v2_behavior()
@@ -532,6 +534,53 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
           "Expected <dtype: 'float32'>, but input 0 has dtype int32."):
         embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
                                                 engine_name)
+
+  @tu.test_uses_ipus(num_ipus=2)
+  @test_util.deprecated_graph_mode_only
+  def test_pipeline_flush(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def stage1(x):
+      return x @ constant_op.constant(1.0, shape=[2, 2])
+
+    def stage2(x):
+      return math_ops.reduce_sum(x)
+
+    def my_net():
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     12,
+                                     infeed_queue=infeed_queue,
+                                     outfeed_queue=outfeed_queue)
+
+    with tu.ipu_session() as sess:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 2
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      with tempfile.TemporaryDirectory() as tmp_dir:
+        poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+        compile_op = application_compile_op.experimental_application_compile_op(
+            my_net, output_path=poplar_exec_filepath)
+        sess.run(compile_op)
+
+        ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                      "pipeline_flush")
+        input_data = array_ops.placeholder(np.float32, shape=[2, 2])
+        result = embedded_runtime.embedded_runtime_call([input_data], ctx)
+        outputs1 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 1.0, dtype=np.float32)})
+        self.assertAllClose(outputs1[0], 8.)
+        outputs2 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 2.0, dtype=np.float32)})
+        self.assertAllClose(outputs2[0], 16.)
 
 
 if __name__ == "__main__":
