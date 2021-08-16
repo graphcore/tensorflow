@@ -276,37 +276,72 @@ class IOConfig {
   IOGroup outfeeds_;
 };
 
+// Base class which is used for processing the results from outfeed callbacks.
+class ResultProcessorBase {
+ public:
+  // Returns whether all outputs have been processed.
+  virtual bool ProcessOutput(const std::string& name, void* data) {
+    // Check whether this is the last callback.
+    return ++processed_outputs_ == num_outputs_;
+  }
+
+  // A method called once all the outputs have been processed.
+  virtual void Done() {}
+
+  // Returns whether this result is for the user or not.
+  virtual bool IsUserResult() const = 0;
+
+ protected:
+  explicit ResultProcessorBase(std::size_t num_outputs)
+      : num_outputs_(num_outputs) {}
+
+ private:
+  const std::size_t num_outputs_;
+  std::atomic<std::size_t> processed_outputs_{0};
+};
+
 // A wrapper class which copies the outputs and calls the callback done once all
 // the results have been processed.
-class ResultProcessor {
+class ResultProcessor : public ResultProcessorBase {
  public:
   ResultProcessor(
       AsyncOpKernel::DoneCallback done,
       const absl::flat_hash_map<std::string, TensorBuffer*>& output_tensors)
-      : done_(std::move(done)), output_tensors_(output_tensors) {}
+      : ResultProcessorBase(output_tensors.size()),
+        done_(std::move(done)),
+        output_tensors_(output_tensors) {}
 
-  // Returns whether all outputs have been processed.
-  bool ProcessOutput(const std::string& name, void* data) {
+  bool ProcessOutput(const std::string& name, void* data) override {
     // Copy the data.
     auto* buffer = output_tensors_.at(name);
     std::memcpy(buffer->data(), data, buffer->size());
-
-    // Check whether this is the last callback.
-    return ++processed_outputs_ == output_tensors_.size();
+    return ResultProcessorBase::ProcessOutput(name, data);
   }
 
-  void Done() { done_(); }
+  void Done() override { done_(); }
+
+  bool IsUserResult() const override { return true; }
 
  private:
   AsyncOpKernel::DoneCallback done_;
   const absl::flat_hash_map<std::string, TensorBuffer*> output_tensors_;
-  std::atomic<std::size_t> processed_outputs_{0};
+};
+
+// Result processor for dummy data which has been pushed through.
+class DummyResultProcessor : public ResultProcessorBase {
+ public:
+  explicit DummyResultProcessor(std::size_t num_outputs)
+      : ResultProcessorBase(num_outputs) {}
+
+  bool IsUserResult() const override { return false; }
 };
 
 class CommunicationManager {
  public:
-  explicit CommunicationManager(PoplarExecutableProto& proto) {
+  explicit CommunicationManager(PoplarExecutableProto& proto)
+      : env_(tensorflow::Env::Default()) {
     io_config_.ParsePoplarExecutableProto(proto);
+    is_multi_ipu_executable_ = proto.embedded_runtime_config().num_ipus() > 1;
   }
 
   tensorflow::Tensor PopInputData(const std::string& name) {
@@ -350,21 +385,31 @@ class CommunicationManager {
 
   void PushInputDataAndResultProcessor(
       absl::flat_hash_map<std::string, tensorflow::Tensor> inputs,
-      std::unique_ptr<ResultProcessor> result_processor) {
+      std::unique_ptr<ResultProcessorBase> result_processor) {
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     for (auto& it : inputs) {
       input_queues_[it.first].push(std::move(it.second));
     }
     input_cv_.notify_one();
+    input_push_timestamp_us_ = env_->NowMicros();
 
     result_processors_.push(std::move(result_processor));
-    ResultProcessor* result_processor_ptr = result_processors_.front().get();
+    ResultProcessorBase* result_processor_ptr = result_processors_.back().get();
+
+    // Keep track of how many user requests there are.
+    if (result_processor_ptr->IsUserResult()) {
+      ++user_requests_to_process_;
+    }
 
     for (auto& outfeed_pair : io_config_.GetOutfeeds()) {
       const std::string feed = outfeed_pair.first;
       output_queues_[feed].push(
           [feed, result_processor_ptr, this](void* data) -> void {
             if (result_processor_ptr->ProcessOutput(feed, data)) {
+              // Keep track of how many user requests there are.
+              if (result_processor_ptr->IsUserResult()) {
+                --user_requests_to_process_;
+              }
               // All outfeeds have data now, call the done function and remove
               // the processor.
               result_processor_ptr->Done();
@@ -376,17 +421,62 @@ class CommunicationManager {
   }
 
   void InitiateExit() {
-    engine_exit_notification_.Notify();
+    engine_exiting_notification_.Notify();
     input_cv_.notify_all();
     output_cv_.notify_all();
   }
 
-  bool Exiting() const { return engine_exit_notification_.HasBeenNotified(); }
+  bool Exiting() const {
+    return engine_exiting_notification_.HasBeenNotified();
+  }
 
   IOConfig& GetIOConfig() { return io_config_; }
 
+  void StartDummyDataThread() {
+    if (is_multi_ipu_executable_) {
+      InitializeDummyInputs();
+      dummy_data_thread_.reset(
+          env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
+                            [this] { DummyDataThread(); }));
+    }
+  }
+
  private:
-  absl::Notification engine_exit_notification_;
+  void InitializeDummyInputs() {
+    for (auto& it : io_config_.GetInfeeds()) {
+      const auto& io_item = it.second;
+      Tensor t{io_item.datatype, io_item.shape};
+      auto buffer = tensorflow::DMAHelper::buffer(&t);
+      // Default the values to zero.
+      std::memset(buffer->data(), 0, buffer->size());
+      dummy_inputs_.insert_or_assign(it.first, t);
+    }
+  }
+
+  void DummyDataThread() {
+    const std::size_t TIMEOUT_US_ = 10000;
+    while (!Exiting()) {
+      const std::size_t time_now_us = env_->NowMicros();
+      const std::size_t elapsed_time_us =
+          time_now_us - input_push_timestamp_us_;
+      // Initial value of input_push_timestamp_us_ is zero, so only push data
+      // once the elapsed time is actually changed.
+      // Only push data if there are user requests left.
+      if (elapsed_time_us != time_now_us && elapsed_time_us > TIMEOUT_US_ &&
+          user_requests_to_process_ > 0) {
+        VLOG(2) << "Pipeline stalled - pushing dummy data.";
+        PushInputDataAndResultProcessor(dummy_inputs_,
+                                        absl::make_unique<DummyResultProcessor>(
+                                            io_config_.GetOutfeeds().size()));
+      }
+      env_->SleepForMicroseconds(TIMEOUT_US_);
+    }
+  }
+
+  tensorflow::Env* env_;
+
+  // This notification is set when the engine needs to start exiting.
+  absl::Notification engine_exiting_notification_;
 
   std::recursive_mutex io_mutex_;
 
@@ -397,10 +487,28 @@ class CommunicationManager {
       GUARDED_BY(io_mutex_);
   absl::flat_hash_map<std::string, std::queue<OutputCallback>> output_queues_
       GUARDED_BY(io_mutex_);
-  std::queue<std::unique_ptr<ResultProcessor>> result_processors_
+  std::queue<std::unique_ptr<ResultProcessorBase>> result_processors_
       GUARDED_BY(io_mutex_);
 
   IOConfig io_config_;
+
+  // Stores whether the executable is multi ipu - if it is an assumption is made
+  // that this is a pipelined model and data is pushed through the pipeline.
+  bool is_multi_ipu_executable_ = false;
+
+  // Dummy values which are pushed through the model by the dummy thread.
+  absl::flat_hash_map<std::string, tensorflow::Tensor> dummy_inputs_;
+
+  // Stores the last time a real input was pushed.
+  std::atomic<std::size_t> input_push_timestamp_us_{0};
+
+  // Stores how many user call requests are left to process.
+  std::atomic<std::size_t> user_requests_to_process_{0};
+
+  // Thread which pushes dummy data to be processed - this is required for
+  // pipelined models as they cannot progress until there is more data.
+  // Note that the destructor blocks until the thread completes.
+  std::unique_ptr<tensorflow::Thread> dummy_data_thread_;
 };
 
 class PrefetchCallback : public poplar::StreamCallback {
@@ -460,9 +568,10 @@ class EngineResource {
         tensorflow::ThreadOptions(), engine_name_ + "_execute_thread",
         [&connect_streams_status, &input_list, this] {
           engine_.load(device_);
-          connect_streams_status = ConnectStreams(input_list);
+          auto status = ConnectStreams(input_list);
+          connect_streams_status = status;
           connect_streams_notification_.Notify();
-          if (!connect_streams_status.ok()) {
+          if (!status.ok()) {
             return;
           }
 
@@ -475,6 +584,10 @@ class EngineResource {
 
     // Wait for streams to be connected.
     connect_streams_notification_.WaitForNotification();
+
+    if (connect_streams_status.ok()) {
+      communication_manager_.StartDummyDataThread();
+    }
 
     return connect_streams_status;
   }
