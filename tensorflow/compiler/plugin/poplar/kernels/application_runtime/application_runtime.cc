@@ -95,6 +95,7 @@ using PoplarExecutableBinaryFile =
 
 namespace tensorflow {
 namespace {
+using OutputCallback = std::function<void(void*)>;
 
 StatusOr<poplar::TargetType> ParsePoplarTargetType(
     const std::string& target_type_string) {
@@ -275,24 +276,43 @@ class IOConfig {
   IOGroup outfeeds_;
 };
 
+// A wrapper class which copies the outputs and calls the callback done once all
+// the results have been processed.
+class ResultProcessor {
+ public:
+  ResultProcessor(
+      AsyncOpKernel::DoneCallback done,
+      const absl::flat_hash_map<std::string, TensorBuffer*>& output_tensors)
+      : done_(std::move(done)), output_tensors_(output_tensors) {}
+
+  // Returns whether all outputs have been processed.
+  bool ProcessOutput(const std::string& name, void* data) {
+    // Copy the data.
+    auto* buffer = output_tensors_.at(name);
+    std::memcpy(buffer->data(), data, buffer->size());
+
+    // Check whether this is the last callback.
+    return ++processed_outputs_ == output_tensors_.size();
+  }
+
+  void Done() { done_(); }
+
+ private:
+  AsyncOpKernel::DoneCallback done_;
+  const absl::flat_hash_map<std::string, TensorBuffer*> output_tensors_;
+  std::atomic<std::size_t> processed_outputs_{0};
+};
+
 class CommunicationManager {
  public:
   explicit CommunicationManager(PoplarExecutableProto& proto) {
     io_config_.ParsePoplarExecutableProto(proto);
   }
 
-  void PushInputData(const std::string& name, tensorflow::Tensor tensor) {
-    {
-      std::unique_lock<std::mutex> lk(input_mutex_);
-      input_queues_[name].push(std::move(tensor));
-      input_cv_.notify_one();
-    }
-  }
-
   tensorflow::Tensor PopInputData(const std::string& name) {
     tensorflow::Tensor result;
     {
-      std::unique_lock<std::mutex> lk(input_mutex_);
+      std::unique_lock<std::recursive_mutex> lk(io_mutex_);
       input_cv_.wait(lk, [&, this]() {
         return Exiting() || !input_queues_[name].empty();
       });
@@ -306,19 +326,10 @@ class CommunicationManager {
     return result;
   }
 
-  void PushOutputCallback(const std::string& name,
-                          std::function<void(void*)> callback) {
+  OutputCallback PopOutputCallback(const std::string& name) {
+    OutputCallback result;
     {
-      std::unique_lock<std::mutex> lk(output_mutex_);
-      output_queues_[name].push(std::move(callback));
-      output_cv_.notify_one();
-    }
-  }
-
-  std::function<void(void*)> PopOutputCallback(const std::string& name) {
-    std::function<void(void*)> result;
-    {
-      std::unique_lock<std::mutex> lk(output_mutex_);
+      std::unique_lock<std::recursive_mutex> lk(io_mutex_);
       output_cv_.wait(lk, [&, this]() {
         return Exiting() || !output_queues_[name].empty();
       });
@@ -330,6 +341,38 @@ class CommunicationManager {
     }
 
     return result;
+  }
+
+  void PopResultProcessor() {
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    result_processors_.pop();
+  }
+
+  void PushInputDataAndResultProcessor(
+      absl::flat_hash_map<std::string, tensorflow::Tensor> inputs,
+      std::unique_ptr<ResultProcessor> result_processor) {
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    for (auto& it : inputs) {
+      input_queues_[it.first].push(std::move(it.second));
+    }
+    input_cv_.notify_one();
+
+    result_processors_.push(std::move(result_processor));
+    ResultProcessor* result_processor_ptr = result_processors_.front().get();
+
+    for (auto& outfeed_pair : io_config_.GetOutfeeds()) {
+      const std::string feed = outfeed_pair.first;
+      output_queues_[feed].push(
+          [feed, result_processor_ptr, this](void* data) -> void {
+            if (result_processor_ptr->ProcessOutput(feed, data)) {
+              // All outfeeds have data now, call the done function and remove
+              // the processor.
+              result_processor_ptr->Done();
+              PopResultProcessor();
+            }
+          });
+    }
+    output_cv_.notify_one();
   }
 
   void InitiateExit() {
@@ -345,16 +388,17 @@ class CommunicationManager {
  private:
   absl::Notification engine_exit_notification_;
 
-  std::mutex input_mutex_;
-  std::mutex output_mutex_;
+  std::recursive_mutex io_mutex_;
 
-  std::condition_variable input_cv_;
-  std::condition_variable output_cv_;
+  std::condition_variable_any input_cv_;
+  std::condition_variable_any output_cv_;
 
   absl::flat_hash_map<std::string, std::queue<tensorflow::Tensor>> input_queues_
-      GUARDED_BY(input_mutex_);
-  absl::flat_hash_map<std::string, std::queue<std::function<void(void*)>>>
-      output_queues_ GUARDED_BY(output_mutex_);
+      GUARDED_BY(io_mutex_);
+  absl::flat_hash_map<std::string, std::queue<OutputCallback>> output_queues_
+      GUARDED_BY(io_mutex_);
+  std::queue<std::unique_ptr<ResultProcessor>> result_processors_
+      GUARDED_BY(io_mutex_);
 
   IOConfig io_config_;
 };
@@ -679,12 +723,6 @@ class ApplicationCall : public AsyncOpKernel {
     OpOutputList outfeed_list;
     ctx->output_list("outfeeds", &outfeed_list);
 
-    int pushed_cb_count = 0;
-    int processed_cb_count = 0;
-    std::condition_variable cb_processed;
-    std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
-
     auto check_shape = [](const IOItem& feed_params,
                           const tensorflow::Tensor& t) -> Status {
       if (feed_params.shape != t.shape()) {
@@ -696,6 +734,8 @@ class ApplicationCall : public AsyncOpKernel {
       return Status::OK();
     };
 
+    // Gather the inputs.
+    absl::flat_hash_map<std::string, tensorflow::Tensor> inputs;
     for (auto& infeed_pair : io_config.GetInfeeds()) {
       std::string feed = infeed_pair.first;
       const IOItem& feed_params = infeed_pair.second;
@@ -703,35 +743,30 @@ class ApplicationCall : public AsyncOpKernel {
       tensorflow::Tensor t = infeed_list[feed_params.tuple_index];
       OP_REQUIRES_OK_ASYNC(ctx, check_shape(feed_params, t), done);
 
-      comm_mgr.PushInputData(feed,
-                             std::move(infeed_list[feed_params.tuple_index]));
+      inputs.insert_or_assign(feed,
+                              std::move(infeed_list[feed_params.tuple_index]));
     }
 
+    // Allocate the outputs.
+    absl::flat_hash_map<std::string, TensorBuffer*> output_tensors;
     for (auto& outfeed_pair : io_config.GetOutfeeds()) {
-      std::string feed = outfeed_pair.first;
+      const std::string& feed = outfeed_pair.first;
       const IOItem& feed_params = outfeed_pair.second;
 
-      int64 i = feed_params.tuple_index;
-
-      Tensor* output_tensor = nullptr;
-      OP_REQUIRES_OK_ASYNC(
-          ctx, outfeed_list.allocate(i, feed_params.shape, &output_tensor),
-          done);
-
-      pushed_cb_count++;
-      comm_mgr.PushOutputCallback(
-          feed, [this, output_tensor, feed, &processed_cb_count,
-                 &cb_processed](void* data) {
-            auto buffer = tensorflow::DMAHelper::buffer(output_tensor);
-            std::memcpy(buffer->data(), data, buffer->size());
-            processed_cb_count++;
-            cb_processed.notify_one();
-          });
+      Tensor* output = nullptr;
+      OP_REQUIRES_OK_ASYNC(ctx,
+                           outfeed_list.allocate(feed_params.tuple_index,
+                                                 feed_params.shape, &output),
+                           done);
+      output_tensors[feed] = tensorflow::DMAHelper::buffer(output);
     }
 
-    cb_processed.wait(lock,
-                      [&]() { return pushed_cb_count == processed_cb_count; });
-    done();
+    // Set up the result processor.
+    std::unique_ptr<ResultProcessor> result_processor =
+        absl::make_unique<ResultProcessor>(std::move(done), output_tensors);
+
+    comm_mgr.PushInputDataAndResultProcessor(inputs,
+                                             std::move(result_processor));
   }
 
  private:
