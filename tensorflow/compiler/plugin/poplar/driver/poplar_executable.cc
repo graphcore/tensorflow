@@ -182,17 +182,6 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
 
   info.logging_cycle_count = proto.logging_cycle_count();
 
-  for (const auto& mapping : proto.key_id_mappings()) {
-    info.key_id_mappings.emplace(
-        mapping.handle(),
-        VerifiedStreamsIndices::KeyIdPair(mapping.key(), mapping.start_id()));
-  }
-
-  std::vector<std::string> checkpoint_feeds_order;
-  for (auto feed : proto.checkpoint_feeds_order()) {
-    info.checkpoint_feeds_order.push_back(feed);
-  }
-
   // Load the additional Poplar engine options that we need to restore.
   CHECK_NOTNULL(engine_options);
   for (const auto& flag : proto.option_flags()) {
@@ -302,18 +291,6 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
     auto& element_map = src_host_rearrangement.element_map;
     *host_rearrangement->mutable_element_map() = {element_map.begin(),
                                                   element_map.end()};
-  }
-
-  for (const auto& key_id_mapping : info.key_id_mappings) {
-    auto* mapping = proto.add_key_id_mappings();
-    mapping->set_handle(key_id_mapping.first);
-    mapping->set_key(key_id_mapping.second.key);
-    mapping->set_start_id(key_id_mapping.second.id);
-  }
-
-  for (const auto& feed : info.checkpoint_feeds_order) {
-    std::string* proto_feed = proto.add_checkpoint_feeds_order();
-    *proto_feed = feed;
   }
 
   proto.set_logging_cycle_count(info.logging_cycle_count);
@@ -431,9 +408,7 @@ Status ExportInternal(
     const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
     const InputOutputAliasingMap& io_map, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string> checkpoint_feeds_order) {
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   if (!sends.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Sends "
@@ -460,8 +435,7 @@ Status ExportInternal(
     TF_ASSIGN_OR_RETURN(
         ipu::Metadata metadata,
         CreateExecutableMetadata(io_map, infeeds, outfeeds, replication_count,
-                                 device_opts, engine_opts, target, indices,
-                                 checkpoint_feeds_order));
+                                 device_opts, engine_opts, target));
     std::string json_metadata = metadata.ToJson();
     VLOG(1) << "Module JSON Metadata: " << json_metadata;
     // For security reasons don't store the verification information inside the
@@ -521,9 +495,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
       resources.annotations.host_embedding_lookup_infos,
       resources.annotations.host_embedding_update_infos,
       resources.annotations.input_output_aliasing_map, replication_count,
-      device_opts, engine_opts, target,
-      resources.streams_indices.GetAssignedIds(),
-      resources.streams_indices.CheckpointFeedsOrder());
+      device_opts, engine_opts, target);
 }
 
 /*static*/ Status PoplarExecutableCore::Export(
@@ -538,8 +510,7 @@ Status PoplarExecutableCore::Serialize(const std::string& filepath) const {
       executable_core.GetHostEmbeddingLookupInfos(),
       executable_core.GetHostEmbeddingUpdateInfos(),
       executable_core.GetInputOutputAliasingMap(),
-      executable_core.GetReplicationFactor(), device_opts, engine_opts, target,
-      executable_core.KeyIdMappings(), executable_core.CheckpointFeedsOrder());
+      executable_core.GetReplicationFactor(), device_opts, engine_opts, target);
 }
 
 PoplarExecutable::PoplarExecutable(
@@ -664,12 +635,6 @@ StatusOr<ExecutionOutput> PoplarExecutable::ExecuteAsyncOnStream(
       }
       break;
     }
-  }
-
-  if (Engine() && poplar_executor->UseVerifiedTransfers()) {
-    return InvalidArgument(
-        "Executables using verified transfers can't be run "
-        "in TensorFlow");
   }
 
   se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();

@@ -570,13 +570,10 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const CanonicalInfeedInfos& infeed_infos,
     const CanonicalOutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& checkpoint_feeds_order) {
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   try {
     ipu::MetadataBuilder builder;
     std::map<int64, InputOutputAliasingMap::InputInfo> params_handle_map;
-    const bool use_verified_transfers = !indices.empty();
     for (auto input : io_map.GetEntryInputInfos()) {
       VLOG(1) << "Processing input " << input.Name();
       if (input.Shape().IsTuple()) {
@@ -586,10 +583,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       ipu::VerificationInfo info;
       t.SetHandle(input.Handles().at(0));
       t.SetName(UnmangleInputName(input.Name()));
-      if (use_verified_transfers) {
-        auto key_id = indices.at(t.Handle());
-        info.SetInfo(key_id.key, key_id.id);
-      }
       TF_RETURN_IF_ERROR(SetIpuShape(t, input.Shape()));
       if (input.IsStreaming()) {
         builder.AddInput(t, info);
@@ -608,10 +601,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       ipu::VerificationInfo info;
       t.SetName(output.Name());
       t.SetHandle(output.Handles().at(0));
-      if (use_verified_transfers) {
-        auto key_id = indices.at(t.Handle());
-        info.SetInfo(key_id.key, key_id.id);
-      }
       TF_RETURN_IF_ERROR(SetIpuShape(t, output.Shape()));
       if (output.IsStreaming()) {
         builder.AddOutput(t, info);
@@ -651,10 +640,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         t.SetHandle(GetInfeedCopyHandle(infeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(infeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
-        if (use_verified_transfers) {
-          auto key_id = indices.at(infeed.config.feed_id());
-          info.SetInfo(key_id.key, key_id.id);
-        }
         builder.AddInfeedStream(infeed.config.feed_id(), t, info);
         stream_idx++;
       }
@@ -679,10 +664,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
         t.SetHandle(GetOutfeedCopyHandle(outfeed.config.feed_id(), stream_idx));
         t.SetName(absl::StrCat(outfeed.config.feed_id(), ".", stream_idx));
         TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
-        if (use_verified_transfers) {
-          auto key_id = indices.at(outfeed.config.feed_id());
-          info.SetInfo(key_id.key, key_id.id);
-        }
         builder.AddOutfeedStream(outfeed.config.feed_id(), t, info);
         stream_idx++;
       }
@@ -701,20 +682,6 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
           "The target's type must be poplar::TargetType::IPU");
     }
 
-    if (!checkpoint_feeds_order.empty()) {
-      VLOG(1) << "Creating checkpoint";
-      if (!use_verified_transfers) {
-        return xla::FailedPrecondition(
-            "Can't use checkpoints without verified transfers");
-      }
-      ipu::VerificationInfo checkpointIn, checkpointOut;
-      auto key_id = indices.at(ipu::Metadata::InputCheckpointHandle());
-      checkpointIn.SetInfo(key_id.key, key_id.id);
-      key_id = indices.at(ipu::Metadata::OutputCheckpointHandle());
-      checkpointOut.SetInfo(key_id.key, key_id.id);
-      builder.AddCheckpoint(checkpoint_feeds_order, checkpointIn,
-                            checkpointOut);
-    }
     return builder.BuildMetadata();
   } catch (const std::exception& e) {
     return tensorflow::errors::Internal(e.what());

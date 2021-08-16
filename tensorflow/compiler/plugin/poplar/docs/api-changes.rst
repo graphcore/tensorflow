@@ -1,5 +1,32 @@
 API changes
 -----------
+
+Release 2.3
+~~~~~~~~~~~
+
+The following changes have been made to the TensorFlow API in the Poplar SDK version 2.3.
+This may require you to change your code.
+
+Breaking changes
+________________
+
+.. warning::
+
+  These will require changes to any code that uses them.
+
+The verified transfers feature has been removed
+'''''''''''''''''''''''''''''''''''''''''''''''
+
+The following functions from `tensorflow.python.ipu.utils` have been removed:
+
+  - `set_transfer_options`
+  - `set_verification_options`
+
+The following classes from `tensorflow.python.ipu.config` have been removed:
+
+  - `KeyId`
+  - `VerificationOptions`
+
 Release 2.2
 ~~~~~~~~~~~
 

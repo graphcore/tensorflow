@@ -74,11 +74,6 @@ class RecvFromHostOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    if (res.use_verified_transfers) {
-      return FailedPrecondition(
-          "Verified transfers cannot be used with RecvFromHost operations");
-    }
-
     PoplarOpDefDebugInfo debug_info(debug_context, "RecvFromHostOp");
     poplar::program::Sequence seq({}, {debug_info});
 

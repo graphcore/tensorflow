@@ -1936,11 +1936,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
       break;
   }
 
-  if (UseVerifiedTransfers()) {
-    option_flags_.set("opt.useAutoloader", "false");
-    option_flags_.set("target.useBufferedCompletions", "false");
-  }
-
   // By setting stream options before user options we make sure the user can
   // override this default behaviour.
   if (current_config_.prefetch_data_streams()) {
@@ -2017,9 +2012,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   for (auto opt : pooling_options_) {
     VLOG(1) << "Pooling option: " << opt.first << " = " << opt.second;
   }
-
-  VLOG(1) << "Use verified transfers: "
-          << (UseVerifiedTransfers() ? "Yes" : "No");
 
   for (auto opt : graph_options_) {
     VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;

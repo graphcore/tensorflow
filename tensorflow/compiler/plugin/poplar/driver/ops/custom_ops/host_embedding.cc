@@ -343,11 +343,6 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    if (res.use_verified_transfers) {
-      return FailedPrecondition(
-          "Verified transfers cannot be used with Host embeddings");
-    }
-
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingLookupOp");
     poplar::program::Sequence seq({}, debug_info);
 
@@ -623,10 +618,6 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    if (res.use_verified_transfers) {
-      return FailedPrecondition(
-          "Verified transfers cannot be used with Host embeddings");
-    }
     PoplarOpDefDebugInfo debug_info(debug_context, "HostEmbeddingUpdateOp");
     poplar::program::Sequence seq({}, debug_info);
 
@@ -692,11 +683,6 @@ class HostEmbeddingNotifyOp : public PoplarOpDef {
       poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
       const xla::Shape& output_shape, TensorMap& tensor_map,
       const poplar::DebugContext& debug_context) override {
-    if (res.use_verified_transfers) {
-      return FailedPrecondition(
-          "Verified transfers cannot be used with Host embeddings");
-    }
-
     const HloHostEmbeddingNotifyInstruction* host_embedding_inst =
         Cast<HloHostEmbeddingNotifyInstruction>(inst);
 

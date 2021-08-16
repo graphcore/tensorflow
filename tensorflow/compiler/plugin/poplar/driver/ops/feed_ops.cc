@@ -43,33 +43,16 @@ Status CreatePoplarH2DFIFO(
     const std::string& handle, poplar::Graph& graph,
     poplar::Tensor& tensor_to_update, poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      infeed_config.feed_id(), tuple_index, seq, inst, debug_name_and_id));
-
-  poplar::OptionFlags fifo_options =
-      res.streams_indices.GraphFeedOptions(infeed_config.feed_id());
+  poplar::OptionFlags fifo_options;
   fifo_options.set("bufferingDepth",
                    std::to_string(infeed_config.prefetch_depth()));
 
   auto fifo = graph.addHostToDeviceFIFO(
       handle, tensor_to_update.elementType(), tensor_to_update.numElements(),
       poplar::ReplicatedStreamMode::REPLICATE, fifo_options);
-  if (res.use_verified_transfers) {
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor index,
-        res.streams_indices.IndexTensor(infeed_config.feed_id(), inst, seq));
-    seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
-                                  res.streams_indices.CopyOptions(),
-                                  {debug_name_and_id}));
-    // Increment the index by one.
-    popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
-                       {index.slice(0, 1)}, seq,
-                       {debug_name_and_id, std::string("InfeedIndexInc/") +
-                                               std::to_string(tuple_index)});
-  } else {
-    seq.add(poplar::program::Copy(fifo, tensor_to_update, false,
-                                  debug_name_and_id));
-  }
+
+  seq.add(
+      poplar::program::Copy(fifo, tensor_to_update, false, debug_name_and_id));
 
   InputInfo info = {handle, handle, 0, tuple_index, shape};
   TF_RETURN_IF_ERROR(AddFeedInputInfo(res.annotations, info));
@@ -115,26 +98,10 @@ Status CreatePoplarD2HFIFO(
     const std::string& handle, poplar::Graph& graph, poplar::Tensor& in,
     poplar::program::Sequence& seq,
     const poplar::DebugNameAndId& debug_name_and_id) {
-  TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
-      outfeed_config.feed_id(), tuple_index, seq, inst, debug_name_and_id));
-  auto fifo = graph.addDeviceToHostFIFO(
-      handle, in.elementType(), in.numElements(),
-      res.streams_indices.GraphFeedOptions(outfeed_config.feed_id()));
-  if (res.use_verified_transfers) {
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor index,
-        res.streams_indices.IndexTensor(outfeed_config.feed_id(), inst, seq));
+  auto fifo =
+      graph.addDeviceToHostFIFO(handle, in.elementType(), in.numElements());
 
-    seq.add(poplar::program::Copy(in, fifo, index, false,
-                                  res.streams_indices.CopyOptions(),
-                                  {debug_name_and_id}));
-    // Increment the index by one.
-    popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
-                       {index.slice(0, 1)}, seq,
-                       {debug_name_and_id, "OutfeedIndexInc"});
-  } else {
-    seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
-  }
+  seq.add(poplar::program::Copy(in, fifo, false, {debug_name_and_id}));
 
   auto* op = inst->operand(0);
   const auto& op_shape = op->shape();

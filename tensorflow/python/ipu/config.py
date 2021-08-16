@@ -1075,38 +1075,6 @@ class SchedulingAlgorithm(Enum):
   SHORTEST_PATH = config_pb2.IpuSchedulingAlgorithm.Value("SHORTEST_PATH")
 
 
-class KeyId:
-  def __init__(self, key=0, start_id=-1):
-    self.key = key
-    self.start_id = start_id
-
-
-class VerificationOptions:
-  """Store pairs of key / id to use for each type of data used in the graph.
-  Does nothing unless verified transfers have been enabled by calling
-  `set_transfer_options(opts, use_verified_transfers=True)`
-  and an instance of this class has been set by calling
-  `set_verification_options`:
-
-  .. code-block:: python
-
-    o = VerificationOptions()
-    o.inputs.key = 1
-    o.infeeds["infeed"].key = 3
-    set_verification_options(opts, o)
-
-  """
-  def __init__(self):
-    self.inputs = KeyId()
-    self.input_parameters = KeyId()
-    self.outputs = KeyId()
-    self.output_parameters = KeyId()
-    self.infeeds = collections.defaultdict(KeyId)
-    self.outfeeds = collections.defaultdict(KeyId)
-    self.checkpoint_in = KeyId(0, 0)
-    self.checkpoint_out = KeyId(0, 0)
-
-
 # pylint: disable=pointless-string-statement
 class _MultiReplicaDistributionConfig(_ConfigBase):
   def __init__(self):
@@ -1731,41 +1699,6 @@ class _SchedulingConfig(_ConfigBase):
         self.maximum_scheduler_search_space_size
 
 
-class _VerifiedTransfersConfig(_ConfigBase):
-  def __init__(self):
-    """
-    If True, use Poplar's verified transfers feature.
-    """
-    self.enabled = False
-    """
-    A :py:class:`~tensorflow.python.ipu.config.VerificationOptions` object that
-    contains the keys and ids to use for verified transfers. Has no effect
-    unless :ref:`verified transfers are enabled
-    <verified_transfers.enabled>`.
-    """
-    self.key_id_pairs = VerificationOptions()
-
-  def _to_protobuf(self, pb):
-    pb.verified_transfers.enabled = self.enabled
-
-    def _cp_key_and_id(src, dst):
-      dst.key = src.key
-      dst.start_id = src.start_id
-
-    for attr in [
-        "inputs", "input_parameters", "outputs", "output_parameters",
-        "checkpoint_in", "checkpoint_out"
-    ]:
-      _cp_key_and_id(getattr(self.key_id_pairs, attr),
-                     getattr(pb.verified_transfers, attr))
-
-    for name, options in self.key_id_pairs.infeeds.items():
-      _cp_key_and_id(options, pb.verified_transfers.infeeds[name])
-
-    for name, options in self.key_id_pairs.outfeeds.items():
-      _cp_key_and_id(options, pb.verified_transfers.outfeeds[name])
-
-
 class IPUConfig(_ConfigBase):
   """
   A nested Python structure containing all IPU configuration options, organized
@@ -2044,12 +1977,6 @@ class IPUConfig(_ConfigBase):
     operations in the graph during compilation.
     """
     self.scheduling = _SchedulingConfig()
-    """
-    DEPRECATED: Verified transfers through the IPUConfig API is deprecated.
-    Set the pairs or key / id to use for each type of data used in the graph
-    when verified transfers are enabled.
-    """
-    self._verified_transfers = _VerifiedTransfersConfig()
     # This only needs to be called in this base config, not nested configs. It
     # generates the docstring of this class and propagates deprecation.
     self._finalize_base_config()  # pylint: disable=protected-access
