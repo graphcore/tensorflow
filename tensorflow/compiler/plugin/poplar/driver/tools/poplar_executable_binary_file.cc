@@ -24,8 +24,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-const std::array<uint8, 8> MAGIC_STRING{0x6e, 0x76, 0x64, 0x61,
-                                        0xf0, 0x9f, 0x96, 0x95};
+const std::array<uint8, 8> MAGIC_STRING{0x47, 0x43, 0x54, 0x46,
+                                        0xf0, 0x9f, 0x91, 0x8d};
 
 Status PoplarExecutableBinaryFile::Write(
     const std::string& file_name,

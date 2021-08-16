@@ -15,6 +15,7 @@ py_library(
     srcs = [
         "ops/application_compile_op.py",
         "ops/cross_replica_ops.py",
+        "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
         "ops/image_ops.py",
@@ -280,6 +281,7 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/dropout_test.py"],
     shard_count = 4,
+    tags = ["hw_poplar_test"],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

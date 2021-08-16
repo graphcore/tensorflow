@@ -26,6 +26,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 
 # Error threshold for forward pass test.
 THRESHOLD = 0.03
@@ -101,6 +102,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
 
       return r, input_data
 
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testInvalidNoiseShape(self):
     in_data = np.random.rand(16, 8, 16)
@@ -125,6 +127,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
         _ = sess.run(r, {input_data: in_data})
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testDropout(self, rate, seed, noise_shape):
     def _run_dropout(w):
@@ -148,8 +151,13 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       self.assertTrue(is_roughly_close < THRESHOLD)
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testUserSeed(self, rate, seed, noise_shape):
+    # When the seed is None, we aren't testing user seeds.
+    if seed is None:
+      return
+
     def _run_dropout(w):
       return self._ipu_dropout(w, rate, seed, noise_shape, False)
 
@@ -170,6 +178,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
         self.assertAllEqual(first_result, result)
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testDropoutBackwardPass(self, rate, seed, noise_shape):
     def _run_dropout(w):
@@ -197,6 +206,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
                           np.count_nonzero(gradients))
 
   @parameterized.named_parameters(*TEST_CASES)
+  @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testScaling(self, rate, seed, noise_shape):
     def _run_dropout(w):

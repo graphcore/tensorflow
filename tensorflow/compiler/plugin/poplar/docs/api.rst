@@ -282,6 +282,10 @@ It is also possible to access the operators via the
   :members:
   :imported-members:
 
+.. automodule:: tensorflow.python.ipu.embedded_runtime
+  :members:
+  :imported-members:
+
 .. _optimisers-api:
 
 Optimisers

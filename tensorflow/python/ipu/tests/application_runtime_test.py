@@ -19,6 +19,7 @@ from functools import partial
 from absl.testing import parameterized
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
@@ -42,6 +43,7 @@ from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.python.training import momentum
 from tensorflow.python.keras.datasets import mnist
 from tensorflow.compat.v1 import train
+from tensorflow.python.ipu import embedded_runtime
 
 ops.disable_eager_execution()
 disable_v2_behavior()
@@ -53,9 +55,6 @@ NUM_ITERATIONS = 8
 NUM_ENGINE_ITERATIONS = 4
 NUM_TEST_ITERATIONS = 10
 IMG_SIZE = 784
-
-tmp_dir_obj = tempfile.TemporaryDirectory()
-tmp_dir = tmp_dir_obj.name
 
 
 def dense_layer(hiddenSize, input_, scope_name):
@@ -129,7 +128,9 @@ def loop_builder(iterations, builder_func, infeed):
   return loops.repeat(iterations, builder_func, [], infeed)
 
 
-def run_and_export_model(poplar_exec_output_path):
+def run_and_export_model(tmp_dir,
+                         poplar_exec_output_path,
+                         freeze_variables=True):
   # Use Keras to get the dataset:
   (x_train, y_train), (x_test, y_test) = mnist.load_data()
   x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -210,7 +211,7 @@ def run_and_export_model(poplar_exec_output_path):
   compile_op = application_compile_op.experimental_application_compile_op(
       bound_test_loop,
       output_path=poplar_exec_output_path,
-      freeze_variables=True)
+      freeze_variables=freeze_variables)
 
   # Initialisers should go on the CPU:
   with ops.device("cpu"):
@@ -286,16 +287,24 @@ def run_and_export_model(poplar_exec_output_path):
     return mnist_ref
 
 
+def _build_executable(tmp_dir_obj, freeze_variables=True):
+  tmp_dir = tmp_dir_obj.name
+  poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+  mnist_ref = run_and_export_model(tmp_dir,
+                                   poplar_exec_filepath,
+                                   freeze_variables=freeze_variables)
+
+  return (mnist_ref, poplar_exec_filepath)
+
+
 class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
                              parameterized.TestCase):
   @tu.test_uses_ipus(num_ipus=1)
   @test_util.deprecated_graph_mode_only
   def testApplicationRuntime(self):
-    poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
-
-    print('Running MNIST example')
-    mnist_ref = run_and_export_model(poplar_exec_filepath)
-    print('Example done')
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj)
 
     print('Running MNIST through embedded runtime')
 
@@ -332,6 +341,197 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
             labels_all[j, :] = results[0]
 
     self.assertAllClose(labels_ref, labels_all)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrapper(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj)
+
+    print('Running MNIST through embedded runtime')
+
+    input_descs = [
+        ('XLA_Args/d1/bias', [L1_SIZE], dtypes.float32),  #0
+        ('XLA_Args/d1/weight', [IMG_SIZE, L1_SIZE], dtypes.float32),  #1
+        ('XLA_Args/d2/bias', [L2_SIZE], dtypes.float32),  #2
+        ('XLA_Args/d2/weight', [L1_SIZE, L2_SIZE], dtypes.float32),  #3
+    ]
+
+    input_placeholders = []
+    for name, shape, dtype in input_descs:
+      input_ph = array_ops.placeholder(dtype, shape=shape, name=name)
+      input_placeholders.append(input_ph)
+
+    inputs = {
+        'XLA_Args/d1/bias': mnist_ref['d1_bias'],
+        'XLA_Args/d1/weight': mnist_ref['d1_weight'],
+        'XLA_Args/d2/bias': mnist_ref['d2_bias'],
+        'XLA_Args/d2/weight': mnist_ref['d2_weight'],
+    }
+
+    input_placeholders = tuple(input_placeholders)
+
+    images = array_ops.placeholder(dtypes.float32,
+                                   shape=[BATCH_SIZE, IMG_SIZE],
+                                   name='images')
+
+    images_all = mnist_ref['images'].reshape(
+        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE, IMG_SIZE))
+    images_all = images_all[0:NUM_TEST_ITERATIONS, :, :]
+
+    labels_all = np.ones([NUM_TEST_ITERATIONS, BATCH_SIZE], dtype='int32')
+
+    labels_ref = mnist_ref['labels'].reshape(
+        (NUM_ENGINE_ITERATIONS * NUM_ITERATIONS, BATCH_SIZE))
+    labels_ref = labels_ref[0:NUM_TEST_ITERATIONS, :]
+
+    with sl.Session() as session:
+      engine_name = f'mnist_engine'
+
+      ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath,
+                                                    inputs, engine_name)
+
+      for j in range(NUM_TEST_ITERATIONS):
+        infeeds = (images,)
+        result = embedded_runtime.embedded_runtime_call(infeeds, ctx)
+
+        images_host = images_all[j, :, :]
+
+        session.run(variables.global_variables_initializer())
+        results = session.run(result,
+                              feed_dict={
+                                  infeeds: (images_host,),
+                                  input_placeholders: tuple(inputs.values()),
+                              })
+
+        labels_all[j, :] = results[0]
+
+    self.assertAllClose(labels_ref, labels_all)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_input_error(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = {
+        'XLA_Args/d1/bias': mnist_ref['d1_bias'],
+        'XLA_Args/d1/weight': mnist_ref['d1_weight'],
+        'XLA_Args/d2/bias': mnist_ref['d2_bias'],
+    }
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Failed to find input tensor with name 'XLA_Args/d2/weight' in "
+          "input dictionary."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_no_list(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    _, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                freeze_variables=False)
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(Exception,
+                                  "Expected the inputs to be a list."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, 4,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_too_many_inputs(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        mnist_ref['d1_bias'], mnist_ref['d1_weight'], mnist_ref['d2_bias'],
+        mnist_ref['d1_weight'], mnist_ref['d1_weight']
+    ]
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Embedded application runtime expects 4 inputs, but 5 were "
+          "provided."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_too_few_inputs(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        mnist_ref['d1_bias'], mnist_ref['d1_weight'], mnist_ref['d2_bias']
+    ]
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Embedded application runtime expects 4 inputs, but 3 were "
+          "provided."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrong_shape(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        mnist_ref['d1_weight'], mnist_ref['d1_bias'], mnist_ref['d2_bias'],
+        mnist_ref['d1_weight']
+    ]
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Mismatched input shape at position 0 \\('XLA_Args/d1/bias'\\). "
+          "Expected \\[320\\], but input 0 has shape \\[784, 320\\]."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_wrong_type(self):
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    mnist_ref, poplar_exec_filepath = _build_executable(tmp_dir_obj,
+                                                        freeze_variables=False)
+
+    inputs = [
+        np.ones((320), dtype=np.int32), mnist_ref['d1_weight'],
+        mnist_ref['d2_bias'], mnist_ref['d1_weight']
+    ]
+
+    with sl.Session():
+      engine_name = 'mnist_engine'
+
+      with self.assertRaisesRegex(
+          Exception,
+          "Mismatched input dtype at position 0 \\('XLA_Args/d1/bias'\\). "
+          "Expected <dtype: 'float32'>, but input 0 has dtype int32."):
+        embedded_runtime.embedded_runtime_start(poplar_exec_filepath, inputs,
+                                                engine_name)
 
 
 if __name__ == "__main__":
