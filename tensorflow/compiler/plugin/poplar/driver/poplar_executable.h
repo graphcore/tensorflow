@@ -32,7 +32,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/feed_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 
 #include <gcl/CollectiveBalancedReorder.hpp>
 #include <poplar/Engine.hpp>
@@ -66,8 +65,6 @@ struct PoplarExecutableInfo {
   OutputInfos entry_output_infos;
   OutputInfos feed_output_infos;
   bool logging_cycle_count;
-  VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
-  std::vector<string> checkpoint_feeds_order;
 };
 
 using CollectiveBalanceReorderHostRerrangements =
@@ -155,14 +152,6 @@ class PoplarExecutableCore {
   bool IsScalarElementwiseGraph() const { return is_scalar_elementwise_graph_; }
 
   bool LoggingCycleCount() const { return info_.logging_cycle_count; }
-
-  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return info_.key_id_mappings;
-  }
-
-  const std::vector<string>& CheckpointFeedsOrder() const {
-    return info_.checkpoint_feeds_order;
-  }
 
   Status Serialize(const std::string& filepath) const;
 
@@ -320,14 +309,6 @@ class PoplarExecutable : public Executable {
 
   bool LoggingCycleCount() const {
     return executable_core_->LoggingCycleCount();
-  }
-
-  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
-    return executable_core_->KeyIdMappings();
-  }
-
-  const std::vector<string>& CheckpointFeedsOrder() const {
-    return executable_core_->CheckpointFeedsOrder();
   }
 
   Status Serialize(const std::string& filepath) const {

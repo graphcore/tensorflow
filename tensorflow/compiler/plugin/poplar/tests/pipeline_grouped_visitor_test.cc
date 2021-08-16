@@ -65,7 +65,6 @@ std::unique_ptr<CompilerResources> GetMockResources(poplar::Device& device,
                                                     int number_of_vgraphs) {
   auto resources = CompilerResources::CreateTestDefault(module);
   resources->merge_infeed_io_copies = merge_infeeds;
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =
       absl::make_unique<poplar::Graph>(device, poplar::replication_factor(1));

@@ -111,17 +111,13 @@ message PoplarExecutableProto {
 
   repeated RemoteParameterConfig remote_parameters = 10;
 
-  repeated KeyIdMapping key_id_mappings = 11;
+  bool logging_cycle_count = 11;
 
-  repeated string checkpoint_feeds_order = 12;
+  EmbeddedRuntimeConfig embedded_runtime_config = 12;
 
-  bool logging_cycle_count = 13;
+  uint32 tf_major_version = 13;
+  uint32 tf_minor_version = 14;
+  string tf_git_version = 15;
 
-  EmbeddedRuntimeConfig embedded_runtime_config = 14;
-
-  uint32 tf_major_version = 15;
-  uint32 tf_minor_version = 16;
-  string tf_git_version = 17;
-
-  repeated CollectiveBalancedHostRearrangement collective_balanced_host_rearrangements = 18;
+  repeated CollectiveBalancedHostRearrangement collective_balanced_host_rearrangements = 16;
 };

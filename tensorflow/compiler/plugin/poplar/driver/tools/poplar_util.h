@@ -37,7 +37,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_replica_groups.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -228,9 +227,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const CanonicalInfeedInfos& infeed_infos,
     const CanonicalOutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& device_opts,
-    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
-    const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& checkpoint_feeds_order);
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target);
 
 // Zero the given remote buffer at the given repeat offset.
 void ZeroRemoteBuffer(CompilerResources& res, poplar::Graph& graph,

@@ -446,10 +446,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return flags.inv() || flags.div0() || flags.oflo() || esr || flags.nanoo();
   }
 
-  const IpuOptions::VerifiedTransfers& VerifiedTransfers() const {
-    return current_config_.verified_transfers();
-  }
-
   IpuDeviceConnectionType ConnectionType() const {
     return current_config_.device_connection_type();
   }
@@ -486,10 +482,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags GetPoolingOptions() const { return pooling_options_; }
 
   poplar::OptionFlags GetSliceOptions() const { return slice_options_; }
-
-  bool UseVerifiedTransfers() const {
-    return current_config_.verified_transfers().enabled();
-  }
 
   bool ClearMatmulPassType() const {
     return current_config_.clear_matmul_pass_type();

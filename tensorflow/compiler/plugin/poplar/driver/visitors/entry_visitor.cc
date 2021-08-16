@@ -48,20 +48,8 @@ Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
                            const InputOutputAliasingMap::InputInfo& info,
                            const HloInstruction* inst,
                            const poplar::DebugNameAndId& debug_name_and_id) {
-  if (res.use_verified_transfers) {
-    if (rearrange_on_host) {
-      LOG(WARNING)
-          << "rearrange_on_host cannot be used with verified streams: ignored.";
-    }
-    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
-                        res.streams_indices.IndexTensor(info, inst, seq));
-    seq.add(poplar::program::Copy(stream, dst, index, false,
-                                  res.streams_indices.CopyOptions(),
-                                  debug_name_and_id));
-  } else {
-    seq.add(poplar::program::Copy(stream, dst, rearrange_on_host,
-                                  debug_name_and_id));
-  }
+  seq.add(
+      poplar::program::Copy(stream, dst, rearrange_on_host, debug_name_and_id));
   return Status::OK();
 }
 
@@ -72,20 +60,8 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
                            const InputOutputAliasingMap::OutputInfo& info,
                            const HloInstruction* inst,
                            const poplar::DebugNameAndId& debug_name_and_id) {
-  if (res.use_verified_transfers) {
-    if (rearrange_on_host) {
-      LOG(WARNING)
-          << "rearrange_on_host cannot be used with verified streams: ignored.";
-    }
-    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
-                        res.streams_indices.IndexTensor(info, inst, seq));
-    seq.add(poplar::program::Copy(src, stream, index, false,
-                                  res.streams_indices.CopyOptions(),
-                                  debug_name_and_id));
-  } else {
-    seq.add(poplar::program::Copy(src, stream, rearrange_on_host,
-                                  debug_name_and_id));
-  }
+  seq.add(
+      poplar::program::Copy(src, stream, rearrange_on_host, debug_name_and_id));
   return Status::OK();
 }
 
@@ -172,11 +148,10 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
 
     // Create a host stream.
     const std::string handle = in_info.Handles().at(flat_tuple_index);
-    auto fifo = graph.addHostToDeviceFIFO(
-        handle, tensor_destination.elementType(),
-        tensor_destination.numElements(),
-        poplar::ReplicatedStreamMode::BROADCAST,
-        resources_.streams_indices.GraphOptions(handle));
+    auto fifo =
+        graph.addHostToDeviceFIFO(handle, tensor_destination.elementType(),
+                                  tensor_destination.numElements(),
+                                  poplar::ReplicatedStreamMode::BROADCAST);
 
     TF_RETURN_IF_ERROR(AddHostToDeviceCopy(
         fifo, tensor_destination,
@@ -270,11 +245,6 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     if (out_info.IsResourceModified()) {
       const int64 param_number = out_info.GetInputIndex();
       if (IsRemoteParameter(param_number, resources_)) {
-        if (resources_.use_verified_transfers) {
-          return xla::FailedPrecondition(
-              "Parameter offloading cannot be used at the same time as "
-              "verified streams");
-        }
         continue;
       }
     }
@@ -319,9 +289,8 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
             layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
 
         const std::string handle = out_info.Handles().at(tuple_index);
-        auto fifo = graph.addDeviceToHostFIFO(
-            handle, out.elementType(), out.numElements(),
-            resources_.streams_indices.GraphOptions(handle));
+        auto fifo = graph.addDeviceToHostFIFO(handle, out.elementType(),
+                                              out.numElements());
 
         TF_RETURN_IF_ERROR(AddDeviceToHostCopy(
             out, fifo,
@@ -346,17 +315,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 }
 
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
-  poplar::program::Sequence combined({}, {"HostToDevice"});
-  combined.add(resources_.streams_indices.LoadCheckpointSequence());
-  combined.add(host_to_device);
-  return combined;
+  return host_to_device;
 }
 
 const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
-  poplar::program::Sequence combined({}, {"DeviceToHost"});
-  combined.add(device_to_host);
-  combined.add(resources_.streams_indices.SaveCheckpointSequence());
-  return combined;
+  return device_to_host;
 }
 
 }  // namespace poplarplugin

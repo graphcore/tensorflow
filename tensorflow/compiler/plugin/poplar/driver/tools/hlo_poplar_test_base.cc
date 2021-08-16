@@ -64,7 +64,6 @@ StatusOr<poplar::Device> HloPoplarTestBase::CreateIpuDevice(int32 num_ipus,
 std::unique_ptr<CompilerResources> HloPoplarTestBase::GetMockResources(
     poplar::Device& device, HloModule* module, int32 replication_factor) {
   auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       device, poplar::replication_factor(replication_factor));

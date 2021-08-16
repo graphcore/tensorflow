@@ -213,36 +213,6 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       cfg = ipu.utils.create_ipu_config(profiling=True,
                                         profile_execution="IPU")
 
-    cfg = ipu.utils.create_ipu_config()
-    self.assertFalse(cfg.verified_transfers.enabled)
-    cfg = ipu.utils.set_transfer_options(cfg, True)
-    self.assertTrue(cfg.verified_transfers.enabled)
-    opts = ipu.utils.VerificationOptions()
-    opts.outputs.key = 2
-    opts.outfeeds["out"].start_id = 1
-    opts.outfeeds["out2"].key = 2
-    opts.infeeds["in"] = ipu.utils.KeyId(key=3, start_id=4)
-
-    cfg = ipu.utils.set_verification_options(cfg, opts)
-    # Default key is 0
-    self.assertEqual(cfg.verified_transfers.inputs.key, 0)
-    # start_id should be -1 by default
-    self.assertEqual(cfg.verified_transfers.inputs.start_id, -1)
-    self.assertEqual(cfg.verified_transfers.outputs.key, 2)
-    self.assertEqual(cfg.verified_transfers.outputs.start_id, -1)
-    self.assertEqual(cfg.verified_transfers.infeeds["in"].key, 3)
-    self.assertEqual(cfg.verified_transfers.infeeds["in"].start_id, 4)
-    self.assertEqual(cfg.verified_transfers.outfeeds["out"].key, 0)
-    self.assertEqual(cfg.verified_transfers.outfeeds["out"].start_id, 1)
-    self.assertEqual(cfg.verified_transfers.outfeeds["out2"].key, 2)
-    self.assertEqual(cfg.verified_transfers.outfeeds["out2"].start_id, -1)
-    # Checkpoints are special cases: by default their id is 0.
-    # (We don't want them to automatically increment)
-    self.assertEqual(cfg.verified_transfers.checkpoint_in.key, 0)
-    self.assertEqual(cfg.verified_transfers.checkpoint_in.start_id, 0)
-    self.assertEqual(cfg.verified_transfers.checkpoint_out.key, 0)
-    self.assertEqual(cfg.verified_transfers.checkpoint_out.start_id, 0)
-
   @test_util.deprecated_graph_mode_only
   def testEventFetchAndStringDecode(self):
     with ops.device("/device:IPU:0"):
