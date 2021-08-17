@@ -83,10 +83,7 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
-def embedded_runtime_start(executable_file,
-                           inputs,
-                           name,
-                           pipeline_timeout=None):
+def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   """
   Create and start an application runtime from a TF poplar executable.
 
@@ -94,17 +91,18 @@ def embedded_runtime_start(executable_file,
     executable_file: The path to the executable file.
     inputs: The initial input tensors.
     name: The name of the application runtime instance.
-    pipeline_timeout: An integer indicating how long (measured in microseconds)
-      to allow a pipelined executable to wait for the next batch of data before
-      forcing the execution to continue. This is required because a pipelined
-      model cannot move the execution to the next pipeline stage until the next
-      batch of data arrives. If not provided, defaults to 5000 microseconds.
+    timeout: An integer indicating how long (measured in microseconds)
+      to allow an executable for a pipelined model or a model with IO tiles to
+      wait for the next batch of data before forcing the execution to continue.
+      This is required because pipelined models and models with IO tiles
+      cannot proceed with execution until the next batch of data arrives. If not
+      provided, defaults to 5000 microseconds.
 
   Returns:
     An embedded application runtime context instance.
   """
 
-  pipeline_timeout = pipeline_timeout or 5000
+  timeout = timeout or 5000
 
   # Open the executable file.
   with open(executable_file, 'rb') as f:
@@ -194,7 +192,7 @@ def embedded_runtime_start(executable_file,
       gen_application_runtime.application_runtime(inputs=reordered_inputs,
                                                   filename=executable_file,
                                                   engine_name=name,
-                                                  timeout_us=pipeline_timeout))
+                                                  timeout_us=timeout))
 
 
 def embedded_runtime_call(inputs, context):

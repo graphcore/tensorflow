@@ -104,6 +104,7 @@ PoplarExecutableInfo FromProto(const PoplarExecutableProto& proto,
   info.target_arch = ertc.target_arch();
   info.gateway_mode = ertc.gateway_mode();
   info.supports_remote_buffers = ertc.supports_remote_buffers();
+  info.executable_can_stall = ertc.executable_can_stall();
 
   info.tf_major_version = proto.tf_major_version();
   info.tf_minor_version = proto.tf_minor_version();
@@ -201,6 +202,7 @@ PoplarExecutableProto ToProto(const PoplarExecutableInfo& info,
   ertc->set_target_arch(info.target_arch);
   ertc->set_gateway_mode(info.gateway_mode);
   ertc->set_supports_remote_buffers(info.supports_remote_buffers);
+  ertc->set_executable_can_stall(info.executable_can_stall);
 
   proto.set_tf_major_version(info.tf_major_version);
   proto.set_tf_minor_version(info.tf_minor_version);
