@@ -342,7 +342,8 @@ class CommunicationManager {
                                 std::size_t timeout_us)
       : env_(tensorflow::Env::Default()), timeout_us_(timeout_us) {
     io_config_.ParsePoplarExecutableProto(proto);
-    is_multi_ipu_executable_ = proto.embedded_runtime_config().num_ipus() > 1;
+    executable_can_stall_ =
+        proto.embedded_runtime_config().executable_can_stall();
   }
 
   bool TryPeekInputData(const std::string& name, tensorflow::Tensor& result,
@@ -461,7 +462,7 @@ class CommunicationManager {
   IOConfig& GetIOConfig() { return io_config_; }
 
   void StartDummyDataThread() {
-    if (is_multi_ipu_executable_) {
+    if (executable_can_stall_) {
       InitializeDummyInputs();
       dummy_data_thread_.reset(
           env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
@@ -520,9 +521,10 @@ class CommunicationManager {
 
   IOConfig io_config_;
 
-  // Stores whether the executable is multi ipu - if it is an assumption is made
-  // that this is a pipelined model and data is pushed through the pipeline.
-  bool is_multi_ipu_executable_ = false;
+  // Stores whether the executable is a model which can stall and which means
+  // that data might need to be pushed through the if there are no inputs
+  // incoming.
+  bool executable_can_stall_ = false;
 
   // Dummy values which are pushed through the model by the dummy thread.
   absl::flat_hash_map<std::string, tensorflow::Tensor> dummy_inputs_;
@@ -534,7 +536,7 @@ class CommunicationManager {
   std::atomic<std::size_t> user_requests_to_process_{0};
 
   // Thread which pushes dummy data to be processed - this is required for
-  // pipelined models as they cannot progress until there is more data.
+  // models which cannot progress until there is more data.
   // Note that the destructor blocks until the thread completes.
   std::unique_ptr<tensorflow::Thread> dummy_data_thread_;
 };

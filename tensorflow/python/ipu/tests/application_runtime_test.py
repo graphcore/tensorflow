@@ -582,6 +582,51 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
             feed_dict={input_data: np.full([2, 2], 2.0, dtype=np.float32)})
         self.assertAllClose(outputs2[0], 16.)
 
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_io_overlap_flush(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      x = x @ constant_op.constant(1.0, shape=[2, 2])
+      x = math_ops.reduce_sum(x)
+      return outfeed_queue.enqueue(x)
+
+    def my_net():
+      return loops.repeat(10, body, [], infeed_queue)
+
+    with tu.ipu_session() as sess:
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.io_tiles.num_io_tiles = 32
+      cfg.io_tiles.place_ops_on_io_tiles = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      with tempfile.TemporaryDirectory() as tmp_dir:
+        poplar_exec_filepath = os.path.join(tmp_dir, "application.poplar_exec")
+
+        compile_op = application_compile_op.experimental_application_compile_op(
+            my_net, output_path=poplar_exec_filepath)
+        sess.run(compile_op)
+
+        ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                      "io_overlap_flush")
+        input_data = array_ops.placeholder(np.float32, shape=[2, 2])
+        result = embedded_runtime.embedded_runtime_call([input_data], ctx)
+        outputs1 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 1.0, dtype=np.float32)})
+        self.assertAllClose(outputs1[0], 8.)
+        outputs2 = sess.run(
+            result,
+            feed_dict={input_data: np.full([2, 2], 2.0, dtype=np.float32)})
+        self.assertAllClose(outputs2[0], 16.)
+
 
 if __name__ == "__main__":
   googletest.main()

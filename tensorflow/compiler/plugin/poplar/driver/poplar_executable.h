@@ -47,6 +47,7 @@ struct PoplarExecutableInfo {
   std::string target_arch;
   bool gateway_mode;
   bool supports_remote_buffers;
+  bool executable_can_stall;
   uint32 tf_major_version;
   uint32 tf_minor_version;
   std::string tf_git_version;

@@ -385,6 +385,38 @@ bool HasPipeliningWithDefaultSharding(const HloModule* module) {
   return true;
 }
 
+StatusOr<bool> ModuleExecutionCanStall(const HloModule* module,
+                                       int32 num_io_tiles) {
+  if (num_io_tiles) {
+    return true;
+  }
+
+  TF_ASSIGN_OR_RETURN(auto pipeline_ops, GetPipelines(module));
+  switch (pipeline_ops.size()) {
+    case 0: {
+      return false;
+    }
+    case 1: {
+      TF_ASSIGN_OR_RETURN(const auto schedule,
+                          GetPipelineSchedule(pipeline_ops[0]));
+      switch (schedule) {
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved: {
+          return true;
+        }
+        case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential: {
+          return false;
+        }
+        default: { return FailedPrecondition("Unknown pipeline schedule."); }
+      }
+    }
+    default: {
+      return Unimplemented(
+          "Multiple pipelines in the same HloModule are not supported");
+    }
+  }
+}
+
 int64 MaximalShard(const HloModule* module) {
   int64 maximal_shard = 0;
   for (const auto* comp : module->MakeNonfusionComputations()) {
@@ -1217,7 +1249,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
       poplar_executor->GetCholeskyBlockSize(),
       poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
-      poplar_executor->EnableFastMath(), poplar_executor->GetNumIoTiles(),
+      poplar_executor->EnableFastMath(), num_io_tiles,
       poplar_executor->GetIoTileAvailableMemoryProportion(),
       EnableProgressBar(module));
 
@@ -1520,6 +1552,11 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     TF_RETURN_IF_ERROR(optimizer_pipeline.Run(module).status());
   }
 
+  // Indicates whether the binary generated for this module can stall without
+  // more data arriving.
+  TF_ASSIGN_OR_RETURN(const bool is_module_which_can_stall,
+                      ModuleExecutionCanStall(module, num_io_tiles));
+
   VLOG(1) << "End XLA compilation: " << module->name() << " (Hash: 0x"
           << std::hex << HloHash(module).GetHash() << ")";
 
@@ -1750,6 +1787,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                   target_arch,
                   gateway_mode,
                   supports_remote_buffers,
+                  is_module_which_can_stall,
                   TF_MAJOR_VERSION,
                   TF_MINOR_VERSION,
                   tf_git_version(),
@@ -1835,6 +1873,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               target_arch,
               gateway_mode,
               supports_remote_buffers,
+              is_module_which_can_stall,
               TF_MAJOR_VERSION,
               TF_MINOR_VERSION,
               tf_git_version(),
