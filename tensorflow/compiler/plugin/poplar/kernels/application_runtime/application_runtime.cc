@@ -338,8 +338,9 @@ class DummyResultProcessor : public ResultProcessorBase {
 
 class CommunicationManager {
  public:
-  explicit CommunicationManager(PoplarExecutableProto& proto)
-      : env_(tensorflow::Env::Default()) {
+  explicit CommunicationManager(PoplarExecutableProto& proto,
+                                std::size_t timeout_us)
+      : env_(tensorflow::Env::Default()), timeout_us_(timeout_us) {
     io_config_.ParsePoplarExecutableProto(proto);
     is_multi_ipu_executable_ = proto.embedded_runtime_config().num_ipus() > 1;
   }
@@ -454,7 +455,6 @@ class CommunicationManager {
   }
 
   void DummyDataThread() {
-    const std::size_t TIMEOUT_US_ = 10000;
     while (!Exiting()) {
       const std::size_t time_now_us = env_->NowMicros();
       const std::size_t elapsed_time_us =
@@ -462,18 +462,19 @@ class CommunicationManager {
       // Initial value of input_push_timestamp_us_ is zero, so only push data
       // once the elapsed time is actually changed.
       // Only push data if there are user requests left.
-      if (elapsed_time_us != time_now_us && elapsed_time_us > TIMEOUT_US_ &&
+      if (elapsed_time_us != time_now_us && elapsed_time_us > timeout_us_ &&
           user_requests_to_process_ > 0) {
         VLOG(2) << "Pipeline stalled - pushing dummy data.";
         PushInputDataAndResultProcessor(dummy_inputs_,
                                         absl::make_unique<DummyResultProcessor>(
                                             io_config_.GetOutfeeds().size()));
       }
-      env_->SleepForMicroseconds(TIMEOUT_US_);
+      env_->SleepForMicroseconds(timeout_us_);
     }
   }
 
   tensorflow::Env* env_;
+  const std::size_t timeout_us_;
 
   // This notification is set when the engine needs to start exiting.
   absl::Notification engine_exiting_notification_;
@@ -537,13 +538,13 @@ class PrefetchCallback : public poplar::StreamCallback {
 
 class EngineResource {
  public:
-  EngineResource(const std::string& engine_name,
+  EngineResource(const std::string& engine_name, std::size_t timeout_us,
                  poplar::Executable&& executable, poplar::Device&& device,
                  PoplarExecutableProto& proto)
       : engine_name_(engine_name),
         device_(std::move(device)),
         engine_(std::move(executable)),
-        communication_manager_(proto) {}
+        communication_manager_(proto, timeout_us) {}
 
   poplar::Engine& GetEngine() { return engine_; }
 
@@ -714,7 +715,7 @@ class EngineManager {
   // doesn't exist, then it creates it.
   Status CreateEngine(const std::string& engine_name,
                       const std::string& executable_filename,
-                      OpInputList& input_list) {
+                      std::size_t timeout_us, OpInputList& input_list) {
     std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
     if (EngineExists(engine_name)) {
       return Status::OK();
@@ -757,7 +758,8 @@ class EngineManager {
                      erc.gateway_mode(), erc.supports_remote_buffers()));
 
     auto engine_resource = absl::make_unique<EngineResource>(
-        engine_name, std::move(executable), std::move(device), proto);
+        engine_name, timeout_us, std::move(executable), std::move(device),
+        proto);
 
     TF_RETURN_IF_ERROR(engine_resource->StartEngine(input_list));
 
@@ -792,6 +794,7 @@ class ApplicationRuntime : public OpKernel {
   explicit ApplicationRuntime(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("engine_name", &engine_name_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("timeout_us", &timeout_us_));
   }
 
   void Compute(OpKernelContext* ctx) override {
@@ -799,13 +802,14 @@ class ApplicationRuntime : public OpKernel {
     ctx->input_list("inputs", &input_list);
     auto& engine_mgr = EngineManager::Instance();
 
-    OP_REQUIRES_OK(
-        ctx, engine_mgr.CreateEngine(engine_name_, filename_, input_list));
+    OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filename_,
+                                                timeout_us_, input_list));
   }
 
  private:
   std::string filename_;
   std::string engine_name_;
+  int64 timeout_us_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ApplicationRuntime);
 };
