@@ -28,10 +28,10 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 
 # Error threshold for forward pass test.
-THRESHOLD = 0.03
+THRESHOLD = 0.1
 
 # Dimensions of the random data tensor.
-DIMS = (1024, 1024, 4)
+DIMS = (64, 64, 4)
 
 # Initialise with a random seed.
 SEED = np.random.randint(np.iinfo(np.int32).max, size=[2], dtype=np.int32)
@@ -96,7 +96,8 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       r = ipu.ipu_compiler.compile(f, inputs=[input_data])
 
       cfg = ipu.config.IPUConfig()
-      cfg.ipu_model.compile_ipu_code = False
+      cfg.auto_select_ipus = 1
+      tu.add_hw_ci_connection_options(cfg)
       cfg.configure_ipu_system()
 
       return r, input_data
@@ -105,7 +106,6 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
   @test_util.deprecated_graph_mode_only
   def testInvalidNoiseShape(self):
     in_data = np.random.rand(16, 8, 16)
-    print(in_data.shape)
     seed = np.array([12, 34], dtype=np.int32)
 
     with sl.Session() as sess:
