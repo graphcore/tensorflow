@@ -83,7 +83,10 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
-def embedded_runtime_start(executable_file, inputs, name):
+def embedded_runtime_start(executable_file,
+                           inputs,
+                           name,
+                           pipeline_timeout=None):
   """
   Create and start an application runtime from a TF poplar executable.
 
@@ -91,10 +94,17 @@ def embedded_runtime_start(executable_file, inputs, name):
     executable_file: The path to the executable file.
     inputs: The initial input tensors.
     name: The name of the application runtime instance.
+    pipeline_timeout: An integer indicating how long (measured in microseconds)
+      to allow a pipelined executable to wait for the next batch of data before
+      forcing the execution to continue. This is required because a pipelined
+      model cannot move the execution to the next pipeline stage until the next
+      batch of data arrives. If not provided, defaults to 5000 microseconds.
 
   Returns:
     An embedded application runtime context instance.
   """
+
+  pipeline_timeout = pipeline_timeout or 5000
 
   # Open the executable file.
   with open(executable_file, 'rb') as f:
@@ -179,7 +189,8 @@ def embedded_runtime_start(executable_file, inputs, name):
       name, executable_file, poplar_exec,
       gen_application_runtime.application_runtime(inputs=inputs,
                                                   filename=executable_file,
-                                                  engine_name=name))
+                                                  engine_name=name,
+                                                  timeout_us=pipeline_timeout))
 
 
 def embedded_runtime_call(inputs, context):
