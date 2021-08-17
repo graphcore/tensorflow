@@ -33,7 +33,10 @@ class GroupedOverlapPipelineVisitor : public ParallelPipelineVisitor {
  public:
   using ParallelPipelineVisitor::ParallelPipelineVisitor;
 
-  Status VerifyPipelineArguments(int64 iterations) const override;
+  StatusOr<poplar::program::Sequence> VerifyPipelineArguments(
+      const HloInstruction* accumulation_count,
+      poplar::Tensor accumulation_count_tensor,
+      poplar::Graph& graph) const override;
 
   static std::unique_ptr<PipelineVisitor> Create(
       const HloInstruction* pipeline, CompilerResources& res,

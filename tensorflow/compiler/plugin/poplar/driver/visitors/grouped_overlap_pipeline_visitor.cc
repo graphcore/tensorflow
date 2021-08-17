@@ -31,6 +31,7 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <popops/ElementWise.hpp>
 #include <poputil/Util.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -65,11 +66,8 @@ namespace poplarplugin {
 
 namespace util = ::xla::poplarplugin::pipelinevisitorutils;
 
-Status GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
-    int64 iterations) const {
-  const int64 overlap_length =
-      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
-
+static Status VerifyPipelineArgumentsFixed(int64 iterations,
+                                           int64 overlap_length) {
   if (iterations < (overlap_length + 2)) {
     return FailedPrecondition(
         "The pipeline depth of the pipeline must be at least %d, but it is %d.",
@@ -77,6 +75,35 @@ Status GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
   }
 
   return Status::OK();
+}
+
+static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
+    const HloInstruction* accumulation_count, int64 overlap_length,
+    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph,
+    const poplar::DebugContext& debug_context) {
+  poplar::program::Sequence prog({}, debug_context);
+  auto cond =
+      popops::map(graph, popops::expr::_1 < (overlap_length + 2),
+                  {std::move(accumulation_count_tensor)}, prog, debug_context);
+  prog.add(poplar::program::AbortOnCondition(cond, debug_context));
+  return prog;
+}
+
+StatusOr<poplar::program::Sequence>
+GroupedOverlapPipelineVisitor::VerifyPipelineArguments(
+    const HloInstruction* accumulation_count,
+    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const {
+  const auto iterations = GetAccumulationConstantsValue(accumulation_count);
+  const int64 overlap_length =
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
+  if (iterations) {
+    TF_RETURN_IF_ERROR(
+        VerifyPipelineArgumentsFixed(*iterations, overlap_length));
+    return poplar::program::Sequence({}, dnai_);
+  }
+  return VerifyPipelineArgumentsRuntime(
+      accumulation_count, overlap_length, std::move(accumulation_count_tensor),
+      graph, {dnai_, "VerifyPipelineConditions"});
 }
 
 PipelineVisitor::RepeatBlock
