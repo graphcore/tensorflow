@@ -184,10 +184,14 @@ def embedded_runtime_start(executable_file,
           f"Mismatched input dtype at position {i} ('{name}'). Expected "
           f"{expected_dtype}, but input {i} has dtype {actual_dtype}.")
 
+  input_tensors = poplar_exec.embedded_runtime_config.signature.inputs
+  arg2idx_map = {t.argument: i for i, t in enumerate(input_tensors)}
+  reordered_inputs = [inputs[arg2idx_map[i]] for i in range(len(inputs))]
+
   # Create the context object that contains all the information required to call the embedded runtime.
   return RuntimeContext(
       name, executable_file, poplar_exec,
-      gen_application_runtime.application_runtime(inputs=inputs,
+      gen_application_runtime.application_runtime(inputs=reordered_inputs,
                                                   filename=executable_file,
                                                   engine_name=name,
                                                   timeout_us=pipeline_timeout))
