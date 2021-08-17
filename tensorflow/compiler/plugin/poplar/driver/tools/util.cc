@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_evaluator.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
@@ -447,10 +448,24 @@ const HloInstruction* GetGradientAccumulationCountInstruction(
 
 absl::optional<int64> GetAccumulationConstantsValue(
     const HloInstruction* inst) {
-  if (!inst->IsConstant()) {
+  if (inst->IsConstant()) {
+    auto value = LiteralScalarToNativeType<int>(inst->literal());
+    return absl::optional<int64>(value.ValueOrDie());
+  }
+  // If instruction is not a constant can try a little harder by trying to
+  // evaluate the instruction
+
+  // To keep this function taking a const HloInstruction (and a lot of
+  // callers also taking a const HloInstruction) clone the instruction here
+  // as the evaluator takes a non const instruction. Though will
+  // try to create a const evaluator
+  auto cloned_inst = inst->Clone();
+  Literal result;
+  HloEvaluator evaluator(/*max_loop_iterations=*/0);
+  if (!evaluator.TryEvaluate(cloned_inst.get(), &result)) {
     return absl::nullopt;
   }
-  auto value = LiteralScalarToNativeType<int>(inst->literal());
+  auto value = LiteralScalarToNativeType<int>(result);
   return absl::optional<int64>(value.ValueOrDie());
 }
 
