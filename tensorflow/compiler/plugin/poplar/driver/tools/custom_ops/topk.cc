@@ -29,7 +29,7 @@ HloTopK::HloTopK(HloInstruction* input, const Shape shape, int64 K, bool sort)
       num_k(K),
       sorted(sort) {}
 
-absl::flat_hash_set<int64> HloTopK::AllocatingIndices() const { return {}; }
+absl::flat_hash_set<int64> HloTopK::AllocatingIndices() const { return {0}; }
 
 bool HloTopK::AllocatingOutput() const { return false; }
 

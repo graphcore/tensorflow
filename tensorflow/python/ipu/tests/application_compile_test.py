@@ -18,6 +18,7 @@ import tempfile
 import numpy as np
 
 from absl.testing import parameterized
+from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import dtypes
@@ -36,6 +37,18 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
+
+
+def parse_poplar_executable(executable_file):
+  with open(executable_file, "rb") as f:
+    # Skip the file magic number.
+    f.seek(8)
+    proto_size = int.from_bytes(f.read(8), byteorder="little")
+    proto_bytes = f.read(proto_size)
+
+  poplar_exec = poplar_executable_pb2.PoplarExecutableProto()
+  poplar_exec.ParseFromString(proto_bytes)
+  return poplar_exec
 
 
 class TestApplicationCompile(test_util.TensorFlowTestCase,
@@ -70,7 +83,13 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
     with session.Session() as sess:
       compiled_path = sess.run(result, {v: np.zeros(v.shape)})
-      self.assertGreater(os.path.getsize(compiled_path), 0)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
+
+      self.assertEqual(len(signature.inputs), 1)
+      self.assertEqual(len(signature.streamed_inputs), 0)
+      self.assertEqual(len(signature.outputs), 1)
+      self.assertEqual(len(signature.streamed_outputs), 0)
 
   @test_util.deprecated_graph_mode_only
   def test_compile_nonexistent_directory(self):
@@ -139,8 +158,14 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
       self.assertEqual(os.path.getsize(output_path), 0)
       compiled_path = sess.run(result, {v: np.zeros(v.shape)})
-      self.assertEqual(compiled_path.decode(), output_path)
-      self.assertGreater(os.path.getsize(output_path), 0)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
+
+      # We expect two inputs: The placeholder and the resource variable.
+      self.assertEqual(len(signature.inputs), 2)
+      self.assertEqual(len(signature.streamed_inputs), 0)
+      self.assertEqual(len(signature.outputs), 1)
+      self.assertEqual(len(signature.streamed_outputs), 0)
 
   @test_util.deprecated_graph_mode_only
   def test_compile_with_constant(self):
@@ -160,8 +185,14 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
       self.assertEqual(os.path.getsize(output_path), 0)
       compiled_path = sess.run(result, {v: np.zeros(v.shape)})
-      self.assertEqual(compiled_path.decode(), output_path)
-      self.assertGreater(os.path.getsize(output_path), 0)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
+
+      # We expect one input since the constant should be embedded.
+      self.assertEqual(len(signature.inputs), 1)
+      self.assertEqual(len(signature.streamed_inputs), 0)
+      self.assertEqual(len(signature.outputs), 1)
+      self.assertEqual(len(signature.streamed_outputs), 0)
 
   @test_util.deprecated_graph_mode_only
   def test_compile_infeed_and_outfeed(self):
@@ -182,7 +213,14 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
     with session.Session() as sess:
       compiled_path = sess.run(result)
-      self.assertGreater(os.path.getsize(compiled_path.decode()), 0)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
+
+      # We expect zero inputs: The constant should be embedded.
+      self.assertEqual(len(signature.inputs), 0)
+      self.assertEqual(len(signature.streamed_inputs), 1)
+      self.assertEqual(len(signature.outputs), 1)
+      self.assertEqual(len(signature.streamed_outputs), 1)
 
   @test_util.deprecated_graph_mode_only
   def test_compile_training_loop(self):
@@ -209,8 +247,14 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
       sess.run(variables.global_variables_initializer())
       compiled_path = sess.run(result)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
 
-      self.assertGreater(os.path.getsize(compiled_path.decode()), 0)
+      # We expect two inputs: The two resource variables.
+      self.assertEqual(len(signature.inputs), 2)
+      self.assertEqual(len(signature.streamed_inputs), 2)
+      self.assertEqual(len(signature.outputs), 3)
+      self.assertEqual(len(signature.streamed_outputs), 0)
 
   @parameterized.named_parameters(("resources", False), ("constants", True))
   @test_util.deprecated_graph_mode_only
@@ -242,8 +286,18 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
 
       sess.run(variables.global_variables_initializer())
       compiled_path = sess.run(result)
+      executable = parse_poplar_executable(compiled_path)
+      signature = executable.embedded_runtime_config.signature
 
-      self.assertGreater(os.path.getsize(compiled_path.decode()), 0)
+      if freeze_variables:
+        self.assertEqual(len(signature.inputs), 0)
+      else:
+        self.assertEqual(len(signature.inputs),
+                         len(variables.global_variables()))
+
+      self.assertEqual(len(signature.streamed_inputs), 1)
+      self.assertEqual(len(signature.outputs), 0)
+      self.assertEqual(len(signature.streamed_outputs), 1)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,8 @@ limitations under the License.
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
+#include "absl/algorithm/algorithm.h"
+
 using namespace xla::poplarplugin;
 
 namespace tensorflow {
@@ -175,6 +177,23 @@ class ResourceUpdateOp : public XlaOpKernel {
 };
 REGISTER_IPU_OP("ResourceUpdate", ResourceUpdateOp);
 
+// Because CompileFunction doesn't know how many constant parameters have
+// been removed resource update indices are wrong. To get round this
+// count how many constants there are before the resources so we can
+// subtrack these off the returned indices
+static int64 FindNumberOfConstantParameters(
+    const std::vector<XlaCompiler::Argument>& arguments) {
+  bool hit_resource = false;
+  return absl::c_count_if(arguments, [&](const XlaCompiler::Argument& arg) {
+    hit_resource |= (arg.kind == XlaCompiler::Argument::kResource);
+    return (!hit_resource) && (arg.kind == XlaCompiler::Argument::kConstant);
+  });
+}
+
+static int64 GetIndexWithoutConstants(const int64 orig, const int64 offset) {
+  return orig - offset;
+}
+
 class PipelineOp : public XlaOpKernel {
   void SetInstructionFrontEndAttributes(
       XlaOpKernelContext* ctx, xla::XlaBuilder* builder,
@@ -205,7 +224,8 @@ class PipelineOp : public XlaOpKernel {
 
   xla::StatusOr<xla::XlaComputation> CreateInnerPipeline(
       XlaOpKernelContext* ctx, const std::vector<xla::XlaOp>& inputs,
-      const XlaCompiler::CompilationResult& result) const {
+      const XlaCompiler::CompilationResult& result,
+      const int64 num_constants) const {
     // For pipelines we make sure that the inputs and outputs have the same
     // shape and that the values for every output at index `i` are:
     // 1. the input value `i` if the input is not a resource variable
@@ -240,9 +260,23 @@ class PipelineOp : public XlaOpKernel {
     for (size_t i = 0; i < result.resource_updates.size(); ++i) {
       const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       if (update.modified) {
-        inner_outputs[update.input_index] = xla::GetTupleElement(inner_call, i);
+        // This modification relies on the constant inputs not
+        // being removed earlier in CompileFunction
+        inner_outputs[GetIndexWithoutConstants(update.input_index,
+                                               num_constants)] =
+            xla::GetTupleElement(inner_call, i);
       }
     }
+    CHECK(absl::c_equal(inner_inputs, inner_outputs,
+                        [&](const xla::XlaOp& a, const xla::XlaOp& b) {
+                          auto a_shape = cb->GetShape(a);
+                          auto b_shape = cb->GetShape(b);
+                          // if doesn't have a shape let it error further down
+                          // the line
+                          return !a_shape.ok() || !b_shape.ok() ||
+                                 (a_shape.ValueOrDie() == b_shape.ValueOrDie());
+                        }));
+
     xla::Tuple(cb.get(), inner_outputs);
     auto comp_or = cb->Build();
     return comp_or;
@@ -252,7 +286,7 @@ class PipelineOp : public XlaOpKernel {
       const XlaCompiler::CompilationResult& result, XlaOpKernelContext* ctx,
       const xla::XlaOp& outputs,
       const std::vector<XlaCompiler::Argument>& arguments,
-      xla::XlaBuilder* builder) {
+      xla::XlaBuilder* builder, const int64 num_constants) {
     // We can use the input index to index into the outputs because we have
     // ensured that the inputs and outputs are aligned.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
@@ -261,10 +295,12 @@ class PipelineOp : public XlaOpKernel {
       if (update.modified) {
         // Add a GTE from the same input index.
         OP_REQUIRES_OK(
-            ctx,
-            resource->SetFromPack(
-                arguments[update.input_index].tensor_array_gradients,
-                xla::GetTupleElement(outputs, update.input_index), builder));
+            ctx, resource->SetFromPack(
+                     arguments[update.input_index].tensor_array_gradients,
+                     xla::GetTupleElement(
+                         outputs, GetIndexWithoutConstants(update.input_index,
+                                                           num_constants)),
+                     builder));
       }
       VLOG(2) << "Variable: pos: " << update.input_index
               << " name: " << resource->name()
@@ -308,7 +344,13 @@ class PipelineOp : public XlaOpKernel {
         poplarplugin::GetXlaArguments(ctx, input_types_, &num_resource_args);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
+
     CHECK_EQ(arguments.size(), ctx->num_inputs() - 1);
+    // Check all resources are after all other arguments
+    CHECK(absl::c_is_partitioned(arguments, [](const XlaCompiler::Argument& a) {
+      return (a.kind != XlaCompiler::Argument::kResource);
+    }));
+    const auto num_constants = FindNumberOfConstantParameters(arguments);
 
     VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
@@ -336,7 +378,8 @@ class PipelineOp : public XlaOpKernel {
     const int gradient_accumulation_operand_index = inputs.size();
     inputs.emplace_back(ctx->Input(ctx->num_inputs() - 1));
 
-    auto wrapped_pipeline = CreateInnerPipeline(ctx, inputs, result);
+    auto wrapped_pipeline =
+        CreateInnerPipeline(ctx, inputs, result, num_constants);
     OP_REQUIRES_OK(ctx, wrapped_pipeline.status());
 
     // Create the actual call.
@@ -346,7 +389,7 @@ class PipelineOp : public XlaOpKernel {
                                      gradient_accumulation_operand_index);
 
     // A pipeline has no explicit outputs, only updates of resource variables.
-    UpdateResources(result, ctx, outputs, arguments, builder);
+    UpdateResources(result, ctx, outputs, arguments, builder, num_constants);
   }
 
  private:

@@ -14,21 +14,23 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/topk.h"
+
+#include <poplar/DebugContext.hpp>
+#include <popnn/Loss.hpp>
+#include <popops/SortOrder.hpp>
+#include <popops/TopK.hpp>
+
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/debug_info.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poplar/DebugContext.hpp>
-#include <popnn/Loss.hpp>
-#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -86,6 +88,41 @@ class TopKOp : public PoplarOpDef {
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, index_output));
     return seq;
+  }
+
+ public:
+  StatusOr<poplar::Tensor> Allocator(
+      poplar::Graph& graph, CompilerResources& res, const std::string& name,
+      const TensorTarget& tensor_target, const TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    const auto* topk_instruction = Cast<HloTopK>(tensor_target.tgt);
+    const auto sort_order = topk_instruction->ShouldBeSorted()
+                                ? popops::SortOrder::DESCENDING
+                                : popops::SortOrder::NONE;
+
+    const popops::TopKParams params = {topk_instruction->NumK(),
+                                       topk_instruction->ShouldBeSorted(),
+                                       sort_order};
+
+    const auto xla_shape =
+        tensor_target.tgt->operand(tensor_target.input_index)->shape();
+    const auto shape = PoplarShapeFromXlaShape(xla_shape);
+
+    TF_ASSIGN_OR_RETURN(poplar::Type type,
+                        PoplarDataType(xla_shape.element_type()));
+
+    PoplarOpDefDebugInfo debug_info(debug_context, "TopKAllocator");
+
+    switch (tensor_target.input_index) {
+      case 0: {
+        return popops::createTopKInput(graph, type, shape, params, debug_info);
+      }
+      default: {
+        return FailedPrecondition(
+            "Trying to allocate TopKOp tensor for an index out of range %d.",
+            tensor_target.input_index);
+      }
+    }
   }
 };
 

@@ -15,6 +15,7 @@ py_library(
     srcs = [
         "ops/application_compile_op.py",
         "ops/cross_replica_ops.py",
+        "ops/embedded_runtime.py",
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
         "ops/image_ops.py",
@@ -272,6 +273,7 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     shard_count = 4,
+    tags = ["hw_poplar_test"],
 )
 
 tf_py_test(
@@ -287,7 +289,7 @@ tf_py_test(
 
 tf_py_test(
     name = "application_runtime_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/application_runtime_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
@@ -302,7 +304,7 @@ tf_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    shard_count = 4,
+    shard_count = 2,
     tags = ["hw_poplar_test"],
 )
 

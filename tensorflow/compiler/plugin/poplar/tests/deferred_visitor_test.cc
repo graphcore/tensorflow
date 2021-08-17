@@ -59,7 +59,6 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     bool merge_infeeds) {
   auto resources = CompilerResources::CreateTestDefault(module);
   resources->merge_infeed_io_copies = merge_infeeds;
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), poplar::replication_factor(1));

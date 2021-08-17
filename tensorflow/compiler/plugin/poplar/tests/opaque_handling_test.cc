@@ -46,7 +46,6 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     bool merge_infeeds) {
   auto res = CompilerResources::CreateTestDefault(module);
   res->merge_infeed_io_copies = merge_infeeds;
-  res->streams_indices.InitializeIndexTensors(*res, {}, {});
   res->module_call_graph = CallGraph::Build(module);
   res->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), poplar::replication_factor(1));
@@ -73,7 +72,6 @@ std::unique_ptr<CompilerResources> GetMockResources(
       max_inter_ipu_copies_buffer_size);
   auto resources = CompilerResources::CreateTestDefault(module, info);
   resources->merge_infeed_io_copies = merge_infeeds;
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       createIpuModel(number_of_vgraphs, 4), poplar::replication_factor(1));

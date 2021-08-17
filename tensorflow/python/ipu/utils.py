@@ -47,7 +47,7 @@ from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import dataset_extractor
-from tensorflow.python.ipu.config import IPUConfig, SelectionOrder, ExecutionProfileType, DeviceConnectionType, MergeRemoteBuffersBehaviour, SchedulingAlgorithm, KeyId, VerificationOptions, get_ipu_config, configure_ipu_system
+from tensorflow.python.ipu.config import IPUConfig, SelectionOrder, ExecutionProfileType, DeviceConnectionType, MergeRemoteBuffersBehaviour, SchedulingAlgorithm, get_ipu_config, configure_ipu_system
 # pylint: enable=unused-import
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.platform import tf_logging as logging
@@ -249,9 +249,6 @@ def create_ipu_config(profiling=False,
   opts.prefetch_data_streams = prefetch_data_streams
   opts.selection_order = selection_order.value
 
-  opts.verified_transfers.enabled = False
-  opts = set_verification_options(opts, VerificationOptions())
-
   opts.enable_experimental_remote_buffer_embedding = \
       enable_experimental_remote_buffer_embedding
 
@@ -449,80 +446,6 @@ def set_norm_options(opts,
   opts.use_stable_norm_statistics = use_stable_statistics
   opts.experimental_distributed_batch_norm_replica_group_size = \
     experimental_distributed_batch_norm_replica_group_size
-
-  return opts
-
-
-@deprecation.deprecated(
-    None, "Configuring IPU session options for TensorFlow has changed and this"
-    " function will be removed in a future release. Use an IPUConfig instance"
-    " instead. For more information on how to create an equivalent config in"
-    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
-    " TensorFlow documentation.")
-def set_transfer_options(opts, use_verified_transfers=False):
-  """Set the IPU options related to Poplar data transfers.
-
-  Args:
-    opts: An IpuOptions session control protobuf.
-    use_verified_transfers: If True, use Poplar's verified transfers.
-
-  Returns:
-    The IpuOptions configuration protobuf.
-  """
-  opts.verified_transfers.enabled = use_verified_transfers
-
-  return opts
-
-
-@deprecation.deprecated(
-    None, "Configuring IPU session options for TensorFlow has changed and this"
-    " function will be removed in a future release. Use an IPUConfig instance"
-    " instead. For more information on how to create an equivalent config in"
-    " the new IPUConfig API, refer to the API changes for SDK 2.1 in the"
-    " TensorFlow documentation.")
-def set_verification_options(opts, verification_options):
-  """Configure verified transfers.
-     Set the pairs or key / id to use for each type of data used in the graph
-     when verified transfers are enabled.
-
-  .. code-block:: python
-
-      # Create a device which will use verified transfers with different keys.
-      opts = create_ipu_config()
-      opts = set_transfer_options(opts, use_verified_transfers=True)
-      o = VerificationOptions()
-      o.input_parameters = KeyId(1)
-      o.infeeds["training_feed"] = KeyId(2)
-      opts = set_verification_options(opts, o)
-      ipu.utils.configure_ipu_system(opts)
-      with tf.Session() as s:
-        ...
-
-  Args:
-    opts: An IpuOptions session control protobuf.
-    verification_options: a VerificationOptions object that contains
-      the keys / ids to use.
-  """
-  if not isinstance(verification_options, VerificationOptions):
-    raise Exception(
-        "`verification_options` must be of type VerificationOptions")
-
-  def _cp_key_and_id(src, dst):
-    dst.key = src.key
-    dst.start_id = src.start_id
-
-  for attr in [
-      "inputs", "input_parameters", "outputs", "output_parameters",
-      "checkpoint_in", "checkpoint_out"
-  ]:
-    _cp_key_and_id(getattr(verification_options, attr),
-                   getattr(opts.verified_transfers, attr))
-
-  for name, options in verification_options.infeeds.items():
-    _cp_key_and_id(options, opts.verified_transfers.infeeds[name])
-
-  for name, options in verification_options.outfeeds.items():
-    _cp_key_and_id(options, opts.verified_transfers.outfeeds[name])
 
   return opts
 

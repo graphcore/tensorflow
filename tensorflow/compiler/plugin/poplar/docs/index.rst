@@ -25,6 +25,7 @@ Targeting the IPU from TensorFlow 1
     functions
     custom_codelet
     host_embedding
+    embedded_application_runtime
     logging
 
     api-changes

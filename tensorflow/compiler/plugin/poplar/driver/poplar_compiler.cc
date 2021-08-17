@@ -1200,7 +1200,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       module, information, poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
       poplar_executor->GetSliceOptions(),
-      poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
@@ -1553,9 +1552,8 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   const bool all_scalar_elementwise_graph =
       AreAllScalarElementwiseGraph(module);
 
-  const bool is_scalar_elementwise_graph = all_scalar_elementwise_graph &&
-                                           !any_computation_has_side_effects &&
-                                           !resources.use_verified_transfers;
+  const bool is_scalar_elementwise_graph =
+      all_scalar_elementwise_graph && !any_computation_has_side_effects;
 
   bool compile = true;
   if (is_constant_graph) {
@@ -1646,9 +1644,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       resources.progress_bar->MoveToNextStage();
 
       auto order = module->schedule().sequence(entry).instructions();
-      TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
-          resources, poplar_executor->VerifiedTransfers(),
-          {"InitializeIndexTensors"}));
 
       // The following line starts the lowering in poplar.
       VLOG(1) << "Begin Poplar graph construction.";
@@ -1693,16 +1688,6 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     progs.push_back(visitor.GetHostToDevice());
     progs.push_back(main_program);
     progs.push_back(visitor.GetDeviceToHost());
-
-    // For verified transfers fuse all 3 programs in a single one.
-    if (poplar_executor->UseVerifiedTransfers()) {
-      poplar::program::Sequence fused_program({}, "FusedProgram");
-      for (auto& prog : progs) {
-        fused_program.add(prog);
-      }
-      progs.clear();
-      progs.push_back(fused_program);
-    }
 
     if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
       auto filename =
@@ -1781,10 +1766,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
                   annotations.feed_input_infos,
                   annotations.entry_output_infos,
                   annotations.feed_output_infos,
-                  logging_cycle_count,
-                  resources.streams_indices.GetAssignedIds(),
-                  resources.streams_indices.CheckpointFeedsOrder(),
-              }));
+                  logging_cycle_count}));
 
           if (in_precompile_mode) {
             LOG(INFO) << "A pre-compiled Poplar program has been saved to "
@@ -1870,9 +1852,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
               std::move(resources.annotations.feed_input_infos),
               std::move(resources.annotations.entry_output_infos),
               std::move(resources.annotations.feed_output_infos),
-              logging_cycle_count,
-              resources.streams_indices.GetAssignedIds(),
-              resources.streams_indices.CheckpointFeedsOrder()});
+              logging_cycle_count});
 
   return executable_core;
 }

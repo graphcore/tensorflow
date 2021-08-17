@@ -54,7 +54,6 @@ std::vector<HloPoplarUseDescription> GetInplaceDescriptions(
 
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module) {
   auto resources = CompilerResources::CreateTestDefault(module);
-  resources->streams_indices.InitializeIndexTensors(*resources, {}, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), poplar::replication_factor(1));

@@ -113,10 +113,6 @@ class UserOpImpl : public PoplarOpDef {
     // stream we create the StreamCopyInfo structures to communicate with
     // poplar_executor which does the actual linking of the streams.
     if (is_user_read_write) {
-      if (res.use_verified_transfers) {
-        return FailedPrecondition(
-            "Verified transfers cannot be used with User ops");
-      }
       // A wrapper around the user functor which we finally call down to.
       auto functor = [=](std::vector<void*>& data,
                          std::vector<std::uint32_t>& number_of_elements,

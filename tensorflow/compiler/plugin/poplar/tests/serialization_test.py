@@ -57,14 +57,11 @@ def PrimitiveTypeStringToNumpyDtype(primitive_type_str):
 
 
 class IpuSerializationTest(xla_test.XLATestCase):
-  def _configureIPU(self, serialization_folder, verification_options=None):
+  def _configureIPU(self, serialization_folder):
     opts = ipu.config.IPUConfig()
     opts.device_connection.version = 'ipu1'
     opts.device_connection.type = utils.DeviceConnectionType.NEVER
     opts.serialization_output_folder = serialization_folder
-    if verification_options:
-      opts._verified_transfers.enabled = True  # pylint: disable=protected-access
-      opts._verified_transfers.key_id_pairs = verification_options  # pylint: disable=protected-access
     opts.configure_ipu_system()
 
   def _create_tmp_symlink(self, tmp_folder):
@@ -284,100 +281,6 @@ class IpuSerializationTest(xla_test.XLATestCase):
                                          dtype=dtypes.float32,
                                          name="vs/weights:0"), "parameter_out")
                  ])
-          else:
-            self.assertEqual(name, "%s.ipu_bin" % module_hash)
-
-  @test_util.deprecated_graph_mode_only
-  def testVerifiedInfeedsOutfeedInfoSerialization(self):
-    poplar_flags = os.environ.get("TF_POPLAR_FLAGS",
-                                  "").replace("--use_ipu_model", "")
-    with test.mock.patch.dict(
-        "os.environ",
-        {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
-      dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
-      infeed_canonical_name = '1'
-      outfeed_canonical_name = '2'
-      infeed_spec = dataset.element_spec[0]
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset)
-      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue()
-
-      def body(const, inp):
-        with variable_scope.variable_scope("vs", use_resource=True):
-          inp2 = variable_scope.get_variable("input_2", [3, 3])
-          v = inp * inp2 + const
-          outfeed = outfeed_queue.enqueue(v)
-          return (const, outfeed)
-
-      def my_graph(const):
-        return ipu.loops.repeat(4, body, (const), infeed_queue)
-
-      with ops.device("cpu"):
-        const = array_ops.placeholder(np.float32, [],
-                                      name="my/test/constant/0")
-
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        output = ipu.ipu_compiler.compile(my_graph, inputs=[const])
-
-      outfed = outfeed_queue.dequeue()
-      with tempfile.TemporaryDirectory() as tmp_folder:
-        tmp = self._create_tmp_symlink(tmp_folder)
-        folder = os.path.join(tmp, "saved")
-
-        opts = utils.VerificationOptions()
-        opts.infeeds[infeed_canonical_name] = utils.KeyId(1)
-        opts.outfeeds[outfeed_canonical_name] = utils.KeyId(2)
-        opts.checkpoint_in.key = 3
-        opts.checkpoint_out.key = 4
-
-        self._configureIPU(folder, verification_options=opts)
-
-        tu.move_variable_initialization_to_cpu()
-
-        sess.run(infeed_queue.initializer)
-        sess.run(variables.global_variables_initializer())
-        with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                    "compilation only"):
-          sess.run(output, {const: np.ones(const.shape)})
-        outfed_result = sess.run(outfed)
-
-        with variable_scope.variable_scope("vs", use_resource=True,
-                                           reuse=True):
-          inp2 = variable_scope.get_variable("input_2")
-        module_hash = None
-
-        self.assertTrue(os.path.isdir(folder))
-        files = filesInFolder(folder)
-        self.assertEqual(len(files), 2, "Expected 2 files, found: %s" % files)
-        for name in files:
-          if not module_hash:
-            m = re.match(r"([0-9a-f]+)\..*", name)
-            self.assertTrue(
-                m, "Failed to identify module hash from filename %s" % name)
-            module_hash = m.group(1)
-          if name == module_hash + ".json":
-            with open(os.path.join(folder, name), "r") as metadata_file:
-              metadata = json.load(metadata_file)
-            self._validateStreams(metadata, [
-                (const, "input_data"), (inp2, "parameter"),
-                (tensor_spec.TensorSpec(shape=[2 * 2],
-                                        dtype=dtypes.int32,
-                                        name="checkpoint:0"), "parameter"),
-                (tensor_spec.TensorSpec(
-                    shape=[2], dtype=dtypes.int32,
-                    name="checkpointIndex:0"), "input_data")
-            ], [(tensor_spec.TensorSpec(shape=[],
-                                        dtype=dtypes.float32,
-                                        name="XLA_Retvals:0"), "output_data"),
-                (tensor_spec.TensorSpec(shape=[2 * 2],
-                                        dtype=dtypes.int32,
-                                        name="checkpoint:0"), "parameter_out"),
-                (tensor_spec.TensorSpec(
-                    shape=[2 * 2],
-                    dtype=dtypes.int32,
-                    name="checkpointClear:0"), "output_data")],
-                                  [(infeed_spec, infeed_canonical_name)],
-                                  [(outfed_result, outfeed_canonical_name)])
-            self._validate_secure_metadata(opts, metadata)
           else:
             self.assertEqual(name, "%s.ipu_bin" % module_hash)
 
