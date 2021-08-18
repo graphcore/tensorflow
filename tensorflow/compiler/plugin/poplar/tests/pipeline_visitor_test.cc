@@ -89,7 +89,7 @@ std::unique_ptr<CompilerResources> GetMockResources(
   return std::move(resources);
 }
 
-poplar::Device createIpuModel(int IPUCount = 1, int IPUTileCount = 1216) {
+poplar::Device createIpuModel(int IPUCount = 1, int IPUTileCount = 4) {
   poplar::IPUModel model;
 
   model.numIPUs = IPUCount;
@@ -220,11 +220,19 @@ ENTRY main {
 
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
+  // Get verify program
+  auto verify_program =
+      visitor
+          .VerifyPipelineArguments(
+              pipeline_call_computation->GetInstructionWithName("const_2"),
+              grad_acc_placeholder, *(resources->main_graph))
+          .ValueOrDie();
   // Get the pipeline program
   auto program = visitor.GetPipelineSequence(4).ValueOrDie();
 
   // Compile the graph
-  poplar::Engine engine(*resources->main_graph, program);
+  poplar::Engine engine(*resources->main_graph,
+                        poplar::program::Sequence(verify_program, program));
 
   // Capture the engine output into a string stream.
   std::stringstream ss;

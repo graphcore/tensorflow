@@ -32,6 +32,7 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <popops/ElementWise.hpp>
 #include <poputil/Util.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -586,10 +587,8 @@ PipelineVisitor::PipelineVisitor(
 
 PipelineVisitor::~PipelineVisitor() = default;
 
-Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
-  const int64 overlap_length =
-      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
-
+static Status VerifyPipelineArgumentsFixed(int64 iterations,
+                                           int64 overlap_length) {
   if (iterations % overlap_length) {
     // TODO(T11404)
     return FailedPrecondition(
@@ -607,10 +606,42 @@ Status PipelineVisitor::VerifyPipelineArguments(int64 iterations) const {
   return Status::OK();
 }
 
+static StatusOr<poplar::program::Sequence> VerifyPipelineArgumentsRuntime(
+    const HloInstruction* accumulation_count, int64 overlap_length,
+    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph,
+    const poplar::DebugContext& debug_context) {
+  poplar::program::Sequence prog({}, debug_context);
+  auto condition_1 =
+      popops::expr::Cast(popops::expr::_1 % overlap_length, poplar::BOOL);
+  auto condition_2 = popops::expr::_1 < overlap_length;
+  auto cond =
+      popops::map(graph, std::move(condition_1) || std::move(condition_2),
+                  {std::move(accumulation_count_tensor)}, prog, debug_context);
+  // TODO(samuelh) when poplar provides the option to add an error message,
+  // add error messages from Fixed version
+  prog.add(poplar::program::AbortOnCondition(cond, debug_context));
+  return prog;
+}
+
+StatusOr<poplar::program::Sequence> PipelineVisitor::VerifyPipelineArguments(
+    const HloInstruction* accumulation_count,
+    poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const {
+  const auto iterations = GetAccumulationConstantsValue(accumulation_count);
+  const int64 overlap_length =
+      pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
+
+  if (iterations) {
+    TF_RETURN_IF_ERROR(
+        VerifyPipelineArgumentsFixed(*iterations, overlap_length));
+    return poplar::program::Sequence({}, dnai_);
+  }
+  return VerifyPipelineArgumentsRuntime(
+      accumulation_count, overlap_length, std::move(accumulation_count_tensor),
+      graph, {dnai_, "VerifyPipelineConditions"});
+}
+
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
-  TF_RETURN_IF_ERROR(VerifyPipelineArguments(iterations));
-
   const int64 overlap_length =
       pipeline_scheduler_util_->ScheduleOffsets(stage_ipu_mapping_).size();
 

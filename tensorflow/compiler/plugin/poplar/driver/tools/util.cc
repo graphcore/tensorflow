@@ -432,20 +432,36 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().repeat_count();
 }
 
-absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+int64 GetAccumulationCountOperandIndex(const HloInstruction* inst) {
   CHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  int64 index =
-      cfg.call_config().pipeline_config().gradient_accumulation_index();
-  CHECK_LT(index, inst->operands().size()) << inst->ToString();
-  const auto& gradient_accumulation_operand = inst->operand(index);
-  if (!gradient_accumulation_operand->IsConstant()) {
-    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
+  return cfg.call_config().pipeline_config().gradient_accumulation_index();
+}
+
+const HloInstruction* GetGradientAccumulationCountInstruction(
+    const HloInstruction* inst) {
+  int64 index = GetAccumulationCountOperandIndex(inst);
+  CHECK_LT(index, inst->operands().size());
+  return inst->operand(index);
+}
+
+absl::optional<int64> GetAccumulationConstantsValue(
+    const HloInstruction* inst) {
+  if (!inst->IsConstant()) {
     return absl::nullopt;
   }
-  auto value =
-      LiteralScalarToNativeType<int>(gradient_accumulation_operand->literal());
+  auto value = LiteralScalarToNativeType<int>(inst->literal());
   return absl::optional<int64>(value.ValueOrDie());
+}
+
+absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+  const auto gradient_accumulation_operand =
+      GetGradientAccumulationCountInstruction(inst);
+  auto result = GetAccumulationConstantsValue(gradient_accumulation_operand);
+  if (!result) {
+    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
+  }
+  return result;
 }
 
 int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {

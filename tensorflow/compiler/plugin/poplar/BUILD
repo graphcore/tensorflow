@@ -2309,6 +2309,20 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_verifier_test",
+    srcs = ["tests/pipeline_verifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "pipeline_visitor_utils_test",
     srcs = ["tests/pipeline_visitor_utils_test.cc"],
     backends = ["poplar"],

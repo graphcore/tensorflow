@@ -168,6 +168,10 @@ bool IsMultiConv(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool IsBatchSerializedPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
+int64 GetAccumulationCountOperandIndex(const HloInstruction* inst);
+const HloInstruction* GetGradientAccumulationCountInstruction(
+    const HloInstruction* inst);
+absl::optional<int64> GetAccumulationConstantsValue(const HloInstruction* inst);
 absl::optional<int64> GetGradientAccumulationCount(const HloInstruction*);
 int64 GetPipelineBatchSerializationIterations(const HloInstruction*);
 ThreeState GetPipelineOffloadActivations(const HloInstruction*);

@@ -110,7 +110,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);
   virtual Status HandleInterTilesetCopy(HloInstruction* hlo);
 
-  virtual Status VerifyPipelineArguments(int64 iterations) const;
+  virtual StatusOr<poplar::program::Sequence> VerifyPipelineArguments(
+      const HloInstruction* accumulation_count,
+      poplar::Tensor accumulation_count_tensor, poplar::Graph& graph) const;
 
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
       int64 iterations) const;
