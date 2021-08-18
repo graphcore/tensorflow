@@ -27,6 +27,7 @@ _type_map = {
     xla_data_pb2.PrimitiveType.S32: dtypes.int32,
     xla_data_pb2.PrimitiveType.F16: dtypes.float16,
     xla_data_pb2.PrimitiveType.F32: dtypes.float32,
+    xla_data_pb2.PrimitiveType.U8: dtypes.uint8,
 }
 
 
