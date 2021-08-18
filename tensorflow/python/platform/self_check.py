@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import ctypes
 import os
 
 MSVCP_DLL_NAMES = "msvcp_dll_names"
@@ -42,7 +43,6 @@ def preload_check():
     # Attempt to load any DLLs that the Python extension depends on before
     # we load the Python extension, so that we can raise an actionable error
     # message if they are not found.
-    import ctypes  # pylint: disable=g-import-not-at-top
     if MSVCP_DLL_NAMES in build_info.build_info:
       missing = []
       for dll_name in build_info.build_info[MSVCP_DLL_NAMES].split(","):
@@ -64,7 +64,6 @@ def preload_check():
     # static initialization. Doing this here as a preload check makes it more
     # likely that we detect any CPU feature incompatibilities before we trigger
     # them (which would typically result in SIGILL).
-    import ctypes  # pylint: disable=g-import-not-at-top
     cpu_feature_guard_library = os.path.join(
-        os.path.dirname(__file__), os.pardir, "_cpu_feature_guard.so")
+        os.path.dirname(__file__), "../../core/platform/_cpu_feature_guard.so")
     ctypes.CDLL(cpu_feature_guard_library)
