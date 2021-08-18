@@ -51,6 +51,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/invariant_passes/resource_update_checker.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/add_stochastic_rounding_options.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
@@ -94,6 +95,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/io_tiles_placer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/mark_replica_identical_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
@@ -1548,6 +1550,9 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
       pipeline.AddPass<ModuleFlatten>(resources.annotations);
       pipeline.AddPass<LowerFrontendAttributes>();
+      pipeline.AddPass<MarkReplicaIdenticalInstructions>();
+      pipeline.AddPass<AddStochasticRoundingOptions>(
+          resources.global_floating_point_behaviour.esr());
       pipeline.AddPass<MultiUseFeedsFinder>();
     }
 

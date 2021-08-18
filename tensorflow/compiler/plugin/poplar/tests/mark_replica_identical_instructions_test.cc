@@ -93,6 +93,30 @@ TEST_F(MarkReplicaIdenticalInstructionsTest, SetsIsReplicaIdenticalOption) {
   }
 }
 
+const char* unreachable_comp_hlo = R"(
+HloModule test
+func {
+  ROOT unvisited = f32[] parameter(0)
+}
+
+ENTRY test {
+  constant = f32[] constant(2)
+  param0 = f32[] parameter(0)
+  ROOT add = f32[] add(constant, param0)
+}
+)";
+TEST_F(MarkReplicaIdenticalInstructionsTest, UnvisitedInstructionDefault) {
+  ASSERT_TRUE(SetUpHloModule(unreachable_comp_hlo));
+
+  MarkReplicaIdenticalInstructions mark_instructions;
+
+  TF_ASSERT_OK_AND_ASSIGN(bool modified, mark_instructions.Run(hlo_module_));
+  ASSERT_TRUE(modified);
+
+  auto* unvisited_instr = FindInstruction(hlo_module_, "unvisited");
+  ASSERT_FALSE(IsInstructionReplicaIdentical(unvisited_instr));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

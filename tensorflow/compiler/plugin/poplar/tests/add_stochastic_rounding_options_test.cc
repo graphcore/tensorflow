@@ -111,12 +111,21 @@ struct AddStochasticRoundingOptionsTest : HloTestFixture {
 const char* stochastic_rounding_attrs = R"(
 HloModule test
 ENTRY test {
-  stochastic_rounding_on = f32[] parameter(0), frontend_attributes={STOCHASTIC_ROUNDING="THREESTATE_ON"}
+  stochastic_rounding_on = f32[] parameter(0)
   ROOT stochastic_rounding_default = f32[] parameter(1)
 }
 )";
 TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingDefault) {
   ASSERT_TRUE(SetUpHloModule(stochastic_rounding_attrs));
+
+  auto* stochastic_rounding_on =
+      FindInstruction(hlo_module_, "stochastic_rounding_on");
+
+  // Enable stochastic rounding for the stochastic_rounding_on instruction.
+  // We cant set it in the Hlo due to a bug in TF1.15.
+  FrontendAttributes frontend_attributes;
+  (*frontend_attributes.mutable_map())["STOCHASTIC_ROUNDING"] = "THREESTATE_ON";
+  stochastic_rounding_on->set_frontend_attributes(frontend_attributes);
 
   AddStochasticRoundingOptions add_stochastic_rounding_options(
       StochasticRounding_Off);
@@ -127,8 +136,6 @@ TEST_F(AddStochasticRoundingOptionsTest, SettingStochasticRoundingDefault) {
 
   // Check that the default is only applied to instructions w/o a stochastic
   // rounding frontend attribute.
-  auto* stochastic_rounding_on =
-      FindInstruction(hlo_module_, "stochastic_rounding_on");
   ASSERT_THAT(stochastic_rounding_on, HasStochasticRounding(THREESTATE_ON));
 
   auto* stochastic_rounding_default =
