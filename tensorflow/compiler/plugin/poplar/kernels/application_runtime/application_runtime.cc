@@ -93,6 +93,8 @@ using PoplarExecutor = xla::poplarplugin::PoplarExecutor;
 using PoplarExecutableBinaryFile =
     xla::poplarplugin::PoplarExecutableBinaryFile;
 
+using Tracepoint = xla::poplarplugin::TensorflowPoplarPluginTracepoint;
+
 namespace tensorflow {
 namespace {
 using OutputCallback = std::function<void(void*)>;
@@ -348,6 +350,7 @@ class CommunicationManager {
 
   bool TryPeekInputData(const std::string& name, tensorflow::Tensor& result,
                         std::size_t look_ahead = 0) {
+    TENSORFLOW_TRACEPOINT();
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
 
@@ -363,6 +366,7 @@ class CommunicationManager {
 
   tensorflow::Tensor PeekInputData(const std::string& name,
                                    std::size_t look_ahead = 0) {
+    TENSORFLOW_TRACEPOINT();
     tensorflow::Tensor result;
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
@@ -379,6 +383,7 @@ class CommunicationManager {
   }
 
   void AdvanceInputData(const std::string& name) {
+    TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     input_cv_.wait(
         lk, [&, this]() { return Exiting() || !input_queues_[name].empty(); });
@@ -391,6 +396,7 @@ class CommunicationManager {
   }
 
   OutputCallback PopOutputCallback(const std::string& name) {
+    TENSORFLOW_TRACEPOINT();
     OutputCallback result;
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
@@ -408,6 +414,7 @@ class CommunicationManager {
   }
 
   void PopResultProcessor() {
+    TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     result_processors_.pop();
   }
@@ -415,6 +422,7 @@ class CommunicationManager {
   void PushInputDataAndResultProcessor(
       absl::flat_hash_map<std::string, tensorflow::Tensor> inputs,
       std::unique_ptr<ResultProcessorBase> result_processor) {
+    TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     for (auto& it : inputs) {
       input_queues_[it.first].push_back(std::move(it.second));
@@ -547,6 +555,7 @@ class PrefetchCallback : public poplar::StreamCallback {
       : comm_mgr_(comm_mgr), name_(name), look_ahead_(0) {}
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    TENSORFLOW_TRACEPOINT();
     tensorflow::Tensor t;
     // Try to peek at the input data.
     if (comm_mgr_->TryPeekInputData(name_, t, look_ahead_)) {
@@ -564,6 +573,7 @@ class PrefetchCallback : public poplar::StreamCallback {
   }
 
   void fetch(void* dest) noexcept override {
+    TENSORFLOW_TRACEPOINT();
     tensorflow::Tensor t = comm_mgr_->PeekInputData(name_, look_ahead_);
     if (!comm_mgr_->Exiting()) {
       auto buffer = tensorflow::DMAHelper::buffer(&t);
@@ -573,6 +583,7 @@ class PrefetchCallback : public poplar::StreamCallback {
   }
 
   void complete() noexcept override {
+    TENSORFLOW_TRACEPOINT();
     if (!comm_mgr_->Exiting()) {
       comm_mgr_->AdvanceInputData(name_);
       look_ahead_--;
@@ -610,6 +621,7 @@ class EngineResource {
   IOConfig& GetIOConfig() { return GetCommunicationManager().GetIOConfig(); }
 
   Status StartEngine(OpInputList& input_list) {
+    TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Starting engine execution for " << engine_name_;
 
     if (execute_thread_) {
@@ -623,7 +635,11 @@ class EngineResource {
     execute_thread_.reset(tensorflow::Env::Default()->StartThread(
         tensorflow::ThreadOptions(), engine_name_ + "_execute_thread",
         [&connect_streams_status, &input_list, this] {
-          engine_.load(device_);
+          {
+            Tracepoint trace("engine_.load(device_)");
+            engine_.load(device_);
+          }
+
           auto status = ConnectStreams(input_list);
           connect_streams_status = status;
           connect_streams_notification_.Notify();
@@ -632,8 +648,13 @@ class EngineResource {
           }
 
           VLOG(2) << "Engine loop starting.";
-          engine_.run(0);
+          {
+            Tracepoint trace("engine_.run(0)");
+            engine_.run(0);
+          }
+
           do {
+            Tracepoint trace("engine_.run(1)");
             engine_.run(1);
           } while (!communication_manager_.Exiting());
         }));
@@ -651,6 +672,7 @@ class EngineResource {
   // Populates the values for buffers which are not streamed every run
   // operation.
   Status PopulateAndConnectInputBuffers(OpInputList& input_list) {
+    TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Populating the input buffers.";
     // TODO(T41137): The assumption here is that the inputs are passed in the
     // correct order.
@@ -677,6 +699,7 @@ class EngineResource {
   }
 
   Status ConnectStreams(OpInputList& input_list) {
+    TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Connecting streams";
 
     auto& io_config = GetIOConfig();
@@ -715,6 +738,7 @@ class EngineResource {
   }
 
   void StopEngine() {
+    TENSORFLOW_TRACEPOINT();
     VLOG(2) << "Stopping engine execution for " << engine_name_;
 
     if (!execute_thread_) {
@@ -771,6 +795,7 @@ class EngineManager {
   Status CreateEngine(const std::string& engine_name,
                       const std::string& executable_filename,
                       std::size_t timeout_us, OpInputList& input_list) {
+    TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
     if (EngineExists(engine_name)) {
       return Status::OK();
@@ -853,6 +878,7 @@ class ApplicationRuntime : public OpKernel {
   }
 
   void Compute(OpKernelContext* ctx) override {
+    TENSORFLOW_TRACEPOINT();
     OpInputList input_list;
     ctx->input_list("inputs", &input_list);
     auto& engine_mgr = EngineManager::Instance();
@@ -880,6 +906,7 @@ class ApplicationCall : public AsyncOpKernel {
   }
 
   void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
+    TENSORFLOW_TRACEPOINT();
     // Get the engine resource.
     auto& engine_mgr = EngineManager::Instance();
     auto status_or = engine_mgr.GetEngine(engine_name_);
