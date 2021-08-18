@@ -174,7 +174,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         def cond(i, x, y):
           del x
           del y
-          return i < 1
+          return i < 2
 
         def body(i, x, y):
           i = i + 1
@@ -192,8 +192,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         r = xla.compile(my_net, inputs=[x])
 
       x, y = sess.run(r, {x: np.full([4], 2)})
-      self.assertAllClose(x, np.full([4], np.tanh(2)))
-      self.assertAllClose(y, np.full([4], np.tanh(2)))
+      self.assertAllClose(x, np.full([4], np.tanh(np.tanh(2))))
+      self.assertAllClose(y, np.full([4], np.tanh(np.tanh(2))))
 
     report = pva.openReport(report_helper.find_report())
     ok = [

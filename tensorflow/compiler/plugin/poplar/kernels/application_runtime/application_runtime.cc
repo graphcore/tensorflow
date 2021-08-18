@@ -95,6 +95,7 @@ using PoplarExecutableBinaryFile =
 
 namespace tensorflow {
 namespace {
+using OutputCallback = std::function<void(void*)>;
 
 StatusOr<poplar::TargetType> ParsePoplarTargetType(
     const std::string& target_type_string) {
@@ -275,24 +276,79 @@ class IOConfig {
   IOGroup outfeeds_;
 };
 
-class CommunicationManager {
+// Base class which is used for processing the results from outfeed callbacks.
+class ResultProcessorBase {
  public:
-  explicit CommunicationManager(PoplarExecutableProto& proto) {
-    io_config_.ParsePoplarExecutableProto(proto);
+  // Returns whether all outputs have been processed.
+  virtual bool ProcessOutput(const std::string& name, void* data) {
+    // Check whether this is the last callback.
+    return ++processed_outputs_ == num_outputs_;
   }
 
-  void PushInputData(const std::string& name, tensorflow::Tensor tensor) {
-    {
-      std::unique_lock<std::mutex> lk(input_mutex_);
-      input_queues_[name].push(std::move(tensor));
-      input_cv_.notify_one();
-    }
+  // A method called once all the outputs have been processed.
+  virtual void Done() {}
+
+  // Returns whether this result is for the user or not.
+  virtual bool IsUserResult() const = 0;
+
+ protected:
+  explicit ResultProcessorBase(std::size_t num_outputs)
+      : num_outputs_(num_outputs) {}
+
+ private:
+  const std::size_t num_outputs_;
+  std::atomic<std::size_t> processed_outputs_{0};
+};
+
+// A wrapper class which copies the outputs and calls the callback done once all
+// the results have been processed.
+class ResultProcessor : public ResultProcessorBase {
+ public:
+  ResultProcessor(
+      AsyncOpKernel::DoneCallback done,
+      const absl::flat_hash_map<std::string, TensorBuffer*>& output_tensors)
+      : ResultProcessorBase(output_tensors.size()),
+        done_(std::move(done)),
+        output_tensors_(output_tensors) {}
+
+  bool ProcessOutput(const std::string& name, void* data) override {
+    // Copy the data.
+    auto* buffer = output_tensors_.at(name);
+    std::memcpy(buffer->data(), data, buffer->size());
+    return ResultProcessorBase::ProcessOutput(name, data);
+  }
+
+  void Done() override { done_(); }
+
+  bool IsUserResult() const override { return true; }
+
+ private:
+  AsyncOpKernel::DoneCallback done_;
+  const absl::flat_hash_map<std::string, TensorBuffer*> output_tensors_;
+};
+
+// Result processor for dummy data which has been pushed through.
+class DummyResultProcessor : public ResultProcessorBase {
+ public:
+  explicit DummyResultProcessor(std::size_t num_outputs)
+      : ResultProcessorBase(num_outputs) {}
+
+  bool IsUserResult() const override { return false; }
+};
+
+class CommunicationManager {
+ public:
+  explicit CommunicationManager(PoplarExecutableProto& proto,
+                                std::size_t timeout_us)
+      : env_(tensorflow::Env::Default()), timeout_us_(timeout_us) {
+    io_config_.ParsePoplarExecutableProto(proto);
+    is_multi_ipu_executable_ = proto.embedded_runtime_config().num_ipus() > 1;
   }
 
   tensorflow::Tensor PopInputData(const std::string& name) {
     tensorflow::Tensor result;
     {
-      std::unique_lock<std::mutex> lk(input_mutex_);
+      std::unique_lock<std::recursive_mutex> lk(io_mutex_);
       input_cv_.wait(lk, [&, this]() {
         return Exiting() || !input_queues_[name].empty();
       });
@@ -306,19 +362,10 @@ class CommunicationManager {
     return result;
   }
 
-  void PushOutputCallback(const std::string& name,
-                          std::function<void(void*)> callback) {
+  OutputCallback PopOutputCallback(const std::string& name) {
+    OutputCallback result;
     {
-      std::unique_lock<std::mutex> lk(output_mutex_);
-      output_queues_[name].push(std::move(callback));
-      output_cv_.notify_one();
-    }
-  }
-
-  std::function<void(void*)> PopOutputCallback(const std::string& name) {
-    std::function<void(void*)> result;
-    {
-      std::unique_lock<std::mutex> lk(output_mutex_);
+      std::unique_lock<std::recursive_mutex> lk(io_mutex_);
       output_cv_.wait(lk, [&, this]() {
         return Exiting() || !output_queues_[name].empty();
       });
@@ -332,31 +379,137 @@ class CommunicationManager {
     return result;
   }
 
+  void PopResultProcessor() {
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    result_processors_.pop();
+  }
+
+  void PushInputDataAndResultProcessor(
+      absl::flat_hash_map<std::string, tensorflow::Tensor> inputs,
+      std::unique_ptr<ResultProcessorBase> result_processor) {
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    for (auto& it : inputs) {
+      input_queues_[it.first].push(std::move(it.second));
+    }
+    input_cv_.notify_one();
+    input_push_timestamp_us_ = env_->NowMicros();
+
+    result_processors_.push(std::move(result_processor));
+    ResultProcessorBase* result_processor_ptr = result_processors_.back().get();
+
+    // Keep track of how many user requests there are.
+    if (result_processor_ptr->IsUserResult()) {
+      ++user_requests_to_process_;
+    }
+
+    for (auto& outfeed_pair : io_config_.GetOutfeeds()) {
+      const std::string feed = outfeed_pair.first;
+      output_queues_[feed].push(
+          [feed, result_processor_ptr, this](void* data) -> void {
+            if (result_processor_ptr->ProcessOutput(feed, data)) {
+              // Keep track of how many user requests there are.
+              if (result_processor_ptr->IsUserResult()) {
+                --user_requests_to_process_;
+              }
+              // All outfeeds have data now, call the done function and remove
+              // the processor.
+              result_processor_ptr->Done();
+              PopResultProcessor();
+            }
+          });
+    }
+    output_cv_.notify_one();
+  }
+
   void InitiateExit() {
-    engine_exit_notification_.Notify();
+    engine_exiting_notification_.Notify();
     input_cv_.notify_all();
     output_cv_.notify_all();
   }
 
-  bool Exiting() const { return engine_exit_notification_.HasBeenNotified(); }
+  bool Exiting() const {
+    return engine_exiting_notification_.HasBeenNotified();
+  }
 
   IOConfig& GetIOConfig() { return io_config_; }
 
+  void StartDummyDataThread() {
+    if (is_multi_ipu_executable_) {
+      InitializeDummyInputs();
+      dummy_data_thread_.reset(
+          env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
+                            [this] { DummyDataThread(); }));
+    }
+  }
+
  private:
-  absl::Notification engine_exit_notification_;
+  void InitializeDummyInputs() {
+    for (auto& it : io_config_.GetInfeeds()) {
+      const auto& io_item = it.second;
+      Tensor t{io_item.datatype, io_item.shape};
+      auto buffer = tensorflow::DMAHelper::buffer(&t);
+      // Default the values to zero.
+      std::memset(buffer->data(), 0, buffer->size());
+      dummy_inputs_.insert_or_assign(it.first, t);
+    }
+  }
 
-  std::mutex input_mutex_;
-  std::mutex output_mutex_;
+  void DummyDataThread() {
+    while (!Exiting()) {
+      const std::size_t time_now_us = env_->NowMicros();
+      const std::size_t elapsed_time_us =
+          time_now_us - input_push_timestamp_us_;
+      // Initial value of input_push_timestamp_us_ is zero, so only push data
+      // once the elapsed time is actually changed.
+      // Only push data if there are user requests left.
+      if (elapsed_time_us != time_now_us && elapsed_time_us > timeout_us_ &&
+          user_requests_to_process_ > 0) {
+        VLOG(2) << "Pipeline stalled - pushing dummy data.";
+        PushInputDataAndResultProcessor(dummy_inputs_,
+                                        absl::make_unique<DummyResultProcessor>(
+                                            io_config_.GetOutfeeds().size()));
+      }
+      env_->SleepForMicroseconds(timeout_us_);
+    }
+  }
 
-  std::condition_variable input_cv_;
-  std::condition_variable output_cv_;
+  tensorflow::Env* env_;
+  const std::size_t timeout_us_;
+
+  // This notification is set when the engine needs to start exiting.
+  absl::Notification engine_exiting_notification_;
+
+  std::recursive_mutex io_mutex_;
+
+  std::condition_variable_any input_cv_;
+  std::condition_variable_any output_cv_;
 
   absl::flat_hash_map<std::string, std::queue<tensorflow::Tensor>> input_queues_
-      GUARDED_BY(input_mutex_);
-  absl::flat_hash_map<std::string, std::queue<std::function<void(void*)>>>
-      output_queues_ GUARDED_BY(output_mutex_);
+      GUARDED_BY(io_mutex_);
+  absl::flat_hash_map<std::string, std::queue<OutputCallback>> output_queues_
+      GUARDED_BY(io_mutex_);
+  std::queue<std::unique_ptr<ResultProcessorBase>> result_processors_
+      GUARDED_BY(io_mutex_);
 
   IOConfig io_config_;
+
+  // Stores whether the executable is multi ipu - if it is an assumption is made
+  // that this is a pipelined model and data is pushed through the pipeline.
+  bool is_multi_ipu_executable_ = false;
+
+  // Dummy values which are pushed through the model by the dummy thread.
+  absl::flat_hash_map<std::string, tensorflow::Tensor> dummy_inputs_;
+
+  // Stores the last time a real input was pushed.
+  std::atomic<std::size_t> input_push_timestamp_us_{0};
+
+  // Stores how many user call requests are left to process.
+  std::atomic<std::size_t> user_requests_to_process_{0};
+
+  // Thread which pushes dummy data to be processed - this is required for
+  // pipelined models as they cannot progress until there is more data.
+  // Note that the destructor blocks until the thread completes.
+  std::unique_ptr<tensorflow::Thread> dummy_data_thread_;
 };
 
 class PrefetchCallback : public poplar::StreamCallback {
@@ -385,13 +538,13 @@ class PrefetchCallback : public poplar::StreamCallback {
 
 class EngineResource {
  public:
-  EngineResource(const std::string& engine_name,
+  EngineResource(const std::string& engine_name, std::size_t timeout_us,
                  poplar::Executable&& executable, poplar::Device&& device,
                  PoplarExecutableProto& proto)
       : engine_name_(engine_name),
         device_(std::move(device)),
         engine_(std::move(executable)),
-        communication_manager_(proto) {}
+        communication_manager_(proto, timeout_us) {}
 
   poplar::Engine& GetEngine() { return engine_; }
 
@@ -416,9 +569,10 @@ class EngineResource {
         tensorflow::ThreadOptions(), engine_name_ + "_execute_thread",
         [&connect_streams_status, &input_list, this] {
           engine_.load(device_);
-          connect_streams_status = ConnectStreams(input_list);
+          auto status = ConnectStreams(input_list);
+          connect_streams_status = status;
           connect_streams_notification_.Notify();
-          if (!connect_streams_status.ok()) {
+          if (!status.ok()) {
             return;
           }
 
@@ -431,6 +585,10 @@ class EngineResource {
 
     // Wait for streams to be connected.
     connect_streams_notification_.WaitForNotification();
+
+    if (connect_streams_status.ok()) {
+      communication_manager_.StartDummyDataThread();
+    }
 
     return connect_streams_status;
   }
@@ -557,7 +715,7 @@ class EngineManager {
   // doesn't exist, then it creates it.
   Status CreateEngine(const std::string& engine_name,
                       const std::string& executable_filename,
-                      OpInputList& input_list) {
+                      std::size_t timeout_us, OpInputList& input_list) {
     std::unique_lock<std::recursive_mutex> lk(engine_resource_map_mutex_);
     if (EngineExists(engine_name)) {
       return Status::OK();
@@ -600,7 +758,8 @@ class EngineManager {
                      erc.gateway_mode(), erc.supports_remote_buffers()));
 
     auto engine_resource = absl::make_unique<EngineResource>(
-        engine_name, std::move(executable), std::move(device), proto);
+        engine_name, timeout_us, std::move(executable), std::move(device),
+        proto);
 
     TF_RETURN_IF_ERROR(engine_resource->StartEngine(input_list));
 
@@ -635,6 +794,7 @@ class ApplicationRuntime : public OpKernel {
   explicit ApplicationRuntime(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("engine_name", &engine_name_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("timeout_us", &timeout_us_));
   }
 
   void Compute(OpKernelContext* ctx) override {
@@ -642,13 +802,14 @@ class ApplicationRuntime : public OpKernel {
     ctx->input_list("inputs", &input_list);
     auto& engine_mgr = EngineManager::Instance();
 
-    OP_REQUIRES_OK(
-        ctx, engine_mgr.CreateEngine(engine_name_, filename_, input_list));
+    OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filename_,
+                                                timeout_us_, input_list));
   }
 
  private:
   std::string filename_;
   std::string engine_name_;
+  int64 timeout_us_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ApplicationRuntime);
 };
@@ -679,12 +840,6 @@ class ApplicationCall : public AsyncOpKernel {
     OpOutputList outfeed_list;
     ctx->output_list("outfeeds", &outfeed_list);
 
-    int pushed_cb_count = 0;
-    int processed_cb_count = 0;
-    std::condition_variable cb_processed;
-    std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
-
     auto check_shape = [](const IOItem& feed_params,
                           const tensorflow::Tensor& t) -> Status {
       if (feed_params.shape != t.shape()) {
@@ -696,6 +851,8 @@ class ApplicationCall : public AsyncOpKernel {
       return Status::OK();
     };
 
+    // Gather the inputs.
+    absl::flat_hash_map<std::string, tensorflow::Tensor> inputs;
     for (auto& infeed_pair : io_config.GetInfeeds()) {
       std::string feed = infeed_pair.first;
       const IOItem& feed_params = infeed_pair.second;
@@ -703,35 +860,30 @@ class ApplicationCall : public AsyncOpKernel {
       tensorflow::Tensor t = infeed_list[feed_params.tuple_index];
       OP_REQUIRES_OK_ASYNC(ctx, check_shape(feed_params, t), done);
 
-      comm_mgr.PushInputData(feed,
-                             std::move(infeed_list[feed_params.tuple_index]));
+      inputs.insert_or_assign(feed,
+                              std::move(infeed_list[feed_params.tuple_index]));
     }
 
+    // Allocate the outputs.
+    absl::flat_hash_map<std::string, TensorBuffer*> output_tensors;
     for (auto& outfeed_pair : io_config.GetOutfeeds()) {
-      std::string feed = outfeed_pair.first;
+      const std::string& feed = outfeed_pair.first;
       const IOItem& feed_params = outfeed_pair.second;
 
-      int64 i = feed_params.tuple_index;
-
-      Tensor* output_tensor = nullptr;
-      OP_REQUIRES_OK_ASYNC(
-          ctx, outfeed_list.allocate(i, feed_params.shape, &output_tensor),
-          done);
-
-      pushed_cb_count++;
-      comm_mgr.PushOutputCallback(
-          feed, [this, output_tensor, feed, &processed_cb_count,
-                 &cb_processed](void* data) {
-            auto buffer = tensorflow::DMAHelper::buffer(output_tensor);
-            std::memcpy(buffer->data(), data, buffer->size());
-            processed_cb_count++;
-            cb_processed.notify_one();
-          });
+      Tensor* output = nullptr;
+      OP_REQUIRES_OK_ASYNC(ctx,
+                           outfeed_list.allocate(feed_params.tuple_index,
+                                                 feed_params.shape, &output),
+                           done);
+      output_tensors[feed] = tensorflow::DMAHelper::buffer(output);
     }
 
-    cb_processed.wait(lock,
-                      [&]() { return pushed_cb_count == processed_cb_count; });
-    done();
+    // Set up the result processor.
+    std::unique_ptr<ResultProcessor> result_processor =
+        absl::make_unique<ResultProcessor>(std::move(done), output_tensors);
+
+    comm_mgr.PushInputDataAndResultProcessor(inputs,
+                                             std::move(result_processor));
   }
 
  private:

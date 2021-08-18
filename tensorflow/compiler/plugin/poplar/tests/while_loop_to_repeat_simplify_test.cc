@@ -870,6 +870,87 @@ ENTRY entry {
   EXPECT_FALSE(changed);
 }
 
+TEST_F(WhileLoopToRepeatSimplifyTest, TestSingleIteration) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (f32[],f32[]) parameter(0)
+  p_body.0 = f32[] get-tuple-element(p_body), index=0
+  const = f32[] constant(2)
+  add = f32[] add(p_body.0, const)
+  p_body.1 = f32[] get-tuple-element(p_body), index=1
+  ROOT root = (f32[],f32[]) tuple(add, p_body.1)
+}
+
+condition {
+  p_cond = (f32[],f32[]) parameter(0)
+  p_cond.0 = f32[] get-tuple-element(p_cond), index=0
+  const = f32[] constant(2)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = f32[] constant(0)
+  const_1 = f32[] constant(2)
+  repeat_init = (f32[],f32[]) tuple(const_0, const_1)
+  ROOT while = (f32[],f32[]) while(repeat_init), condition=condition, body=body
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  HloPassFix<WhileLoopToRepeatSimplify> wltrs;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  auto* root = module.get()->entry_computation()->root_instruction();
+
+  HloInstruction *tuple0, *tuple1;
+  EXPECT_TRUE(Match(root, m::Tuple(m::Add(m::GetTupleElement(m::Op(&tuple0), 0),
+                                          m::ConstantScalar(2)),
+                                   m::GetTupleElement(m::Op(&tuple1), 1))));
+  EXPECT_EQ(tuple0, tuple1);
+  EXPECT_TRUE(
+      Match(tuple0, m::Tuple(m::ConstantScalar(0), m::ConstantScalar(2))));
+}
+
+TEST_F(WhileLoopToRepeatSimplifyTest, SideEffect) {
+  const char* const hlo_string = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (f32[],f32[]) parameter(0)
+  p_body.0 = f32[] get-tuple-element(p_body), index=0
+  const = f32[] constant(2)
+  add = f32[] add(p_body.0, const)
+  p_body.1 = f32[] get-tuple-element(p_body), index=1
+  ROOT root = (f32[],f32[]) tuple(add, p_body.1)
+}
+
+condition {
+  p_cond = (f32[],f32[]) parameter(0)
+  p_cond.0 = f32[] get-tuple-element(p_cond), index=0
+  const = f32[] constant(2)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+  rng = f32[] rng(const, const), distribution=rng_uniform
+}
+
+ENTRY entry {
+  const_0 = f32[] constant(0)
+  const_1 = f32[] constant(2)
+  repeat_init = (f32[],f32[]) tuple(const_0, const_1)
+  ROOT while = (f32[],f32[]) while(repeat_init), condition=condition, body=body
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  HloPassFix<WhileLoopToRepeatSimplify> wltrs;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
+  EXPECT_FALSE(changed);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

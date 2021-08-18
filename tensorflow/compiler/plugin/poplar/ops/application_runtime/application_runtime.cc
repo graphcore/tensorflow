@@ -23,6 +23,7 @@ REGISTER_OP("ApplicationRuntime")
     .Attr("input_types: list(type) >= 0")
     .Attr("filename: string")
     .Attr("engine_name: string")
+    .Attr("timeout_us: int = 5000")
     .SetIsStateful();
 
 REGISTER_OP("ApplicationCall")
