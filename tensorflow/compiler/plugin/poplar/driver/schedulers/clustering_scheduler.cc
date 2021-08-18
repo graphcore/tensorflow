@@ -176,6 +176,11 @@ class ClusteringScheduler {
     // to add the dependency information.
     void BuildDependencyGraph();
 
+    // Gets the colocator helper for inst if there is a valid colocator helper
+    // and its buffer size is not 0.
+    absl::optional<const InstructionColocatorHelper*> GetColocatorHelper(
+        const HloInstruction* inst);
+
     ClusteringScheduler* parent;
 
     // Roots of the cluster graph. These are nodes which have no strict
@@ -401,7 +406,7 @@ void ClusteringScheduler::ClusterHelper::GroupChainsOfInstructions() {
     ref->net_memory_usage += parent->BytesFreedIfScheduled(instruction);
 
     // We mark these so they can be added to their own seperately managed queue.
-    ref->colocator = GetInstructionColocatorHelper(instruction);
+    ref->colocator = GetColocatorHelper(instruction);
     // Add the child nodes to the cluster.
     HloInstruction* current_instruction = instruction;
     while (current_instruction && current_instruction->user_count() == 1 &&
@@ -411,7 +416,7 @@ void ClusteringScheduler::ClusterHelper::GroupChainsOfInstructions() {
       // Check the child hasn't already been added to a cluster. We want
       // instructions with colocation in their own clusters as well.
       if (previously_clustered_node.count(user) != 0 ||
-          GetInstructionColocatorHelper(user)) {
+          GetColocatorHelper(user)) {
         break;
       }
 
@@ -502,6 +507,17 @@ void ClusteringScheduler::AddToReady(Cluster::Ref node_to_add) {
   } else {
     ready_queue.push(node_to_add);
   }
+}
+
+absl::optional<const xla::poplarplugin::InstructionColocatorHelper*>
+ClusteringScheduler::ClusterHelper::GetColocatorHelper(
+    const HloInstruction* inst) {
+  auto helper = GetInstructionColocatorHelper(inst);
+  if (helper.has_value() &&
+      helper.value()->GetColocateBufferSize(parent->information) == 0) {
+    return absl::nullopt;
+  }
+  return helper;
 }
 
 std::vector<ClusteringScheduler::Cluster::Ref>

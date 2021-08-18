@@ -114,6 +114,7 @@ enum PoplarOp {
   DynamicLstmLayerBwd = 110;
   DynamicLstmLayerFwd = 111;
   AssumeEqualAcrossReplicas = 112;
+  ReduceMany = 113;
   
   // Supported Fusions.
   Conv_biasadd = 200;
