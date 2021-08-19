@@ -5837,6 +5837,7 @@ test_suite(
         "topk_test",
         "triangular_solve_test",
         "update_op_dependencies_test",
+        "user_op_internal_test",
         "variable_test",
         "variables_offload_and_partition_test",
         "weights_transpose_chans_flip_xy_test",
