@@ -24,6 +24,7 @@ limitations under the License.
 #include "google/protobuf/util/message_differencer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_many.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/reduce_scatter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_to_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
@@ -32,6 +33,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
@@ -56,7 +58,10 @@ int64 ByteSizeOfIncludingTuple(const Shape& shape) {
 }
 }  // namespace
 
-InstructionColocatorHelper::InstructionColocatorHelper() : id_(GetNextID()) {}
+InstructionColocatorHelper::InstructionColocatorHelper(
+    bool requires_matching_element_types)
+    : id_(GetNextID()),
+      requires_matching_element_types_(requires_matching_element_types) {}
 
 int64 InstructionColocatorHelper::GetID() const { return id_; }
 
@@ -89,18 +94,20 @@ bool InstructionColocatorHelper::CanColocate(const HloInstruction* a,
     }
   }
 
-  // Make sure a and b have compitable sharding.
+  // Make sure a and b have compatible sharding.
   if (!a->has_compatible_sharding(b)) {
-    return false;
-  }
-
-  // The two instructions must have the same element type.
-  if (a->shape().element_type() != b->shape().element_type()) {
     return false;
   }
 
   // The two instructions must have the same inplaceness.
   if (IsLoweredInplace(a) != IsLoweredInplace(b)) {
+    return false;
+  }
+
+  // The two instructions must have the same element type if
+  // requires_matching_element_types_ is true for this colocator helper.
+  if (requires_matching_element_types_ &&
+      (a->shape().element_type() != b->shape().element_type())) {
     return false;
   }
 
@@ -584,6 +591,83 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
   }
 };
 
+// Colocator combines simple reductions into ReduceMany instructions.
+class ReduceManyColocatorHelper : public InstructionColocatorHelper {
+ public:
+  ReduceManyColocatorHelper()
+      : InstructionColocatorHelper(
+            /*requires_matching_element_types=*/false) {}
+
+  bool CanColocate(const HloInstruction* inst) const override {
+    return (inst->opcode() == HloOpcode::kReduce) || IsReductionFusion(inst);
+  }
+
+  int64 GetColocateBufferSize(
+      const CompilerInformation& information) const override {
+    return information.max_reduce_many_buffer_size;
+  }
+
+  StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
+      std::vector<HloInstruction*> to_combine) const override {
+    const uint64 cluster_size = to_combine.size();
+    CHECK_GT(cluster_size, 0);
+    if (cluster_size == 1) {
+      return to_combine;
+    }
+
+    auto* first_reduce = to_combine[0];
+    HloComputation* comp = first_reduce->parent();
+
+    std::vector<Shape> new_shapes;
+    std::vector<HloInstruction*> new_operands;
+    std::vector<ReductionInfo> reductions_info;
+    new_shapes.reserve(cluster_size);
+    new_operands.reserve(cluster_size * 2);
+    reductions_info.reserve(cluster_size);
+    for (HloInstruction* old_reduce : to_combine) {
+      CHECK_EQ(old_reduce->operand_count(), 2);
+      new_shapes.push_back(old_reduce->shape());
+      new_operands.push_back(old_reduce->mutable_operand(0));
+      new_operands.push_back(old_reduce->mutable_operand(1));
+      TF_ASSIGN_OR_RETURN(ReductionInfo reduction_info,
+                          GetReductionInfo(old_reduce));
+      reductions_info.push_back(reduction_info);
+    }
+
+    const auto new_shape = ShapeUtil::MakeTupleShape(new_shapes);
+
+    // Add the new instruction.
+    HloInstruction* reduce_many = comp->AddInstruction(
+        CreatePoplarReduceMany(new_operands, new_shape, reductions_info));
+
+    // Copy the sharding information if there was any.
+    if (first_reduce->has_sharding()) {
+      reduce_many->set_sharding(first_reduce->sharding());
+    }
+
+    std::vector<HloInstruction*> result(cluster_size + 1);
+    result[0] = reduce_many;
+
+    for (uint64 i = 0; i != cluster_size; ++i) {
+      HloInstruction* old_reduce = to_combine[i];
+      // Add a GTE to unpack the new_inst result.
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(reduce_many, i));
+      // Mark it as inplace.
+      MakeUsedInplace(gte);
+      result[i + 1] = gte;
+      TF_RETURN_IF_ERROR(reduce_many->CopyAllControlDepsFrom(old_reduce));
+      TF_RETURN_IF_ERROR(old_reduce->DropAllControlDeps());
+      TF_RETURN_IF_ERROR(old_reduce->ReplaceAllUsesWith(gte));
+      // This will do safety checks like confirming that there are no
+      // users of the reduce instruction.
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(old_reduce));
+    }
+
+    return result;
+  }
+};
+
 }  // namespace
 
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(InterIpuCopyColocatorHelper)
@@ -593,6 +677,7 @@ REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
     StatefulGradientAccumulationAllReduceColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
     StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper)
+REGISTER_INSTRUCTION_COLLOCATOR_HELPER(ReduceManyColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(SendToHostColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(RecvFromHostColocatorHelper)
 

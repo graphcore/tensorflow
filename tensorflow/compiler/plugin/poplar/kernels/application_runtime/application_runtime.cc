@@ -342,24 +342,52 @@ class CommunicationManager {
                                 std::size_t timeout_us)
       : env_(tensorflow::Env::Default()), timeout_us_(timeout_us) {
     io_config_.ParsePoplarExecutableProto(proto);
-    is_multi_ipu_executable_ = proto.embedded_runtime_config().num_ipus() > 1;
+    executable_can_stall_ =
+        proto.embedded_runtime_config().executable_can_stall();
   }
 
-  tensorflow::Tensor PopInputData(const std::string& name) {
+  bool TryPeekInputData(const std::string& name, tensorflow::Tensor& result,
+                        std::size_t look_ahead = 0) {
+    {
+      std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+
+      if (Exiting() || (input_queues_[name].size() <= look_ahead)) {
+        return false;
+      }
+
+      result = input_queues_[name][look_ahead];
+    }
+
+    return true;
+  }
+
+  tensorflow::Tensor PeekInputData(const std::string& name,
+                                   std::size_t look_ahead = 0) {
     tensorflow::Tensor result;
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
       input_cv_.wait(lk, [&, this]() {
-        return Exiting() || !input_queues_[name].empty();
+        return Exiting() || (input_queues_[name].size() > look_ahead);
       });
 
       if (!Exiting()) {
-        result = std::move(input_queues_[name].front());
-        input_queues_[name].pop();
+        result = input_queues_[name][look_ahead];
       }
     }
 
     return result;
+  }
+
+  void AdvanceInputData(const std::string& name) {
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    input_cv_.wait(
+        lk, [&, this]() { return Exiting() || !input_queues_[name].empty(); });
+
+    if (!Exiting()) {
+      std::rotate(input_queues_[name].begin(), input_queues_[name].begin() + 1,
+                  input_queues_[name].end());
+      input_queues_[name].pop_back();
+    }
   }
 
   OutputCallback PopOutputCallback(const std::string& name) {
@@ -389,7 +417,7 @@ class CommunicationManager {
       std::unique_ptr<ResultProcessorBase> result_processor) {
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
     for (auto& it : inputs) {
-      input_queues_[it.first].push(std::move(it.second));
+      input_queues_[it.first].push_back(std::move(it.second));
     }
     input_cv_.notify_one();
     input_push_timestamp_us_ = env_->NowMicros();
@@ -434,7 +462,7 @@ class CommunicationManager {
   IOConfig& GetIOConfig() { return io_config_; }
 
   void StartDummyDataThread() {
-    if (is_multi_ipu_executable_) {
+    if (executable_can_stall_) {
       InitializeDummyInputs();
       dummy_data_thread_.reset(
           env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
@@ -484,8 +512,8 @@ class CommunicationManager {
   std::condition_variable_any input_cv_;
   std::condition_variable_any output_cv_;
 
-  absl::flat_hash_map<std::string, std::queue<tensorflow::Tensor>> input_queues_
-      GUARDED_BY(io_mutex_);
+  absl::flat_hash_map<std::string, std::vector<tensorflow::Tensor>>
+      input_queues_ GUARDED_BY(io_mutex_);
   absl::flat_hash_map<std::string, std::queue<OutputCallback>> output_queues_
       GUARDED_BY(io_mutex_);
   std::queue<std::unique_ptr<ResultProcessorBase>> result_processors_
@@ -493,9 +521,10 @@ class CommunicationManager {
 
   IOConfig io_config_;
 
-  // Stores whether the executable is multi ipu - if it is an assumption is made
-  // that this is a pipelined model and data is pushed through the pipeline.
-  bool is_multi_ipu_executable_ = false;
+  // Stores whether the executable is a model which can stall and which means
+  // that data might need to be pushed through the if there are no inputs
+  // incoming.
+  bool executable_can_stall_ = false;
 
   // Dummy values which are pushed through the model by the dummy thread.
   absl::flat_hash_map<std::string, tensorflow::Tensor> dummy_inputs_;
@@ -507,7 +536,7 @@ class CommunicationManager {
   std::atomic<std::size_t> user_requests_to_process_{0};
 
   // Thread which pushes dummy data to be processed - this is required for
-  // pipelined models as they cannot progress until there is more data.
+  // models which cannot progress until there is more data.
   // Note that the destructor blocks until the thread completes.
   std::unique_ptr<tensorflow::Thread> dummy_data_thread_;
 };
@@ -515,25 +544,51 @@ class CommunicationManager {
 class PrefetchCallback : public poplar::StreamCallback {
  public:
   PrefetchCallback(CommunicationManager* comm_mgr, const std::string& name)
-      : comm_mgr_(comm_mgr), name_(name) {}
+      : comm_mgr_(comm_mgr), name_(name), look_ahead_(0) {}
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    tensorflow::Tensor t;
+    // Try to peek at the input data.
+    if (comm_mgr_->TryPeekInputData(name_, t, look_ahead_)) {
+      // Peek was successful, so memcpy to the poplar buffer.
+      auto buffer = tensorflow::DMAHelper::buffer(&t);
+      std::memcpy(dest, buffer->data(), buffer->size());
+      look_ahead_++;
+
+      // Indicate to poplar that the prefetch was successful.
+      return poplar::StreamCallback::Result::Success;
+    }
+
+    // Indicate to poplar that the prefetch was not successful.
     return poplar::StreamCallback::Result::NotAvailable;
   }
 
   void fetch(void* dest) noexcept override {
-    tensorflow::Tensor t = comm_mgr_->PopInputData(name_);
+    tensorflow::Tensor t = comm_mgr_->PeekInputData(name_, look_ahead_);
     if (!comm_mgr_->Exiting()) {
       auto buffer = tensorflow::DMAHelper::buffer(&t);
       std::memcpy(dest, buffer->data(), buffer->size());
+      look_ahead_++;
     }
   }
 
-  void complete() noexcept override {}
+  void complete() noexcept override {
+    if (!comm_mgr_->Exiting()) {
+      comm_mgr_->AdvanceInputData(name_);
+      look_ahead_--;
+    }
+
+    // look_ahead_ should never become negative. This indicates more
+    // completions than prefetches/fetches.
+    CHECK_GE(look_ahead_, 0);
+  }
+
+  void invalidatePrefetched() noexcept override { look_ahead_ = 0; }
 
  private:
   CommunicationManager* comm_mgr_;
   const std::string name_;
+  std::atomic<int64> look_ahead_;
 };
 
 class EngineResource {

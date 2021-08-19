@@ -30,6 +30,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/reduction_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -134,54 +136,6 @@ bool IsPoplibsPool(const HloInstruction* inst,
   }
 
   return (reduction_count <= 2);
-}
-
-static Literal GetIdentityConstantLiteral(const HloInstruction* root,
-                                          const HloInstruction* reduce) {
-  switch (root->opcode()) {
-    case HloOpcode::kAdd:
-    case HloOpcode::kAnd:
-    default:
-      return LiteralUtil::Zero(reduce->shape().element_type());
-    case HloOpcode::kMultiply:
-    case HloOpcode::kOr:
-      return LiteralUtil::One(reduce->shape().element_type());
-    case HloOpcode::kMaximum:
-      return LiteralUtil::MinValue(reduce->shape().element_type());
-    case HloOpcode::kMinimum:
-      return LiteralUtil::MaxValue(reduce->shape().element_type());
-    case HloOpcode::kCompare:
-      switch (root->comparison_direction()) {
-        case ComparisonDirection::kGe:
-        case ComparisonDirection::kGt:
-          return LiteralUtil::MinValue(reduce->shape().element_type());
-        case ComparisonDirection::kLe:
-        case ComparisonDirection::kLt:
-          return LiteralUtil::MaxValue(reduce->shape().element_type());
-        default:
-          return LiteralUtil::Zero(reduce->shape().element_type());
-      }
-  }
-}
-
-static popops::Operation PoplibsReductionOperation(const HloInstruction* inst) {
-  switch (inst->opcode()) {
-    case HloOpcode::kAdd:
-      return popops::Operation::ADD;
-    case HloOpcode::kMultiply:
-      return popops::Operation::MUL;
-    case HloOpcode::kMaximum:
-      return popops::Operation::MAX;
-    case HloOpcode::kMinimum:
-      return popops::Operation::MIN;
-    case HloOpcode::kAnd:
-      return popops::Operation::LOGICAL_AND;
-    case HloOpcode::kOr:
-      return popops::Operation::LOGICAL_OR;
-    default:
-      // Cannot reach here
-      return popops::Operation::ADD;
-  }
 }
 
 static const std::string& ReductionVertexBaseName(const HloInstruction* inst) {
@@ -339,8 +293,8 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const HloInstruction* reduce_inst, const xla::Shape& output_shape,
     TensorMap& tensor_map, const poplar::DebugNameAndId& debug_name_and_id) {
-  const HloInstruction* root = reduce_inst->to_apply()->root_instruction();
-  popops::Operation reduction_operation = PoplibsReductionOperation(root);
+  TF_ASSIGN_OR_RETURN(popops::Operation reduction_operation,
+                      GetPoplibsReductionOperation(reduce_inst));
   return CreateSimpleReduction(res, reduction_operation, inst, reduce_inst,
                                output_shape, tensor_map, debug_name_and_id);
 }
@@ -424,7 +378,8 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
                              reduction_operation, seq, {debug_name_and_id});
 
     // Apply initial value
-    Literal identity_literal = GetIdentityConstantLiteral(root, inst);
+    Literal identity_literal =
+        GetIdentityConstantLiteral(root, inst->shape().element_type());
     auto* init_inst = inst->operand(1);
     if (!(init_inst->IsConstant() &&
           init_inst->literal() == identity_literal)) {
@@ -586,7 +541,8 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     seq.add(poplar::program::Execute(cs, {debug_name_and_id}));
 
     // Apply initial value
-    Literal identity_literal = GetIdentityConstantLiteral(root, inst);
+    Literal identity_literal =
+        GetIdentityConstantLiteral(root, inst->shape().element_type());
     auto* init_inst = inst->operand(1);
     if (!(init_inst->IsConstant() &&
           init_inst->literal() == identity_literal)) {
@@ -701,7 +657,8 @@ StatusOr<poplar::program::Program> CreatePoplibsPooling(
 
     // What is the default base case for the reduction_op, MAX: -largest, SUM:
     // 0, etc.
-    Literal identity_literal = GetIdentityConstantLiteral(reducing_op, inst);
+    Literal identity_literal =
+        GetIdentityConstantLiteral(reducing_op, inst->shape().element_type());
 
     // Apply the base case if necessary
     if (!(initial_value->IsConstant() &&
@@ -883,7 +840,8 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
   LayoutUtil::ClearLayout(&partial_shape);
   partial_shape.mutable_layout()->set_format(DENSE);
 
-  Literal identity_literal = GetIdentityConstantLiteral(scatter_root, inst);
+  Literal identity_literal =
+      GetIdentityConstantLiteral(scatter_root, inst->shape().element_type());
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor identity_val,
@@ -973,7 +931,7 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
   /*
    * Reduction
    */
-  popops::Operation op = PoplibsReductionOperation(scatter_root);
+  TF_ASSIGN_OR_RETURN(popops::Operation op, GetPoplibsReductionOperation(inst));
 
   std::vector<std::size_t> reduction_dims;
   reduction_dims.push_back(partial.rank() - 1);

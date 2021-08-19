@@ -27,6 +27,7 @@ _type_map = {
     xla_data_pb2.PrimitiveType.S32: dtypes.int32,
     xla_data_pb2.PrimitiveType.F16: dtypes.float16,
     xla_data_pb2.PrimitiveType.F32: dtypes.float32,
+    xla_data_pb2.PrimitiveType.U8: dtypes.uint8,
 }
 
 
@@ -83,10 +84,7 @@ class RuntimeContext:
             self.signature().streamed_outputs))
 
 
-def embedded_runtime_start(executable_file,
-                           inputs,
-                           name,
-                           pipeline_timeout=None):
+def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   """
   Create and start an application runtime from a TF poplar executable.
 
@@ -94,17 +92,18 @@ def embedded_runtime_start(executable_file,
     executable_file: The path to the executable file.
     inputs: The initial input tensors.
     name: The name of the application runtime instance.
-    pipeline_timeout: An integer indicating how long (measured in microseconds)
-      to allow a pipelined executable to wait for the next batch of data before
-      forcing the execution to continue. This is required because a pipelined
-      model cannot move the execution to the next pipeline stage until the next
-      batch of data arrives. If not provided, defaults to 5000 microseconds.
+    timeout: An integer indicating how long (measured in microseconds)
+      to allow an executable for a pipelined model or a model with IO tiles to
+      wait for the next batch of data before forcing the execution to continue.
+      This is required because pipelined models and models with IO tiles
+      cannot proceed with execution until the next batch of data arrives. If not
+      provided, defaults to 5000 microseconds.
 
   Returns:
     An embedded application runtime context instance.
   """
 
-  pipeline_timeout = pipeline_timeout or 5000
+  timeout = timeout or 5000
 
   # Open the executable file.
   with open(executable_file, 'rb') as f:
@@ -184,13 +183,17 @@ def embedded_runtime_start(executable_file,
           f"Mismatched input dtype at position {i} ('{name}'). Expected "
           f"{expected_dtype}, but input {i} has dtype {actual_dtype}.")
 
+  input_tensors = poplar_exec.embedded_runtime_config.signature.inputs
+  arg2idx_map = {t.argument: i for i, t in enumerate(input_tensors)}
+  reordered_inputs = [inputs[arg2idx_map[i]] for i in range(len(inputs))]
+
   # Create the context object that contains all the information required to call the embedded runtime.
   return RuntimeContext(
       name, executable_file, poplar_exec,
-      gen_application_runtime.application_runtime(inputs=inputs,
+      gen_application_runtime.application_runtime(inputs=reordered_inputs,
                                                   filename=executable_file,
                                                   engine_name=name,
-                                                  timeout_us=pipeline_timeout))
+                                                  timeout_us=timeout))
 
 
 def embedded_runtime_call(inputs, context):

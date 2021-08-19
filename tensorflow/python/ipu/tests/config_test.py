@@ -1047,6 +1047,14 @@ class IPUConfigTest(test_util.TensorFlowTestCase):
     pb = cfg._create_protobuf()
     self.assertEqual(pb.max_inter_ipu_copies_buffer_size, 1024768)
 
+  def testOptimizationsMaximumReduceManyBufferSize(self):
+    cfg = ipu.config.IPUConfig()
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_reduce_many_buffer_size, 0)
+    cfg.optimizations.maximum_reduce_many_buffer_size = 1024768
+    pb = cfg._create_protobuf()
+    self.assertEqual(pb.max_reduce_many_buffer_size, 1024768)
+
   def testOptimizationsMaximumSendRecvClusterSize(self):
     cfg = ipu.config.IPUConfig()
     pb = cfg._create_protobuf()

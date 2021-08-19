@@ -297,4 +297,7 @@ message IpuOptions {
 
   // Options controlling the configuration of slice operations.
   repeated PoplarOptionFlag slice_options = 44;
+
+  // The maximum number of bytes to wait before scheduling a reduce-many
+  int64 max_reduce_many_buffer_size = 45;
 };
