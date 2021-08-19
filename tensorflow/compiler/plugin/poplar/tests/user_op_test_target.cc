@@ -40,15 +40,15 @@ extern "C" void Build_metadata(
     std::map<std::int64_t, std::int64_t>& input_to_output_tensor_aliasing,
     bool& is_elementwise, bool& is_stateless, bool& is_hashable,
     std::uint32_t num_inputs) {
-  num_inplace = 12;
   input_to_output_tensor_aliasing = {{0, 0}, {2, 1}, {3, 2}};
   is_elementwise = true;
 
-  allocating_indices.insert(0);
-  allocating_indices.insert(1);
-  allocating_indices.insert(2);
-  allocating_indices.insert(3);
+  allocating_indices.push_back(0);
+  allocating_indices.push_back(1);
+  allocating_indices.push_back(2);
+  allocating_indices.push_back(3);
+}
 
-  layout_dependencies[0] = 2;
-  layout_dependencies[1] = 3;
+extern "C" poplar::Tensor Build_allocator(std::uint32_t operand) {
+  return poplar::Tensor{};
 }
