@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -720,35 +721,15 @@ Status FixResourceUpdateOutputSharding(HloInstruction* resource_update) {
   resource_update->set_sharding(new_resource_update_sharding);
   return Status::OK();
 }
-}  // namespace
 
-StatusOr<bool> ShardingPass::Run(HloModule* module) {
-  VLOG(2) << "Before ShardingPass:";
-  XLA_VLOG_LINES(2, module->ToString());
-
-  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
-  if (!call_graph->IsFlattened()) {
-    return FailedPrecondition(
-        "Expected the call graph of the module to be flat.");
-  }
-  absl::flat_hash_set<const HloComputation*> completed;
-  // We first fix sharding for pipelining as it is well defined.
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
-  if (pipeline_ops.size()) {
-    CHECK_EQ(pipeline_ops.size(), 1);
-    TF_ASSIGN_OR_RETURN(
-        absl::flat_hash_set<const HloComputation*> completed_in_pipeline,
-        ProcessPipeline(pipeline_ops[0], call_graph.get()));
-    completed.insert(completed_in_pipeline.begin(),
-                     completed_in_pipeline.end());
-  }
-  // We now propagate the sharding for the rest of the module.
-  // Remove unsupported sharding, and sharding on Tuple shaped ops.  We remove
-  // sharding from ops which are allowed tuple-type sharding because their
-  // sharding should follow the ops which they are sources/sinks for. We also
-  // remove sharding from all parameter ops (which probably don't have sharding
-  // anyway).
+// Remove unsupported sharding, and sharding on Tuple shaped ops.  We remove
+// sharding from ops which are allowed tuple-type sharding because their
+// sharding should follow the ops which they are sources/sinks for. We also
+// remove sharding from all parameter ops (which probably don't have sharding
+// anyway).
+static void RemoveSharding(
+    HloModule* module,
+    const absl::flat_hash_set<const HloComputation*>& completed) {
   for (auto* comp : module->computations()) {
     if (completed.contains(comp)) {
       continue;
@@ -780,6 +761,120 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
       }
     }
   }
+}
+
+static StatusOr<absl::flat_hash_set<const HloComputation*>>
+FindInstructionsCompletedInPipeline(HloModule* module, CallGraph* call_graph) {
+  // We first fix sharding for pipelining as it is well defined.
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
+  if (pipeline_ops.size()) {
+    CHECK_EQ(pipeline_ops.size(), 1);
+    return ProcessPipeline(pipeline_ops[0], call_graph);
+  }
+  return absl::flat_hash_set<const HloComputation*>();
+}
+
+static bool PatchGTESharding(HloComputation* comp) {
+  bool made_progress = false;
+  for (auto* inst : comp->MakeInstructionPostOrder()) {
+    if (inst->opcode() == HloOpcode::kGetTupleElement) {
+      made_progress |= CopyGteShardingFromOperand(inst);
+    }
+  }
+  return made_progress;
+}
+
+static Status ApplyParameterPredicateToBody(CallGraphNode& call_graph_node,
+                                            HloComputation* comp) {
+  for (auto cs : call_graph_node.caller_callsites()) {
+    auto* caller = cs.instruction();
+    if (caller->opcode() == HloOpcode::kWhile) {
+      auto comp_params = comp->parameter_instructions();
+      for (auto* c : caller->called_computations()) {
+        auto c_params = c->parameter_instructions();
+        if (c_params.size() != comp_params.size()) {
+          return xla::FailedPrecondition(
+              "Unequal parameter count on %s (%d) and %s (%d)",
+              comp->name().c_str(), comp_params.size(), c->name().c_str(),
+              c_params.size());
+        }
+        for (size_t p = 0; p < c_params.size(); p++) {
+          SetSharding(c_params[p], comp_params[p]->sharding());
+        }
+      }
+    }
+  }
+  return Status::OK();
+}
+
+static void SetConditionalSubComputationSharding(CallGraphNode& call_graph_node,
+                                                 HloComputation* comp) {
+  for (auto cs : call_graph_node.caller_callsites()) {
+    auto* caller = cs.instruction();
+    if (caller->opcode() == HloOpcode::kConditional) {
+      auto sharding = comp->root_instruction()->sharding();
+      for (auto* c : caller->called_computations()) {
+        SetSharding(c->root_instruction(), sharding);
+      }
+    }
+  }
+}
+
+static void MatchBodyShardingToInput(CallGraphNode& call_graph_node,
+                                     HloComputation* comp) {
+  for (auto cs : call_graph_node.caller_callsites()) {
+    auto* caller = cs.instruction();
+    HloComputation* body = nullptr;
+    if (caller->opcode() == HloOpcode::kWhile) {
+      body = caller->while_body();
+    }
+
+    if (IsRepeatLoop(caller) || IsPipelineOp(caller)) {
+      body = caller->to_apply();
+    }
+
+    if (body == call_graph_node.computation()) {
+      std::vector<HloSharding> shardings;
+      absl::c_transform(
+          body->parameter_instructions(), std::back_inserter(shardings),
+          [](HloInstruction* o) { return GetShardingOfOutputTensor(o); });
+
+      SetSharding(
+          body->root_instruction(),
+          ConvertToTupleSharding(body->root_instruction()->shape(), shardings));
+    }
+  }
+}
+
+static void SetShardingOfCallers(CallGraphNode& call_graph_node,
+                                 HloComputation* comp) {
+  for (auto cs : call_graph_node.caller_callsites()) {
+    if (cs.context() == CallContext::kSequential) {
+      auto* caller = cs.instruction();
+      if (comp->root_instruction()->shape() == caller->shape()) {
+        SetSharding(caller, comp->root_instruction()->sharding());
+      }
+    }
+  }
+}
+
+}  // namespace
+
+StatusOr<bool> ShardingPass::Run(HloModule* module) {
+  VLOG(2) << "Before ShardingPass:";
+  XLA_VLOG_LINES(2, module->ToString());
+
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  if (!call_graph->IsFlattened()) {
+    return FailedPrecondition(
+        "Expected the call graph of the module to be flat.");
+  }
+  TF_ASSIGN_OR_RETURN(
+      absl::flat_hash_set<const HloComputation*> completed,
+      FindInstructionsCompletedInPipeline(module, call_graph.get()));
+  // We now propagate the sharding for the rest of the module.
+  RemoveSharding(module, completed);
 
   if (!HaveSharding(module)) {
     return false;
@@ -842,11 +937,7 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
         // from their operand, not their users.  During the initial copying of
         // sharding info, they are allowed to take the sharding of their users
         // in order to propagate sharding upwards through the graph.
-        for (auto* inst : comp->MakeInstructionPostOrder()) {
-          if (inst->opcode() == HloOpcode::kGetTupleElement) {
-            made_progress |= CopyGteShardingFromOperand(inst);
-          }
-        }
+        made_progress |= PatchGTESharding(comp);
 
         // For any called subcomputations which are not complete, copy onto
         // them the input and output sharding from one of their caller
@@ -876,82 +967,26 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
         }
 
         // Apply parameter sharding to predicate and body of a while
-        for (auto cs : call_graph_node.caller_callsites()) {
-          auto* caller = cs.instruction();
-          if (caller->opcode() == HloOpcode::kWhile) {
-            auto comp_params = comp->parameter_instructions();
-            for (auto* c : caller->called_computations()) {
-              auto c_params = c->parameter_instructions();
-              if (c_params.size() != comp_params.size()) {
-                return xla::FailedPrecondition(
-                    "Unequal parameter count on %s (%d) and %s (%d)",
-                    comp->name().c_str(), comp_params.size(), c->name().c_str(),
-                    c_params.size());
-              }
-              for (size_t p = 0; p < c_params.size(); p++) {
-                SetSharding(c_params[p], comp_params[p]->sharding());
-              }
-            }
-          }
-        }
+        TF_RETURN_IF_ERROR(
+            ApplyParameterPredicateToBody(call_graph_node, comp));
 
         // Patch up GTE sharding again.  Changing the parameter sharding can
         // alter the inputs to a GTE.
-        for (auto* inst : comp->MakeInstructionPostOrder()) {
-          if (inst->opcode() == HloOpcode::kGetTupleElement) {
-            CopyGteShardingFromOperand(inst);
-          }
-        }
+        PatchGTESharding(comp);
 
         // Note: after this point, only nodes which do not proceed GTE
         // instructions can be modified.
 
         // Ensure that all conditional subcomps have the same output sharding
-        for (auto cs : call_graph_node.caller_callsites()) {
-          auto* caller = cs.instruction();
-          if (caller->opcode() == HloOpcode::kConditional) {
-            auto sharding = comp->root_instruction()->sharding();
-            for (auto* c : caller->called_computations()) {
-              SetSharding(c->root_instruction(), sharding);
-            }
-          }
-        }
+        SetConditionalSubComputationSharding(call_graph_node, comp);
 
         // Ensure that the root sharding of a while/repeat/pipeline body matches
         // the input.
-        for (auto cs : call_graph_node.caller_callsites()) {
-          auto* caller = cs.instruction();
-          HloComputation* body = nullptr;
-          if (caller->opcode() == HloOpcode::kWhile) {
-            body = caller->while_body();
-          }
-
-          if (IsRepeatLoop(caller) || IsPipelineOp(caller)) {
-            body = caller->to_apply();
-          }
-
-          if (body == call_graph_node.computation()) {
-            std::vector<HloSharding> shardings;
-            absl::c_transform(
-                body->parameter_instructions(), std::back_inserter(shardings),
-                [](HloInstruction* o) { return GetShardingOfOutputTensor(o); });
-
-            SetSharding(body->root_instruction(),
-                        ConvertToTupleSharding(
-                            body->root_instruction()->shape(), shardings));
-          }
-        }
+        MatchBodyShardingToInput(call_graph_node, comp);
 
         // Ensure that the callers of this computation have the same sharding as
         // its root
-        for (auto cs : call_graph_node.caller_callsites()) {
-          if (cs.context() == CallContext::kSequential) {
-            auto* caller = cs.instruction();
-            if (comp->root_instruction()->shape() == caller->shape()) {
-              SetSharding(caller, comp->root_instruction()->sharding());
-            }
-          }
-        }
+        SetShardingOfCallers(call_graph_node, comp);
 
         completed.insert(comp);
         made_progress |= true;
