@@ -5802,6 +5802,88 @@ TEST_F(PoplarAlgebraicSimplifierTest, SimplifyAllReduceNormaliseAllReduce) {
               GmockMatch(m::AllReduce(m::Parameter(0))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest,
+       OptimiseNestedBroadcastsForElementwiseOps) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[] parameter(0)
+      p1 = f16[] parameter(1)
+      b0 = f32[4] broadcast(p0), dimensions={}
+      b1 = f16[4] broadcast(p1), dimensions={}
+      c1 = f32[4] convert(b1)
+      c2 = f32[4] convert(c1)
+      ROOT multiply0 = f32[4] multiply(b0, c2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::Multiply(
+                  m::Parameter(0), m::Convert(m::Convert(m::Parameter(1)))))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest,
+       OptimiseDoubleNestedBroadcastsForElementwiseOps) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[] parameter(0)
+      p1 = f16[] parameter(1)
+      b0 = f32[4] broadcast(p0), dimensions={}
+      b1 = f16[4] broadcast(p1), dimensions={}
+      c1 = f32[4] convert(b1)
+      c2 = f32[4] convert(c1)
+      multiply0 = f32[4] multiply(b0, c2)
+      ROOT convert0 = f32[4] convert(multiply0)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::Convert(m::Multiply(
+                  m::Parameter(0), m::Convert(m::Convert(m::Parameter(1))))))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, OptimiseBroadcastsForElementwiseOps) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[] parameter(0)
+      p1 = f16[] parameter(1)
+      b0 = f32[4] broadcast(p0), dimensions={}
+      b1 = f16[4] broadcast(p1), dimensions={}
+      c1 = f32[4] convert(b1)
+      ROOT multiply0 = f32[4] multiply(b0, c1)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(
+                  m::Multiply(m::Parameter(0), m::Convert(m::Parameter(1))))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, OptimiseBroadcastsForNonElementwiseOps) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[] parameter(0)
+      p1 = f16[] parameter(1)
+      b0 = f32[4] broadcast(p0), dimensions={}
+      b1 = f16[4] broadcast(p1), dimensions={}
+      c1 = f32[4] convert(b1)
+      ROOT d0 = f32[4,4] dot(b0, c1)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Op().WithBinaryOperandsAnyOrder(
+                  m::Broadcast(m::Parameter(0)),
+                  m::Broadcast(m::Convert(m::Parameter(1))))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

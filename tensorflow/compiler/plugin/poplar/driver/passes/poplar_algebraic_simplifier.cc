@@ -16,20 +16,15 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/container/inlined_vector.h"
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
@@ -51,7 +46,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
-#include "tensorflow/compiler/xla/service/hlo_query.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -2411,6 +2405,7 @@ Status AlgebraicSimplifierVisitor::HandleBroadcast(HloInstruction* broadcast) {
         HloInstruction::CreateBroadcast(
             broadcast->shape(), operand->mutable_operand(0), new_dimensions));
   }
+
   return Status::OK();
 }
 
@@ -2740,6 +2735,48 @@ Status AlgebraicSimplifierVisitor::HandlePower(HloInstruction* power) {
   return Status::OK();
 }
 
+namespace {
+bool IsHloInstructionElementWiseWithCompatibleBroadcastOperands(
+    const HloInstruction* instruction) {
+  if (!instruction->IsElementwise() || instruction->operand_count() == 0) {
+    return false;
+  }
+
+  // Fetch the first operand and make sure it's a broadcast instruction. We'll
+  // use it to compare to the other operands.
+  const auto* broadcast = instruction->operand(0);
+
+  if (broadcast->opcode() != HloOpcode::kBroadcast) {
+    return false;
+  }
+
+  const auto is_operand_compatible =
+      [&broadcast](const HloInstruction* operand) {
+        return operand->shape() == broadcast->shape() &&
+               operand->dimensions() == broadcast->dimensions();
+      };
+
+  // Check for all operands whether their shapes and dimensions are equal.
+  const auto& operands = instruction->operands();
+
+  return std::all_of(operands.begin(), operands.end(),
+                     std::move(is_operand_compatible));
+}
+
+bool ShouldSinkBroadcastAndOperandWithSameUser(const HloInstruction* user,
+                                               const HloInstruction* broadcast,
+                                               const HloInstruction* operand) {
+  return broadcast == operand ||
+         IsHloInstructionElementWiseWithCompatibleBroadcastOperands(user);
+}
+
+bool IsHloInstructionBroadcastWithScalarOperand(
+    const HloInstruction* instruction) {
+  return instruction->opcode() == HloOpcode::kBroadcast &&
+         ShapeUtil::IsScalar(instruction->operand(0)->shape());
+}
+}  // namespace
+
 StatusOr<bool>
 AlgebraicSimplifierVisitor::TryToSinkBroadcastAfterOpWithUniqueNonScalarOperand(
     HloInstruction* broadcast) {
@@ -2785,9 +2822,14 @@ AlgebraicSimplifierVisitor::TryToSinkBroadcastAfterOpWithUniqueNonScalarOperand(
     new_operands.reserve(user->operand_count());
 
     Shape changed_shape;
-    for (HloInstruction* user_operand : user->operands()) {
-      if (user_operand->opcode() == HloOpcode::kBroadcast &&
-          ShapeUtil::IsScalar(user_operand->operand(0)->shape())) {
+
+    for (auto* user_operand : user->operands()) {
+      if (ShouldSinkBroadcastAndOperandWithSameUser(user, broadcast,
+                                                    user_operand)) {
+        // Sink original broadcast X -b-> Y => -b-> X -> Y.
+        new_operands.emplace_back(user_operand->mutable_operand(0));
+      } else if (IsHloInstructionBroadcastWithScalarOperand(user_operand)) {
+        // Make sure that any scalar operand gets the same shape as the user.
         changed_shape = ShapeUtil::ChangeElementType(
             operand->shape(), user_operand->shape().element_type());
         simplifier_->UpdateLayout(&changed_shape);
@@ -2795,16 +2837,18 @@ AlgebraicSimplifierVisitor::TryToSinkBroadcastAfterOpWithUniqueNonScalarOperand(
             computation_->AddInstruction(HloInstruction::CreateBroadcast(
                 changed_shape, user_operand->mutable_operand(0), {})));
       } else {
-        CHECK_EQ(broadcast, user_operand);
-        new_operands.push_back(operand);
+        // No optimization possible, so just insert the old operand.
+        new_operands.emplace_back(operand);
       }
     }
+
     VLOG(4) << "Sinking broadcast after user:";
     VLOG(4) << "  old broadcast: " << broadcast->ToString();
     VLOG(4) << "  old user: " << user->ToString();
     changed_shape = ShapeUtil::ChangeElementType(operand->shape(),
                                                  user->shape().element_type());
     simplifier_->UpdateLayout(&changed_shape);
+
     HloInstruction* new_user = computation_->AddInstruction(
         user->CloneWithNewOperands(changed_shape, new_operands));
     VLOG(4) << "  new user: " << new_user->ToString();
@@ -2814,8 +2858,14 @@ AlgebraicSimplifierVisitor::TryToSinkBroadcastAfterOpWithUniqueNonScalarOperand(
         broadcast);
     VLOG(4) << "  new broadcast: " << new_broadcast->ToString();
     TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(new_broadcast));
+
     changed = true;
+
+    TF_RETURN_IF_ERROR(
+        TryToSinkBroadcastAfterOpWithUniqueNonScalarOperand(new_broadcast)
+            .status());
   }
+
   return changed;
 }
 
@@ -4339,7 +4389,7 @@ StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {
       2, "PoplarAlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
   AlgebraicSimplifierVisitor visitor(this, enable_fast_math_);
-  for (auto comp : module->MakeComputationPostOrder()) {
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (pp::IsPopOpsFusion(comp)) {
       continue;
     }
