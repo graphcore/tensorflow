@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -36,39 +37,13 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/test_helpers.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-class ExecutionCounterUtilTest : public HloTestBase {};
-
-poplar::Device CreateIpuModel(int64 num_shards) {
-  poplar::IPUModel model;
-  model.numIPUs = num_shards;
-  return model.createDevice();
-}
-
-std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
-                                                    int64 num_shards) {
-  auto resources = CompilerResources::CreateTestDefault(module);
-  resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      CreateIpuModel(num_shards), poplar::replication_factor(1));
-  if (num_shards > 1) {
-    auto target = resources->main_graph->getTarget();
-    auto tiles_per_ipu = target.getTilesPerIPU();
-    for (int64 i = 0; i != num_shards; ++i) {
-      resources->shard_compute_graphs.emplace_back(
-          resources->main_graph->createVirtualGraph(i * tiles_per_ipu,
-                                                    (i + 1) * tiles_per_ipu));
-    }
-  }
-  popops::addCodelets(*resources->main_graph);
-  return std::move(resources);
-}
+using ExecutionCounterUtilTest = HloPoplarTestBase;
 
 TEST_F(ExecutionCounterUtilTest, TestNoShards) {
   const string hlo_text = R"(
@@ -109,7 +84,10 @@ ENTRY main {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
 
-  auto resources = GetMockResources(module.get(), 4);
+  const int32 num_shards = 4;
+  auto device = CreateIpuModel(num_shards);
+  auto resources = GetMockResources(device, module.get(), false, num_shards);
+
   ExecutionCounters counters(*resources.get(), {});
   EXPECT_FALSE(counters.Initialized());
   // Put the counters on the stack.

@@ -36,11 +36,20 @@ class HloPoplarTestBase : public HloTestBase {
  protected:
   using HloTestBase::HloTestBase;
 
-  static std::unique_ptr<CompilerResources> GetMockResources(
-      poplar::Device& device, HloModule* module, int32 replication_factor = 1);
+  static std::unique_ptr<CompilerResources> GetMockResources(HloModule* module);
 
-  static StatusOr<poplar::Device> CreateIpuModel(int32 num_ipus = 0,
-                                                 int32 num_tiles = 0);
+  static std::unique_ptr<CompilerResources> GetMockResources(
+      HloModule* module, bool merge_infeeds);
+
+  static std::unique_ptr<CompilerResources> GetMockResources(
+      poplar::Device& device, HloModule* module, bool merge_infeeds,
+      int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size = 0);
+
+  static std::unique_ptr<CompilerResources> GetMockResources(
+      poplar::Device& device, HloModule* module, int32 replication_factor = 1,
+      const CompilerInformation& info = CompilerInformation());
+
+  static poplar::Device CreateIpuModel(int32 num_ipus = 0, int32 num_tiles = 0);
   static StatusOr<poplar::Device> CreateIpuDevice(int32 num_ipus = 1,
                                                   int32 num_tiles = 0);
 

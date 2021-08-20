@@ -36,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -51,49 +52,13 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/test_helpers.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
 
-class PipelineSeqVisitorTest : public HloTestBase {};
-
-std::unique_ptr<CompilerResources> GetMockResources(
-    poplar::Device& device, HloModule* module, bool merge_infeeds,
-    int number_of_vgraphs, int64 max_inter_ipu_copies_buffer_size = 0) {
-  const auto info = CompilerInformation().set_max_inter_ipu_copies_buffer_size(
-      max_inter_ipu_copies_buffer_size);
-  auto resources = CompilerResources::CreateTestDefault(module, info);
-  resources->merge_infeed_io_copies = merge_infeeds;
-  resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph =
-      absl::make_unique<poplar::Graph>(device, poplar::replication_factor(1));
-
-  // Add mock vgraphs
-  for (int i = 0; i < number_of_vgraphs; ++i) {
-    resources->shard_compute_graphs.emplace_back(
-        resources->main_graph->createVirtualGraph(i * 4, (i + 1) * 4));
-  }
-  resources->shard_to_ipu_id.resize(number_of_vgraphs);
-  absl::c_iota(resources->shard_to_ipu_id, 0);
-
-  poplin::addCodelets(*resources->main_graph);
-  popnn::addCodelets(*resources->main_graph);
-  popops::addCodelets(*resources->main_graph);
-  poprand::addCodelets(*resources->main_graph);
-  return std::move(resources);
-}
-
-poplar::Device createIpuModel(int IPUCount = 1, int IPUTileCount = 1216) {
-  poplar::IPUModel model;
-
-  model.numIPUs = IPUCount;
-  model.tilesPerIPU = IPUTileCount;
-
-  return model.createDevice();
-}
+using PipelineSeqVisitorTest = HloPoplarTestBase;
 
 // This tests that the print tensor statements get printed in the expected
 // order, given a pipeline poplar control program.
@@ -157,7 +122,7 @@ ENTRY main {
   ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Sequential\"}}}"
 }
 )";
-  auto device = createIpuModel(2, 4);
+  auto device = CreateIpuModel(2, 4);
 
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
@@ -307,7 +272,7 @@ ENTRY main {
   ROOT p = () call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Sequential\"}}}"
 }
 )";
-  auto device = createIpuModel(2, 4);
+  auto device = CreateIpuModel(2, 4);
 
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
@@ -453,7 +418,7 @@ ENTRY main {
 }
 
 )";
-  auto device = createIpuModel(2, 4);
+  auto device = CreateIpuModel(2, 4);
 
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
@@ -617,7 +582,7 @@ ENTRY main {
   ROOT p = (f32[]) call(arg, const_2), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, metadata={op_type="Pipeline" op_name="pipeline/Pipeline"}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\",\"pipelineConfig\":{\"repeatCount\":\"2\",\"batchSerializationIterations\":\"1\",\"schedule\":\"Sequential\"}}}"
 }
 )";
-  auto device = createIpuModel(4, 4);
+  auto device = CreateIpuModel(4, 4);
 
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
@@ -788,7 +753,7 @@ ENTRY e {
   ROOT c = () call(p0, p1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
-  auto device = createIpuModel(2, 4);
+  auto device = CreateIpuModel(2, 4);
 
   std::unique_ptr<HloModule> module =
       ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
