@@ -2326,6 +2326,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2340,6 +2341,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2367,6 +2369,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         ":test_utils",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
@@ -2381,6 +2384,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
@@ -2434,6 +2438,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -2452,6 +2457,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -2513,6 +2519,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:shape_inference",
@@ -3387,6 +3394,7 @@ xla_test(
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
+        ":poplar_test_base",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:test",
         "//tensorflow/compiler/xla:util",
@@ -3632,6 +3640,7 @@ xla_test(
     copts = ["-fexceptions"],
     deps = [
         ":optimizers",
+        ":poplar_test_base",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",

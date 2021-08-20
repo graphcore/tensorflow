@@ -987,7 +987,7 @@ ENTRY cluster_1  {
   EXPECT_TRUE(CombineInstructions().Run(module.get()).ValueOrDie());
 
   // Prepare to execute graph.
-  TF_ASSERT_OK_AND_ASSIGN(auto device, CreateIpuModel(1, 32));
+  auto device = CreateIpuModel(1, 32);
   auto resources = GetMockResources(device, module.get());
 
   auto order = module->schedule().sequence(entry).instructions();
