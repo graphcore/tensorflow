@@ -2309,6 +2309,20 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_verifier_test",
+    srcs = ["tests/pipeline_verifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+    ],
+)
+
+xla_test(
     name = "pipeline_visitor_utils_test",
     srcs = ["tests/pipeline_visitor_utils_test.cc"],
     backends = ["poplar"],
@@ -5370,6 +5384,7 @@ test_suite(
     tests = [
         "64_bit_test",
         "add_block_recompute_test",
+        "add_stochastic_rounding_options_test",
         "all_to_all_finder_test",
         "allocation_finder_priority_test",
         "allocation_finder_test",
@@ -5458,6 +5473,7 @@ test_suite(
         "lstm_test",
         "map_hlo_instruction_to_debug_id_test",
         "mapping_test",
+        "mark_replica_identical_instructions_test",
         "matmul_combiner_test",
         "matmul_graph_caching_test",
         "matmul_option_test",

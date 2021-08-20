@@ -56,6 +56,8 @@ class ValuesIdenticalAcrossReplicasVisitor
   // visited.
   bool Visited(const HloComputation* comp) const;
 
+  Status Postprocess(const HloInstruction* inst) override;
+
   Status DefaultAction(const HloInstruction* inst) override;
 
   Status HandleCall(const HloInstruction* inst) override;

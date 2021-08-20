@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_evaluator.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
@@ -432,20 +433,50 @@ int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   return cfg.call_config().pipeline_config().repeat_count();
 }
 
-absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+int64 GetAccumulationCountOperandIndex(const HloInstruction* inst) {
   CHECK(IsPipelineOp(inst));
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  int64 index =
-      cfg.call_config().pipeline_config().gradient_accumulation_index();
-  CHECK_LT(index, inst->operands().size()) << inst->ToString();
-  const auto& gradient_accumulation_operand = inst->operand(index);
-  if (!gradient_accumulation_operand->IsConstant()) {
-    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
+  return cfg.call_config().pipeline_config().gradient_accumulation_index();
+}
+
+const HloInstruction* GetGradientAccumulationCountInstruction(
+    const HloInstruction* inst) {
+  int64 index = GetAccumulationCountOperandIndex(inst);
+  CHECK_LT(index, inst->operands().size());
+  return inst->operand(index);
+}
+
+absl::optional<int64> GetAccumulationConstantsValue(
+    const HloInstruction* inst) {
+  if (inst->IsConstant()) {
+    auto value = LiteralScalarToNativeType<int>(inst->literal());
+    return absl::optional<int64>(value.ValueOrDie());
+  }
+  // If instruction is not a constant can try a little harder by trying to
+  // evaluate the instruction
+
+  // To keep this function taking a const HloInstruction (and a lot of
+  // callers also taking a const HloInstruction) clone the instruction here
+  // as the evaluator takes a non const instruction. Though will
+  // try to create a const evaluator
+  auto cloned_inst = inst->Clone();
+  Literal result;
+  HloEvaluator evaluator(/*max_loop_iterations=*/0);
+  if (!evaluator.TryEvaluate(cloned_inst.get(), &result)) {
     return absl::nullopt;
   }
-  auto value =
-      LiteralScalarToNativeType<int>(gradient_accumulation_operand->literal());
+  auto value = LiteralScalarToNativeType<int>(result);
   return absl::optional<int64>(value.ValueOrDie());
+}
+
+absl::optional<int64> GetGradientAccumulationCount(const HloInstruction* inst) {
+  const auto gradient_accumulation_operand =
+      GetGradientAccumulationCountInstruction(inst);
+  auto result = GetAccumulationConstantsValue(gradient_accumulation_operand);
+  if (!result) {
+    LOG(FATAL) << "GradientAccumulationCount has to be a constant";
+  }
+  return result;
 }
 
 int64 GetPipelineBatchSerializationIterations(const HloInstruction* inst) {

@@ -100,11 +100,12 @@ constexpr string_view format_pretty_function(const char* s) {
 #else
 #error "require C++11 or greater for trace point function name mangaling"
 #endif
-
-#define TENSORFLOW_TRACEPOINT()          \
-  TensorflowPoplarPluginTracepoint __pt( \
-      format_pretty_function(__PRETTY_FUNCTION__))
 }  // namespace poplarplugin
 }  // namespace xla
+
+// Using a global namespace reference to make the macro work from anywhere.
+#define TENSORFLOW_TRACEPOINT()                               \
+  ::xla::poplarplugin::TensorflowPoplarPluginTracepoint __pt( \
+      ::xla::poplarplugin::format_pretty_function(__PRETTY_FUNCTION__))
 
 #endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_TRACEPOINT_H_
