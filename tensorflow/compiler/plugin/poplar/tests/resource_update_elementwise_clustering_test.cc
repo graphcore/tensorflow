@@ -121,7 +121,7 @@ struct ResourceUpdateElementwiseClusteringShapeTestSpec {
     add.1 = $element_type$shape add(input, arg0)
     call = ($element_type$shape,$remote_buffer_element_type$shape)
     call(add.1, arg0, arg1), to_apply=resource_update,
-    frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate},
+    frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"},
     backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\",
     \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}" gte0 =
     $element_type$shape get-tuple-element(call), index=0 gte1 =
@@ -362,7 +362,7 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestSameCluster) {
     add.1 = f16[128] add(input, l.arg0)
     add.2 = f16[128] add(add.1, l.arg1)
 
-    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
+    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
     gte0 = f16[128] get-tuple-element(resource_update), index=0
     gte1 = f16[128] get-tuple-element(resource_update), index=1
     gte2 = f16[128] get-tuple-element(resource_update), index=2
@@ -464,7 +464,7 @@ TEST_F(ResourceUpdateElementwiseClusteringOutlineTests, TestDifferentCluster) {
     add.1 = f16[128] add(input, l.arg0)
     add.2 = f16[128] add(add.1, l.arg1)
 
-    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
+    resource_update = (f16[128],f16[128],f16[128],f16[128]) call(add.1, add.2, l.arg0, l.arg1, l.arg2, l.arg3, l.arg4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE="ResourceUpdate"}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":\"THREESTATE_ON\", \"partitionOffloadedVariables\":\"THREESTATE_OFF\"}}}"
     gte0 = f16[128] get-tuple-element(resource_update), index=0
     gte1 = f16[128] get-tuple-element(resource_update), index=1
     gte2 = f16[128] get-tuple-element(resource_update), index=2
