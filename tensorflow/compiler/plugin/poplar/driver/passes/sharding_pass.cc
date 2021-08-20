@@ -421,6 +421,8 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
           }
           return false;
         default:
+          // We need an attempt after the others so that the changes in case 2
+          // can be used by the functions called before this step
           return false;
       }
     }
@@ -859,6 +861,17 @@ static void SetShardingOfCallers(CallGraphNode& call_graph_node,
   }
 }
 
+static std::vector<HloComputation*> FilterOutCompleted(
+    std::vector<HloComputation*> comps,
+    const absl::flat_hash_set<const HloComputation*>& completed) {
+  std::vector<HloComputation*> result;
+  result.reserve(comps.size());
+  absl::c_copy_if(
+      comps, std::back_inserter(result),
+      [&](const HloComputation* c) { return !completed.contains(c); });
+  return result;
+}
+
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
@@ -881,120 +894,118 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
   }
 
   std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
-  auto comp_count = comps.size();
+  comps = FilterOutCompleted(std::move(comps), completed);
 
   int attempt = 0;
-  while (completed.size() != comp_count) {
+  while (comps.size()) {
     bool made_progress = false;
     for (auto* comp : comps) {
-      if (!completed.contains(comp)) {
-        auto call_graph_node = call_graph->GetNode(comp);
+      auto call_graph_node = call_graph->GetNode(comp);
 
-        // Fusion computations are not considered for sharding
-        if (IsPopOpsFusion(comp)) {
-          completed.insert(comp);
-          made_progress |= true;
-          continue;
-        }
-
-        // Only call/while/if type computations can be sharded. map/sort/reduce
-        // ones take the sharding of the caller.
-        if (call_graph_node.context() != CallContext::kSequential) {
-          completed.insert(comp);
-          made_progress |= true;
-          continue;
-        }
-
-        // Computations which are not called from anywhere are ignored, not
-        // including the entry computation.
-        if (call_graph_node.callers().size() == 0 &&
-            comp != module->entry_computation()) {
-          completed.insert(comp);
-          made_progress |= true;
-          continue;
-        }
-
-        if (!HaveSharding(comp)) {
-          // Defer computation until its caller has sharding
-          continue;
-        }
-
-        TF_ASSIGN_OR_RETURN(bool done, ProcessComputation(comp, attempt));
-
-        // Check whether this is a function which requires unique sharding.
-        if (done && call_graph_node.caller_callsites().size() == 1 &&
-            IsFunction(call_graph_node.caller_callsites()[0].instruction())) {
-          HloInstruction* caller =
-              call_graph_node.caller_callsites()[0].instruction();
-          const bool unique_sharding = GetFunctionUniqueSharding(caller);
-          if (unique_sharding) {
-            TF_RETURN_IF_ERROR(ConvertComputationToUniqueSharding(
-                caller, comp, call_graph.get()));
-          }
-        }
-
-        // Patch up GTE sharding.  GTEs should always have the sharding taken
-        // from their operand, not their users.  During the initial copying of
-        // sharding info, they are allowed to take the sharding of their users
-        // in order to propagate sharding upwards through the graph.
-        made_progress |= PatchGTESharding(comp);
-
-        // For any called subcomputations which are not complete, copy onto
-        // them the input and output sharding from one of their caller
-        // instructions
-        for (auto site : call_graph_node.callsites()) {
-          for (auto* c : site.called_computations()) {
-            if (completed.count(c) == 0) {
-              made_progress |= CopyShardingToCalledComputations(site, c);
-            }
-          }
-        }
-
-        // Abandoned computation due to application of sharding to a deferred
-        // subcomputation.
-        if (!done) {
-          break;
-        }
-
-        // Apply sharding to callers of this computation.  Caller nodes reflect
-        // the sharding of the called subcomputation.  Ignore mismatching shapes
-        // because the while operation 'condition' subgraph has a different
-        // shape output to the operation itself.
-        for (auto cs : call_graph_node.caller_callsites()) {
-          if (cs.instruction()->shape() == comp->root_instruction()->shape()) {
-            SetSharding(cs.instruction(), comp->root_instruction()->sharding());
-          }
-        }
-
-        // Apply parameter sharding to predicate and body of a while
-        TF_RETURN_IF_ERROR(
-            ApplyParameterPredicateToBody(call_graph_node, comp));
-
-        // Patch up GTE sharding again.  Changing the parameter sharding can
-        // alter the inputs to a GTE.
-        PatchGTESharding(comp);
-
-        // Note: after this point, only nodes which do not proceed GTE
-        // instructions can be modified.
-
-        // Ensure that all conditional subcomps have the same output sharding
-        SetConditionalSubComputationSharding(call_graph_node, comp);
-
-        // Ensure that the root sharding of a while/repeat/pipeline body matches
-        // the input.
-        MatchBodyShardingToInput(call_graph_node, comp);
-
-        // Ensure that the callers of this computation have the same sharding as
-        // its root
-        SetShardingOfCallers(call_graph_node, comp);
-
+      // Fusion computations are not considered for sharding
+      if (IsPopOpsFusion(comp)) {
         completed.insert(comp);
         made_progress |= true;
+        continue;
       }
+
+      // Only call/while/if type computations can be sharded. map/sort/reduce
+      // ones take the sharding of the caller.
+      if (call_graph_node.context() != CallContext::kSequential) {
+        completed.insert(comp);
+        made_progress |= true;
+        continue;
+      }
+
+      // Computations which are not called from anywhere are ignored, not
+      // including the entry computation.
+      if (call_graph_node.callers().size() == 0 &&
+          comp != module->entry_computation()) {
+        completed.insert(comp);
+        made_progress |= true;
+        continue;
+      }
+
+      if (!HaveSharding(comp)) {
+        // Defer computation until its caller has sharding
+        continue;
+      }
+
+      TF_ASSIGN_OR_RETURN(bool done, ProcessComputation(comp, attempt));
+
+      // Check whether this is a function which requires unique sharding.
+      if (done && call_graph_node.caller_callsites().size() == 1 &&
+          IsFunction(call_graph_node.caller_callsites()[0].instruction())) {
+        HloInstruction* caller =
+            call_graph_node.caller_callsites()[0].instruction();
+        const bool unique_sharding = GetFunctionUniqueSharding(caller);
+        if (unique_sharding) {
+          TF_RETURN_IF_ERROR(ConvertComputationToUniqueSharding(
+              caller, comp, call_graph.get()));
+        }
+      }
+
+      // Patch up GTE sharding.  GTEs should always have the sharding taken
+      // from their operand, not their users.  During the initial copying of
+      // sharding info, they are allowed to take the sharding of their users
+      // in order to propagate sharding upwards through the graph.
+      made_progress |= PatchGTESharding(comp);
+
+      // For any called subcomputations which are not complete, copy onto
+      // them the input and output sharding from one of their caller
+      // instructions
+      for (auto site : call_graph_node.callsites()) {
+        for (auto* c : site.called_computations()) {
+          if (completed.count(c) == 0) {
+            made_progress |= CopyShardingToCalledComputations(site, c);
+          }
+        }
+      }
+
+      // Abandoned computation due to application of sharding to a deferred
+      // subcomputation.
+      if (!done) {
+        break;
+      }
+
+      // Apply sharding to callers of this computation.  Caller nodes reflect
+      // the sharding of the called subcomputation.  Ignore mismatching shapes
+      // because the while operation 'condition' subgraph has a different
+      // shape output to the operation itself.
+      for (auto cs : call_graph_node.caller_callsites()) {
+        if (cs.instruction()->shape() == comp->root_instruction()->shape()) {
+          SetSharding(cs.instruction(), comp->root_instruction()->sharding());
+        }
+      }
+
+      // Apply parameter sharding to predicate and body of a while
+      TF_RETURN_IF_ERROR(ApplyParameterPredicateToBody(call_graph_node, comp));
+
+      // Patch up GTE sharding again.  Changing the parameter sharding can
+      // alter the inputs to a GTE.
+      PatchGTESharding(comp);
+
+      // Note: after this point, only nodes which do not proceed GTE
+      // instructions can be modified.
+
+      // Ensure that all conditional subcomps have the same output sharding
+      SetConditionalSubComputationSharding(call_graph_node, comp);
+
+      // Ensure that the root sharding of a while/repeat/pipeline body matches
+      // the input.
+      MatchBodyShardingToInput(call_graph_node, comp);
+
+      // Ensure that the callers of this computation have the same sharding as
+      // its root
+      SetShardingOfCallers(call_graph_node, comp);
+
+      completed.insert(comp);
+      made_progress |= true;
     }
+    comps = FilterOutCompleted(std::move(comps), completed);
 
     if (!made_progress) {
-      if (attempt < 2) {
+      if (attempt < 3) {
         attempt++;
       } else {
         return xla::FailedPrecondition(
