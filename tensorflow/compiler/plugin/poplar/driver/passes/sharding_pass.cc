@@ -455,9 +455,10 @@ Status PropagateShardingDeviceToInstruction(int64 sharding_device,
   return Status::OK();
 }
 
-StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipelineStage(
-    HloInstruction* stage, HloInstruction* pipeline_op, CallGraph* call_graph) {
-  absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+Status ProcessPipelineStage(
+    HloInstruction* stage, HloInstruction* pipeline_op,
+    const CallGraph* call_graph,
+    absl::flat_hash_set<const HloComputation*>& computations_in_pipeline) {
   const int64 sharding_device = stage->sharding().GetUniqueDevice();
 
   CHECK_NE(sharding_device, -1);
@@ -476,13 +477,13 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipelineStage(
     computations_in_pipeline.insert(comp);
   }
 
-  return computations_in_pipeline;
+  return Status::OK();
 }
 
-StatusOr<absl::flat_hash_set<const HloComputation*>>
-ProcessParallelPipelineStage(HloInstruction* stage, HloInstruction* pipeline_op,
-                             CallGraph* call_graph) {
-  absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+Status ProcessParallelPipelineStage(
+    HloInstruction* stage, HloInstruction* pipeline_op,
+    const CallGraph* call_graph,
+    absl::flat_hash_set<const HloComputation*>& computations_in_pipeline) {
   const int64 sharding_device = stage->sharding().GetUniqueDevice();
 
   auto stage_insts = stage->to_apply()->MakeInstructionPostOrder();
@@ -494,13 +495,9 @@ ProcessParallelPipelineStage(HloInstruction* stage, HloInstruction* pipeline_op,
     const int64 sub_sharding_device = sub_stage->sharding().GetUniqueDevice();
 
     // Process each substage.
-    TF_ASSIGN_OR_RETURN(
-        auto stage_called_computations,
-        ProcessPipelineStage(sub_stage, pipeline_op, call_graph));
-
-    // Add the substage computations to the computation set.
-    computations_in_pipeline.insert(stage_called_computations.begin(),
-                                    stage_called_computations.end());
+    // And add the substage computations to the computation set.
+    TF_RETURN_IF_ERROR(ProcessPipelineStage(sub_stage, pipeline_op, call_graph,
+                                            computations_in_pipeline));
 
     // Then propagate sharding to users.
     for (HloInstruction* user : sub_stage->users()) {
@@ -532,7 +529,7 @@ ProcessParallelPipelineStage(HloInstruction* stage, HloInstruction* pipeline_op,
   // Add the stage to the computation set.
   computations_in_pipeline.insert(stage->to_apply());
 
-  return computations_in_pipeline;
+  return Status::OK();
 }
 
 namespace {
@@ -568,8 +565,10 @@ Status TransferSubStageSharding(HloComputation* fwd_stage,
 }  // namespace
 
 StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
-    HloInstruction* pipeline_op, CallGraph* call_graph) {
+    HloInstruction* pipeline_op, const CallGraph* call_graph,
+    const int64 computation_count) {
   absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+  computations_in_pipeline.reserve(computation_count);
 
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
@@ -606,17 +605,11 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
       const int64 sharding_device = stage->sharding().GetUniqueDevice();
 
       if (sharding_device != Devices::All) {
-        TF_ASSIGN_OR_RETURN(
-            auto stage_called_computations,
-            ProcessPipelineStage(stage, pipeline_op, call_graph));
-        computations_in_pipeline.insert(stage_called_computations.begin(),
-                                        stage_called_computations.end());
+        TF_RETURN_IF_ERROR(ProcessPipelineStage(stage, pipeline_op, call_graph,
+                                                computations_in_pipeline));
       } else {
-        TF_ASSIGN_OR_RETURN(
-            auto stage_called_computations,
-            ProcessParallelPipelineStage(stage, pipeline_op, call_graph));
-        computations_in_pipeline.insert(stage_called_computations.begin(),
-                                        stage_called_computations.end());
+        TF_RETURN_IF_ERROR(ProcessParallelPipelineStage(
+            stage, pipeline_op, call_graph, computations_in_pipeline));
       }
 
       // Then propagate sharding to users.
@@ -635,7 +628,7 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
 // parameters.
 Status ConvertComputationToUniqueSharding(HloInstruction* caller,
                                           HloComputation* comp,
-                                          CallGraph* call_graph) {
+                                          const CallGraph* call_graph) {
   TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_comps,
                       GetAllComputationsCalledBy(caller, call_graph));
 
@@ -766,13 +759,15 @@ static void RemoveSharding(
 }
 
 static StatusOr<absl::flat_hash_set<const HloComputation*>>
-FindInstructionsCompletedInPipeline(HloModule* module, CallGraph* call_graph) {
+FindInstructionsCompletedInPipeline(HloModule* module,
+                                    const CallGraph* call_graph) {
   // We first fix sharding for pipelining as it is well defined.
   TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
                       GetPipelines(module));
   if (pipeline_ops.size()) {
     CHECK_EQ(pipeline_ops.size(), 1);
-    return ProcessPipeline(pipeline_ops[0], call_graph);
+    return ProcessPipeline(pipeline_ops[0], call_graph,
+                           module->computation_count());
   }
   return absl::flat_hash_set<const HloComputation*>();
 }
@@ -787,8 +782,8 @@ static bool PatchGTESharding(HloComputation* comp) {
   return made_progress;
 }
 
-static Status ApplyParameterPredicateToBody(CallGraphNode& call_graph_node,
-                                            HloComputation* comp) {
+static Status ApplyParameterPredicateToBody(
+    const CallGraphNode& call_graph_node, HloComputation* comp) {
   for (auto cs : call_graph_node.caller_callsites()) {
     auto* caller = cs.instruction();
     if (caller->opcode() == HloOpcode::kWhile) {
@@ -810,8 +805,8 @@ static Status ApplyParameterPredicateToBody(CallGraphNode& call_graph_node,
   return Status::OK();
 }
 
-static void SetConditionalSubComputationSharding(CallGraphNode& call_graph_node,
-                                                 HloComputation* comp) {
+static void SetConditionalSubComputationSharding(
+    const CallGraphNode& call_graph_node, HloComputation* comp) {
   for (auto cs : call_graph_node.caller_callsites()) {
     auto* caller = cs.instruction();
     if (caller->opcode() == HloOpcode::kConditional) {
@@ -823,7 +818,7 @@ static void SetConditionalSubComputationSharding(CallGraphNode& call_graph_node,
   }
 }
 
-static void MatchBodyShardingToInput(CallGraphNode& call_graph_node,
+static void MatchBodyShardingToInput(const CallGraphNode& call_graph_node,
                                      HloComputation* comp) {
   for (auto cs : call_graph_node.caller_callsites()) {
     auto* caller = cs.instruction();
@@ -849,7 +844,7 @@ static void MatchBodyShardingToInput(CallGraphNode& call_graph_node,
   }
 }
 
-static void SetShardingOfCallers(CallGraphNode& call_graph_node,
+static void SetShardingOfCallers(const CallGraphNode& call_graph_node,
                                  HloComputation* comp) {
   for (auto cs : call_graph_node.caller_callsites()) {
     if (cs.context() == CallContext::kSequential) {
@@ -872,13 +867,48 @@ static std::vector<HloComputation*> FilterOutCompleted(
   return result;
 }
 
+static absl::flat_hash_set<const HloComputation*>
+MarkComputationsNotConsideredForSharding(
+    const std::vector<HloComputation*>& comps, const CallGraph& call_graph,
+    const HloModule* module,
+    absl::flat_hash_set<const HloComputation*> completed) {
+  for (const auto* comp : comps) {
+    if (completed.contains(comp)) {
+      // We haven't filtered comps yet, and as only iterating through once
+      // wouldn't speed us up to filter before this
+      continue;
+    }
+    // Fusion computations are not considered for sharding
+    if (IsPopOpsFusion(comp)) {
+      completed.insert(comp);
+      continue;
+    }
+    auto call_graph_node = call_graph.GetNode(comp);
+    // Only call/while/if type computations can be sharded. map/sort/reduce
+    // ones take the sharding of the caller.
+    if (call_graph_node.context() != CallContext::kSequential) {
+      completed.insert(comp);
+      continue;
+    }
+
+    // Computations which are not called from anywhere are ignored, not
+    // including the entry computation.
+    if (call_graph_node.callers().size() == 0 &&
+        comp != module->entry_computation()) {
+      completed.insert(comp);
+      continue;
+    }
+  }
+  return completed;
+}
+
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
   VLOG(2) << "Before ShardingPass:";
   XLA_VLOG_LINES(2, module->ToString());
 
-  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  std::unique_ptr<const CallGraph> call_graph = CallGraph::Build(module);
   if (!call_graph->IsFlattened()) {
     return FailedPrecondition(
         "Expected the call graph of the module to be flat.");
@@ -894,44 +924,25 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
   }
 
   std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
+
+  // Mark computations not considered for sharding as completed
+  completed = MarkComputationsNotConsideredForSharding(
+      comps, *call_graph, module, std::move(completed));
+
   comps = FilterOutCompleted(std::move(comps), completed);
 
   int attempt = 0;
   while (comps.size()) {
     bool made_progress = false;
     for (auto* comp : comps) {
-      auto call_graph_node = call_graph->GetNode(comp);
-
-      // Fusion computations are not considered for sharding
-      if (IsPopOpsFusion(comp)) {
-        completed.insert(comp);
-        made_progress |= true;
-        continue;
-      }
-
-      // Only call/while/if type computations can be sharded. map/sort/reduce
-      // ones take the sharding of the caller.
-      if (call_graph_node.context() != CallContext::kSequential) {
-        completed.insert(comp);
-        made_progress |= true;
-        continue;
-      }
-
-      // Computations which are not called from anywhere are ignored, not
-      // including the entry computation.
-      if (call_graph_node.callers().size() == 0 &&
-          comp != module->entry_computation()) {
-        completed.insert(comp);
-        made_progress |= true;
-        continue;
-      }
-
       if (!HaveSharding(comp)) {
         // Defer computation until its caller has sharding
         continue;
       }
 
       TF_ASSIGN_OR_RETURN(bool done, ProcessComputation(comp, attempt));
+
+      const CallGraphNode& call_graph_node = call_graph->GetNode(comp);
 
       // Check whether this is a function which requires unique sharding.
       if (done && call_graph_node.caller_callsites().size() == 1 &&
