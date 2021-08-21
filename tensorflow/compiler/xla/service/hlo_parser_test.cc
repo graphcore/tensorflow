@@ -2365,6 +2365,14 @@ TEST_F(HloParserTest, ParseFrontendAttributes) {
   EXPECT_EQ(FrontendAttributesToString(frontend_attributes), original);
 }
 
+TEST_F(HloParserTest, ParseFrontendAttributesTF2Syntax) {
+  const string original = "{attr_a=test_a,attr_b=b}";
+  const string tf2 = "{attr_a=\"test_a\",attr_b=\"b\"}";
+  TF_ASSERT_OK_AND_ASSIGN(FrontendAttributes frontend_attributes,
+                          ParseFrontendAttributes(tf2));
+  EXPECT_EQ(FrontendAttributesToString(frontend_attributes), original);
+}
+
 TEST_F(HloParserTest, ParseWindow) {
   Window original = window_util::MakeWindow({1, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(Window parsed,

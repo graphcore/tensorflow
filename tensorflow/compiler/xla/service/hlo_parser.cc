@@ -1866,12 +1866,11 @@ bool HloParser::ParseFrontendAttributes(
     // empty
   } else {
     do {
-      LocTy loc = lexer_.GetLoc();
-      string attribute;
+      std::string attribute;
       if (!ParseAttributeName(&attribute)) {
         return false;
       }
-      if (lexer_.GetKind() != TokKind::kIdent) {
+      if (lexer_.GetKind() != TokKind::kIdent && lexer_.GetKind() != TokKind::kString) {
         return false;
       }
       (*frontend_attributes->mutable_map())[attribute] = lexer_.GetStrVal();
