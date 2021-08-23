@@ -290,6 +290,9 @@ class ResultProcessorBase {
   // A method called once all the outputs have been processed.
   virtual void Done() {}
 
+  // A method called to indicate failure.
+  virtual void Abort(Status status) { Done(); }
+
   // Returns whether this result is for the user or not.
   virtual bool IsUserResult() const = 0;
 
@@ -307,9 +310,10 @@ class ResultProcessorBase {
 class ResultProcessor : public ResultProcessorBase {
  public:
   ResultProcessor(
-      AsyncOpKernel::DoneCallback done,
+      OpKernelContext* ctx, AsyncOpKernel::DoneCallback done,
       const absl::flat_hash_map<std::string, TensorBuffer*>& output_tensors)
       : ResultProcessorBase(output_tensors.size()),
+        ctx_(ctx),
         done_(std::move(done)),
         output_tensors_(output_tensors) {}
 
@@ -322,9 +326,15 @@ class ResultProcessor : public ResultProcessorBase {
 
   void Done() override { done_(); }
 
+  void Abort(Status status) override {
+    ctx_->CtxFailureWithWarning(status);
+    Done();
+  }
+
   bool IsUserResult() const override { return true; }
 
  private:
+  OpKernelContext* ctx_;
   AsyncOpKernel::DoneCallback done_;
   const absl::flat_hash_map<std::string, TensorBuffer*> output_tensors_;
 };
@@ -342,7 +352,9 @@ class CommunicationManager {
  public:
   explicit CommunicationManager(PoplarExecutableProto& proto,
                                 std::size_t timeout_us)
-      : env_(tensorflow::Env::Default()), timeout_us_(timeout_us) {
+      : env_(tensorflow::Env::Default()),
+        timeout_us_(timeout_us),
+        status_(Status::OK()) {
     io_config_.ParsePoplarExecutableProto(proto);
     executable_can_stall_ =
         proto.embedded_runtime_config().executable_can_stall();
@@ -419,11 +431,16 @@ class CommunicationManager {
     result_processors_.pop();
   }
 
-  void PushInputDataAndResultProcessor(
+  Status PushInputDataAndResultProcessor(
       absl::flat_hash_map<std::string, tensorflow::Tensor> inputs,
       std::unique_ptr<ResultProcessorBase> result_processor) {
     TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+
+    if (!status_.ok()) {
+      return status_;
+    }
+
     for (auto& it : inputs) {
       input_queues_[it.first].push_back(std::move(it.second));
     }
@@ -455,6 +472,8 @@ class CommunicationManager {
           });
     }
     output_cv_.notify_one();
+
+    return Status::OK();
   }
 
   void InitiateExit() {
@@ -476,6 +495,23 @@ class CommunicationManager {
           env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
                             [this] { DummyDataThread(); }));
     }
+  }
+
+  void Abort(Status status) {
+    TENSORFLOW_TRACEPOINT();
+    std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+    status_ = status;
+
+    while (!result_processors_.empty()) {
+      auto& result_processor = result_processors_.front();
+      result_processor->Abort(status);
+      result_processors_.pop();
+    }
+
+    input_queues_.clear();
+    output_queues_.clear();
+
+    InitiateExit();
   }
 
  private:
@@ -526,6 +562,7 @@ class CommunicationManager {
       GUARDED_BY(io_mutex_);
   std::queue<std::unique_ptr<ResultProcessorBase>> result_processors_
       GUARDED_BY(io_mutex_);
+  Status status_ GUARDED_BY(io_mutex_);
 
   IOConfig io_config_;
 
@@ -637,7 +674,15 @@ class EngineResource {
         [&connect_streams_status, &input_list, this] {
           {
             Tracepoint trace("engine_.load(device_)");
-            engine_.load(device_);
+            try {
+              engine_.load(device_);
+            } catch (std::exception& e) {
+              auto status =
+                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+                      "[Load engine]", e, /* recoverable_reset = */ false);
+              communication_manager_.Abort(status);
+              return;
+            }
           }
 
           auto status = ConnectStreams(input_list);
@@ -650,12 +695,28 @@ class EngineResource {
           VLOG(2) << "Engine loop starting.";
           {
             Tracepoint trace("engine_.run(0)");
-            engine_.run(0);
+            try {
+              engine_.run(0);
+            } catch (std::exception& e) {
+              auto status =
+                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+                      "[Host to device]", e, /* recoverable_reset = */ false);
+              communication_manager_.Abort(status);
+              return;
+            }
           }
 
           do {
             Tracepoint trace("engine_.run(1)");
-            engine_.run(1);
+            try {
+              engine_.run(1);
+            } catch (std::exception& e) {
+              auto status =
+                  xla::poplarplugin::PoplarExceptionToTensorflowStatus(
+                      "[Execute engine]", e, /* recoverable_reset = */ false);
+              communication_manager_.Abort(status);
+              return;
+            }
           } while (!communication_manager_.Exiting());
         }));
 
@@ -966,10 +1027,12 @@ class ApplicationCall : public AsyncOpKernel {
 
     // Set up the result processor.
     std::unique_ptr<ResultProcessor> result_processor =
-        absl::make_unique<ResultProcessor>(std::move(done), output_tensors);
+        absl::make_unique<ResultProcessor>(ctx, done, output_tensors);
 
-    comm_mgr.PushInputDataAndResultProcessor(inputs,
-                                             std::move(result_processor));
+    OP_REQUIRES_OK_ASYNC(ctx,
+                         comm_mgr.PushInputDataAndResultProcessor(
+                             inputs, std::move(result_processor)),
+                         done);
   }
 
  private:

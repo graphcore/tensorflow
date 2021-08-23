@@ -214,7 +214,8 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
 }
 
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,
-                                         const std::exception& e) {
+                                         const std::exception& e,
+                                         bool recoverable_reset) {
   const std::string prefix = "[Poplar]" + origin + " ";
   try {
     std::rethrow_exception(std::current_exception());
@@ -224,7 +225,8 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
     // Recoverable runtime error with IPU_RESET action is handled by resetting
     // the engine to nullptr, otherwise it's a fatal error.
     if (runtime_error->getRecoveryAction() ==
-        poplar::RecoveryAction::IPU_RESET) {
+            poplar::RecoveryAction::IPU_RESET &&
+        recoverable_reset) {
       return tensorflow::errors::Internal(
           prefix, runtime_error->type, ": ", e.what(),
           ". IPU will be reset the next time a program is executed.");

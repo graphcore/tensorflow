@@ -104,7 +104,8 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources&,
 
 // Convert a poplar/poplibs exception to a Tensorflow error Status
 Status PoplarExceptionToTensorflowStatus(const std::string& origin,
-                                         const std::exception& e);
+                                         const std::exception& e,
+                                         bool recoverable_reset = true);
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
                          const std::string& value);

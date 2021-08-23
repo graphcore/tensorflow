@@ -789,6 +789,59 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
 
       self.assertAllClose(outputs[0], [14, 22])
 
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_exception(self):
+    # The dataset for feeding the graphs.
+    ds = dataset_ops.Dataset.from_tensors(constant_op.constant(1.0, shape=[1]))
+    ds = ds.repeat()
+
+    # The host side queues.
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      return outfeed_queue.enqueue(12.0 / x)
+
+    # Wrap in a loop.
+    def my_net():
+      r = loops.repeat(16, body, [], infeed_queue)
+      return r
+
+    def exception_executable(tmp_dir):
+      poplar_exec_filepath = os.path.join(tmp_dir.name,
+                                          "application.poplar_exec")
+
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.floating_point_behaviour.div0 = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      # Compile the application.
+      compile_op = application_compile_op.experimental_application_compile_op(
+          my_net, output_path=poplar_exec_filepath)
+      with sl.Session() as sess:
+        sess.run(compile_op)
+
+      return poplar_exec_filepath
+
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    poplar_exec_filepath = exception_executable(tmp_dir_obj)
+
+    engine_name = f'engine_{self.id()}'
+    ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                  engine_name)
+    result = embedded_runtime.embedded_runtime_call(
+        [np.zeros((1), dtype=np.float32)], ctx)
+
+    with sl.Session() as sess:
+      with self.assertRaisesRegex(
+          Exception,
+          r"\[Poplar\]\[Execute engine\] application_runtime_error: Tiles in "
+          r"excepted state.*"):
+        sess.run(result)
+
 
 if __name__ == "__main__":
   googletest.main()
