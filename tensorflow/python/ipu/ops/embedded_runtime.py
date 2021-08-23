@@ -17,7 +17,7 @@ Embedded application runtime
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from tensorflow.compiler.plugin.poplar.ops import gen_application_runtime
-from tensorflow.python.framework import ops, dtypes
+from tensorflow.python.framework import dtypes
 from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
 from tensorflow.compiler.xla import xla_data_pb2
 
@@ -38,20 +38,21 @@ class RuntimeContext:
   This class must not be constructed directly, instead call
   `embedded_runtime_start` or `emedded_runtime_start_and_call`.
   """
-  def __init__(self, name, executable_file, executable_proto, start_op):
+  def __init__(self, name, executable_file, executable_proto, start_output):
     self._name = name
     self._executable_file = executable_file
-    self._start_op = start_op
+    self._start_output = start_output
     self._executable_proto = executable_proto
 
-  def start_op(self):
+  def start_output(self):
     """
-    Get the op that will start the application runtime instance.
+    Get the output from the start op which will start the application runtime
+    instance.
 
     Returns:
-      The tensorflow op.
+      The output tensor from the start op.
     """
-    return self._start_op
+    return self._start_output
 
   def name(self):
     """
@@ -187,7 +188,8 @@ def embedded_runtime_start(executable_file, inputs, name, timeout=None):
   arg2idx_map = {t.argument: i for i, t in enumerate(input_tensors)}
   reordered_inputs = [inputs[arg2idx_map[i]] for i in range(len(inputs))]
 
-  # Create the context object that contains all the information required to call the embedded runtime.
+  # Create the context object that contains all the information required to
+  # call the embedded runtime.
   return RuntimeContext(
       name, executable_file, poplar_exec,
       gen_application_runtime.application_runtime(inputs=reordered_inputs,
@@ -232,13 +234,13 @@ def embedded_runtime_call(inputs, context):
           f"Mismatched input dtype at position {i} ('{name}'). Expected "
           f"{expected_dtype}, but input {i} has dtype {actual_dtype}.")
 
-  # Create a control dependency to the context's start op.
-  with ops.control_dependencies([context.start_op()]):
-    # Use the context's output types and engine name to call the runtime.
-    return gen_application_runtime.application_call(
-        inputs,
-        outfeed_types=context.output_types(),
-        engine_name=context.name())
+  # Use the context's start output, output types and engine name to call the
+  # runtime.
+  return gen_application_runtime.application_call(
+      inputs,
+      anchor=context.start_output(),
+      outfeed_types=context.output_types(),
+      engine_name=context.name())
 
 
 def embedded_runtime_stop(context):  #pylint: disable=unused-argument

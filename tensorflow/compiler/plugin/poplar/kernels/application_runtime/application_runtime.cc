@@ -885,6 +885,10 @@ class ApplicationRuntime : public OpKernel {
 
     OP_REQUIRES_OK(ctx, engine_mgr.CreateEngine(engine_name_, filename_,
                                                 timeout_us_, input_list));
+
+    tensorflow::Tensor* anchor = nullptr;
+    OP_REQUIRES_OK(ctx,
+                   ctx->allocate_output("anchor", TensorShape({}), &anchor));
   }
 
  private:
