@@ -301,6 +301,10 @@ class IPUExtendedV1(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstr
         self._container_strategy(),
         num_replicas_in_sync=self._num_replicas_in_sync)
 
+  def _distribute_datasets_from_function(self, dataset_fn, options):
+    del options
+    return dataset_fn(distribute_lib.InputContext())
+
   def non_slot_devices(self, var_list):
     del var_list
     return self._ipu_device
