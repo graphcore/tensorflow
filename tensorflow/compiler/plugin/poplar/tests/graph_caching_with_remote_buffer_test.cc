@@ -135,9 +135,13 @@ ENTRY main {
        {"$R", std::to_string(param.replication_factor)},
        {"$N", param.n ? std::to_string(param.n) : std::string()}});
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      auto device, param.hw ? CreateIpuDevice(param.replication_factor, 4)
-                            : CreateIpuModel());
+  poplar::Device device;
+  if (param.hw) {
+    TF_ASSERT_OK_AND_ASSIGN(device,
+                            CreateIpuDevice(param.replication_factor, 4));
+  } else {
+    device = CreateIpuModel();
+  }
 
   auto config = GetModuleConfigForTest();
   config.set_argument_input_indices({});

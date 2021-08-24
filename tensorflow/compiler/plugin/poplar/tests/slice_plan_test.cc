@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_passes/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_poplar_test_base.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -42,7 +43,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/test_helpers.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
 #include "absl/memory/memory.h"
@@ -60,21 +60,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class SlicePlanTest : public HloTestBase {};
-
-std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
-                                                    bool merge_infeeds) {
-  auto resources = CompilerResources::CreateTestDefault(module);
-  resources->merge_infeed_io_copies = merge_infeeds;
-  resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
-  poplin::addCodelets(*resources->main_graph);
-  popnn::addCodelets(*resources->main_graph);
-  popops::addCodelets(*resources->main_graph);
-  poprand::addCodelets(*resources->main_graph);
-  return std::move(resources);
-}
+using SlicePlanTest = HloPoplarTestBase;
 
 HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");

@@ -131,10 +131,8 @@ def run_and_export_model(tmp_dir,
   test_dataset = test_dataset.cache().repeat().batch(BATCH_SIZE,
                                                      drop_remainder=True)
 
-  infeed_test_queue = ipu_infeed_queue.IPUInfeedQueue(test_dataset,
-                                                      feed_name="test_infeed")
-  outfeed_test_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-      feed_name="test_outfeed")
+  infeed_test_queue = ipu_infeed_queue.IPUInfeedQueue(test_dataset)
+  outfeed_test_queue = ipu_outfeed_queue.IPUOutfeedQueue()
 
   if pipelined:
     bound_test_loop = partial(test_model_pipelined, infeed_test_queue,
@@ -146,10 +144,7 @@ def run_and_export_model(tmp_dir,
 
   # Use the bound builder functions to place the model on the IPU:
   with scopes.ipu_scope("/device:IPU:0"):
-    if not pipelined:
-      test_loop = ipu_compiler.compile(bound_test_loop, inputs=[])
-    else:
-      test_loop = ipu_compiler.compile(bound_test_loop)
+    test_loop = ipu_compiler.compile(bound_test_loop)
 
   compile_op = application_compile_op.experimental_application_compile_op(
       bound_test_loop,
@@ -360,7 +355,6 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
     def inference_thread(sess, res, infeeds_, t):
       if multiple_engines:
         engine_name = f'{engine_name_prefix}_{t % NUM_ENGINES}'
-        # engine_name = f'{engine_name_prefix}_{t}'
       else:
         engine_name = engine_name_prefix
 
@@ -375,12 +369,12 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
                                             shape=[BATCH_SIZE, NUM_PIXELS],
                                             name='images')
 
-          with ops.control_dependencies([run_app]):
-            infeeds = (images_ph,)
-            result = gen_application_runtime.application_call(
-                infeeds,
-                outfeed_types=[dtypes.float32],
-                engine_name=engine_name)
+          infeeds = (images_ph,)
+          result = gen_application_runtime.application_call(
+              infeeds,
+              anchor=run_app,
+              outfeed_types=[dtypes.float32],
+              engine_name=engine_name)
 
           session.graph.finalize()
           run_loops(session, result, infeeds, t)
@@ -397,14 +391,13 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
                                                 shape=[BATCH_SIZE, NUM_PIXELS],
                                                 name=f'images')
 
-              with ops.control_dependencies([run_app]):
-                infeeds = (images_ph,)
-                result = gen_application_runtime.application_call(
-                    infeeds,
-                    outfeed_types=[dtypes.float32],
-                    engine_name=engine_name)
+              infeeds = (images_ph,)
+              result = gen_application_runtime.application_call(
+                  infeeds,
+                  anchor=run_app,
+                  outfeed_types=[dtypes.float32],
+                  engine_name=engine_name)
 
-              # sess.graph.finalize()
               run_loops(sess, result, infeeds, t)
             else:
               run_loops(sess, res, infeeds_, t)
@@ -425,29 +418,29 @@ class ApplicationRuntimeTest(test_util.TensorFlowTestCase,
 
     if multiple_sessions:
       run_across_threads()
+    elif multiple_engines:
+      with sl.Session() as session:
+        run_across_threads(session, None, None)
     else:
-      if multiple_engines:
-        with sl.Session() as session:
-          run_across_threads(session, None, None)
-      else:
-        with sl.Session() as session:
-          run_app = gen_application_runtime.application_runtime(
-              inputs=(),
-              filename=poplar_exec_filepath,
-              engine_name=engine_name_prefix)
+      with sl.Session() as session:
+        run_app = gen_application_runtime.application_runtime(
+            inputs=(),
+            filename=poplar_exec_filepath,
+            engine_name=engine_name_prefix)
 
-          images_ph = array_ops.placeholder(dtypes.float32,
-                                            shape=[BATCH_SIZE, NUM_PIXELS],
-                                            name='images')
-          with ops.control_dependencies([run_app]):
-            infeeds = (images_ph,)
-            result = gen_application_runtime.application_call(
-                infeeds,
-                outfeed_types=[dtypes.float32],
-                engine_name=engine_name_prefix)
+        images_ph = array_ops.placeholder(dtypes.float32,
+                                          shape=[BATCH_SIZE, NUM_PIXELS],
+                                          name='images')
 
-          session.graph.finalize()
-          run_across_threads(session, result, infeeds)
+        infeeds = (images_ph,)
+        result = gen_application_runtime.application_call(
+            infeeds,
+            anchor=run_app,
+            outfeed_types=[dtypes.float32],
+            engine_name=engine_name_prefix)
+
+        session.graph.finalize()
+        run_across_threads(session, result, infeeds)
 
     self.assertAllClose(ref_output, output)
 
@@ -795,6 +788,59 @@ class EmbeddedRuntimeTest(test_util.TensorFlowTestCase,
       outputs = sess.run(result, feed_dict={a_ph: a, b_ph: b, c_ph: c})
 
       self.assertAllClose(outputs[0], [14, 22])
+
+  @tu.test_uses_ipus(num_ipus=1)
+  @test_util.deprecated_graph_mode_only
+  def test_embedded_runtime_exception(self):
+    # The dataset for feeding the graphs.
+    ds = dataset_ops.Dataset.from_tensors(constant_op.constant(1.0, shape=[1]))
+    ds = ds.repeat()
+
+    # The host side queues.
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds)
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+    def body(x):
+      return outfeed_queue.enqueue(12.0 / x)
+
+    # Wrap in a loop.
+    def my_net():
+      r = loops.repeat(16, body, [], infeed_queue)
+      return r
+
+    def exception_executable(tmp_dir):
+      poplar_exec_filepath = os.path.join(tmp_dir.name,
+                                          "application.poplar_exec")
+
+      cfg = IPUConfig()
+      cfg.auto_select_ipus = 1
+      cfg.floating_point_behaviour.div0 = True
+      tu.add_hw_ci_connection_options(cfg)
+      cfg.configure_ipu_system()
+
+      # Compile the application.
+      compile_op = application_compile_op.experimental_application_compile_op(
+          my_net, output_path=poplar_exec_filepath)
+      with sl.Session() as sess:
+        sess.run(compile_op)
+
+      return poplar_exec_filepath
+
+    tmp_dir_obj = tempfile.TemporaryDirectory()
+    poplar_exec_filepath = exception_executable(tmp_dir_obj)
+
+    engine_name = f'engine_{self.id()}'
+    ctx = embedded_runtime.embedded_runtime_start(poplar_exec_filepath, [],
+                                                  engine_name)
+    result = embedded_runtime.embedded_runtime_call(
+        [np.zeros((1), dtype=np.float32)], ctx)
+
+    with sl.Session() as sess:
+      with self.assertRaisesRegex(
+          Exception,
+          r"\[Poplar\]\[Execute engine\] application_runtime_error: Tiles in "
+          r"excepted state.*"):
+        sess.run(result)
 
 
 if __name__ == "__main__":
