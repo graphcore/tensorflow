@@ -34,6 +34,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
@@ -48,8 +49,9 @@ bool IsParameter(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kParameter;
 }
 
-bool IsAllReduce(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kAllReduce;
+bool IsGlobalAllReduce(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kAllReduce &&
+         inst->replica_groups().empty();
 }
 
 bool IsRemoteParameterLoad(const HloInstruction* inst) {
@@ -90,7 +92,7 @@ bool IsImplicitOpWithAllScalarArguments(const HloInstruction* inst) {
 bool ValidClusterInput(const HloInstruction* inst,
                        const ElementwiseClusterValidator& validator) {
   return validator.IsValidInput(inst) || IsWideConstant(inst) ||
-         IsAllReduce(inst) || IsReplicatedParameterLoad(inst) ||
+         IsReplicatedParameterLoad(inst) ||
          IsNonReplicatedParameterLoad(inst, validator);
 }
 
@@ -109,8 +111,8 @@ ElementwiseClusterValidator::Inputs ElementwiseClusterValidator::GetValidInputs(
     bool valid_input = false;
     if (IsParameter(inst) && parameter_filter(inst->parameter_number())) {
       valid_input = true;
-    } else if (IsScalar(inst) && inst->IsElementwise()) {
-      // Note that this also captures constants.
+    } else if (!IsPoplarInstruction(PoplarOp::ExecutionCounter, inst) &&
+               !inst->HasSideEffect()) {
       valid_input = absl::c_all_of(
           inst->operands(), [&valid_inputs](const HloInstruction* operand) {
             return valid_inputs.contains(operand);
@@ -118,6 +120,8 @@ ElementwiseClusterValidator::Inputs ElementwiseClusterValidator::GetValidInputs(
     } else if (IsBroadcast(inst)) {
       valid_input =
           IsScalar(inst->operand(0)) && valid_inputs.contains(inst->operand(0));
+    } else if (IsGlobalAllReduce(inst)) {
+      valid_input = true;
     }
 
     if (valid_input) {
@@ -168,12 +172,15 @@ bool ElementwiseCluster::MaybeAdd(HloInstruction* inst) {
   return true;
 }
 
-bool ElementwiseCluster::CanMerge(const ElementwiseCluster& other) {
+bool ElementwiseCluster::CanMerge(const ElementwiseCluster& other) const {
   // Allow to merge clusters if we use any of other cluster instruction
-  bool can_merge = false;
   for (auto inst : insts_) {
     for (auto user : inst->users()) {
       if (other.In(user)) {
+        VLOG(3) << "Cluster with top in " << GetTop()->name()
+                << " could be merged with cluster " << other.GetTop()->name()
+                << " via instruction " << inst->ToString() << ", user "
+                << user->ToString();
         return true;
       }
     }
@@ -192,14 +199,22 @@ HloComputation* ElementwiseCluster::GetComputation() const {
   return top_->parent();
 }
 
-bool ElementwiseCluster::CanCluster(
-    const HloInstruction* inst, bool allow_inputs,
-    const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-    const ElementwiseClusterValidator& validator) {
-  if (allow_inputs && ValidClusterInput(inst, validator)) {
-    return true;
+bool ElementwiseCluster::IsElementwise(
+    const HloInstruction* inst,
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
+  switch (inst->opcode()) {
+    case HloOpcode::kBroadcast:
+      return IsScalar(inst->operand(0));
+    case HloOpcode::kFusion:
+      return elementwise_comps.contains(inst->fused_instructions_computation());
+    default:
+      return IsPopOpsElementwise(inst);
   }
+}
 
+bool ElementwiseCluster::CanCluster(
+    const HloInstruction* inst,
+    const absl::flat_hash_set<const HloComputation*>& elementwise_comps) {
   if (inst->HasSideEffect()) {
     return false;
   }
@@ -219,14 +234,35 @@ bool ElementwiseCluster::CanCluster(
   }
 
   switch (inst->opcode()) {
-    case HloOpcode::kCustomCall:
-      return IsPopOpsElementwise(inst);
     case HloOpcode::kFusion:
       return !IsWideConstant(inst) &&
              elementwise_comps.contains(inst->fused_instructions_computation());
     default:
-      return inst->IsElementwise();
+      return IsPopOpsElementwise(inst);
   }
+}
+
+absl::flat_hash_set<const HloComputation*>
+ElementwiseCluster::GetElementwiseClusterableComputations(
+    const HloModule* module) {
+  // This is primarily for the fusions, but could be useful for other
+  // computations as well. Go through all computations and populate the
+  // elementwise set. Elementwise computation defined as a set of instructions
+  // which are either
+  // - elementwise instruction
+  // - fusion uses elementwise computation from this set.
+  absl::flat_hash_set<const HloComputation*> elementwise_comps;
+  for (auto comp : module->computations()) {
+    if (absl::c_all_of(comp->instructions(), [&elementwise_comps](
+                                                 const HloInstruction* inst) {
+          return inst->opcode() == HloOpcode::kParameter ||
+                 ElementwiseCluster::IsElementwise(inst, elementwise_comps);
+        })) {
+      VLOG(2) << "Found elementwise computation " << comp->name();
+      elementwise_comps.insert(comp);
+    }
+  }
+  return elementwise_comps;
 }
 
 StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
@@ -236,6 +272,8 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   HloComputation* resource_update_comp = resource_update->to_apply();
   auto offload_variables =
       GetResourceUpdatePartitionOffloadedVariables(resource_update);
+
+  auto reachability_map = HloReachabilityMap::Build(resource_update_comp);
 
   std::vector<ElementwiseCluster> clusters;
 
@@ -270,8 +308,7 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   auto comp_insts = resource_update_comp->MakeInstructionPostOrder();
   absl::c_reverse(comp_insts);
   for (auto inst : comp_insts) {
-    bool can_cluster =
-        CanCluster(inst, /*allow_inputs=*/false, elementwise_comps, validator);
+    bool can_cluster = CanCluster(inst, elementwise_comps);
     if (can_cluster) {
       VLOG(2) << "Found elementwise instruction: " << inst->ToString();
       bool added = false;
@@ -322,7 +359,8 @@ StatusOr<std::vector<ElementwiseCluster>> ElementwiseCluster::GetClustersIn(
   absl::flat_hash_set<HloInstruction*> seen_insts;
   for (auto it = clusters.begin(); it != clusters.end();) {
     auto& cluster = *it;
-    bool valid = cluster.Finalize(validator, offload_variables);
+    bool valid =
+        cluster.Finalize(*reachability_map, validator, offload_variables);
 
     if (valid) {
       // Make sure that non of the outputs overlap with previously seen
@@ -390,7 +428,25 @@ ElementwiseClusterClass ElementwiseCluster::Classify(
   }
 }
 
-bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
+bool ElementwiseCluster::HasCycles(const HloReachabilityMap& reachability_map) {
+  for (HloInstruction* input : inputs_vec_) {
+    for (HloInstruction* output : outputs_) {
+      for (auto& user : outputs_to_users_.at(output)) {
+        auto reachable = reachability_map.IsReachable(user.instruction, input);
+        if (reachable) {
+          VLOG(1) << "Found graph cycle, output user: "
+                  << user.instruction->name() << " is reachable from "
+                  << input->name();
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+bool ElementwiseCluster::Finalize(const HloReachabilityMap& reachability_map,
+                                  const ElementwiseClusterValidator& validator,
                                   ThreeState partition_offload_variables) {
   CHECK(!finalized_);
 
@@ -467,6 +523,10 @@ bool ElementwiseCluster::Finalize(const ElementwiseClusterValidator& validator,
   outputs_.reserve(outputs_to_users_.size());
   for (auto& pair : outputs_to_users_) {
     outputs_.push_back(pair.first);
+  }
+
+  if (HasCycles(reachability_map)) {
+    return false;
   }
 
   cluster_size_ = ShapeUtil::ElementsIn(cluster_shape_);

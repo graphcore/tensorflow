@@ -153,7 +153,7 @@ ENTRY main {
                           ParseAndReturnVerifiedModule(hlo_string, config));
   ReplicatedResourceUpdateElementwiseClustering pass(1);
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   CHECK_EQ(elementwise_comps.size(), 2);
   absl::flat_hash_set<std::string> elementwise_comp_names = {"_comp0",
                                                              "_comp2"};
@@ -280,7 +280,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                         : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 2);
@@ -388,7 +388,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                         : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -584,7 +584,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                         : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -773,7 +773,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringBasicTest,
                         : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1037,7 +1037,7 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringShapeTest, DoTest) {
           : new ResourceUpdateElementwiseClustering);
   auto& pass = *pass_ptr;
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1395,7 +1395,7 @@ TEST_F(TestPartitionReplicationFactor, TestCollectiveGroups) {
   ReplicatedResourceUpdateElementwiseClustering pass(
       partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1528,7 +1528,7 @@ TEST_F(TestPartitionReplicationFactor, TestNonGlobalAllReduce) {
   ReplicatedResourceUpdateElementwiseClustering pass(
       partition_replication_factor, global_replication_factor);
   auto elementwise_comps =
-      pass.GetElementwiseClusterableComputations(module.get());
+      ElementwiseCluster::GetElementwiseClusterableComputations(module.get());
   TF_ASSERT_OK_AND_ASSIGN(auto clusters,
                           pass.GetClustersIn(loop, elementwise_comps));
   ASSERT_THAT(clusters.size(), 1);
@@ -1577,7 +1577,14 @@ TEST_F(TestPartitionReplicationFactor, IgnoreImplicit2ScalarBroadcast) {
       bool changed,
       ReplicatedResourceUpdateElementwiseClustering(replication_factor)
           .Run(module.get()));
-  EXPECT_FALSE(changed);
+  EXPECT_TRUE(changed);
+
+  HloInstruction* fusion = FindInstruction(module.get(), "fusion");
+  HloComputation* resource_update =
+      FindComputation(module.get(), "resource_update");
+
+  // Fusion should not be in the cluster, but it could be one of the inputs.
+  EXPECT_EQ(resource_update, fusion->parent());
 }
 
 }  // namespace
