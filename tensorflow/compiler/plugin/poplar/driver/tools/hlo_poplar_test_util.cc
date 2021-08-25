@@ -282,8 +282,8 @@ std::string HloPoplarTestUtil::GetBroadcastHloString(int n, int minibatches) {
     add.2 = f32[$N,$M] add(arg3, fusion)
 
     rate.1 = f32[] constant(0.1)
-    fusion.1 = f32[$N,$M] fusion(add.1, add.2, rate.1), kind=kCustom, calls=scale_xya.1
-    fusion.2 = f32[$N,$M] fusion(add.2, add.1, rate.1), kind=kCustom, calls=scale_xya.2
+    fusion.1 = f32[$N,$M] fusion(add.1, fusion, rate.1), kind=kCustom, calls=scale_xya.1
+    fusion.2 = f32[$N,$M] fusion(add.2, fusion, rate.1), kind=kCustom, calls=scale_xya.2
 
     convert.1 = f16[$N,$M] convert(fusion.1)
     convert.2 = f32[$N,$M] convert(convert.1)

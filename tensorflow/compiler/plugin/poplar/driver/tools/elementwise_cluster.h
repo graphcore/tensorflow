@@ -29,6 +29,7 @@ namespace xla {
 
 class HloModule;
 class HloComputation;
+class HloReachabilityMap;
 
 namespace poplarplugin {
 
@@ -62,7 +63,7 @@ class ElementwiseCluster {
   bool MaybeAdd(HloInstruction* inst);
   ElementwiseClusterClass Classify(
       const ElementwiseClusterValidator& validator) const;
-  bool CanMerge(const ElementwiseCluster& other);
+  bool CanMerge(const ElementwiseCluster& other) const;
   void Merge(const ElementwiseCluster& other);
   const HloInstruction* GetTop() const;
   HloComputation* GetComputation() const;
@@ -70,7 +71,8 @@ class ElementwiseCluster {
 
   // Finalize the cluster - no more instructions will be added. Returns whether
   // this is a cluster which should be processed further.
-  bool Finalize(const ElementwiseClusterValidator& validator,
+  bool Finalize(const HloReachabilityMap& reachability_map,
+                const ElementwiseClusterValidator& validator,
                 ThreeState partition_offload_variables);
 
   // Following functions can be called once finalized.
@@ -96,17 +98,27 @@ class ElementwiseCluster {
   // Returns original shape of the top-level instruction.
   Shape GetClusterShape(PrimitiveType type) const;
 
+  static bool IsElementwise(
+      const HloInstruction* inst,
+      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
   static bool CanCluster(
-      const HloInstruction* inst, bool allow_inputs,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
-      const ElementwiseClusterValidator& validator);
+      const HloInstruction* inst,
+      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
 
   static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const resource_update,
       const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
       ElementwiseClusterValidator& validator);
 
+  // Returns all computations in the module which are elementwise and can be
+  // clustered.
+  static absl::flat_hash_set<const HloComputation*>
+  GetElementwiseClusterableComputations(const HloModule* module);
+
  private:
+  // Finds if there's any cycles between input/outputs.
+  bool HasCycles(const HloReachabilityMap& reachability_map);
+
   HloInstruction* top_;
   Shape cluster_shape_;
   HloInstructionSet insts_;
