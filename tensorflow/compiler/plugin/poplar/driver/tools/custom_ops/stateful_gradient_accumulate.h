@@ -222,6 +222,33 @@ class HloGradientAccumulatorSink : public HloPoplarInstruction {
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorSink(
     absl::Span<HloInstruction* const> operands);
 
+class HloGradientAccumulationCount : public HloPoplarInstruction {
+ public:
+  explicit HloGradientAccumulationCount(
+      absl::Span<HloInstruction* const> operands);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  bool AllocatingOutput() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  HloPoplarUseDescriptions GetUseDescriptions() const override;
+  HloPoplarBufferDescriptions GetBufferDescriptions() const override;
+  const FindConsumersExtensionResults FindConsumers(
+      FindConsumersExtensionParams params) const override;
+  bool IsPopOpsElementwise() const override;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulationCount(
+    absl::Span<HloInstruction* const> operands);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
