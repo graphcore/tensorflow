@@ -160,12 +160,7 @@ class IPUApplicationCompile : public OpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(IPUApplicationCompile);
 };
 
-// We register the op both for CPU and IPU to make it easier to use, as we then
-// can handle any colocation requirements from variables etc. The function will
-// be compiled for IPU regardless of the device placement of the op itself.
 REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_CPU),
-                        IPUApplicationCompile);
-REGISTER_KERNEL_BUILDER(Name("IPUApplicationCompile").Device(DEVICE_XLA_IPU),
                         IPUApplicationCompile);
 
 }  // namespace tensorflow
