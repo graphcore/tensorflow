@@ -238,4 +238,23 @@ class GradientAccumulatorSink : public XlaOpKernel, IpuOpKernel {
 
 REGISTER_IPU_OP("GradientAccumulatorSink", GradientAccumulatorSink);
 
+class GradientAccumulationCount : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit GradientAccumulationCount(
+      OpKernelConstruction* ctx,
+      PoplarOp op = PoplarOp::GradientAccumulationCount)
+      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {}
+  void Compile(XlaOpKernelContext* ctx) override {
+    xla::XlaBuilder* b = ctx->builder();
+
+    xla::CustomCall(b, PoplarOp_Name(op_), {ctx->Input(0)},
+                    xla::ShapeUtil::MakeNil());
+  }
+
+ private:
+  const PoplarOp op_;
+};
+
+REGISTER_IPU_OP("GradientAccumulationCount", GradientAccumulationCount);
+
 }  // namespace tensorflow

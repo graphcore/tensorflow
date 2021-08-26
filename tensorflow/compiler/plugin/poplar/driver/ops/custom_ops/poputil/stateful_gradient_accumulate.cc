@@ -358,6 +358,20 @@ class GradientAccumulatorSinkOp : public PoplarOpDef {
 };
 REGISTER_POPLAR_OP(GradientAccumulatorSink, GradientAccumulatorSinkOp);
 
+// An instruction only used for keeping track of the gradient accumulation count
+// in compilation. Doesn't produce calls to poplar/poplibs
+class GradientAccumulationCountOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(
+      poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+      const xla::Shape& output_shape, TensorMap& tensor_map,
+      const poplar::DebugContext& debug_context) override {
+    return poplar::program::Sequence(
+        {}, PoplarOpDefDebugInfo(debug_context, "GradientAccumulationCount"));
+  }
+};
+
+REGISTER_POPLAR_OP(GradientAccumulationCount, GradientAccumulationCountOp);
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
