@@ -26,7 +26,7 @@ StatusOr<bool> MarkReplicaIdenticalInstructions::Run(HloModule* module) {
   TF_RETURN_IF_ERROR(analysis_.Run(module));
 
   for (auto* comp : module->computations()) {
-    if (!analysis_.Analysed(comp)) {
+    if (IsPopOpsFusion(comp)) {
       continue;
     }
 
