@@ -146,11 +146,6 @@ def run_and_export_model(tmp_dir,
   with scopes.ipu_scope("/device:IPU:0"):
     test_loop = ipu_compiler.compile(bound_test_loop)
 
-  compile_op = application_compile_op.experimental_application_compile_op(
-      bound_test_loop,
-      output_path=poplar_exec_output_path,
-      freeze_variables=freeze_variables)
-
   # Initialisers should go on the CPU:
   with ops.device("cpu"):
     saver = train.Saver()
@@ -204,10 +199,20 @@ def run_and_export_model(tmp_dir,
                      images=images,
                      output=output)
 
+  # Use a new graph and session for the compilation.
+  with ops.Graph().as_default(), sl.Session() as sess:
+    compile_op = application_compile_op.experimental_application_compile_op(
+        bound_test_loop,
+        output_path=poplar_exec_output_path,
+        freeze_variables=freeze_variables)
+
+    # Load the weights into the new session.
+    train.Saver().restore(sess, model_save_path)
+
     print(f"  Compiling and exporting...")
     sess.run(compile_op)
 
-    return model_ref
+  return model_ref
 
 
 def _build_executable(tmp_dir_obj,
