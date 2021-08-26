@@ -321,25 +321,6 @@ ENTRY test {
   ROOT compare = pred[] compare(identical0, constant), direction=LT
 }
 )"};
-static const HloTestCase assume_equal_identical_operands = {
-    "assume_equal_identical_operands", R"(
-HloModule test
-
-ENTRY test {
-  identical0 = f32[] constant(1)
-  ROOT assumeEqual = f32[] custom-call(identical0), custom_call_target="AssumeEqualAcrossReplicas"
-}
-)"};
-static const HloTestCase assume_equal_differing_operands = {
-    "assume_equal_differing_operands", R"(
-HloModule test
-
-ENTRY test {
-  const = f32[] constant(1)
-  differing0 = f32[] rng(const, const), distribution=rng_uniform
-  ROOT assumeEqual = f32[] custom-call(differing0), custom_call_target="AssumeEqualAcrossReplicas"
-}
-)"};
 TEST_P(ReplicaIdenticalInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
@@ -354,7 +335,7 @@ TEST_P(ReplicaIdenticalInstructionTest, ValueCategory) {
   auto* root = FindRootInstruction();
   TF_ASSERT_OK_AND_ASSIGN(bool is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(root));
-  ASSERT_TRUE(is_identical) << "Root instruction should be replica identical";
+  ASSERT_TRUE(is_identical);
 }
 
 using ReplicaDifferingInstructionTest =
@@ -901,9 +882,6 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, UnvisitedInstructionErrors) {
 
   ReplicaIdenticalDataflowAnalysis analysis;
   TF_ASSERT_OK(analysis.Run(hlo_module_));
-
-  auto* unvisited_comp = FindComputation(hlo_module_, "add");
-  ASSERT_FALSE(analysis.Analysed(unvisited_comp));
 
   const auto status_or_value_category =
       analysis.ValueCategory(FindInstruction(hlo_module_, "x"));
@@ -1504,14 +1482,14 @@ TEST_P(ReplicaValueCategoryRepeatTest, MultiIterationRepeatValueCategory) {
 
 INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaIdenticalInstructionTest,
-    ::testing::Values(
-        simple_parameters, simple_constants, simple_wide_const,
-        global_all_reduce, global_all_gather, repeat_with_identical_io,
-        repeat_single_element_tuple, while_with_identical_body_and_condition,
-        conditional_with_identical_branches_and_pred, simple_pipeline,
-        simple_select, simple_tuple_select, compare_with_identical_operands,
-        switch_with_identical_branches_and_index,
-        assume_equal_identical_operands, assume_equal_differing_operands),
+    ::testing::Values(simple_parameters, simple_constants, simple_wide_const,
+                      global_all_reduce, global_all_gather,
+                      repeat_with_identical_io, repeat_single_element_tuple,
+                      while_with_identical_body_and_condition,
+                      conditional_with_identical_branches_and_pred,
+                      simple_pipeline, simple_select, simple_tuple_select,
+                      compare_with_identical_operands,
+                      switch_with_identical_branches_and_index),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(
