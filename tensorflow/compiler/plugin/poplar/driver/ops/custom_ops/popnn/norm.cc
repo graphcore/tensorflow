@@ -238,63 +238,21 @@ int64 CalculateNormBatchSize(const poplar::Tensor& t,
 poplin::DistributedNormReduceCallback GetDistributedNormReduceCallback(
     const std::string& debug_name_ref) {
   const std::string debug_name = debug_name_ref;
-  return [debug_name](
-             poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-             poplar::program::Sequence& prog, unsigned replica_group_size,
-             const poplar::DebugContext& debug_context,
-             const poplar::OptionFlags& options)
-             -> std::vector<poplar::Tensor> {
-    PoplarOpDefDebugInfo debug_info(debug_context, debug_name);
-    const int64 num_inputs = inputs.size();
-    std::vector<poplar::Tensor> output_tensors(num_inputs);
+  return
+      [debug_name](
+          poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+          poplar::program::Sequence& prog, unsigned replica_group_size,
+          const poplar::DebugContext& debug_context,
+          const poplar::OptionFlags& options) -> std::vector<poplar::Tensor> {
+        PoplarOpDefDebugInfo debug_info(debug_context, debug_name);
 
-    // Keeps track of what types we have seen in a deterministic ordering.
-    std::vector<poplar::Type> seen_types;
-
-    // Merge all tensors of the same type and keep information about them to
-    // undo the merging.
-    struct TensorInfo {
-      const poplar::Tensor& tensor;
-      const int64 index;
-    };
-
-    absl::flat_hash_map<poplar::Type, std::vector<TensorInfo>, PoplarTypeHasher>
-        inputs_by_type;
-
-    for (int64 i = 0; i != num_inputs; ++i) {
-      const poplar::Type& type = inputs[i].elementType();
-      if (!inputs_by_type.contains(type)) {
-        seen_types.push_back(type);
-      }
-      inputs_by_type[type].push_back(TensorInfo{inputs[i], i});
-    }
-
-    // Do a single all-reduce per element type.
-    for (const poplar::Type& type : seen_types) {
-      const auto& tensor_infos = inputs_by_type.at(type);
-      // Merge the inputs.
-      std::vector<poplar::Tensor> input_type_tensors(tensor_infos.size());
-      absl::c_transform(tensor_infos, input_type_tensors.begin(),
-                        [](const TensorInfo& info) { return info.tensor; });
-      poplar::Tensor to_reduce =
-          FlattenAndConcatenateTensors(input_type_tensors);
-
-      poplar::Tensor reduced = gcl::allReduce(
-          graph, to_reduce, popops::CollectiveOperator::ADD, prog,
-          {gcl::CommGroupType::CONSECUTIVE, replica_group_size}, {debug_info},
-          options);
-
-      // Slice out the tensor and place them in the correct output positions.
-      std::vector<poplar::Tensor> output_type_tensors =
-          SliceTensorIntoTensorsLike(reduced, input_type_tensors);
-      CHECK_EQ(output_type_tensors.size(), tensor_infos.size());
-      for (int64 i = 0; i != tensor_infos.size(); ++i) {
-        output_tensors[tensor_infos[i].index] = output_type_tensors[i];
-      }
-    }
-
-    return output_tensors;
-  };
+        // Use multi-tensor allReduce to reduce them all at the same time even
+        // if they have different types.
+        return gcl::allReduce(
+            graph, inputs, popops::CollectiveOperator::ADD, prog,
+            {gcl::CommGroupType::CONSECUTIVE, replica_group_size}, {debug_info},
+            options);
+      };
 }
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
