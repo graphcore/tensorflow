@@ -33,21 +33,18 @@ class CTCInferenceLayer(layers.Layer):
     from_logits: Whether to expect the input data in the form of logits
         (`True`) or log probabilities (`False`).
         Default value is `False`.
-    name: A name for this op. Defaults to "ctc_beam_search" or
-        "ctc_beam_search_with_logits".
   """
   def __init__(self,
                blank_index=0,
                beam_width=100,
                top_paths=1,
                from_logits=False,
-               name=None):
-    super().__init__(name)
+               **kwargs):
+    super().__init__(**kwargs)
     self.blank_index = blank_index
     self.beam_width = beam_width
     self.top_paths = top_paths
-    self.infer_function = nn_ops.ctc_beam_search_decoder if from_logits \
-                         else nn_ops.ctc_beam_search_decoder_with_log_probs
+    self.from_logits = from_logits
 
   def call(self, data, data_length, **kwargs):  # pylint: disable=W0221
     """
@@ -64,11 +61,24 @@ class CTCInferenceLayer(layers.Layer):
       * Label lengths: Length of each path of predictions.
       * Decoded labels: The predictions made by the beam search.
     """
-    return self.infer_function(data,
-                               data_length,
-                               beam_width=self.beam_width,
-                               top_paths=self.top_paths,
-                               blank_index=self.blank_index)
+    infer_function = nn_ops.ctc_beam_search_decoder if self.from_logits \
+                         else nn_ops.ctc_beam_search_decoder_with_log_probs
+    return infer_function(data,
+                          data_length,
+                          beam_width=self.beam_width,
+                          top_paths=self.top_paths,
+                          blank_index=self.blank_index)
+
+  def get_config(self):
+    config = {
+        'blank_index': self.blank_index,
+        'beam_width': self.beam_width,
+        'top_paths': self.top_paths,
+        'from_logits': self.from_logits,
+    }
+
+    base_config = super().get_config()
+    return dict(list(base_config.items()) + list(config.items()))
 
 
 class CTCPredictionsLayer(layers.Layer):
@@ -93,8 +103,6 @@ class CTCPredictionsLayer(layers.Layer):
     from_logits: Whether to expect the input data in the form of logits
         (`True`) or log probabilities (`False`).
         Default value is `False`.
-    name: A name for this op. Defaults to "ctc_beam_search" or
-        "ctc_beam_search_with_logits".
 
   """
   def __init__(self,
@@ -102,13 +110,13 @@ class CTCPredictionsLayer(layers.Layer):
                beam_width=100,
                top_paths=1,
                from_logits=False,
-               name=None):
-    super().__init__(name)
+               **kwargs):
+    super().__init__(**kwargs)
     self._inference_layer = CTCInferenceLayer(blank_index=blank_index,
                                               beam_width=beam_width,
                                               top_paths=top_paths,
                                               from_logits=from_logits,
-                                              name=name)
+                                              **kwargs)
 
   @staticmethod
   def _select_most_likely_path(probs, predicted, top_paths, lengths):
@@ -186,3 +194,6 @@ class CTCPredictionsLayer(layers.Layer):
 
     """
     return self._perform_inference(data, data_length, **kwargs)
+
+  def get_config(self):
+    return self._inference_layer.get_config()

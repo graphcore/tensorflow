@@ -14,13 +14,13 @@
 # ==============================================================================
 """Tests for IPU Embedding layer."""
 
-
 import numpy as np
 
 from tensorflow.python import ipu
 from tensorflow.python import keras
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import nn
 from tensorflow.python.platform import test
 
@@ -73,6 +73,13 @@ class IPUEmbeddingLookupTest(test.TestCase):
     paras = np.arange(25600, dtype=dataType).reshape([32, 200, 4])
     with self.assertRaisesRegexp(ValueError, r'The input shape should be a'):
       kerasIPUEmbeddingLookup(paras, ids, name="emb_test_4")
+
+  @test_util.run_v2_only
+  def testGetConfig(self):
+    layer = ipu.layers.Embedding(input_dim=32, output_dim=200)
+    config = layer.get_config()
+    layer2 = ipu.layers.Embedding.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 if __name__ == '__main__':

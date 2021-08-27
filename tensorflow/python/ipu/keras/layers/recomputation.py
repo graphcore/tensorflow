@@ -41,7 +41,6 @@ class RecomputationCheckpoint(Layer):
   """
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
-    self.built = False
 
   def call(self, inputs, **kwargs):
     """
@@ -55,3 +54,6 @@ class RecomputationCheckpoint(Layer):
       `inputs`.
     """
     return pipelining_ops.recomputation_checkpoint(inputs, name=self.name)
+
+  def get_config(self):
+    return {}

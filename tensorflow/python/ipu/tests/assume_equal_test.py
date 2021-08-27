@@ -251,6 +251,13 @@ class TestKerasAssumeEqual(test_util.TensorFlowTestCase,
 
     mock_op.assert_called_with(placeholder, inplace)
 
+  @parameterized.parameters(TestAssumeEqual.inplace_or_copy)
+  @tu.skip_on_hw
+  @test_util.run_v2_only
+  def testGetConfig(self, inplace):
+    layer = ipu.keras.layers.AssumeEqualAcrossReplicas(inplace)
+    self.assertEqual(layer.get_config()["inplace"], inplace)
+
 
 if __name__ == "__main__":
   googletest.main()

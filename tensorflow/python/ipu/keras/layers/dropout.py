@@ -45,7 +45,6 @@ class Dropout(Layer):
       mask.
   """
   def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
-    self.built = False
     self.seed = seed
     self.rate = rate
     self.noise_shape = noise_shape
@@ -93,10 +92,9 @@ class Dropout(Layer):
     return input_shape
 
   def get_config(self):
-    config = {
+    return {
         'rate': self.rate,
         'noise_shape': self.noise_shape,
-        'seed': self.seed
+        'seed': self.seed,
+        'ref': self.ref
     }
-    base_config = super(Dropout, self).get_config()
-    return dict(list(base_config.items()) + list(config.items()))

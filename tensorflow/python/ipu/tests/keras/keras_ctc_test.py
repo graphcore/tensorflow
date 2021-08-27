@@ -453,6 +453,32 @@ class CTCLossTest(test.TestCase, parameterized.TestCase):
 
     self.assertAllClose(cpu_predictions, ipu_predictions)
 
+  @test_util.run_v2_only
+  def testCTCInferenceLayerGetConfig(self):
+    layer = ipu.keras.layers.CTCInferenceLayer(blank_index=0,
+                                               from_logits=True,
+                                               beam_width=10,
+                                               top_paths=1)
+    config = layer.get_config()
+    layer2 = ipu.keras.layers.CTCInferenceLayer.from_config(config)
+    self.assertEqual(config, layer2.get_config())
+
+  @test_util.run_v2_only
+  def testCTCPredictionsLayerGetConfig(self):
+    layer = ipu.keras.layers.CTCPredictionsLayer(blank_index=0,
+                                                 beam_width=10,
+                                                 top_paths=1)
+    config = layer.get_config()
+    layer2 = ipu.keras.layers.CTCPredictionsLayer.from_config(config)
+    self.assertEqual(config, layer2.get_config())
+
+  @test_util.run_v2_only
+  def testCTCLossGetConfig(self):
+    layer = ipu.keras.CTCLoss(blank_index=0)
+    config = layer.get_config()
+    layer2 = ipu.keras.CTCLoss.from_config(config)
+    self.assertEqual(config, layer2.get_config())
+
 
 if __name__ == '__main__':
   test.main()

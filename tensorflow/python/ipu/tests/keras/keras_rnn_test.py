@@ -270,6 +270,7 @@ class IpuLstmTest(test.TestCase):
     layer_ipu = ipu.layers.PopnnLSTM(num_hidden)
     layer_ipu.build((batch_size, timesteps, num_input))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+    keras.backend.set_floatx('float32')
 
   @test_util.run_v2_only
   def test_upstream_layer(self):
@@ -326,6 +327,13 @@ class IpuLstmTest(test.TestCase):
 
     self.assertAllClose(results_ipu, results_cpu)
     self.assertAllClose(weights_ipu, weights_cpu)
+
+  @test_util.run_v2_only
+  def test_get_config(self):
+    layer = _getLSTMLayer(ipu.layers.PopnnLSTM)
+    config = layer.get_config()
+    layer2 = ipu.layers.PopnnLSTM.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 def _getGRULayer(keras_layer=None,
@@ -587,6 +595,7 @@ class IpuGruTest(test.TestCase):
     layer_ipu = ipu.layers.PopnnGRU(num_hidden)
     layer_ipu.build((batch_size, timesteps, num_input))
     self.assertTrue(all(w.dtype == dtypes.float16 for w in layer_ipu.weights))
+    keras.backend.set_floatx('float32')
 
   @test_util.run_v2_only
   def test_gru_ipu_vs_cpu_results_reset_after(self):
@@ -641,6 +650,13 @@ class IpuGruTest(test.TestCase):
 
     self.assertAllClose(results_ipu, results_cpu)
     self.assertAllClose(weights_ipu, weights_cpu)
+
+  @test_util.run_v2_only
+  def test_get_config(self):
+    layer = _getGRULayer(ipu.layers.PopnnGRU)
+    config = layer.get_config()
+    layer2 = ipu.layers.PopnnGRU.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 if __name__ == '__main__':

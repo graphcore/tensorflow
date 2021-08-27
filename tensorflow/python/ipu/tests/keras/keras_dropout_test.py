@@ -17,6 +17,7 @@
 import numpy as np
 
 from tensorflow.python import ipu
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
@@ -83,6 +84,14 @@ class IPUDropoutTest(test.TestCase):
     with self.assertRaisesRegex(
         ValueError, r"The rate must be in the range \[0, 1\), but was 1"):
       kerasIPUDropout(np.ones(1), rate=1)
+
+  @test_util.run_v2_only
+  def testGetConfig(self):
+    seed = constant_op.constant([0, 0])
+    layer = ipu.layers.Dropout(rate=0.5, seed=seed)
+    config = layer.get_config()
+    layer2 = ipu.layers.Dropout.from_config(config)
+    self.assertEqual(config, layer2.get_config())
 
 
 if __name__ == '__main__':

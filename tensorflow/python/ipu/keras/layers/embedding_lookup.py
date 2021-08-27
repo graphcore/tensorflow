@@ -105,7 +105,7 @@ class Embedding(ipu_layer.IPULayer):
     return input_shape + (self.output_dim,)
 
   def get_config(self):
-    config = {
+    return {
         'input_dim':
         self.input_dim,
         'output_dim':
@@ -113,5 +113,3 @@ class Embedding(ipu_layer.IPULayer):
         'embeddings_initializer':
         initializers.serialize(self.embeddings_initializer)
     }
-    base_config = super(Embedding, self).get_config()
-    return dict(list(base_config.items()) + list(config.items()))

@@ -46,8 +46,12 @@ class AssumeEqualAcrossReplicas(Layer):
   """
   def __init__(self, inplace=False, **kwargs):
     super().__init__(**kwargs)
-    self._inplace = inplace
+    self.inplace = inplace
 
   def call(self, inputs, **kwargs):
-    return cross_replica_ops.assume_equal_across_replicas(
-        inputs, self._inplace)
+    return cross_replica_ops.assume_equal_across_replicas(inputs, self.inplace)
+
+  def get_config(self):
+    return {
+        'inplace': self.inplace,
+    }
