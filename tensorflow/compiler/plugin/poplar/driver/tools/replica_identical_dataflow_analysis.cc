@@ -153,8 +153,11 @@ bool ValuesIdenticalAcrossReplicasVisitor::Visited(
 
 Status ValuesIdenticalAcrossReplicasVisitor::DefaultAction(
     const HloInstruction* inst) {
-  return SetAllInstructionValuesToIdenticalOrDiffering(
-      inst, AllOperandsIdentical(inst));
+  // If an instruction has side effects then calling it multiple times
+  // with the same operands might produce different results.
+  const bool is_identical =
+      !inst->HasSideEffect() && AllOperandsIdentical(inst);
+  return SetAllInstructionValuesToIdenticalOrDiffering(inst, is_identical);
 }
 
 Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
@@ -237,6 +240,10 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
         all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
     return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
                                                          gather_all_replicas);
+  } else if (IsPoplarInstruction(PoplarOp::AssumeEqualAcrossReplicas, inst)) {
+    // AssumeEqual is a special case were we always want it to be treated
+    // as replica identical.
+    return SetAllInstructionValuesToIdentical(inst);
   }
 
   return DefaultAction(inst);
