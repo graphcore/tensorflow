@@ -22,10 +22,12 @@ from tensorflow.compiler.plugin.poplar.driver import poplar_executable_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu.config import DeviceConnectionType
 from tensorflow.python.ipu.config import IPUConfig
 from tensorflow.python.ipu.ops import pipelining_ops
@@ -298,6 +300,38 @@ class TestApplicationCompile(test_util.TensorFlowTestCase,
       self.assertEqual(len(signature.streamed_inputs), 1)
       self.assertEqual(len(signature.outputs), 0)
       self.assertEqual(len(signature.streamed_outputs), 1)
+
+  @test_util.deprecated_graph_mode_only
+  def test_compile_op_placed_on_ipu(self):
+    with session.Session() as sess:
+
+      dataset = dataset_ops.Dataset.from_tensor_slices((np.ones(
+          (10, 5), dtype=np.float32),))
+      dataset = dataset.batch(1, drop_remainder=True)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset)
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue()
+
+      def stage1(x):
+        return layers.Dense(10, activation="relu")(x)
+
+      def stage2(x):
+        return layers.Dense(10, activation="softmax")(x)
+
+      def my_net():
+        return pipelining_ops.pipeline(computational_stages=[stage1, stage2],
+                                       gradient_accumulation_count=4,
+                                       infeed_queue=infeed_queue,
+                                       outfeed_queue=outfeed_queue,
+                                       device_mapping=[0, 0])
+
+      with scopes.ipu_scope("/device:IPU:0"):
+        result = application_compile_op(my_net, freeze_variables=True)
+
+      with self.assertRaisesRegex(
+          errors_impl.InvalidArgumentError,
+          "Cannot assign a device for operation application_compile"):
+        sess.run(variables.global_variables_initializer())
+        sess.run(result)
 
 
 if __name__ == "__main__":

@@ -91,7 +91,7 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 // Get all the computations called by the pipeline stage or which are reachable
 // from it. Ignores computations which are called in the Parallel context.
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
-    HloInstruction* pipeline_stage, CallGraph* call_graph);
+    HloInstruction* pipeline_stage, const CallGraph* call_graph);
 
 // Convert an instruction which has a tuple shape such that all the users of
 // that instruction are GetTupleElement instructions.

@@ -219,7 +219,7 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 }
 
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
-    HloInstruction* caller, CallGraph* call_graph) {
+    HloInstruction* caller, const CallGraph* call_graph) {
   absl::flat_hash_set<HloComputation*> called_computations;
   absl::flat_hash_set<HloComputation*> to_visit;
   to_visit.insert(caller->to_apply());
@@ -235,7 +235,7 @@ StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     }
     visited.insert(comp);
     // Get the context.
-    CallGraphNode& node = call_graph->GetNode(comp);
+    const CallGraphNode& node = call_graph->GetNode(comp);
     // We do not consider sharding in parallel context or fusions.
     if (node.context() == CallContext::kParallel ||
         comp->IsFusionComputation()) {

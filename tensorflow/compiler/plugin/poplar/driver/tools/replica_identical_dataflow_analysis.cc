@@ -43,14 +43,10 @@ bool IsWrapperTuple(const Shape& shape, const Shape& wrapped_shape) {
   return false;
 }
 
-bool IsVisitable(CallGraph& call_graph, HloComputation* computation) {
-  const auto called = !call_graph.GetComputationCallers(computation).empty();
-  if (called) {
-    const auto& node = call_graph.GetNode(computation);
-    return node.context() != CallContext::kParallel;
-  }
-
-  return false;
+bool IsVisitable(const CallGraph& call_graph,
+                 const HloComputation* computation) {
+  const auto& node = call_graph.GetNode(computation);
+  return node.context() != CallContext::kParallel;
 }
 
 // Create a new ValueCategoryTree whose nodes have
@@ -155,15 +151,6 @@ bool ValuesIdenticalAcrossReplicasVisitor::Visited(
   return value_category_mapping_.contains(comp->root_instruction());
 }
 
-Status ValuesIdenticalAcrossReplicasVisitor::Postprocess(
-    const HloInstruction* inst) {
-  const auto category = value_category_mapping_[inst].element(RootShapeIndex());
-  VLOG(3) << "Instruction '" << inst->name() << "' has value category '"
-          << category << "'.";
-
-  return Status::OK();
-}
-
 Status ValuesIdenticalAcrossReplicasVisitor::DefaultAction(
     const HloInstruction* inst) {
   return SetAllInstructionValuesToIdenticalOrDiffering(
@@ -187,7 +174,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCall(
     // value category will be encoded in the tuple result of the
     // pipeline body. Which means that if its not identical then
     // neither is the pipeline.
-    VLOG(3) << "Handling pipeline '" << comp->name() << "' as repeat loop.";
     return HandleRepeatLoop(call, comp, GetPipelineRepeatCount(call));
   } else if (IsRepeatLoop(call)) {
     return HandleRepeatLoop(call, comp, GetRepeatLoopCount(call));
@@ -212,7 +198,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleConditional(
     // Get the value categories for each branch and merge them together so
     // that the only values that are identical are those that are identical
     // in all branches.
-    VLOG(3) << "HandleConditional visit branch 0.";
     TF_ASSIGN_OR_RETURN(
         value_category_mapping_[inst],
         VisitSubComputation(branches[0],
@@ -223,7 +208,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleConditional(
       const HloComputation* branch = branches[branch_index];
       const HloInstruction* branch_arg = inst->operand(branch_index + 1);
 
-      VLOG(3) << "HandleConditional visit branch " << branch_index << ".";
       TF_ASSIGN_OR_RETURN(
           const ValueCategoryTree branch_categories,
           VisitSubComputation(branch, value_category_mapping_.at(branch_arg)));
@@ -253,10 +237,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleCustomCall(
         all_gather->GetPoplarReplicaGroups() == PoplarReplicaGroups();
     return SetAllInstructionValuesToIdenticalOrDiffering(all_gather,
                                                          gather_all_replicas);
-  } else if (IsPoplarInstruction(PoplarOp::AssumeEqualAcrossReplicas, inst)) {
-    // AssumeEqual is a special case were we always want it to be treated
-    // as replica identical.
-    return SetAllInstructionValuesToIdentical(inst);
   }
 
   return DefaultAction(inst);
@@ -343,11 +323,9 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
   // values are identical, as it may differ depending on the number of
   // iterations.
 
-  VLOG(3) << "HandleWhile visit conditional start.";
   TF_ASSIGN_OR_RETURN(const ValueCategoryTree conditional_start_categories,
                       VisitSubComputation(while_condition, inst));
   if (IsResultIdentical(conditional_start_categories)) {
-    VLOG(3) << "HandleWhile visit body iter0.";
     TF_ASSIGN_OR_RETURN(const ValueCategoryTree body_iter0_categories,
                         VisitSubComputation(while_body, inst));
 
@@ -355,19 +333,16 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleWhile(
     // initially, now we need to check that it remains so for iter0 and
     // iter1. This way we can know that the replicas have the same number
     // of iterations.
-    VLOG(3) << "HandleWhile visit conitional iter0.";
     TF_ASSIGN_OR_RETURN(
         const ValueCategoryTree conditional_iter0_categories,
         VisitSubComputation(while_condition, body_iter0_categories));
     if (IsResultIdentical(conditional_iter0_categories)) {
       // We treat this point as the loops fixed point since we expect
       // the input and output categories from here to be the same.
-      VLOG(3) << "HandleWhile visit body iter1.";
       TF_ASSIGN_OR_RETURN(
           const ValueCategoryTree body_iter1_categories,
           VisitSubComputation(while_body, body_iter0_categories));
 
-      VLOG(3) << "HandleWhile visit conitional iter1.";
       TF_ASSIGN_OR_RETURN(
           const ValueCategoryTree conditional_iter1_categories,
           VisitSubComputation(while_condition, body_iter1_categories));
@@ -406,7 +381,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
     // body. Hence we run the visitor with the initial value categories given to
     // body and then with the value categories of that first iteration, which we
     // use as the actual categories.
-    VLOG(3) << "HandleRepeat visit body iter0.";
     TF_ASSIGN_OR_RETURN(ValueCategoryTree body_iter0_categories,
                         VisitSubComputation(body, call));
 
@@ -424,7 +398,6 @@ Status ValuesIdenticalAcrossReplicasVisitor::HandleRepeatLoop(
                           body_iter0_categories.SubShapeTree({0}));
     }
 
-    VLOG(3) << "HandleRepeat visit body iter1.";
     TF_ASSIGN_OR_RETURN(value_category_mapping_[call],
                         VisitSubComputation(body, body_iter0_categories));
   } else {
@@ -465,9 +438,6 @@ ValuesIdenticalAcrossReplicasVisitor::VisitSubComputation(
     const absl::flat_hash_map<const HloInstruction*, ValueCategoryTree>&
         parameter_overrides) {
   ValuesIdenticalAcrossReplicasVisitor comp_visitor(parameter_overrides);
-
-  VLOG(3) << "Running replica dataflow analysis on '" << comp->name()
-          << "' computation.";
   TF_RETURN_IF_ERROR(comp->Accept(&comp_visitor));
 
   for (auto& item : comp_visitor.value_category_mapping_) {
@@ -586,8 +556,6 @@ void ValuesIdenticalAcrossReplicasVisitor::MarkOverridesAsVisited(
 Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
   auto call_graph = CallGraph::Build(module);
   if (call_graph->IsFlattened()) {
-    VLOG(3) << "Starting replica dataflow analysis on entry computation.";
-
     auto* entry_computation = module->entry_computation();
     TF_RETURN_IF_ERROR(entry_computation->Accept(&value_category_visitor_));
 
@@ -596,9 +564,6 @@ Status ReplicaIdenticalDataflowAnalysis::Run(const HloModule* module) {
       const bool is_visitable =
           !Analysed(comp) && IsVisitable(*call_graph, comp);
       if (is_visitable) {
-        VLOG(3) << "Running replica dataflow analysis on '" << comp->name()
-                << "' computation.";
-
         TF_RETURN_IF_ERROR(comp->Accept(&value_category_visitor_));
       }
     }
