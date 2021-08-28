@@ -382,9 +382,34 @@ class CommunicationManager {
     tensorflow::Tensor result;
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
-      input_cv_.wait(lk, [&, this]() {
+      Tracepoint::BeginTrace("Wait");
+      const auto predicate = [&, this]() {
         return Exiting() || (input_queues_[name].size() > look_ahead);
-      });
+      };
+
+      // If the application will stall waiting forever, only wait for the
+      // timeout.
+      if (executable_can_stall_ && user_requests_to_process_) {
+        bool ready = input_cv_.wait_for(
+            lk, std::chrono::microseconds(timeout_us_), predicate);
+
+        // If we hit the timeout, push a dummy input instead.
+        if (!Exiting() && !ready) {
+          VLOG(2) << "Pipeline stalled - pushing dummy data.";
+          auto status = PushInputDataAndResultProcessor(
+              dummy_inputs_, absl::make_unique<DummyResultProcessor>(
+                                 io_config_.GetOutfeeds().size()));
+
+          // Report failure back to the user.
+          if (!status.ok()) {
+            Abort(status);
+          }
+        }
+      } else {
+        // If we can't stall forever, just wait for data.
+        input_cv_.wait(lk, predicate);
+      }
+      Tracepoint::EndTrace("Wait");
 
       if (!Exiting()) {
         result = input_queues_[name][look_ahead];
@@ -397,8 +422,11 @@ class CommunicationManager {
   void AdvanceInputData(const std::string& name) {
     TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+
+    Tracepoint::BeginTrace("Wait");
     input_cv_.wait(
         lk, [&, this]() { return Exiting() || !input_queues_[name].empty(); });
+    Tracepoint::EndTrace("Wait");
 
     if (!Exiting()) {
       std::rotate(input_queues_[name].begin(), input_queues_[name].begin() + 1,
@@ -412,9 +440,12 @@ class CommunicationManager {
     OutputCallback result;
     {
       std::unique_lock<std::recursive_mutex> lk(io_mutex_);
+
+      Tracepoint::BeginTrace("Wait");
       output_cv_.wait(lk, [&, this]() {
         return Exiting() || !output_queues_[name].empty();
       });
+      Tracepoint::EndTrace("Wait");
 
       if (!Exiting()) {
         result = std::move(output_queues_[name].front());
@@ -445,7 +476,6 @@ class CommunicationManager {
       input_queues_[it.first].push_back(std::move(it.second));
     }
     input_cv_.notify_one();
-    input_push_timestamp_us_ = env_->NowMicros();
 
     result_processors_.push(std::move(result_processor));
     ResultProcessorBase* result_processor_ptr = result_processors_.back().get();
@@ -488,15 +518,6 @@ class CommunicationManager {
 
   IOConfig& GetIOConfig() { return io_config_; }
 
-  void StartDummyDataThread() {
-    if (executable_can_stall_) {
-      InitializeDummyInputs();
-      dummy_data_thread_.reset(
-          env_->StartThread(tensorflow::ThreadOptions(), "dummy_data_thread",
-                            [this] { DummyDataThread(); }));
-    }
-  }
-
   void Abort(Status status) {
     TENSORFLOW_TRACEPOINT();
     std::unique_lock<std::recursive_mutex> lk(io_mutex_);
@@ -514,7 +535,6 @@ class CommunicationManager {
     InitiateExit();
   }
 
- private:
   void InitializeDummyInputs() {
     for (auto& it : io_config_.GetInfeeds()) {
       const auto& io_item = it.second;
@@ -526,25 +546,7 @@ class CommunicationManager {
     }
   }
 
-  void DummyDataThread() {
-    while (!Exiting()) {
-      const std::size_t time_now_us = env_->NowMicros();
-      const std::size_t elapsed_time_us =
-          time_now_us - input_push_timestamp_us_;
-      // Initial value of input_push_timestamp_us_ is zero, so only push data
-      // once the elapsed time is actually changed.
-      // Only push data if there are user requests left.
-      if (elapsed_time_us != time_now_us && elapsed_time_us > timeout_us_ &&
-          user_requests_to_process_ > 0) {
-        VLOG(2) << "Pipeline stalled - pushing dummy data.";
-        PushInputDataAndResultProcessor(dummy_inputs_,
-                                        absl::make_unique<DummyResultProcessor>(
-                                            io_config_.GetOutfeeds().size()));
-      }
-      env_->SleepForMicroseconds(timeout_us_);
-    }
-  }
-
+ private:
   tensorflow::Env* env_;
   const std::size_t timeout_us_;
 
@@ -574,16 +576,8 @@ class CommunicationManager {
   // Dummy values which are pushed through the model by the dummy thread.
   absl::flat_hash_map<std::string, tensorflow::Tensor> dummy_inputs_;
 
-  // Stores the last time a real input was pushed.
-  std::atomic<std::size_t> input_push_timestamp_us_{0};
-
   // Stores how many user call requests are left to process.
   std::atomic<std::size_t> user_requests_to_process_{0};
-
-  // Thread which pushes dummy data to be processed - this is required for
-  // models which cannot progress until there is more data.
-  // Note that the destructor blocks until the thread completes.
-  std::unique_ptr<tensorflow::Thread> dummy_data_thread_;
 };
 
 class PrefetchCallback : public poplar::StreamCallback {
@@ -722,10 +716,7 @@ class EngineResource {
 
     // Wait for streams to be connected.
     connect_streams_notification_.WaitForNotification();
-
-    if (connect_streams_status.ok()) {
-      communication_manager_.StartDummyDataThread();
-    }
+    communication_manager_.InitializeDummyInputs();
 
     return connect_streams_status;
   }
