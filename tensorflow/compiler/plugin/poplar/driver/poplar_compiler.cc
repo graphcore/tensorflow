@@ -212,6 +212,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+using Tracepoint = TensorflowPoplarPluginTracepoint;
+
 std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
@@ -227,11 +229,11 @@ int64 SizeFunction(const BufferValue& buffer) {
 class PVTICompilerStats : public xla::CompilationStats {
  public:
   void StartPass(absl::string_view pass_name) override {
-    TensorflowPoplarPluginTracepoint::BeginTrace(pass_name);
+    Tracepoint::BeginTrace(pass_name);
   }
 
   void EndPass(absl::string_view pass_name) override {
-    TensorflowPoplarPluginTracepoint::EndTrace(pass_name);
+    Tracepoint::EndTrace(pass_name);
   }
 
   // Pure virtual but not needed for our tracepoints.
@@ -1268,6 +1270,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   resources.progress_bar->Start();
 
   {
+    Tracepoint tracepoint("HloOptimizerPipeline");
     std::unique_ptr<PVTICompilerStats> optimizer_compiler_stats =
         absl::make_unique<PVTICompilerStats>();
     HloPassPipeline optimizer_pipeline("OptimizerPipeline",
@@ -1635,6 +1638,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
   bool logging_cycle_count;
 
   if (compile) {
+    Tracepoint tracepoint("ExecutableConstruction");
     if (in_precompile_mode) {
       TF_RETURN_IF_ERROR(CheckUnsupportedPrecompileInstructions(module));
     }
@@ -1663,6 +1667,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
 
     EntryVisitor visitor(resources, entry);
     try {
+      Tracepoint tracepoint("PoplarGraphConstruction");
       resources.progress_bar->MoveToNextStage();
       // Run a compile only Poplar specific pipeline - these passes do not
       // modify the module in a functional way.
@@ -1739,6 +1744,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
     }
 
     try {
+      Tracepoint tracepoint("PoplarEngineConstruction");
       VLOG(1) << "Begin compiling Poplar engine " << module->name();
 
       auto progress_logging = [&resources](int progress, int total) {
@@ -1774,6 +1780,7 @@ StatusOr<std::unique_ptr<PoplarExecutableCore>> CompileEngine(
       if (is_cacheable) {
         // If we have the lock, serialize the result to the executable cache.
         if (executable_cache_lock) {
+          Tracepoint tracepoint("PoplarEngineSerialisation");
           // Serialize some additional options that Poplar does not serialize
           // on its own.
           poplar::OptionFlags options_to_serialize =

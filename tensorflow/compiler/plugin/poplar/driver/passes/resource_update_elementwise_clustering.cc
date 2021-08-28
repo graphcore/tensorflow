@@ -84,33 +84,6 @@ ResourceUpdateElementwiseClustering::CreateValidator(
                          [](int64) { return true; });
 }
 
-absl::flat_hash_set<const HloComputation*>
-ResourceUpdateElementwiseClustering::GetElementwiseClusterableComputations(
-    const HloModule* module) const {
-  // This is primarily for the fusions, but could be useful for other
-  // computations as well. Go through all computations and populate the
-  // elementwise set. Elementwise computation defined as a set of instructions
-  // which are either
-  // - valid cluster input (constant, parameter, reduce-all, etc)
-  // - elementwise instruction
-  // - fusion uses elementwise computation from this set.
-  absl::flat_hash_set<const HloComputation*> elementwise_comps;
-  for (auto comp : module->computations()) {
-    // In fusion computations all parameters are allowed as parameter inputs.
-    auto validator = CreateValidator(comp, [](int64) { return true; });
-    CHECK(validator) << "Internal error: null validator";
-    if (absl::c_all_of(comp->instructions(), [&elementwise_comps, &validator](
-                                                 const HloInstruction* inst) {
-          return ElementwiseCluster::CanCluster(inst, /*allow_inputs=*/true,
-                                                elementwise_comps, *validator);
-        })) {
-      VLOG(2) << "Found elementwise computation " << comp->name();
-      elementwise_comps.insert(comp);
-    }
-  }
-  return elementwise_comps;
-}
-
 StatusOr<std::vector<ElementwiseCluster>>
 ResourceUpdateElementwiseClustering::GetClustersIn(
     HloInstruction* const call,
@@ -458,7 +431,7 @@ StatusOr<bool> ResourceUpdateElementwiseClustering::Run(HloModule* module) {
   }
 
   const absl::flat_hash_set<const HloComputation*> elementwise_comps =
-      GetElementwiseClusterableComputations(module);
+      ElementwiseCluster::GetElementwiseClusterableComputations(module);
 
   bool module_changed = false;
   for (auto call : to_optimize) {

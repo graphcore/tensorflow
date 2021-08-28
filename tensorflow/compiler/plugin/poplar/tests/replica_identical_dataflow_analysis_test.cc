@@ -321,6 +321,25 @@ ENTRY test {
   ROOT compare = pred[] compare(identical0, constant), direction=LT
 }
 )"};
+static const HloTestCase assume_equal_identical_operands = {
+    "assume_equal_identical_operands", R"(
+HloModule test
+
+ENTRY test {
+  identical0 = f32[] constant(1)
+  ROOT assumeEqual = f32[] custom-call(identical0), custom_call_target="AssumeEqualAcrossReplicas"
+}
+)"};
+static const HloTestCase assume_equal_differing_operands = {
+    "assume_equal_differing_operands", R"(
+HloModule test
+
+ENTRY test {
+  const = f32[] constant(1)
+  differing0 = f32[] rng(const, const), distribution=rng_uniform
+  ROOT assumeEqual = f32[] custom-call(differing0), custom_call_target="AssumeEqualAcrossReplicas"
+}
+)"};
 TEST_P(ReplicaIdenticalInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
@@ -335,7 +354,7 @@ TEST_P(ReplicaIdenticalInstructionTest, ValueCategory) {
   auto* root = FindRootInstruction();
   TF_ASSERT_OK_AND_ASSIGN(bool is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(root));
-  ASSERT_TRUE(is_identical);
+  ASSERT_TRUE(is_identical) << "Root instruction should be replica identical";
 }
 
 using ReplicaDifferingInstructionTest =
@@ -704,6 +723,25 @@ ENTRY test {
   ROOT call = (f32[1,4,4,2], f32[1,4,4,2], s32[]) call(input0, input1, differing_gradient_accumulation_count), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipeline_config\":{\"repeatCount\":\"4\"}}}"
 }
 )"};
+static const HloTestCase dropout_with_seed_op = {"dropout_with_seed_op", R"(
+HloModule test
+
+ENTRY test {
+  param0 = f32[1024,1024,4] parameter(0)
+  reshape = f32[1024,1024,4] reshape(param0)
+  seed = s32[2] custom-call(), custom_call_target="Seed"
+  ROOT dropout = (f32[1024,1024,4], s32[2], opaque[]) custom-call(reshape, seed), custom_call_target="Dropout", backend_config="{\n\t\"rate\" : 0.5,\n\t\"scale\" : 2.0\n}"
+}
+)"};
+static const HloTestCase truncated_normal = {"truncated_normal", R"(
+HloModule test
+
+ENTRY test {
+  constant = f32[] constant(2)
+  truncated_normal = f32[] custom-call(), custom_call_target="TruncatedNormal"
+  ROOT differing_root = f32[] multiply(truncated_normal, constant)
+}
+)"};
 TEST_P(ReplicaDifferingInstructionTest, ValueCategory) {
   CustomOpReplacer custom_op_replacer;
   // We dont assert against the return value of this since it's not relevent
@@ -719,7 +757,8 @@ TEST_P(ReplicaDifferingInstructionTest, ValueCategory) {
   auto* root = FindRootInstruction();
   TF_ASSERT_OK_AND_ASSIGN(bool is_identical,
                           analysis.IsValueIdenticalAcrossReplicas(root));
-  ASSERT_FALSE(is_identical);
+  ASSERT_FALSE(is_identical)
+      << "Root instruction should not be replica identical";
 }
 
 using ReplicaValueCategoryGTETest = ParameterizedReplicaDataflowAnalysisTest;
@@ -882,6 +921,9 @@ TEST_F(ReplicaIdenticalDataflowAnalysisTest, UnvisitedInstructionErrors) {
 
   ReplicaIdenticalDataflowAnalysis analysis;
   TF_ASSERT_OK(analysis.Run(hlo_module_));
+
+  auto* unvisited_comp = FindComputation(hlo_module_, "add");
+  ASSERT_FALSE(analysis.Analysed(unvisited_comp));
 
   const auto status_or_value_category =
       analysis.ValueCategory(FindInstruction(hlo_module_, "x"));
@@ -1482,14 +1524,14 @@ TEST_P(ReplicaValueCategoryRepeatTest, MultiIterationRepeatValueCategory) {
 
 INSTANTIATE_TEST_SUITE_P(
     ReplicaIdenticalDataflowHLO, ReplicaIdenticalInstructionTest,
-    ::testing::Values(simple_parameters, simple_constants, simple_wide_const,
-                      global_all_reduce, global_all_gather,
-                      repeat_with_identical_io, repeat_single_element_tuple,
-                      while_with_identical_body_and_condition,
-                      conditional_with_identical_branches_and_pred,
-                      simple_pipeline, simple_select, simple_tuple_select,
-                      compare_with_identical_operands,
-                      switch_with_identical_branches_and_index),
+    ::testing::Values(
+        simple_parameters, simple_constants, simple_wide_const,
+        global_all_reduce, global_all_gather, repeat_with_identical_io,
+        repeat_single_element_tuple, while_with_identical_body_and_condition,
+        conditional_with_identical_branches_and_pred, simple_pipeline,
+        simple_select, simple_tuple_select, compare_with_identical_operands,
+        switch_with_identical_branches_and_index,
+        assume_equal_identical_operands, assume_equal_differing_operands),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1503,7 +1545,8 @@ INSTANTIATE_TEST_SUITE_P(
         select_with_differing_values, tuple_select_with_differing_pred,
         tuple_select_with_differing_values, compare_with_differing_operands,
         pipeline_with_differing_gradient_accumulation_count,
-        switch_with_differing_index, switch_with_differing_branches),
+        switch_with_differing_index, switch_with_differing_branches,
+        dropout_with_seed_op, truncated_normal),
     HloTestCaseName);
 
 INSTANTIATE_TEST_SUITE_P(ReplicaIdenticalDataflowHLO,
