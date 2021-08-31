@@ -66,4 +66,9 @@ REGISTER_OP("GradientAccumulatorSink")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
+REGISTER_OP("GradientAccumulationCount")
+    .Input("value: int32")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
 }  // namespace tensorflow
