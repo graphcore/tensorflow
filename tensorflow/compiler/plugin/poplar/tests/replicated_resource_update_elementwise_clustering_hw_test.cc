@@ -178,6 +178,10 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
       VLOG(1) << "Input name: " << input.Name() << ", shape: " << input.Shape()
               << ", streaming: " << input.IsStreaming();
       auto size = ShapeUtil::ElementsIn(input.Shape());
+      auto per_replica_size =
+          PartitionedElementCountPerReplica(size, param.replication_factor);
+      auto aligned_size = per_replica_size * param.replication_factor;
+
       for (auto& handle : input.Handles()) {
         VLOG(1) << " handle: " << handle;
         auto it = remote_infos.find(RemoteParameterInfo(index));
@@ -188,14 +192,14 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                   << ", offset: " << info.buffer_offset
                   << ", replicated: " << info.is_replica_partitioned;
 
-          std::vector<float> buffer(size);
-          std::iota(buffer.begin(), buffer.end(), start);
+          std::vector<float> buffer(aligned_size);
+          std::iota(buffer.begin(), buffer.begin() + size, start);
           start += size;
           for (unsigned replica = 0; replica < param.replication_factor;
                ++replica) {
             engine.copyToRemoteBuffer(
-                buffer.data() + replica * size / param.replication_factor,
-                info.buffer_name, info.buffer_offset, replica);
+                buffer.data() + replica * per_replica_size, info.buffer_name,
+                info.buffer_offset, replica);
             if (!info.is_replica_partitioned) {
               break;
             }
@@ -235,6 +239,9 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
               << ", shape: " << output.Shape()
               << ", streaming: " << output.IsStreaming();
       auto size = ShapeUtil::ElementsIn(output.Shape());
+      auto per_replica_size =
+          PartitionedElementCountPerReplica(size, param.replication_factor);
+      auto aligned_size = per_replica_size * param.replication_factor;
       for (auto& handle : output.Handles()) {
         VLOG(1) << " handle: " << handle;
         auto it = remote_infos.find(RemoteParameterInfo(index));
@@ -245,14 +252,14 @@ class ReplicatedResourceUpdateElementwiseClusteringHwTest
                   << ", offset: " << info.buffer_offset
                   << ", replicated: " << info.is_replica_partitioned;
 
-          std::vector<float> buffer(size);
+          std::vector<float> buffer(aligned_size);
           for (auto replica_id = 0; replica_id < param.replication_factor;
                ++replica_id) {
             engine.copyFromRemoteBuffer(
-                info.buffer_name,
-                buffer.data() + replica_id * size / param.replication_factor,
+                info.buffer_name, buffer.data() + replica_id * per_replica_size,
                 info.buffer_offset, replica_id);
           }
+          buffer.resize(size);
           buffers.push_back(std::move(buffer));
         }
       }
@@ -265,12 +272,11 @@ INSTANTIATE_TEST_SUITE_P(
     ReplicatedResourceUpdateElementwiseClusteringHwTest,
     ::testing::ValuesIn(
         std::vector<ReplicatedResourceUpdateElementwiseClusteringHwTestSpec>{
-            {tu::GetSimpleHloString(1000, 10), "simple", 2},
-            {tu::GetSGDHloString(1000, 10), "sgd", 2},
-            {tu::GetAdamLikeHloString(1000, 10), "adam", 2},
-            {tu::GetMomentumLikeHloString(1000, 10), "momentum", 2},
-            {tu::GetTwoClustersShareInputHloString(1000, 10), "shared-inputs",
-             2},
+            {tu::GetSimpleHloString(99, 7), "simple", 2},
+            {tu::GetSGDHloString(99, 7), "sgd", 2},
+            {tu::GetAdamLikeHloString(99, 7), "adam", 2},
+            {tu::GetMomentumLikeHloString(99, 7), "momentum", 2},
+            {tu::GetTwoClustersShareInputHloString(99, 7), "shared-inputs", 2},
         }));
 
 TEST_P(ReplicatedResourceUpdateElementwiseClusteringHwTest, DoTest) {
