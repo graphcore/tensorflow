@@ -26,6 +26,7 @@ namespace poplarplugin {
  optimizers.
 */
 struct HloPoplarTestUtil {
+  static std::string GetLambLikeHloString(int n, int m, int minibatches = 1);
   static std::string GetAdamLikeHloString(int n, int m, int minibatches = 1);
   static std::string GetMomentumLikeHloString(int n, int m,
                                               int minibatches = 1);

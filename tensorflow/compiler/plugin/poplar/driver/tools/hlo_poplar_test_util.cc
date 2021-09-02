@@ -69,6 +69,13 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
     ROOT mul.1 = f32[$N,$M] multiply(arg0, broadcast)
   }
 
+  scale_xa.1 {
+    arg0 = f32[$N,$M] parameter(0)
+    arg1 = f32[] parameter(1)
+    broadcast = f32[$N,$M] broadcast(arg1), dimensions={}
+    ROOT mul.1 = f32[$N,$M] multiply(arg0, broadcast)
+  }
+
   inplace_xa {
     arg0 = f32[$N,$M] parameter(0)
     const = f32[] constant(1.1)
@@ -91,6 +98,20 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
     broadcast = f32[$N,$M] broadcast(const), dimensions={}
     mul.1 = f32[$N,$M] multiply(arg0, broadcast)
     ROOT r = f32[$N,$M] add(mul.1, arg1)
+  }
+
+  _pop_op_reduction_square_add {
+    arg0 = f32[$N,$M] parameter(0)
+    arg1 = f32[] parameter(1)
+    mul = f32[$N,$M] multiply(arg0, arg0)
+    ROOT r = f32[] reduce(f32[$N,$M] mul, f32[] arg1), dimensions=$REDUCE_DIMS, to_apply=sum
+  }
+
+  _pop_op_reduction_square_add.1 {
+    arg0 = f32[$N,$M] parameter(0)
+    arg1 = f32[] parameter(1)
+    mul = f32[$N,$M] multiply(arg0, arg0)
+    ROOT r = f32[] reduce(f32[$N,$M] mul, f32[] arg1), dimensions=$REDUCE_DIMS, to_apply=sum
   }
 
   resource_update {
@@ -140,16 +161,62 @@ std::string GetTemplateHloString(const std::string& wu, int n, int m,
     hlo_string =
         absl::StrReplaceAll(hlo_string, {{"$N", std::to_string(n)},
                                          {"$M", std::to_string(m)},
-                                         {"$B", std::to_string(minibatches)}});
+                                         {"$B", std::to_string(minibatches)},
+                                         {"$REDUCE_DIMS", "{0,1}"}});
   } else {
-    hlo_string = absl::StrReplaceAll(
-        hlo_string,
-        {{"$N,$M", std::to_string(n)}, {"$B", std::to_string(minibatches)}});
+    hlo_string =
+        absl::StrReplaceAll(hlo_string, {{"$N,$M", std::to_string(n)},
+                                         {"$B", std::to_string(minibatches)},
+                                         {"$REDUCE_DIMS", "{0}"}});
   }
   return hlo_string;
 }
 
 }  // namespace
+
+std::string HloPoplarTestUtil::GetLambLikeHloString(int n, int m,
+                                                    int minibatches) {
+  const std::string wu = R"(
+    beta.1 = f32[] constant(0.1)
+    beta.2 = f32[] constant(0.01)
+    const.55 = f32[] constant(0.9)
+    const.2 = f32[] constant(0)
+    const.3 = f32[] constant(1)
+
+    all-reduce0 = f32[$N,$M] all-reduce(arg0), to_apply=sum
+    all-reduce1 = f32[$N,$M] all-reduce(arg1), to_apply=sum
+    replication-normalise = f32[$N,$M] custom-call(all-reduce0), custom_call_target="ReplicationNormalise"
+    fusion.2 = f32[$N,$M] fusion(arg2, replication-normalise), kind=kCustom, calls=inplace_xya.1, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
+
+    constant.54 = f32[] constant(0.001)
+    constant.58 = f32[] constant(1)
+    subtract.60 = f32[] subtract(constant.58, beta.2)
+    sqrt.61 = f32[] sqrt(f32[] subtract.60)
+    multiply.62 = f32[] multiply(constant.54, sqrt.61)
+    subtract.59 = f32[] subtract(constant.58, beta.1)
+    divide.63 = f32[] divide(multiply.62, subtract.59)
+
+    fusion.4 = f32[$N,$M] fusion(fusion.2, divide.63), kind=kCustom, calls=scale_xa
+    multiply.71 = f32[$N,$M] multiply(replication-normalise, replication-normalise)
+    fusion.1 = f32[$N,$M] fusion(arg3, multiply.71), kind=kCustom, calls=inplace_xya.2, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
+    sqrt.77 = f32[$N,$M] sqrt(fusion.1)
+    fusion.5 = f32[$N,$M] fusion(sqrt.77), kind=kCustom, calls=inplace_xa, backend_config="{\"fusionConfig\":{\"inplaceDescriptions\":[{\"kind\":\"USE_ALIAS_READ_WRITE\"}]}}"
+    divide.82 = f32[$N,$M] divide(fusion.4, fusion.5)
+
+    wsum = f32[] fusion(all-reduce1, const.2), kind=kCustom, calls=_pop_op_reduction_square_add
+    wnorm = f32[] sqrt(wsum)
+    %wnormcorrected = f32[] maximum(wnorm, const.3)
+    gsum = f32[] fusion(divide.82, const.2), kind=kCustom, calls=_pop_op_reduction_square_add.1
+    gnorm = f32[] sqrt(gsum)
+    %gnormcorrected = f32[] maximum(gnorm, const.3)
+    trustratio = f32[] divide(wnormcorrected, gnormcorrected)
+    fusion.7 = f32[$N,$M] fusion(divide.82, trustratio), kind=kCustom, calls=scale_xa.1
+
+    subtract.83 = f32[$N,$M] subtract(all-reduce1, fusion.7)
+    ROOT root = (f32[$N,$M], f32[$N,$M], f32[$N,$M], f32[$N,$M]) tuple(arg0, arg1, subtract.83, fusion.2)
+  )";
+  return GetTemplateHloString(wu, n, m, minibatches);
+}
 
 std::string HloPoplarTestUtil::GetAdamLikeHloString(int n, int m,
                                                     int minibatches) {

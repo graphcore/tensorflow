@@ -1165,6 +1165,7 @@ struct ReplicatedResourceUpdateElementwiseClusteringTestSpec {
   // These are all-gathers which are not arguments to the root instruction.
   int expected_non_root_all_gathers;
   int expected_elementwise_clusters;
+  int expected_all_reduces;
 };
 
 std::ostream& operator<<(
@@ -1175,7 +1176,7 @@ std::ostream& operator<<(
             << ", all-gathers: " << spec.expected_all_gathers
             << ", non-root-all-gathers: " << spec.expected_non_root_all_gathers
             << ", elementwise-clusters: " << spec.expected_elementwise_clusters
-            << "}";
+            << ", all-reduces: " << spec.expected_all_reduces << "}";
 }
 
 class ReplicatedResourceUpdateElementwiseClusteringTest
@@ -1186,37 +1187,44 @@ class ReplicatedResourceUpdateElementwiseClusteringTest
 INSTANTIATE_TEST_SUITE_P(
     ReplicatedResourceUpdateElementwiseClusteringTestCases,
     ReplicatedResourceUpdateElementwiseClusteringTest,
-    ::testing::ValuesIn(std::vector<
-                        ReplicatedResourceUpdateElementwiseClusteringTestSpec>{
-        // Simple HLO with all types of the inputs
-        {tu::GetSimpleHloString(20, 100), "simple", false, 2, 2, 2, 0},
-        {tu::GetSimpleHloString(20, 100), "simple", true, 2, 0, 0, 1},
-        // Edge case
-        {tu::GetSimpleHloString(1, 1), "1x1", false, 2, 2, 2, 0},
-        {tu::GetSimpleHloString(1, 1), "1x1", true, 2, 0, 0, 1},
-        // Check padded offloading:
-        {tu::GetSimpleHloString(11, 13), "simple-padded", false, 2, 2, 2, 0},
-        {tu::GetSimpleHloString(11, 13), "simple-padded", true, 2, 0, 0, 1},
-        // Two cluster share the same inputs
-        {tu::GetTwoClustersShareInputHloString(20, 100), "2-clusters", false, 2,
-         2, 2, 0},
-        {tu::GetTwoClustersShareInputHloString(20, 100), "2-clusters", true, 2,
-         0, 0, 2},
-        // Adam-like resource update
-        {tu::GetAdamLikeHloString(20, 100), "adam", false, 2, 2, 2, 0},
-        {tu::GetAdamLikeHloString(20, 100), "adam", true, 2, 0, 0, 1},
-        // Momentum-like resource update
-        {tu::GetMomentumLikeHloString(1000, 20), "momentum", false, 2, 2, 2, 0},
-        {tu::GetMomentumLikeHloString(1000, 20), "momentum", true, 2, 0, 0, 1},
-        // SGD-like resource update
-        {tu::GetSGDHloString(1000, 20), "sgd", false, 2, 2, 2, 0},
-        {tu::GetSGDHloString(1000, 20), "sgd", true, 2, 0, 0, 2},
-        // Test with one of the arguments be non-replicated remote buffer.
-        {tu::GetFullRemoteLoadHloString(100, 20), "full-remote-load", false, 4,
-         2, 2, 0},
-        {tu::GetFullRemoteLoadHloString(19, 7), "full-remote-load", false, 4, 2,
-         2, 0},
-    }));
+    ::testing::ValuesIn(
+        std::vector<ReplicatedResourceUpdateElementwiseClusteringTestSpec>{
+            // Simple HLO with all types of the inputs
+            {tu::GetSimpleHloString(20, 100), "simple", false, 2, 2, 2, 0, 2},
+            {tu::GetSimpleHloString(20, 100), "simple", true, 2, 0, 0, 1, 0},
+            // Edge case
+            {tu::GetSimpleHloString(1, 1), "1x1", false, 2, 2, 2, 0, 2},
+            {tu::GetSimpleHloString(1, 1), "1x1", true, 2, 0, 0, 1, 0},
+            // Check padded offloading:
+            {tu::GetSimpleHloString(11, 13), "simple-padded", false, 2, 2, 2, 0,
+             2},
+            {tu::GetSimpleHloString(11, 13), "simple-padded", true, 2, 0, 0, 1,
+             0},
+            // Two cluster share the same inputs
+            {tu::GetTwoClustersShareInputHloString(20, 100), "2-clusters",
+             false, 2, 2, 2, 0, 2},
+            {tu::GetTwoClustersShareInputHloString(20, 100), "2-clusters", true,
+             2, 0, 0, 2, 2},
+            // Adam-like resource update
+            {tu::GetAdamLikeHloString(20, 100), "adam", false, 2, 2, 2, 0, 2},
+            {tu::GetAdamLikeHloString(20, 100), "adam", true, 2, 0, 0, 1, 0},
+            // Lamb-like resource update
+            {tu::GetLambLikeHloString(20, 100), "lamb", false, 2, 2, 2, 0, 2},
+            {tu::GetLambLikeHloString(20, 100), "lamb", true, 2, 0, 0, 1, 2},
+            // Momentum-like resource update
+            {tu::GetMomentumLikeHloString(1000, 20), "momentum", false, 2, 2, 2,
+             0, 1},
+            {tu::GetMomentumLikeHloString(1000, 20), "momentum", true, 2, 0, 0,
+             1, 0},
+            // SGD-like resource update
+            {tu::GetSGDHloString(1000, 20), "sgd", false, 2, 2, 2, 0, 2},
+            {tu::GetSGDHloString(1000, 20), "sgd", true, 2, 0, 0, 2, 0},
+            // Test with one of the arguments be non-replicated remote buffer.
+            {tu::GetFullRemoteLoadHloString(100, 20), "full-remote-load", false,
+             4, 2, 2, 0, 0},
+            {tu::GetFullRemoteLoadHloString(19, 7), "full-remote-load", false,
+             4, 2, 2, 0, 0},
+        }));
 
 int64 GetCount(const HloComputation* comp,
                std::function<bool(const HloInstruction*)> pred) {
@@ -1287,6 +1295,12 @@ TEST_P(ReplicatedResourceUpdateElementwiseClusteringTest, DoTest) {
             param.expected_all_gathers);
   EXPECT_EQ(param.expected_elementwise_clusters,
             GetCount(resource_update, IsFunction));
+
+  // Check there are the specified number of all-reductions
+  EXPECT_EQ(param.expected_all_reduces,
+            GetCount(resource_update, [](const HloInstruction* inst) {
+              return inst->opcode() == HloOpcode::kAllReduce;
+            }));
 
   auto IsNonRootAllGather = [&](const HloInstruction* inst) {
     if (!IsPoplarInstruction(PoplarOp::AllGather)(inst)) {

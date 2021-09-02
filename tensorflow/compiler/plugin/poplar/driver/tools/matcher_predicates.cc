@@ -558,6 +558,11 @@ bool IsReduceWithRootOp(const HloInstruction* inst, HloOpcode opcode) {
 }
 }  // namespace
 
+bool IsGlobalAllReduce(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kAllReduce &&
+         inst->replica_groups().empty();
+}
+
 bool IsReduceAdd(const HloInstruction* inst) {
   return IsReduceWithRootOp(inst, HloOpcode::kAdd);
 }
