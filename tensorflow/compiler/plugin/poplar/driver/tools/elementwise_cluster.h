@@ -51,6 +51,8 @@ struct ElementwiseClusterValidator {
       const HloComputation* comp);
 };
 
+using ElementwiseComputationSet = absl::flat_hash_set<const HloComputation*>;
+
 enum struct ElementwiseClusterClass { Invalid, Partitioned, NonPartitioned };
 
 class ElementwiseCluster {
@@ -60,7 +62,9 @@ class ElementwiseCluster {
   bool AnyUserIn(HloInstruction* inst) const;
   bool AllUsersIn(HloInstruction* inst) const;
   void Add(HloInstruction* inst);
-  bool MaybeAdd(HloInstruction* inst);
+  bool MaybeAdd(HloInstruction* inst,
+                const ElementwiseComputationSet& elementwise_comps,
+                const HloReachabilityMap& reachability_map);
   ElementwiseClusterClass Classify(
       const ElementwiseClusterValidator& validator) const;
   bool CanMerge(const ElementwiseCluster& other) const;
@@ -98,16 +102,14 @@ class ElementwiseCluster {
   // Returns original shape of the top-level instruction.
   Shape GetClusterShape(PrimitiveType type) const;
 
-  static bool IsElementwise(
-      const HloInstruction* inst,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
-  static bool CanCluster(
-      const HloInstruction* inst,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps);
+  static bool IsElementwise(const HloInstruction* inst,
+                            const ElementwiseComputationSet& elementwise_comps);
+  static bool CanCluster(const HloInstruction* inst,
+                         const ElementwiseComputationSet& elementwise_comps);
 
   static StatusOr<std::vector<ElementwiseCluster>> GetClustersIn(
       HloInstruction* const resource_update,
-      const absl::flat_hash_set<const HloComputation*>& elementwise_comps,
+      ElementwiseComputationSet elementwise_comps,
       ElementwiseClusterValidator& validator);
 
   // Returns all computations in the module which are elementwise and can be
@@ -133,6 +135,7 @@ class ElementwiseCluster {
   HloInstructionMap<std::vector<UserPositions>> outputs_to_users_;
   std::vector<int64> cluster_dimensions_;
   std::vector<int64> shard_dimensions_;
+  absl::flat_hash_set<HloInstruction*> allowed_scalars_;
   int64 cluster_size_;
   int64 shard_size_;
   int64 aligned_cluster_size_;
